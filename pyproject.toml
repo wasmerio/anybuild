@@ -26,8 +26,3 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/shipit"]
-
-[tool.uv.workspace]
-members = [
-    "examples/mkdocs/.shipits/local/build",
-]
