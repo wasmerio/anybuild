@@ -1,0 +1,38 @@
+
+ # from .python-version
+php_version = getenv("php_version") or "8.3"
+HOME = getenv("HOME")
+# COMPOSER_HOME = getenv("COMPOSER_HOME")
+
+php = dep("php", php_version)
+
+serve(
+  name="php-laravel-react",
+  provider="php",
+  build=[
+    use(php, dep("composer")),
+    env(HOME=HOME, COMPOSER_FUND="0"),
+    run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install"),
+    run("pnpm install", inputs=["package.json", "package-lock.json"], outputs=["."], group="install"),
+    copy(".", ".", ignore=[".git"]),
+    run("pnpm run build", outputs=["."], group="build"),
+  ],
+  deps=[php, dep("bash")],
+  prepare="""
+mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache
+php artisan config:cache
+php artisan event:cache
+php artisan route:cache
+php artisan view:cache
+""",
+  commands = {
+    "start": "php -S localhost:8080 -t public",
+    # "start": "php artisan serve",
+    "after_deploy": f"php artisan migrate",
+  },
+  # workers = [
+  #   "python -m celery ...",
+  # ],
+  mounts={
+  },
+) # -> (package.webc, app.yaml) (then it can run locally, deploy, ...)

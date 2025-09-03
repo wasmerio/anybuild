@@ -1,0 +1,18 @@
+hugo_version = getenv("AUTOBUILD_HUGO_VERSION") or "22"  # from .node-version
+hugo = dep("hugo", hugo_version)
+
+staticwebserver = dep("static-web-server")
+
+serve(
+  name="staticsite-hugo",
+  provider="staticsite",
+  build=[
+    use(hugo),
+    copy(".", ".", ignore=[".git"]),
+    run("hugo build", outputs=["public"], group="build"),
+  ],
+  deps=[staticwebserver],
+  commands = {
+    "start": "webserver --root /app/public",
+  },
+)

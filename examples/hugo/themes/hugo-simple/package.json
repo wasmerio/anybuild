@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "fmt": "prettier layouts/**/*.html assets/style.css --write",
+    "check": "prettier layouts/**/*.html assets/style.css --check"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "prettier-plugin-go-template": "^0.0.15"
+  }
+}

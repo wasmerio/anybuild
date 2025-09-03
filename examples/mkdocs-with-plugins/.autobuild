@@ -1,0 +1,23 @@
+
+python_version = getenv("AUTOBUILD_PYTHON_VERSION") or "3.13"  # from .python-version
+python = dep("python", python_version)
+
+staticwebserver = dep("static-web-server")
+
+serve(
+  name="mkdocs-with-plugins",
+  provider="mkdocs-site",
+  build=[
+    use(python, dep("uv")),
+    run("uv init --no-managed-python", inputs=[], outputs=["."], group="install"),
+    run(f"uv add -r requirements.txt", inputs=["requirements.txt"], outputs=["."], group="install"),
+    path(".venv/bin"),
+    copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
+    # run("python -m compileall -o 2 ."),
+    run("uv run mkdocs build", outputs=["."], group="build")
+  ],
+  deps=[staticwebserver],
+  commands = {
+    "start": "webserver --root /app/site",
+  },
+)

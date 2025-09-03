@@ -1,0 +1,13 @@
+staticwebserver = dep("static-web-server")
+
+serve(
+  name="staticfile",
+  provider="staticfile",
+  build=[
+    copy(".", ".", ignore=[".git"])
+  ],
+  deps=[staticwebserver],
+  commands = {
+    "start": "webserver --root /app/site",
+  },
+)
