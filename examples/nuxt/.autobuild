@@ -1,4 +1,4 @@
-node_version = getenv("AUTOBUILD_NODE_VERSION") or "22"  # from .node-version
+node_version = getenv("SHIPIT_NODE_VERSION") or "22"  # from .node-version
 node = dep("node", node_version)
 
 staticwebserver = dep("static-web-server")

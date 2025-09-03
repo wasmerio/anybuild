@@ -1,5 +1,5 @@
-.autobuilds
-**/.autobuilds
+.shipit
+**/.shipit
 *.pyc
 __pycache__
 .DS_Store
@@ -11,3 +11,4 @@ __pycache__
 .env.development.local
 .env.test.local
 .env.production.local
+/examples/php-laravel-react/.shipit

@@ -18,7 +18,7 @@ https://pythonindex.wasix.org/
 
 # How to install dependencies
 
-This process is going to be streamlined using wasmer's autobuild, so you just need to upload a zip with the source and `requirements.txt`. Until that happens, please do:
+This process is going to be streamlined using wasmer's shipit, so you just need to upload a zip with the source and `requirements.txt`. Until that happens, please do:
 
 ## If you have `pyproject.toml`
 

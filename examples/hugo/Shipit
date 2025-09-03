@@ -1,4 +1,4 @@
-hugo_version = getenv("AUTOBUILD_HUGO_VERSION") or "0.149.0"  # from .node-version
+hugo_version = getenv("SHIPIT_HUGO_VERSION") or "0.149.0"  # from .node-version
 hugo = dep("hugo", hugo_version)
 
 staticwebserver = dep("static-web-server")
