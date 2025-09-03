@@ -51,7 +51,6 @@ class Serve:
     mounts: Optional[Dict[str, str]] = None
 
 
-
 @dataclass
 class Package:
     name: str
@@ -103,7 +102,6 @@ class Build:
     steps: List[Step]
 
 
-
 def write_stdout(line: str) -> None:
     sys.stdout.write(f"{line}")  # print to console
 
@@ -112,11 +110,11 @@ def write_stderr(line: str) -> None:
     sys.stderr.write(f"{line}")  # print to console
 
 
-
 class MapperItem(TypedDict):
     dependencies: Dict[str, str]
     scripts: Set[str]
     env: Dict[str, str]
+    aliases: Dict[str, str]
 
 
 class Builder(Protocol):
@@ -126,7 +124,9 @@ class Builder(Protocol):
     def prepare(self, env: Dict[str, str], prepare: str) -> None: ...
     def getenv(self, name: str) -> Optional[str]: ...
     def run_serve_command(self, command: str) -> None: ...
-    def run_command(self, command: str, extra_args: Optional[List[str]] | None = None) -> Any: ...
+    def run_command(
+        self, command: str, extra_args: Optional[List[str]] | None = None
+    ) -> Any: ...
     def serve_mount(self, name: str) -> str: ...
     def get_asset(self, name: str) -> str: ...
 
@@ -152,9 +152,7 @@ class DockerBuilder:
         # path.mkdir(parents=True, exist_ok=True)
         return path.absolute()
 
-    def run_command(
-        self, command: str, extra_args: Optional[List[str]] = None
-    ) -> Any:
+    def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
         # docker_file = self.docker_path / "Dockerfile"
         # docker_file_contents = docker_file.read_text()
         # docker_file_contents += f"\nRUN {command} {' '.join(extra_args or [])}"
@@ -306,6 +304,18 @@ Shipit
         raise NotImplementedError
 
     def buildserve(self, serve: Serve) -> None:
+        serve_command_path = self.mkdir(Path("serve") / "bin")
+        console.print(f"[bold]Serve Commands:[/bold]")
+        build_path = self.get_build_path()
+        for command in serve.commands:
+            console.print(f"* {command}")
+            command_path = serve_command_path / command
+            self.create_file(
+                command_path,
+                f"#!/bin/bash\ncd {build_path}\n{serve.commands[command]}",
+                mode=0o755,
+            )
+
         self.print_dockerfile()
         sh.Command("docker")(
             "build",
@@ -326,7 +336,8 @@ Shipit
         raise NotImplementedError
 
     def run_serve_command(self, command: str) -> None:
-        raise NotImplementedError
+        path = Path("/shipit") / "serve" / "bin" / command
+        self.run_command(str(path))
 
 
 class LocalBuilder:
@@ -426,9 +437,7 @@ class LocalBuilder:
         path.chmod(mode)
         return path.absolute()
 
-    def run_command(
-        self, command: str, extra_args: Optional[List[str]] = None
-    ) -> Any:
+    def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
         return sh.Command(command)(
             *(extra_args or []), _out=write_stdout, _err=write_stderr
         )
@@ -508,6 +517,7 @@ class WasmerBuilder:
                 "3.13": "wasmer/python-native@=0.1.11",
             },
             "scripts": {"python"},
+            "aliases": {},
             "env": {
                 "PYTHONEXECUTABLE": "/bin/python",
                 "PYTHONHOME": "/cpython",
@@ -520,6 +530,7 @@ class WasmerBuilder:
                 "8.3": "php/php-32@=8.3.2104",
             },
             "scripts": {"php"},
+            "aliases": {},
             "env": {},
         },
         "bash": {
@@ -528,6 +539,7 @@ class WasmerBuilder:
                 "8.3": "wasmer/bash@=1.0.24",
             },
             "scripts": {"bash", "sh"},
+            "aliases": {},
             "env": {},
         },
         "static-web-server": {
@@ -536,6 +548,7 @@ class WasmerBuilder:
                 "0.1": "wasmer/static-web-server@=1.1.0",
             },
             "scripts": {"webserver"},
+            "aliases": {"static-web-server": "webserver"},
             "env": {},
         },
     }
@@ -556,6 +569,9 @@ class WasmerBuilder:
 
     def build_assets(self, assets: Dict[str, str]) -> None:
         return self.inner_builder.build_assets(assets)
+
+    def get_build_path(self) -> Path:
+        return Path("/app")
 
     def prepare(self, env: Dict[str, str], prepare: str) -> None:
         inner = cast(Any, self.inner_builder)
@@ -602,6 +618,8 @@ class WasmerBuilder:
                     dependencies.add(package_name, version)
                     for script in self.mapper[dep.name]["scripts"]:
                         binaries[script] = f"{package_name}:{script}"
+                    for alias, script in self.mapper[dep.name]["aliases"].items():
+                        binaries[alias] = f"{package_name}:{script}"
                 else:
                     raise Exception(
                         f"Dependency {dep.name}@{version} not found in Wasmer"
@@ -796,7 +814,7 @@ class Ctx:
         return self.add_step(step)
 
     def buildpath(self, name: str) -> str:
-        return f"file://{name}"
+        return str((self.builder.get_build_path() / name).absolute())
 
     def env(self, **env_vars: str) -> Optional[str]:
         step = EnvStep(env_vars)

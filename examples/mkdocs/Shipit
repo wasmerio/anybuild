@@ -18,6 +18,6 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "webserver --root /app/site",
+    "start": "static-web-server --root /app/site",
   },
 )

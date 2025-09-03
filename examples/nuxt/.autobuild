@@ -14,6 +14,6 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "webserver --root /app/.output/public",
+    "start": "static-web-server --root /app/.output/public",
   },
 )
