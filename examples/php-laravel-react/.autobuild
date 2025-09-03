@@ -10,8 +10,10 @@ serve(
   name="php-laravel-react",
   provider="php",
   build=[
-    use(php, dep("composer")),
+    use(php, dep("composer"), dep("pie")),
     env(HOME=HOME, COMPOSER_FUND="0"),
+    run("pie install php/pdo_pgsql"),
+    # run("pie install --force --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install"),
     run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install"),
     run("pnpm install", inputs=["package.json", "package-lock.json"], outputs=["."], group="install"),
     copy(".", ".", ignore=[".git"]),

@@ -29,5 +29,5 @@ packages = ["src/autobuild"]
 
 [tool.uv.workspace]
 members = [
-    "examples/mkdocs-with-plugins/.autobuilds/local/build",
+    "examples/mkdocs/.autobuilds/local/build",
 ]
