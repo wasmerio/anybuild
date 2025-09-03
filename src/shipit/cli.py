@@ -1,112 +1,104 @@
-import starlark as sl
-import sys
-import os
-from typing import List, Dict, Union, Optional
 import logging
-from shutil import copy, copytree, ignore_patterns
-import sh
+import os
 import shlex
-import typer
-from pathlib import Path
-from rich.rule import Rule
-from rich.panel import Panel
-from rich import box
-from rich.syntax import Syntax
-from rich.console import Console
-from shipit.version import version as shipit_version
 import shutil
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+from shutil import copy, copytree, ignore_patterns
+
+import sh
+import starlark as sl
+import typer
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.syntax import Syntax
+
+from shipit.version import version as shipit_version
 
 
 console = Console()
 
 app = typer.Typer(invoke_without_command=True)
 
-DIR_PATH = Path(os.path.dirname(os.path.realpath(__file__)))
+DIR_PATH = Path(__file__).resolve().parent
 ASSETS_PATH = DIR_PATH / "assets"
 
 
+@dataclass
 class Serve:
-    def __init__(self, name, provider, build, deps, commands, assets=None, prepare=None, workers=None, mounts=None):
-        self.name = name
-        self.provider = provider
-        self.build = build
-        self.deps = deps
-        self.commands = commands
-        self.assets = assets
-        self.workers = workers
-        self.prepare = prepare
-        self.mounts = mounts
-
-    def __str__(self):
-        return f"Serve(name={self.name}, provider={self.provider}, prepare={self.prepare}, deps={self.deps}, commands={self.commands}, workers={self.workers}, volumes={self.volumes})"
+    name: str
+    provider: str
+    build: List[str]
+    deps: List["Package"]
+    commands: Dict[str, str]
+    assets: Optional[Dict[str, Union[str, bytes]]] = None
+    prepare: Optional[str] = None
+    workers: Optional[List[str]] = None
+    mounts: Optional[Dict[str, str]] = None
 
 
+
+@dataclass
 class Package:
-    def __init__(self, name, version=None):
-        self.name = name
-        self.version = version
+    name: str
+    version: Optional[str] = None
 
-    def __str__(self):
+    def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.name}@{self.version}"
 
 
+@dataclass
 class RunStep:
-    def __init__(
-        self,
-        command: str,
-        inputs: List[str] = None,
-        outputs: List[str] = None,
-        group: str = None,
-    ):
-        self.command = command
-        self.inputs = inputs
-        self.outputs = outputs
-        self.group = group
+    command: str
+    inputs: Optional[List[str]] = None
+    outputs: Optional[List[str]] = None
+    group: Optional[str] = None
 
 
+@dataclass
 class CopyStep:
-    def __init__(self, source: str, target: str, ignore: List[str] = None):
-        self.source = source
-        self.target = target
-        self.ignore = ignore
+    source: str
+    target: str
+    ignore: Optional[List[str]] = None
 
 
+@dataclass
 class EnvStep:
-    def __init__(self, variables: Dict[str, str]):
-        self.variables = variables
+    variables: Dict[str, str]
 
-    def __str__(self):
+    def __str__(self) -> str:  # pragma: no cover - simple representation
         return " ".join([f"{key}={value}" for key, value in self.variables.items()])
 
 
+@dataclass
 class UseStep:
-    def __init__(self, dependencies: List[Package]):
-        self.dependencies = dependencies
-
-    # def __str__(self):
-    #     return " ".join([f"{dependency.name}@{dependency.version}" for dependency in self.dependencies])
+    dependencies: List[Package]
 
 
+@dataclass
 class PathStep:
-    def __init__(self, path: str):
-        self.path = path
+    path: str
 
 
 Step = Union[RunStep, CopyStep, EnvStep, PathStep, UseStep]
 
 
+@dataclass
 class Build:
-    def __init__(self, deps: List[Package], steps: List[Step]):
-        self.deps = deps
-        self.steps = steps
+    deps: List[Package]
+    steps: List[Step]
 
 
 
-def write_stdout(line):
+def write_stdout(line: str) -> None:
     sys.stdout.write(f"{line}")  # print to console
 
 
-def write_stderr(line):
+def write_stderr(line: str) -> None:
     sys.stderr.write(f"{line}")  # print to console
 
 
@@ -114,7 +106,7 @@ def write_stderr(line):
 class DockerBuilder:
     def __init__(self, src_dir: Path):
         self.src_dir = src_dir
-        self.docker_path = self.src_dir / "" / "docker"
+        self.docker_path = self.src_dir / "docker"
 
     env = {
         "HOME": "/root",
