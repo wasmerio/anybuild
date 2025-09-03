@@ -26,3 +26,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/shipit"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.2",
+]

@@ -25,6 +25,13 @@ for popular frameworks.
 - `uv run shipit serve` – Build and run the project.
 - `uv run pytest` – Run the test suite (if tests exist).
 
+## Testing
+
+- Pytest is declared as a dev dependency in `pyproject.toml` under
+  `[tool.uv].dev-dependencies`. Running `uv run pytest` will automatically use
+  the project environment and install pytest if needed.
+- No global installation or manual virtualenv activation is required.
+
 ## Code style
 
 - Follow Python conventions (PEP 8) and existing patterns in the codebase.
