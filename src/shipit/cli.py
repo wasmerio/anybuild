@@ -5,10 +5,20 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Protocol,
+    Set,
+    TypedDict,
+    Union,
+    cast,
+)
 from shutil import copy, copytree, ignore_patterns
 
-import sh
+import sh  # type: ignore[import-untyped]
 import starlark as sl
 import typer
 from rich import box
@@ -32,10 +42,10 @@ ASSETS_PATH = DIR_PATH / "assets"
 class Serve:
     name: str
     provider: str
-    build: List[str]
+    build: List["Step"]
     deps: List["Package"]
     commands: Dict[str, str]
-    assets: Optional[Dict[str, Union[str, bytes]]] = None
+    assets: Optional[Dict[str, str]] = None
     prepare: Optional[str] = None
     workers: Optional[List[str]] = None
     mounts: Optional[Dict[str, str]] = None
@@ -103,8 +113,26 @@ def write_stderr(line: str) -> None:
 
 
 
+class MapperItem(TypedDict):
+    dependencies: Dict[str, str]
+    scripts: Set[str]
+    env: Dict[str, str]
+
+
+class Builder(Protocol):
+    def build(self, env: Dict[str, str], steps: List[Step]) -> None: ...
+    def build_assets(self, assets: Dict[str, str]) -> None: ...
+    def buildserve(self, serve: Serve) -> None: ...
+    def prepare(self, env: Dict[str, str], prepare: str) -> None: ...
+    def getenv(self, name: str) -> Optional[str]: ...
+    def run_serve_command(self, command: str) -> None: ...
+    def run_command(self, command: str, extra_args: Optional[List[str]] | None = None) -> Any: ...
+    def serve_mount(self, name: str) -> str: ...
+    def get_asset(self, name: str) -> str: ...
+
+
 class DockerBuilder:
-    def __init__(self, src_dir: Path):
+    def __init__(self, src_dir: Path) -> None:
         self.src_dir = src_dir
         self.docker_path = self.src_dir / "docker"
 
@@ -115,7 +143,7 @@ class DockerBuilder:
     def getenv(self, name: str) -> Optional[str]:
         return self.env.get(name) or os.environ.get(name)
 
-    def mkdir(self, path: Path):
+    def mkdir(self, path: Path) -> Path:
         path = Path("/shipit") / path
         docker_file = self.docker_path / "Dockerfile"
         docker_file_contents = docker_file.read_text()
@@ -124,14 +152,16 @@ class DockerBuilder:
         # path.mkdir(parents=True, exist_ok=True)
         return path.absolute()
 
-    def run_command(self, command: str, extra_args: List[str] = []):
+    def run_command(
+        self, command: str, extra_args: Optional[List[str]] = None
+    ) -> Any:
         # docker_file = self.docker_path / "Dockerfile"
         # docker_file_contents = docker_file.read_text()
-        # docker_file_contents += f"\nRUN {command} {' '.join(extra_args)}"
+        # docker_file_contents += f"\nRUN {command} {' '.join(extra_args or [])}"
         # docker_file.write_text(docker_file_contents)
         # path.mkdir(parents=True, exist_ok=True)
         image_name = "test-command"
-        build = sh.Command("docker")(
+        sh.Command("docker")(
             "build",
             "-f",
             (self.docker_path / "Dockerfile").absolute(),
@@ -142,19 +172,19 @@ class DockerBuilder:
             _out=write_stdout,
             _err=write_stderr,
         )
-        sh.Command("docker")(
+        return sh.Command("docker")(
             "run",
             "-p",
             "80:80",
             "--rm",
             image_name,
             command,
-            *extra_args,
+            *(extra_args or []),
             _out=write_stdout,
             _err=write_stderr,
         )
 
-    def create_file(self, path: Path, content: str, mode: int = 0o755):
+    def create_file(self, path: Path, content: str, mode: int = 0o755) -> Path:
         # docker_files = self.docker_path / "files" / path.name
         # docker_files.write_text(content)
         # docker_files.chmod(mode)
@@ -171,7 +201,7 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
 
         return path.absolute()
 
-    def print_dockerfile(self):
+    def print_dockerfile(self) -> None:
         docker_file = self.docker_path / "Dockerfile"
         manifest_panel = Panel(
             Syntax(
@@ -187,7 +217,7 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
         )
         console.print(manifest_panel, markup=False, highlight=True)
 
-    def build(self, env: Dict[str, str], steps: List[Step]):
+    def build(self, env: Dict[str, str], steps: List[Step]) -> None:
         console.print(f"\n[bold]Building Docker file[/bold]")
         base_path = self.docker_path
         shutil.rmtree(base_path, ignore_errors=True)
@@ -255,12 +285,8 @@ Shipit
         console.print(Rule(characters="-", style="bright_black"))
         console.print(f"[bold]Build complete ✅[/bold]")
 
-    def build_assets(self, assets: Dict[str, str]):
-        pass
-        # for asset in assets:
-        #     asset_path = src_dir / ".shipit" / "local" / "assets" / asset
-        #     asset_path.parent.mkdir(parents=True, exist_ok=True)
-        #     asset_path.write_text(assets[asset])
+    def build_assets(self, assets: Dict[str, str]) -> None:
+        raise NotImplementedError
 
     def get_path(self) -> Path:
         return Path("/")
@@ -276,10 +302,10 @@ Shipit
         self.mkdir(path)
         return path
 
-    def prepare(self, env: Dict[str, str], prepare: str):
-        pass
+    def prepare(self, env: Dict[str, str], prepare: str) -> None:
+        raise NotImplementedError
 
-    def buildserve(self, serve: Serve):
+    def buildserve(self, serve: Serve) -> None:
         self.print_dockerfile()
         sh.Command("docker")(
             "build",
@@ -293,22 +319,22 @@ Shipit
             _err=write_stderr,
         )
 
-    def serve_mount(self, name: str):
-        pass
+    def serve_mount(self, name: str) -> str:
+        raise NotImplementedError
 
-    def get_asset(self, name: str):
-        pass
+    def get_asset(self, name: str) -> str:
+        raise NotImplementedError
 
-    def run_serve_command(self, command: str):
-        pass
+    def run_serve_command(self, command: str) -> None:
+        raise NotImplementedError
 
 
 class LocalBuilder:
-    def __init__(self, src_dir: Path):
+    def __init__(self, src_dir: Path) -> None:
         self.src_dir = src_dir
         self.local_path = self.src_dir / ".shipit" / "local"
 
-    def execute_step(self, step: Step, env: Dict[str, str], build_path: Path):
+    def execute_step(self, step: Step, env: Dict[str, str], build_path: Path) -> None:
         if isinstance(step, UseStep):
             console.print(f"[bold]Using dependencies:[/bold] {step.dependencies}")
         elif isinstance(step, RunStep):
@@ -371,7 +397,7 @@ class LocalBuilder:
         else:
             raise Exception(f"Unknown step type: {type(step)}")
 
-    def build(self, env: Dict[str, str], steps: List[Step]):
+    def build(self, env: Dict[str, str], steps: List[Step]) -> None:
         console.print(f"\n[bold]Building package[/bold]")
         base_path = self.local_path
         shutil.rmtree(base_path, ignore_errors=True)
@@ -390,18 +416,22 @@ class LocalBuilder:
         console.print(Rule(characters="-", style="bright_black"))
         console.print(f"[bold]Build complete ✅[/bold]")
 
-    def mkdir(self, path: Path):
+    def mkdir(self, path: Path) -> Path:
         path = self.get_path() / path
         path.mkdir(parents=True, exist_ok=True)
         return path.absolute()
 
-    def create_file(self, path: Path, content: str, mode: int = 0o755):
+    def create_file(self, path: Path, content: str, mode: int = 0o755) -> Path:
         path.write_text(content)
         path.chmod(mode)
         return path.absolute()
 
-    def run_command(self, command: str, extra_args: List[str] = []):
-        return sh.Command(command)(*extra_args, _out=write_stdout, _err=write_stderr)
+    def run_command(
+        self, command: str, extra_args: Optional[List[str]] = None
+    ) -> Any:
+        return sh.Command(command)(
+            *(extra_args or []), _out=write_stdout, _err=write_stderr
+        )
 
     def getenv(self, name: str) -> Optional[str]:
         return os.environ.get(name)
@@ -420,13 +450,13 @@ class LocalBuilder:
         self.mkdir(path)
         return path
 
-    def build_assets(self, assets: Dict[str, str]):
+    def build_assets(self, assets: Dict[str, str]) -> None:
         assets_path = self.get_assets_path()
         for asset in assets:
             asset_path = assets_path / asset
             self.create_file(asset_path, assets[asset])
 
-    def prepare(self, env: Dict[str, str], prepare: str):
+    def prepare(self, env: Dict[str, str], prepare: str) -> None:
         app_dir = self.get_build_path()
         prepare_bash_script = self.get_path() / "prepare" / "prepare.sh"
         prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
@@ -436,7 +466,7 @@ class LocalBuilder:
             _out=write_stdout, _err=write_stderr
         )
 
-    def buildserve(self, serve: Serve):
+    def buildserve(self, serve: Serve) -> None:
         console.print("\n[bold]Building serve[/bold]")
         build_path = self.get_build_path()
         serve_command_path = self.get_serve_path() / "bin"
@@ -454,7 +484,7 @@ class LocalBuilder:
             )
             command_path.chmod(0o755)
 
-    def run_serve_command(self, command: str):
+    def run_serve_command(self, command: str) -> None:
         console.print(f"\n[bold]Running {command} command[/bold]")
         base_path = self.get_serve_path() / "bin"
         command_path = base_path / command
@@ -465,19 +495,19 @@ class LocalBuilder:
         base_path.mkdir(parents=True, exist_ok=True)
         return str(base_path.absolute())
 
-    def get_asset(self, name: str):
+    def get_asset(self, name: str) -> str:
         asset_path = ASSETS_PATH / name
         return asset_path.read_text()
 
 
 class WasmerBuilder:
-    mapper = {
+    mapper: Dict[str, MapperItem] = {
         "python": {
             "dependencies": {
                 "latest": "wasmer/python-native@=0.1.11",
                 "3.13": "wasmer/python-native@=0.1.11",
             },
-            "scripts": set(["python"]),
+            "scripts": {"python"},
             "env": {
                 "PYTHONEXECUTABLE": "/bin/python",
                 "PYTHONHOME": "/cpython",
@@ -489,7 +519,7 @@ class WasmerBuilder:
                 "latest": "php/php-32@=8.3.2104",
                 "8.3": "php/php-32@=8.3.2104",
             },
-            "scripts": set(["php"]),
+            "scripts": {"php"},
             "env": {},
         },
         "bash": {
@@ -497,7 +527,7 @@ class WasmerBuilder:
                 "latest": "wasmer/bash@=1.0.24",
                 "8.3": "wasmer/bash@=1.0.24",
             },
-            "scripts": set(["bash", "sh"]),
+            "scripts": {"bash", "sh"},
             "env": {},
         },
         "static-web-server": {
@@ -505,12 +535,12 @@ class WasmerBuilder:
                 "latest": "wasmer/static-web-server@=1.1.0",
                 "0.1": "wasmer/static-web-server@=1.1.0",
             },
-            "scripts": set(["webserver"]),
+            "scripts": {"webserver"},
             "env": {},
         },
     }
 
-    def __init__(self, inner_builder: LocalBuilder):
+    def __init__(self, inner_builder: Builder) -> None:
         self.inner_builder = inner_builder
         self.default_env = {
             "SHIPIT_PYTHON_EXTRA_INDEX_URL": "https://pythonindex.wasix.org/simple",
@@ -521,15 +551,16 @@ class WasmerBuilder:
     def getenv(self, name: str) -> Optional[str]:
         return self.inner_builder.getenv(name) or self.default_env.get(name)
 
-    def build(self, env: Dict[str, str], build: List[Step]):
+    def build(self, env: Dict[str, str], build: List[Step]) -> None:
         return self.inner_builder.build(env, build)
 
-    def build_assets(self, assets: Dict[str, str]):
+    def build_assets(self, assets: Dict[str, str]) -> None:
         return self.inner_builder.build_assets(assets)
 
-    def prepare(self, env: Dict[str, str], prepare: str):
-        prepare_dir = self.inner_builder.mkdir(Path("wasmer") / "prepare")
-        self.inner_builder.create_file(
+    def prepare(self, env: Dict[str, str], prepare: str) -> None:
+        inner = cast(Any, self.inner_builder)
+        prepare_dir = inner.mkdir(Path("wasmer") / "prepare")
+        inner.create_file(
             Path(prepare_dir) / "prepare.sh",
             f"#!/bin/bash\ncd /app\n{prepare}",
             mode=0o755,
@@ -543,7 +574,7 @@ class WasmerBuilder:
             ],
         )
 
-    def buildserve(self, serve: Serve):
+    def buildserve(self, serve: Serve) -> None:
         from tomlkit import comment, document, nl, table, aot, string
 
         doc = document()
@@ -565,12 +596,12 @@ class WasmerBuilder:
                     console.print(
                         f"* {dep.name}@{version} mapped to {self.mapper[dep.name]['dependencies'][version]}"
                     )
-                    package, version = self.mapper[dep.name]["dependencies"][
+                    package_name, version = self.mapper[dep.name]["dependencies"][
                         version
-                    ].split("@")  # type:ignore
-                    dependencies.add(package, version)
+                    ].split("@")
+                    dependencies.add(package_name, version)
                     for script in self.mapper[dep.name]["scripts"]:
-                        binaries[script] = f"{package}:{script}"
+                        binaries[script] = f"{package_name}:{script}"
                 else:
                     raise Exception(
                         f"Dependency {dep.name}@{version} not found in Wasmer"
@@ -580,11 +611,10 @@ class WasmerBuilder:
 
         fs = table()
         doc.add("fs", fs)
+        inner = cast(Any, self.inner_builder)
         if serve.assets:
-            fs.add(
-                "/assets", str((self.inner_builder.get_path() / "assets").absolute())
-            )
-        fs.add("/app", str(self.inner_builder.get_build_path().absolute()))
+            fs.add("/assets", str((inner.get_path() / "assets").absolute()))
+        fs.add("/app", str(inner.get_build_path().absolute()))
         if serve.mounts:
             for mount in serve.mounts:
                 fs.add(mount, serve.mounts[mount])
@@ -616,7 +646,8 @@ class WasmerBuilder:
                 title = string("annotations.wasi", literal=False)
                 command.add(title, wasi_args)
 
-        wasmer_dir = self.inner_builder.mkdir(Path("wasmer"))
+        inner = cast(Any, self.inner_builder)
+        wasmer_dir = inner.mkdir(Path("wasmer"))
 
         manifest = doc.as_string().replace(
             '[command."annotations.wasi"]', "[command.annotations.wasi]"
@@ -635,13 +666,16 @@ class WasmerBuilder:
             expand=False,
         )
         console.print(manifest_panel, markup=False, highlight=True)
-        self.inner_builder.create_file(Path(wasmer_dir) / "wasmer.toml", manifest)
+        inner.create_file(Path(wasmer_dir) / "wasmer.toml", manifest)
 
         # self.inner_builder.buildserve(serve)
 
-    def run_serve_command(self, command: str, extra_args: Optional[List[str]] = None):
+    def run_serve_command(
+        self, command: str, extra_args: Optional[List[str]] = None
+    ) -> None:
         console.print(f"\n[bold]Serving site[/bold]: running {command} command")
-        wasmer_path = self.inner_builder.mkdir(Path("wasmer"))
+        inner = cast(Any, self.inner_builder)
+        wasmer_path = inner.mkdir(Path("wasmer"))
         extra_args = extra_args or []
         wasmer_registry = self.getenv("SHIPIT_WASMER_REGISTRY")
         if wasmer_registry:
@@ -651,47 +685,32 @@ class WasmerBuilder:
             ["run", str(wasmer_path), "--net", f"--command={command}", *extra_args],
         )
 
-    def serve_mount(self, name: str):
+    def serve_mount(self, name: str) -> str:
         return self.inner_builder.serve_mount(name)
 
-    def get_asset(self, name: str):
+    def get_asset(self, name: str) -> str:
         return self.inner_builder.get_asset(name)
 
-
-class Builder:
-    def __init__(self, src_dir: Path):
-        self.src_dir = src_dir
-
-    def buildandserve(self, env: Dict[str, str], serve: Serve):
-        pass
-
-    def getenv(self, name: str) -> Optional[str]:
-        pass
-
-    def run_serve_command(self, command: str):
-        pass
-
-    def serve_mount(self, name: str) -> str:
-        pass
-
-    def get_asset(self, name: str):
-        pass
+    def run_command(
+        self, command: str, extra_args: Optional[List[str]] | None = None
+    ) -> Any:
+        return self.inner_builder.run_command(command, extra_args or [])
 
 
 class Ctx:
-    def __init__(self, builder: Builder):
+    def __init__(self, builder: Builder) -> None:
         self.builder = builder
-        self.packages = {}
-        self.builds = []
-        self.steps = []
-        self.serves = {}
+        self.packages: Dict[str, Package] = {}
+        self.builds: List[Build] = []
+        self.steps: List[Step] = []
+        self.serves: Dict[str, Serve] = {}
 
-    def add_package(self, package: Package):
+    def add_package(self, package: Package) -> str:
         index = f"{package.name}@{package.version}" if package.version else package.name
         self.packages[index] = package
         return f"ref:package:{index}"
 
-    def get_ref(self, index: str) -> Package:
+    def get_ref(self, index: str) -> Any:
         if index.startswith("ref:package:"):
             return self.packages[index[len("ref:package:") :]]
         elif index.startswith("ref:build:"):
@@ -703,30 +722,30 @@ class Ctx:
         else:
             raise Exception(f"Invalid reference: {index}")
 
-    def get_refs(self, indices: List[str]) -> List[object]:
+    def get_refs(self, indices: List[str]) -> List[Any]:
         return [self.get_ref(index) for index in indices if index is not None]
 
-    def add_build(self, build: Build):
+    def add_build(self, build: Build) -> str:
         self.builds.append(build)
         return f"ref:build:{len(self.builds) - 1}"
 
-    def add_serve(self, serve: Serve):
+    def add_serve(self, serve: Serve) -> str:
         self.serves[serve.name] = serve
         return f"ref:serve:{serve.name}"
 
-    def add_step(self, step: Step):
+    def add_step(self, step: Step) -> Optional[str]:
         if step is None:
             return None
         self.steps.append(step)
         return f"ref:step:{len(self.steps) - 1}"
 
-    def getenv(self, name):
+    def getenv(self, name: str) -> Optional[str]:
         return self.builder.getenv(name)
 
-    def get_asset(self, name: str):
+    def get_asset(self, name: str) -> Optional[str]:
         return self.builder.get_asset(name)
 
-    def dep(self, name, version=None):
+    def dep(self, name: str, version: Optional[str] = None) -> str:
         package = Package(name, version)
         return self.add_package(package)
 
@@ -737,17 +756,19 @@ class Ctx:
         build: List[str],
         deps: List[str],
         commands: Dict[str, str],
-        assets: Dict[str, Union[str, bytes]] = None,
-        prepare: str = None,
-        workers: List[str] = None,
-        mounts: Dict[str, str] = None,
+        assets: Optional[Dict[str, str]] = None,
+        prepare: Optional[str] = None,
+        workers: Optional[List[str]] = None,
+        mounts: Optional[Dict[str, str]] = None,
     ) -> str:
+        build_refs = [cast(Step, r) for r in self.get_refs(build)]
+        dep_refs = [cast(Package, r) for r in self.get_refs(deps)]
         serve = Serve(
             name=name,
             provider=provider,
-            build=self.get_refs(build),
+            build=build_refs,
             assets=assets,
-            deps=self.get_refs(deps),
+            deps=dep_refs,
             commands=commands,
             prepare=prepare,
             workers=workers,
@@ -755,35 +776,38 @@ class Ctx:
         )
         return self.add_serve(serve)
 
-    def path(self, path: str):
+    def path(self, path: str) -> Optional[str]:
         step = PathStep(path)
         return self.add_step(step)
 
-    def use(self, *dependencies: List[str]):
-        step = UseStep(self.get_refs(dependencies))  # type: ignore
+    def use(self, *dependencies: str) -> Optional[str]:
+        deps = [cast(Package, r) for r in self.get_refs(list(dependencies))]
+        step = UseStep(deps)
         return self.add_step(step)
 
-    def run(self, *args, **kwargs):
+    def run(self, *args: Any, **kwargs: Any) -> Optional[str]:
         step = RunStep(*args, **kwargs)
         return self.add_step(step)
 
-    def copy(self, source: str, target: str, ignore: List[str] = None):
+    def copy(
+        self, source: str, target: str, ignore: Optional[List[str]] = None
+    ) -> Optional[str]:
         step = CopyStep(source, target, ignore)
         return self.add_step(step)
 
-    def buildpath(self, name):
+    def buildpath(self, name: str) -> str:
         return f"file://{name}"
 
-    def env(self, **env_vars):
+    def env(self, **env_vars: str) -> Optional[str]:
         step = EnvStep(env_vars)
         return self.add_step(step)
 
-    def serve_mount(self, name):
+    def serve_mount(self, name: str) -> Optional[str]:
         print(f"serve_mount called with {name}")
         return self.builder.serve_mount(name)
 
 
-def print_help():
+def print_help() -> None:
     panel = Panel(
         f"Shipit {shipit_version}",
         box=box.ROUNDED,
@@ -837,7 +861,7 @@ def generate(
     invoke_without_command=True,
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
-def _default(ctx: typer.Context):
+def _default(ctx: typer.Context) -> None:
     print_help()
 
 
@@ -872,6 +896,7 @@ def serve(
         help="Run the start command after building.",
     ),
 ) -> None:
+    builder: Builder
     if docker:
         builder = DockerBuilder(path)
     else:
@@ -902,6 +927,7 @@ def build(
     if not ab_file.exists():
         raise FileNotFoundError(f"Shipit file not found at {ab_file}")
     source = open(ab_file).read()
+    builder: Builder
     if docker:
         builder = DockerBuilder(path)
     else:
@@ -953,7 +979,7 @@ def build(
         builder.prepare(env, serve.prepare)
 
 
-def main():
+def main() -> None:
     args = sys.argv[1:]
     # If no subcommand or first token looks like option/path → default to "build"
     available_commands = [cmd.name for cmd in app.registered_commands]
