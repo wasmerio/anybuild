@@ -124,7 +124,7 @@ class DockerBuilder:
         return self.env.get(name) or os.environ.get(name)
 
     def mkdir(self, path: Path):
-        path = Path("/shipits") / path
+        path = Path("/shipit") / path
         docker_file = self.docker_path / "Dockerfile"
         docker_file_contents = docker_file.read_text()
         docker_file_contents += f"\nRUN mkdir -p {str(path.absolute())}"
