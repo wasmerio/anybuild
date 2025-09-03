@@ -1,5 +1,5 @@
 import starlark as sl
-from autobuild import Package, Serve
+import sys
 import os
 from typing import List, Dict, Union, Optional
 import logging
@@ -16,12 +16,38 @@ from rich.console import Console
 from autobuild.version import version as autobuild_version
 import shutil
 
+
 console = Console()
 
 app = typer.Typer(invoke_without_command=True)
 
 DIR_PATH = Path(os.path.dirname(os.path.realpath(__file__)))
 ASSETS_PATH = DIR_PATH / "assets"
+
+
+class Serve:
+    def __init__(self, name, provider, build, deps, commands, assets=None, prepare=None, workers=None, mounts=None):
+        self.name = name
+        self.provider = provider
+        self.build = build
+        self.deps = deps
+        self.commands = commands
+        self.assets = assets
+        self.workers = workers
+        self.prepare = prepare
+        self.mounts = mounts
+
+    def __str__(self):
+        return f"Serve(name={self.name}, provider={self.provider}, prepare={self.prepare}, deps={self.deps}, commands={self.commands}, workers={self.workers}, volumes={self.volumes})"
+
+
+class Package:
+    def __init__(self, name, version=None):
+        self.name = name
+        self.version = version
+
+    def __str__(self):
+        return f"{self.name}@{self.version}"
 
 
 class RunStep:
@@ -75,8 +101,6 @@ class Build:
         self.steps = steps
 
 
-import sys
-
 
 def write_stdout(line):
     sys.stdout.write(f"{line}")  # print to console
@@ -84,6 +108,7 @@ def write_stdout(line):
 
 def write_stderr(line):
     sys.stderr.write(f"{line}")  # print to console
+
 
 
 class DockerBuilder:
