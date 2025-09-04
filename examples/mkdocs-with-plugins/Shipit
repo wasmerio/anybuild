@@ -10,10 +10,8 @@ serve(
   build=[
     use(python, dep("uv")),
     run("uv init --no-managed-python", inputs=[], outputs=["."], group="install"),
-    run(f"uv add -r requirements.txt", inputs=["requirements.txt"], outputs=["."], group="install"),
-    path(".venv/bin"),
+    run(f"uv add -r requirements.txt", inputs=["requirements.txt"], outputs=[".venv"], group="install"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    # run("python -m compileall -o 2 ."),
     run("uv run mkdocs build", outputs=["."], group="build")
   ],
   deps=[staticwebserver],

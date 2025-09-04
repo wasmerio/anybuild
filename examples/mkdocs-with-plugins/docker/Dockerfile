@@ -17,11 +17,11 @@ RUN uv init --no-managed-python
 RUN \
   --mount=type=bind,source=requirements.txt,target=requirements.txt \
   uv add -r requirements.txt
-ENV PATH=.venv/bin:$PATH
 COPY . .
 RUN uv run mkdocs build
-
 RUN mkdir -p /shipit/serve/bin
+RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh
+
 RUN cat > /shipit/serve/bin/start <<'EOF'
 #!/bin/bash
 cd /app

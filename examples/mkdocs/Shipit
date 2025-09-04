@@ -1,6 +1,7 @@
 
 python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"  # from .python-version
 python = dep("python", python_version)
+mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"
 
 staticwebserver = dep("static-web-server")
 
@@ -9,15 +10,13 @@ serve(
   provider="mkdocs-site",
   build=[
     use(python, dep("uv")),
-    run("uv init --no-managed-python", inputs=[], outputs=["."], group="install"),
-    run(f"uv add mkdocs"), # uv add -r requirements.txt mkdocs
-    path(".venv/bin"),
+    run("uv init --no-managed-python", inputs=[], outputs=[".venv"], group="install"),
+    run(f"uv add mkdocs=={mkdocs_version}", group="install"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    # run("python -m compileall -o 2 ."),
     run("uv run mkdocs build", outputs=["."], group="build")
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root /app/site",
+    "start": "static-web-server --root {}".format(buildpath("site")),
   },
 )

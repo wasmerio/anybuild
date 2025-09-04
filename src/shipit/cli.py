@@ -134,6 +134,7 @@ class Builder(Protocol):
 class DockerBuilder:
     def __init__(self, src_dir: Path) -> None:
         self.src_dir = src_dir
+        self.docker_file_contents = ""
         self.docker_path = self.src_dir / "docker"
 
     env = {
@@ -146,9 +147,7 @@ class DockerBuilder:
     def mkdir(self, path: Path) -> Path:
         path = Path("/shipit") / path
         docker_file = self.docker_path / "Dockerfile"
-        docker_file_contents = docker_file.read_text()
-        docker_file_contents += f"\nRUN mkdir -p {str(path.absolute())}"
-        docker_file.write_text(docker_file_contents)
+        self.docker_file_contents += f"RUN mkdir -p {str(path.absolute())}\n"
         # path.mkdir(parents=True, exist_ok=True)
         return path.absolute()
 
@@ -186,16 +185,13 @@ class DockerBuilder:
         # docker_files = self.docker_path / "files" / path.name
         # docker_files.write_text(content)
         # docker_files.chmod(mode)
-        docker_file = self.docker_path / "Dockerfile"
-        docker_file_contents = docker_file.read_text()
-        docker_file_contents += f"""
+        self.docker_file_contents += f"""
 RUN cat > {path.absolute()} <<'EOF'
 {content}
 EOF
 
 RUN chmod {oct(mode)[2:]} {path.absolute()}
 """
-        docker_file.write_text(docker_file_contents)
 
         return path.absolute()
 
@@ -215,14 +211,29 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
         )
         console.print(manifest_panel, markup=False, highlight=True)
 
+    def add_dependency(self, dependency: Package):
+        if dependency.name == "pie":
+            self.docker_file_contents += f"RUN apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n"
+            self.docker_file_contents += f"RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n"
+            return
+        elif dependency.name == "static-web-server":
+            self.docker_file_contents += f"RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n"
+            return
+        if dependency.version:
+            self.docker_file_contents += (
+                f"RUN pkgm install {dependency.name}@{dependency.version}\n"
+            )
+        else:
+            self.docker_file_contents += f"RUN pkgm install {dependency.name}\n"
+
     def build(self, env: Dict[str, str], steps: List[Step]) -> None:
         console.print(f"\n[bold]Building Docker file[/bold]")
         base_path = self.docker_path
         shutil.rmtree(base_path, ignore_errors=True)
         base_path.mkdir(parents=True, exist_ok=True)
         docker_file = base_path / "Dockerfile"
-        docker_file_contents = "FROM debian:bookworm-slim\n"
-        docker_file_contents += """
+        self.docker_file_contents = "FROM debian:bookworm-slim\n"
+        self.docker_file_contents += """
 RUN apt-get update \\
     && apt-get -y --no-install-recommends install sudo curl ca-certificates locate git zip unzip \\
     && rm -rf /var/lib/apt/lists/*
@@ -232,11 +243,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl https://pkgx.sh | sh
 """
         # docker_file_contents += "RUN curl https://mise.run | sh\n"
-        docker_file_contents += """
+        self.docker_file_contents += """
 RUN curl https://get.wasmer.io -sSfL | sh
 ENV PATH="/root/.wasmer/bin:${PATH}"
 """
-        docker_file_contents += "WORKDIR /app\n"
+        self.docker_file_contents += "WORKDIR /app\n"
         for step in steps:
             if isinstance(step, RunStep):
                 if step.inputs:
@@ -248,31 +259,21 @@ ENV PATH="/root/.wasmer/bin:${PATH}"
                     )
                 else:
                     pre = ""
-                docker_file_contents += f"RUN {pre}{step.command}\n"
+                self.docker_file_contents += f"RUN {pre}{step.command}\n"
             elif isinstance(step, CopyStep):
-                docker_file_contents += f"COPY {step.source} {step.target}\n"
+                self.docker_file_contents += f"COPY {step.source} {step.target}\n"
             elif isinstance(step, EnvStep):
                 env_vars = " ".join(
                     [f"{key}={value}" for key, value in step.variables.items()]
                 )
-                docker_file_contents += f"ENV {env_vars}\n"
+                self.docker_file_contents += f"ENV {env_vars}\n"
             elif isinstance(step, PathStep):
-                docker_file_contents += f"ENV PATH={step.path}:$PATH\n"
+                self.docker_file_contents += f"ENV PATH={step.path}:$PATH\n"
             elif isinstance(step, UseStep):
                 for dependency in step.dependencies:
-                    if dependency.name == "pie":
-                        docker_file_contents += f"RUN apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n"
-                        docker_file_contents += f"RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n"
-                        continue
-                    if dependency.version:
-                        docker_file_contents += (
-                            f"RUN pkgm install {dependency.name}@{dependency.version}\n"
-                        )
-                    else:
-                        docker_file_contents += f"RUN pkgm install {dependency.name}\n"
-                # docker_file_contents += f"RUN apt-get update && apt-get install -y {step.dependencies}\n"
+                    self.add_dependency(dependency)
 
-        docker_file.write_text(docker_file_contents)
+        docker_file.write_text(self.docker_file_contents)
 
         docker_file_ignore = base_path / "Dockerfile.dockerignore"
         docker_file_ignore.write_text("""
@@ -306,6 +307,10 @@ Shipit
     def buildserve(self, serve: Serve) -> None:
         serve_command_path = self.mkdir(Path("serve") / "bin")
         console.print(f"[bold]Serve Commands:[/bold]")
+        docker_file = self.docker_path / "Dockerfile"
+        for dep in serve.deps:
+            self.add_dependency(dep)
+
         build_path = self.get_build_path()
         for command in serve.commands:
             console.print(f"* {command}")
@@ -316,6 +321,7 @@ Shipit
                 mode=0o755,
             )
 
+        docker_file.write_text(self.docker_file_contents)
         self.print_dockerfile()
         sh.Command("docker")(
             "build",
