@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Dict, List, Optional, Protocol
+
+
+@dataclass
+class DetectResult:
+    name: str
+    score: int  # Higher score wins when multiple providers match
+
+
+class Provider(Protocol):
+    def name(self) -> str: ...
+    def detect(self, path: Path) -> Optional[DetectResult]: ...
+    def initialize(self, path: Path) -> None: ...
+    # Structured plan steps
+    def serve_name(self, path: Path) -> str: ...
+    def provider_kind(self, path: Path) -> str: ...
+    def build_dependencies(self, path: Path) -> list["DependencySpec"]: ...
+    def serve_dependencies(self, path: Path) -> list["DependencySpec"]: ...
+    def build_steps(self, path: Path) -> list[str]: ...
+    def prepare_script(self, path: Path) -> Optional[str]: ...
+    def commands(self, path: Path) -> Dict[str, str]: ...
+    def assets(self, path: Path) -> Optional[Dict[str, str]]: ...
+    def mounts(self, path: Path) -> Optional[Dict[str, str]]: ...
+
+
+@dataclass
+class DependencySpec:
+    name: str
+    env_var: Optional[str] = None
+    default_version: Optional[str] = None
+    alias: Optional[str] = None  # Variable name in Shipit plan
+
+
+@dataclass
+class ProviderPlan:
+    serve_name: str
+    provider: str
+    build_dependencies: List[DependencySpec] = field(default_factory=list)
+    serve_dependencies: List[DependencySpec] = field(default_factory=list)
+    build_steps: List[str] = field(default_factory=list)
+    prepare: Optional[str] = None
+    commands: Dict[str, str] = field(default_factory=dict)
+    assets: Optional[Dict[str, str]] = None
+    mounts: Optional[Dict[str, str]] = None
+
+
+def _exists(path: Path, *candidates: str) -> bool:
+    return any((path / c).exists() for c in candidates)
+
+
+def _has_dependency(pkg_json: Path, dep: str) -> bool:
+    try:
+        import json
+
+        data = json.loads(pkg_json.read_text())
+        for section in ("dependencies", "devDependencies", "peerDependencies"):
+            if dep in data.get(section, {}):
+                return True
+    except Exception:
+        return False
+    return False
+

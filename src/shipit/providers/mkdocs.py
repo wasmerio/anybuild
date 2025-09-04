@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Dict, Optional
+
+from .base import DetectResult, DependencySpec, Provider, _exists
+
+
+class MkdocsProvider:
+    def name(self) -> str:
+        return "mkdocs"
+
+    def detect(self, path: Path) -> Optional[DetectResult]:
+        if _exists(path, "mkdocs.yml", "mkdocs.yaml"):
+            return DetectResult(self.name(), 85)
+        return None
+
+    def initialize(self, path: Path) -> None:
+        pass
+
+    def serve_name(self, path: Path) -> str:
+        return "mkdocs"
+
+    def provider_kind(self, path: Path) -> str:
+        return "mkdocs-site"
+
+    def build_dependencies(self, path: Path) -> list[DependencySpec]:
+        return [
+            DependencySpec("python", env_var="SHIPIT_PYTHON_VERSION", default_version="3.13"),
+            DependencySpec("uv", env_var="SHIPIT_UV_VERSION", default_version="0.8.15"),
+        ]
+
+    def serve_dependencies(self, path: Path) -> list[DependencySpec]:
+        return [DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION", default_version="2.38.0")]
+
+    def build_steps(self, path: Path) -> list[str]:
+        has_requirements = _exists(path, "requirements.txt")
+        if has_requirements:
+            install_lines = [
+                "run(\"uv init --no-managed-python\", inputs=[], outputs=[\".\"], group=\"install\")",
+                "run(f\"uv add -r requirements.txt\", inputs=[\"requirements.txt\"], outputs=[\".venv\"], group=\"install\")",
+            ]
+        else:
+            install_lines = [
+                "mkdocs_version = getenv(\"SHIPIT_MKDOCS_VERSION\") or \"1.6.1\"",
+                "run(\"uv init --no-managed-python\", inputs=[], outputs=[\".venv\"], group=\"install\")",
+                "run(f\"uv add mkdocs=={mkdocs_version}\", group=\"install\")",
+            ]
+        return [
+            "use(python, uv)",
+            *install_lines,
+            "copy(\".\", \".\", ignore=[\".venv\", \".git\", \"__pycache__\"])",
+            "run(\"uv run mkdocs build\", outputs=[\".\"], group=\"build\")",
+        ]
+
+    def prepare_script(self, path: Path) -> Optional[str]:
+        return None
+
+    def commands(self, path: Path) -> Dict[str, str]:
+        return {"start": '"static-web-server --root {}".format(buildpath("site"))'}
+
+    def assets(self, path: Path) -> Optional[Dict[str, str]]:
+        return None
+
+    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
+        return None
+

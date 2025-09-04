@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Dict, Optional
+
+from .base import DetectResult, DependencySpec, Provider, _exists
+
+
+class PhpProvider:
+    def name(self) -> str:
+        return "php"
+
+    def detect(self, path: Path) -> Optional[DetectResult]:
+        if _exists(path, "composer.json") and _exists(path, "public/index.php"):
+            return DetectResult(self.name(), 60)
+        return None
+
+    def initialize(self, path: Path) -> None:
+        pass
+
+    def serve_name(self, path: Path) -> str:
+        return "php-api"
+
+    def provider_kind(self, path: Path) -> str:
+        return "php"
+
+    def build_dependencies(self, path: Path) -> list[DependencySpec]:
+        return [
+            DependencySpec("php", env_var="SHIPIT_PHP_VERSION", default_version="8.3"),
+            DependencySpec("composer"),
+        ]
+
+    def serve_dependencies(self, path: Path) -> list[DependencySpec]:
+        return [DependencySpec("php"), DependencySpec("bash")]
+
+    def build_steps(self, path: Path) -> list[str]:
+        return [
+            "HOME = getenv(\"HOME\")",
+            "use(php, composer)",
+            "env(HOME=HOME, COMPOSER_FUND=\"0\")",
+            "run(\"composer install --optimize-autoloader --no-scripts --no-interaction\", inputs=[\"composer.json\", \"composer.lock\"], outputs=[\".\"], group=\"install\")",
+            "copy(\".\", \".\", ignore=[\".git\"])",
+        ]
+
+    def prepare_script(self, path: Path) -> Optional[str]:
+        return None
+
+    def commands(self, path: Path) -> Dict[str, str]:
+        return {"start": '"php -S localhost:8080 -t public"'}
+
+    def assets(self, path: Path) -> Optional[Dict[str, str]]:
+        return {"php.ini": "get_asset(\"php/php.ini\")"}
+
+    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
+        return None
+
