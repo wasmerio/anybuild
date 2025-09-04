@@ -1,7 +1,8 @@
 hugo_version = getenv("SHIPIT_HUGO_VERSION") or "0.149.0"  # from .node-version
-hugo = dep("hugo", hugo_version)
+sws_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 
-staticwebserver = dep("static-web-server")
+hugo = dep("hugo", hugo_version)
+staticwebserver = dep("static-web-server", sws_version)
 
 serve(
   name="staticsite-hugo",
@@ -13,6 +14,6 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root /app/public",
+    "start": "static-web-server --root {}".format(buildpath("public")),
   },
 )

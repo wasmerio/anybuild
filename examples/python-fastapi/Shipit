@@ -1,9 +1,12 @@
 
 python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"  # from .python-version
-python = dep("python", python_version)
-
+uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
+
+python = dep("python", python_version)
+uv = dep("uv", uv_version)
+
 python_cross_packages_serve_path = None
 
 if cross_platform:
@@ -16,17 +19,22 @@ serve(
   name="python-fastapi",
   provider="python",
   build=[
-    use(python, dep("uv")),
+    use(python, uv),
     run("uv sync --compile --no-managed-python", inputs=["pyproject.toml", "uv.lock", ".python-version"], outputs=["."], group="install"),
     run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt") if cross_platform else None,
     run(f"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
     run("rm cross-requirements.txt") if cross_platform else None,
     path(".venv/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    # run("python -m compileall -o 2 ."),
     run("rm -rf .venv") if cross_platform else None
   ],
   deps=[python],
+  prepare=f"""
+echo "Precompiling Python code..."
+python -m compileall -o 2 {python_cross_packages_serve_path}
+echo "Precompiling package code..."
+python -m compileall -o 2 .
+""",
   commands = {
     "start": "python src/main.py",
   },

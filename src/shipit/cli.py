@@ -217,6 +217,8 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
             self.docker_file_contents += f"RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n"
             return
         elif dependency.name == "static-web-server":
+            if dependency.version:
+                self.docker_file_contents += f"ENV SWS_INSTALL_VERSION={dependency.version}\n"
             self.docker_file_contents += f"RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n"
             return
         if dependency.version:
@@ -551,6 +553,7 @@ class WasmerBuilder:
         "static-web-server": {
             "dependencies": {
                 "latest": "wasmer/static-web-server@=1.1.0",
+                "2.38.0": "wasmer/static-web-server@=1.1.0",
                 "0.1": "wasmer/static-web-server@=1.1.0",
             },
             "scripts": {"webserver"},
@@ -609,9 +612,21 @@ class WasmerBuilder:
 
         binaries = {}
 
-        if serve.deps:
+        deps = serve.deps or []
+        # We add bash if it's not present, as the prepare command is run in bash
+        if serve.prepare:
+            if not any(dep.name == "bash" for dep in deps):
+                deps.append(Package("bash"))
+            if any(dep.name == "python" for dep in deps):
+                serve.prepare = """
+export PYTHONEXECUTABLE=/bin/python
+export PYTHONHOME=/cpython
+export HOME=/app
+""" + serve.prepare
+
+        if deps:
             console.print(f"[bold]Mapping dependencies:[/bold]")
-        for dep in serve.deps:
+        for dep in deps:
             if dep.name in self.mapper:
                 version = dep.version or "latest"
                 if version in self.mapper[dep.name]["dependencies"]:
@@ -878,7 +893,12 @@ def generate(
         show_default=False,
     ),
 ):
-    raise NotImplementedError("Shipit generation is not yet implemented")
+    from shipit.generator import generate_shipit
+
+    target = path / "Shipit"
+    content = generate_shipit(path)
+    target.write_text(content)
+    console.print(f"[bold]Generated Shipit[/bold] at {target}")
 
 
 @app.callback(
