@@ -23,7 +23,7 @@ class StaticFileProvider:
         pass
 
     def serve_name(self, path: Path) -> str:
-        return "staticfile"
+        return path.name
 
     def provider_kind(self, path: Path) -> str:
         return "staticfile"
@@ -40,8 +40,11 @@ class StaticFileProvider:
     def prepare_script(self, path: Path) -> Optional[str]:
         return None
 
+    def declarations(self, path: Path) -> Optional[str]:
+        return None
+
     def commands(self, path: Path) -> Dict[str, str]:
-        return {"start": '"static-web-server --root /app/site"'}
+        return {"start": '"static-web-server --root {}".format(buildpath("site"))'}
 
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return None

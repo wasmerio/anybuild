@@ -19,7 +19,7 @@ class MkdocsProvider:
         pass
 
     def serve_name(self, path: Path) -> str:
-        return "mkdocs"
+        return path.name
 
     def provider_kind(self, path: Path) -> str:
         return "mkdocs-site"
@@ -32,6 +32,9 @@ class MkdocsProvider:
 
     def serve_dependencies(self, path: Path) -> list[DependencySpec]:
         return [DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION", default_version="2.38.0")]
+
+    def declarations(self, path: Path) -> Optional[str]:
+        return None
 
     def build_steps(self, path: Path) -> list[str]:
         has_requirements = _exists(path, "requirements.txt")

@@ -24,10 +24,13 @@ class GatsbyProvider:
         pass
 
     def serve_name(self, path: Path) -> str:
-        return "staticsite-gatsby"
+        return path.name
 
     def provider_kind(self, path: Path) -> str:
         return "staticsite"
+
+    def declarations(self, path: Path) -> Optional[str]:
+        return None
 
     def build_dependencies(self, path: Path) -> list[DependencySpec]:
         return [
@@ -36,7 +39,7 @@ class GatsbyProvider:
         ]
 
     def serve_dependencies(self, path: Path) -> list[DependencySpec]:
-        return [DependencySpec("static-web-server")]
+        return [DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION")]
 
     def build_steps(self, path: Path) -> list[str]:
         return [

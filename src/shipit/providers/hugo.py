@@ -25,7 +25,7 @@ class HugoProvider:
         pass
 
     def serve_name(self, path: Path) -> str:
-        return "staticsite-hugo"
+        return path.name
 
     def provider_kind(self, path: Path) -> str:
         return "staticsite"
@@ -45,6 +45,9 @@ class HugoProvider:
                 default_version="2.38.0",
             )
         ]
+
+    def declarations(self, path: Path) -> Optional[str]:
+        return None
 
     def build_steps(self, path: Path) -> list[str]:
         return [

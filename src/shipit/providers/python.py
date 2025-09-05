@@ -26,7 +26,7 @@ class PythonProvider:
         pass
 
     def serve_name(self, path: Path) -> str:
-        return "python-app"
+        return path.name
 
     def provider_kind(self, path: Path) -> str:
         return "python"
@@ -40,16 +40,20 @@ class PythonProvider:
     def serve_dependencies(self, path: Path) -> list[DependencySpec]:
         return [DependencySpec("python", env_var="SHIPIT_PYTHON_VERSION", default_version="3.13")]
 
+    def declarations(self, path: Path) -> Optional[str]:
+        return (
+            "cross_platform = getenv(\"SHIPIT_PYTHON_CROSS_PLATFORM\")\n"
+            "python_extra_index_url = getenv(\"SHIPIT_PYTHON_EXTRA_INDEX_URL\")\n"
+            "python_cross_packages_serve_path = \"\"\n"
+            "python_cross_packages_path = None\n"
+            "if cross_platform:\n"
+            "  python_cross_packages_path = serve_mount(\"python-cross-packages\")\n"
+            "  if cross_platform == \"wasix_wasm32\":\n"
+            "    python_cross_packages_serve_path = f\"/cpython/lib/python{python_version}/site-packages\"\n"
+        )
+
     def build_steps(self, path: Path) -> list[str]:
         return [
-            "cross_platform = getenv(\"SHIPIT_PYTHON_CROSS_PLATFORM\")",
-            "python_extra_index_url = getenv(\"SHIPIT_PYTHON_EXTRA_INDEX_URL\")",
-            "python_cross_packages_serve_path = \"\"",
-            "python_cross_packages_path = None",
-            "if cross_platform:",
-            "  python_cross_packages_path = serve_mount(\"python-cross-packages\")",
-            "  if cross_platform == \"wasix_wasm32\":",
-            "    python_cross_packages_serve_path = f\"/cpython/lib/python{python_version}/site-packages\"",
             "use(python, uv)",
             "run(\"uv sync --compile --no-managed-python\", inputs=[\"pyproject.toml\", \"uv.lock\", \".python-version\"], outputs=[\".\"], group=\"install\")",
             "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\") if cross_platform else None",
@@ -70,6 +74,8 @@ class PythonProvider:
     def commands(self, path: Path) -> Dict[str, str]:
         if _exists(path, "manage.py"):
             start_cmd = '"python manage.py runserver 0.0.0.0:8000"'
+            migrate_cmd = '"python manage.py migrate"'
+            return {"start": start_cmd, "after_deploy": migrate_cmd}
         elif _exists(path, "main.py"):
             start_cmd = '"python main.py"'
         else:

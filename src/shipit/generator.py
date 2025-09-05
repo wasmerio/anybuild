@@ -70,6 +70,7 @@ def generate_shipit(path: Path) -> str:
     plan = ProviderPlan(
         serve_name=provider.serve_name(path),
         provider=provider.provider_kind(path),
+        declarations=provider.declarations(path),
         build_dependencies=provider.build_dependencies(path),
         serve_dependencies=provider.serve_dependencies(path),
         build_steps=provider.build_steps(path),
@@ -96,6 +97,9 @@ def generate_shipit(path: Path) -> str:
     if build_dep_block:
         out.append(build_dep_block)
         out.append("")
+    if plan.declarations:
+        out.append(plan.declarations)
+        out.append("")
     if serve_dep_block:
         out.append(serve_dep_block)
         out.append("")
@@ -109,7 +113,7 @@ def generate_shipit(path: Path) -> str:
         out.append("  assets=" + assets_block + ",")
     out.append(f"  deps=[{deps_array}],")
     if plan.prepare:
-        out.append("  prepare=\"\"\"")
+        out.append("  prepare=f\"\"\"")
         out.append(plan.prepare.rstrip("\n"))
         out.append("\"\"\",")
     out.append("  commands = {")

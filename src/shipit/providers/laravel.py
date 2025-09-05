@@ -19,7 +19,7 @@ class LaravelProvider:
         pass
 
     def serve_name(self, path: Path) -> str:
-        return "php-laravel"
+        return path.name
 
     def provider_kind(self, path: Path) -> str:
         return "php"
@@ -35,9 +35,11 @@ class LaravelProvider:
     def serve_dependencies(self, path: Path) -> list[DependencySpec]:
         return [DependencySpec("php"), DependencySpec("bash")]
 
+    def declarations(self, path: Path) -> Optional[str]:
+        return "HOME = getenv(\"HOME\")"
+
     def build_steps(self, path: Path) -> list[str]:
         return [
-            "HOME = getenv(\"HOME\")",
             "use(php, composer, pie, pnpm)",
             "env(HOME=HOME, COMPOSER_FUND=\"0\")",
             "run(\"pie install php/pdo_pgsql\")",

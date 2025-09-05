@@ -23,7 +23,7 @@ class NodeStaticProvider:
         pass
 
     def serve_name(self, path: Path) -> str:
-        return "staticsite-node"
+        return path.name
 
     def provider_kind(self, path: Path) -> str:
         return "staticsite"
@@ -36,6 +36,9 @@ class NodeStaticProvider:
 
     def serve_dependencies(self, path: Path) -> list[DependencySpec]:
         return [DependencySpec("static-web-server")]
+
+    def declarations(self, path: Path) -> Optional[str]:
+        return None
 
     def build_steps(self, path: Path) -> list[str]:
         output_dir = "dist" if (path / "dist").exists() else "public"
