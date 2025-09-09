@@ -103,11 +103,11 @@ class Build:
 
 
 def write_stdout(line: str) -> None:
-    sys.stdout.write(f"{line}")  # print to console
+    sys.stdout.write(line)  # print to console
 
 
 def write_stderr(line: str) -> None:
-    sys.stderr.write(f"{line}")  # print to console
+    sys.stderr.write(line)  # print to console
 
 
 class MapperItem(TypedDict):
@@ -438,7 +438,7 @@ class LocalBuilder:
 
     def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
         return sh.Command(command)(
-            *(extra_args or []), _out=write_stdout, _err=write_stderr
+            *(extra_args or []), _out=write_stdout, _err=write_stderr, _env=os.environ,
         )
 
     def getenv(self, name: str) -> Optional[str]:
@@ -891,8 +891,12 @@ def auto(
         False,
         help="Run the start command after building.",
     ),
+    regenerate: bool = typer.Option(
+        False,
+        help="Regenerate the Shipit file.",
+    ),
 ):
-    if not (path / "Shipit").exists():
+    if not (path / "Shipit").exists() or regenerate:
         generate(path)
 
     build(path, wasmer=wasmer, docker=docker)
@@ -985,7 +989,7 @@ def build(
 ) -> None:
     ab_file = path / "Shipit"
     if not ab_file.exists():
-        raise FileNotFoundError(f"Shipit file not found at {ab_file}")
+        raise FileNotFoundError(f"Shipit file not found at {ab_file}. Please run `shipit generate {path}` to create it.")
     source = open(ab_file).read()
     builder: Builder
     if docker:

@@ -4,9 +4,11 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from .base import DetectResult, DependencySpec, Provider, _exists
+from .staticfile import StaticFileProvider
 
+class HugoProvider(StaticFileProvider):
+    static_dir = "public"
 
-class HugoProvider:
     def name(self) -> str:
         return "hugo"
 
@@ -20,9 +22,6 @@ class HugoProvider:
         ):
             return DetectResult(self.name(), 40)
         return None
-
-    def initialize(self, path: Path) -> None:
-        pass
 
     def serve_name(self, path: Path) -> str:
         return path.name
@@ -38,31 +37,11 @@ class HugoProvider:
                 default_version="0.149.0",
                 use_in_build=True,
             ),
-            DependencySpec(
-                "static-web-server",
-                env_var="SHIPIT_SWS_VERSION",
-                default_version="2.38.0",
-                use_in_serve=True,
-            ),
+            *super().dependencies(path),
         ]
-
-    def declarations(self, path: Path) -> Optional[str]:
-        return None
 
     def build_steps(self, path: Path) -> list[str]:
         return [
             'copy(".", ".", ignore=[".git"])',
             'run("hugo build", outputs=["public"], group="build")',
         ]
-
-    def prepare_script(self, path: Path) -> Optional[str]:
-        return None
-
-    def commands(self, path: Path) -> Dict[str, str]:
-        return {"start": '"static-web-server --root {}".format(buildpath("public"))'}
-
-    def assets(self, path: Path) -> Optional[Dict[str, str]]:
-        return None
-
-    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
-        return None

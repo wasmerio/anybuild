@@ -7,6 +7,8 @@ from .base import DetectResult, DependencySpec, Provider, _exists
 
 
 class StaticFileProvider:
+    static_dir = "site"
+
     def name(self) -> str:
         return "staticfile"
 
@@ -29,10 +31,17 @@ class StaticFileProvider:
         return "staticfile"
 
     def dependencies(self, path: Path) -> list[DependencySpec]:
-        return [DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION", use_in_serve=True)]
+        return [
+            DependencySpec(
+                "static-web-server",
+                env_var="SHIPIT_SWS_VERSION",
+                default_version="2.38.0",
+                use_in_serve=True,
+            )
+        ]
 
     def build_steps(self, path: Path) -> list[str]:
-        return ["copy(\".\", \".\", ignore=[\".git\"])" ]
+        return ['copy(".", ".", ignore=[".git"])']
 
     def prepare_script(self, path: Path) -> Optional[str]:
         return None
@@ -41,7 +50,9 @@ class StaticFileProvider:
         return None
 
     def commands(self, path: Path) -> Dict[str, str]:
-        return {"start": '"static-web-server --root {}".format(buildpath("site"))'}
+        return {
+            "start": f'"static-web-server --root {{}} --log-level=info".format(buildpath("{self.static_dir}"))'
+        }
 
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return None
