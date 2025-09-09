@@ -18,8 +18,7 @@ class Provider(Protocol):
     # Structured plan steps
     def serve_name(self, path: Path) -> str: ...
     def provider_kind(self, path: Path) -> str: ...
-    def build_dependencies(self, path: Path) -> list["DependencySpec"]: ...
-    def serve_dependencies(self, path: Path) -> list["DependencySpec"]: ...
+    def dependencies(self, path: Path) -> list["DependencySpec"]: ...
     def declarations(self, path: Path) -> Optional[str]: ...
     def build_steps(self, path: Path) -> list[str]: ...
     def prepare_script(self, path: Path) -> Optional[str]: ...
@@ -34,6 +33,8 @@ class DependencySpec:
     env_var: Optional[str] = None
     default_version: Optional[str] = None
     alias: Optional[str] = None  # Variable name in Shipit plan
+    use_in_build: bool = False
+    use_in_serve: bool = False
 
 
 @dataclass
@@ -41,8 +42,7 @@ class ProviderPlan:
     serve_name: str
     provider: str
     declarations: Optional[str] = None
-    build_dependencies: List[DependencySpec] = field(default_factory=list)
-    serve_dependencies: List[DependencySpec] = field(default_factory=list)
+    dependencies: List[DependencySpec] = field(default_factory=list)
     build_steps: List[str] = field(default_factory=list)
     prepare: Optional[str] = None
     commands: Dict[str, str] = field(default_factory=dict)
@@ -65,4 +65,3 @@ def _has_dependency(pkg_json: Path, dep: str) -> bool:
     except Exception:
         return False
     return False
-

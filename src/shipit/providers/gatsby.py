@@ -32,18 +32,20 @@ class GatsbyProvider:
     def declarations(self, path: Path) -> Optional[str]:
         return None
 
-    def build_dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self, path: Path) -> list[DependencySpec]:
         return [
-            DependencySpec("node", env_var="SHIPIT_NODE_VERSION", default_version="22"),
-            DependencySpec("npm"),
+            DependencySpec(
+                "node",
+                env_var="SHIPIT_NODE_VERSION",
+                default_version="22",
+                use_in_build=True,
+            ),
+            DependencySpec("npm", use_in_build=True),
+            DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION", use_in_serve=True),
         ]
-
-    def serve_dependencies(self, path: Path) -> list[DependencySpec]:
-        return [DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION")]
 
     def build_steps(self, path: Path) -> list[str]:
         return [
-            "use(node, npm)",
             "run(\"npm install\", inputs=[\"package.json\", \"package-lock.json\"], group=\"install\")",
             "copy(\".\", \".\", ignore=[\"node_modules\", \".git\"])",
             "run(\"npm run build\", outputs=[\"public\"], group=\"build\")",
@@ -60,4 +62,3 @@ class GatsbyProvider:
 
     def mounts(self, path: Path) -> Optional[Dict[str, str]]:
         return None
-

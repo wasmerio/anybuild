@@ -31,14 +31,22 @@ class PythonProvider:
     def provider_kind(self, path: Path) -> str:
         return "python"
 
-    def build_dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self, path: Path) -> list[DependencySpec]:
         return [
-            DependencySpec("python", env_var="SHIPIT_PYTHON_VERSION", default_version="3.13"),
-            DependencySpec("uv", env_var="SHIPIT_UV_VERSION", default_version="0.8.15"),
+            DependencySpec(
+                "python",
+                env_var="SHIPIT_PYTHON_VERSION",
+                default_version="3.13",
+                use_in_build=True,
+                use_in_serve=True,
+            ),
+            DependencySpec(
+                "uv",
+                env_var="SHIPIT_UV_VERSION",
+                default_version="0.8.15",
+                use_in_build=True,
+            ),
         ]
-
-    def serve_dependencies(self, path: Path) -> list[DependencySpec]:
-        return [DependencySpec("python", env_var="SHIPIT_PYTHON_VERSION", default_version="3.13")]
 
     def declarations(self, path: Path) -> Optional[str]:
         return (
@@ -54,16 +62,17 @@ class PythonProvider:
 
     def build_steps(self, path: Path) -> list[str]:
         return [
-            "use(python, uv)",
-            "run(\"uv sync --compile --no-managed-python\", inputs=[\"pyproject.toml\", \"uv.lock\", \".python-version\"], outputs=[\".\"], group=\"install\")",
-            "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\") if cross_platform else None",
-            "run(f\"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile\") if cross_platform else None",
+            "run(f\"uv sync --compile --python python{python_version} --locked --no-managed-python\", inputs=[\"pyproject.toml\", \"uv.lock\", \".python-version\"], outputs=[\".\"], group=\"install\")",
+            "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", inputs=[\"pyproject.toml\"], outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
+            "run(f\"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile\", outputs=[\".\"]) if cross_platform else None",
+            "run(\"rm cross-requirements.txt\") if cross_platform else None",
             "path(\".venv/bin\")",
             "copy(\".\", \".\", ignore=[\".venv\", \".git\", \"__pycache__\"])",
             "run(\"rm -rf .venv\") if cross_platform else None",
         ]
 
     def prepare_script(self, path: Path) -> Optional[str]:
+        return None
         return (
             "echo \"Precompiling Python code...\"\n"
             "python -m compileall -o 2 {python_cross_packages_serve_path}\n"
@@ -87,4 +96,3 @@ class PythonProvider:
 
     def mounts(self, path: Path) -> Optional[Dict[str, str]]:
         return {"python_cross_packages_serve_path": "python_cross_packages_path"}
-

@@ -28,11 +28,8 @@ class StaticFileProvider:
     def provider_kind(self, path: Path) -> str:
         return "staticfile"
 
-    def build_dependencies(self, path: Path) -> list[DependencySpec]:
-        return []
-
-    def serve_dependencies(self, path: Path) -> list[DependencySpec]:
-        return [DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION")]
+    def dependencies(self, path: Path) -> list[DependencySpec]:
+        return [DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION", use_in_serve=True)]
 
     def build_steps(self, path: Path) -> list[str]:
         return ["copy(\".\", \".\", ignore=[\".git\"])" ]
@@ -51,4 +48,3 @@ class StaticFileProvider:
 
     def mounts(self, path: Path) -> Optional[Dict[str, str]]:
         return None
-

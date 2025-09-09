@@ -24,23 +24,26 @@ class LaravelProvider:
     def provider_kind(self, path: Path) -> str:
         return "php"
 
-    def build_dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self, path: Path) -> list[DependencySpec]:
         return [
-            DependencySpec("php", env_var="SHIPIT_PHP_VERSION", default_version="8.3"),
-            DependencySpec("composer"),
-            DependencySpec("pie"),
-            DependencySpec("pnpm"),
+            DependencySpec(
+                "php",
+                env_var="SHIPIT_PHP_VERSION",
+                default_version="8.3",
+                use_in_build=True,
+                use_in_serve=True,
+            ),
+            DependencySpec("composer", use_in_build=True),
+            DependencySpec("pie", use_in_build=True),
+            DependencySpec("pnpm", use_in_build=True),
+            DependencySpec("bash", use_in_serve=True),
         ]
-
-    def serve_dependencies(self, path: Path) -> list[DependencySpec]:
-        return [DependencySpec("php"), DependencySpec("bash")]
 
     def declarations(self, path: Path) -> Optional[str]:
         return "HOME = getenv(\"HOME\")"
 
     def build_steps(self, path: Path) -> list[str]:
         return [
-            "use(php, composer, pie, pnpm)",
             "env(HOME=HOME, COMPOSER_FUND=\"0\")",
             "run(\"pie install php/pdo_pgsql\")",
             "run(\"composer install --optimize-autoloader --no-scripts --no-interaction\", inputs=[\"composer.json\", \"composer.lock\", \"artisan\"], outputs=[\".\"], group=\"install\")",
@@ -69,4 +72,3 @@ class LaravelProvider:
 
     def mounts(self, path: Path) -> Optional[Dict[str, str]]:
         return None
-

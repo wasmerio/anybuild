@@ -36,11 +36,28 @@ def _sanitize_alias(name: str) -> str:
     return alias.replace("-", "")
 
 
-def _emit_dependency_block(deps: List[DependencySpec]) -> tuple[str, List[str]]:
+def _emit_dependencies_declarations(
+    deps: List[DependencySpec],
+) -> tuple[str, List[str], List[str]]:
     lines: List[str] = []
-    var_names: List[str] = []
+    declared: set[str] = set()
+    serve_vars: List[str] = []
+    build_vars: List[str] = []
+
     for dep in deps:
         alias = dep.alias or _sanitize_alias(dep.name)
+
+        # Track serve variables in order of appearance (deduped)
+        if dep.use_in_serve and alias not in serve_vars:
+            serve_vars.append(alias)
+        if dep.use_in_build and alias not in build_vars:
+            build_vars.append(alias)
+
+        # Only declare each dependency once
+        if alias in declared:
+            continue
+        declared.add(alias)
+
         version_var = None
         if dep.env_var:
             default = f' or "{dep.default_version}"' if dep.default_version else ""
@@ -51,8 +68,8 @@ def _emit_dependency_block(deps: List[DependencySpec]) -> tuple[str, List[str]]:
             lines.append(f'{alias} = dep("{dep.name}", {version_var})')
         else:
             lines.append(f'{alias} = dep("{dep.name}")')
-        var_names.append(alias)
-    return "\n".join(lines), var_names
+
+    return "\n".join(lines), serve_vars, build_vars
 
 
 def _render_assets(assets: Optional[Dict[str, str]]) -> Optional[str]:
@@ -71,8 +88,7 @@ def generate_shipit(path: Path) -> str:
         serve_name=provider.serve_name(path),
         provider=provider.provider_kind(path),
         declarations=provider.declarations(path),
-        build_dependencies=provider.build_dependencies(path),
-        serve_dependencies=provider.serve_dependencies(path),
+        dependencies=provider.dependencies(path),
         build_steps=provider.build_steps(path),
         prepare=provider.prepare_script(path),
         commands=provider.commands(path),
@@ -80,12 +96,18 @@ def generate_shipit(path: Path) -> str:
         mounts=provider.mounts(path),
     )
 
-    # Build dependency variables
-    build_dep_block, _ = _emit_dependency_block(plan.build_dependencies)
-    serve_dep_block, serve_dep_vars = _emit_dependency_block(plan.serve_dependencies)
+    # Declare dependency variables (combined) and collect serve deps
+    dep_block, serve_dep_vars, build_dep_vars = _emit_dependencies_declarations(
+        plan.dependencies
+    )
 
     # Compose serve(...) body
-    build_steps_block = ",\n".join([f"    {s}" for s in plan.build_steps])
+    # Auto-insert a use(...) step at the beginning if not explicitly provided
+    build_steps: List[str] = list(plan.build_steps)
+    if build_dep_vars and not any("use(" in s for s in build_steps):
+        build_steps.insert(0, f"use({', '.join(build_dep_vars)})")
+
+    build_steps_block = ",\n".join([f"    {s}" for s in build_steps])
     deps_array = ", ".join(serve_dep_vars)
     commands_lines = ",\n".join([f'    "{k}": {v}' for k, v in plan.commands.items()])
     assets_block = _render_assets(plan.assets)
@@ -94,14 +116,11 @@ def generate_shipit(path: Path) -> str:
         mounts_block = ",\n".join([f"    {k}: {v}" for k, v in plan.mounts.items()])
 
     out: List[str] = []
-    if build_dep_block:
-        out.append(build_dep_block)
+    if dep_block:
+        out.append(dep_block)
         out.append("")
     if plan.declarations:
         out.append(plan.declarations)
-        out.append("")
-    if serve_dep_block:
-        out.append(serve_dep_block)
         out.append("")
     out.append("serve(")
     out.append(f'  name="{plan.serve_name}",')
@@ -126,4 +145,3 @@ def generate_shipit(path: Path) -> str:
     out.append(")")
     out.append("")
     return "\n".join(out)
-

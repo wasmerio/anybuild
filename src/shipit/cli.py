@@ -120,7 +120,9 @@ class MapperItem(TypedDict):
 class Builder(Protocol):
     def build(self, env: Dict[str, str], steps: List[Step]) -> None: ...
     def build_assets(self, assets: Dict[str, str]) -> None: ...
-    def buildserve(self, serve: Serve) -> None: ...
+    def build_prepare(self, serve: Serve) -> None: ...
+    def build_serve(self, serve: Serve) -> None: ...
+    def finalize_build(self, serve: Serve) -> None: ...
     def prepare(self, env: Dict[str, str], prepare: str) -> None: ...
     def getenv(self, name: str) -> Optional[str]: ...
     def run_serve_command(self, command: str) -> None: ...
@@ -135,7 +137,11 @@ class DockerBuilder:
     def __init__(self, src_dir: Path) -> None:
         self.src_dir = src_dir
         self.docker_file_contents = ""
-        self.docker_path = self.src_dir / "docker"
+        self.docker_path = self.src_dir / ".shipit" / "docker"
+        self.docker_file_path = self.docker_path / "Dockerfile"
+        self.docker_name_path = self.docker_path / "name"
+        self.docker_ignore_path = self.docker_path / "Dockerfile.dockerignore"
+        self.shipit_docker_path = Path("/shipit")
 
     env = {
         "HOME": "/root",
@@ -145,19 +151,14 @@ class DockerBuilder:
         return self.env.get(name) or os.environ.get(name)
 
     def mkdir(self, path: Path) -> Path:
-        path = Path("/shipit") / path
-        docker_file = self.docker_path / "Dockerfile"
+        path = self.shipit_docker_path / path
         self.docker_file_contents += f"RUN mkdir -p {str(path.absolute())}\n"
-        # path.mkdir(parents=True, exist_ok=True)
         return path.absolute()
 
-    def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
-        # docker_file = self.docker_path / "Dockerfile"
-        # docker_file_contents = docker_file.read_text()
-        # docker_file_contents += f"\nRUN {command} {' '.join(extra_args or [])}"
-        # docker_file.write_text(docker_file_contents)
-        # path.mkdir(parents=True, exist_ok=True)
-        image_name = "test-command"
+    def build_dockerfile(self, image_name: str) -> None:
+        self.docker_file_path.write_text(self.docker_file_contents)
+        self.docker_name_path.write_text(image_name)
+        self.print_dockerfile()
         sh.Command("docker")(
             "build",
             "-f",
@@ -169,6 +170,15 @@ class DockerBuilder:
             _out=write_stdout,
             _err=write_stderr,
         )
+    
+    def finalize_build(self, serve: Serve) -> None:
+        console.print(f"\n[bold]Building Docker file[/bold]")
+        self.build_dockerfile(serve.name)
+        console.print(Rule(characters="-", style="bright_black"))
+        console.print(f"[bold]Build complete ✅[/bold]")
+
+    def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
+        image_name = self.docker_name_path.read_text()
         return sh.Command("docker")(
             "run",
             "-p",
@@ -229,11 +239,9 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
             self.docker_file_contents += f"RUN pkgm install {dependency.name}\n"
 
     def build(self, env: Dict[str, str], steps: List[Step]) -> None:
-        console.print(f"\n[bold]Building Docker file[/bold]")
         base_path = self.docker_path
         shutil.rmtree(base_path, ignore_errors=True)
         base_path.mkdir(parents=True, exist_ok=True)
-        docker_file = base_path / "Dockerfile"
         self.docker_file_contents = "FROM debian:bookworm-slim\n"
         self.docker_file_contents += """
 RUN apt-get update \\
@@ -246,7 +254,7 @@ RUN curl https://pkgx.sh | sh
 """
         # docker_file_contents += "RUN curl https://mise.run | sh\n"
         self.docker_file_contents += """
-RUN curl https://get.wasmer.io -sSfL | sh
+RUN curl https://get.wasmer.io -sSfL | sh -s "v6.1.0-rc.3"
 ENV PATH="/root/.wasmer/bin:${PATH}"
 """
         self.docker_file_contents += "WORKDIR /app\n"
@@ -275,16 +283,11 @@ ENV PATH="/root/.wasmer/bin:${PATH}"
                 for dependency in step.dependencies:
                     self.add_dependency(dependency)
 
-        docker_file.write_text(self.docker_file_contents)
-
-        docker_file_ignore = base_path / "Dockerfile.dockerignore"
-        docker_file_ignore.write_text("""
+        self.docker_ignore_path.write_text("""
 .shipit
 Shipit
 """)
 
-        console.print(Rule(characters="-", style="bright_black"))
-        console.print(f"[bold]Build complete ✅[/bold]")
 
     def build_assets(self, assets: Dict[str, str]) -> None:
         raise NotImplementedError
@@ -306,10 +309,9 @@ Shipit
     def prepare(self, env: Dict[str, str], prepare: str) -> None:
         raise NotImplementedError
 
-    def buildserve(self, serve: Serve) -> None:
+    def build_serve(self, serve: Serve) -> None:
         serve_command_path = self.mkdir(Path("serve") / "bin")
         console.print(f"[bold]Serve Commands:[/bold]")
-        docker_file = self.docker_path / "Dockerfile"
         for dep in serve.deps:
             self.add_dependency(dep)
 
@@ -323,28 +325,16 @@ Shipit
                 mode=0o755,
             )
 
-        docker_file.write_text(self.docker_file_contents)
-        self.print_dockerfile()
-        sh.Command("docker")(
-            "build",
-            "-f",
-            (self.docker_path / "Dockerfile").absolute(),
-            "-t",
-            serve.name,
-            ".",
-            _cwd=self.src_dir.absolute(),
-            _out=write_stdout,
-            _err=write_stderr,
-        )
-
     def serve_mount(self, name: str) -> str:
-        raise NotImplementedError
+        path = self.mkdir(Path("serve") / "mounts" / name)
+        return str(path.absolute())
 
     def get_asset(self, name: str) -> str:
-        raise NotImplementedError
+        asset_path = ASSETS_PATH / name
+        return asset_path.read_text()
 
     def run_serve_command(self, command: str) -> None:
-        path = Path("/shipit") / "serve" / "bin" / command
+        path = self.shipit_docker_path / "serve" / "bin" / command
         self.run_command(str(path))
 
 
@@ -352,6 +342,7 @@ class LocalBuilder:
     def __init__(self, src_dir: Path) -> None:
         self.src_dir = src_dir
         self.local_path = self.src_dir / ".shipit" / "local"
+        self.prepare_bash_script = self.local_path / "prepare" / "prepare.sh"
 
     def execute_step(self, step: Step, env: Dict[str, str], build_path: Path) -> None:
         if isinstance(step, UseStep):
@@ -473,17 +464,21 @@ class LocalBuilder:
             asset_path = assets_path / asset
             self.create_file(asset_path, assets[asset])
 
-    def prepare(self, env: Dict[str, str], prepare: str) -> None:
+    def build_prepare(self, serve: Serve) -> None:
         app_dir = self.get_build_path()
-        prepare_bash_script = self.get_path() / "prepare" / "prepare.sh"
-        prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
-        prepare_bash_script.write_text(f"#!/bin/bash\ncd {app_dir}\n{prepare}")
-        prepare_bash_script.chmod(0o755)
-        sh.Command(f"{prepare_bash_script.absolute()}")(
+        self.prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
+        self.prepare_bash_script.write_text(f"#!/bin/bash\ncd {app_dir}\n{serve.prepare}")
+        self.prepare_bash_script.chmod(0o755)
+
+    def finalize_build(self, serve: Serve) -> None:
+        pass
+
+    def prepare(self, env: Dict[str, str], prepare: str) -> None:
+        sh.Command(f"{self.prepare_bash_script.absolute()}")(
             _out=write_stdout, _err=write_stderr
         )
 
-    def buildserve(self, serve: Serve) -> None:
+    def build_serve(self, serve: Serve) -> None:
         console.print("\n[bold]Building serve[/bold]")
         build_path = self.get_build_path()
         serve_command_path = self.get_serve_path() / "bin"
@@ -562,8 +557,10 @@ class WasmerBuilder:
         },
     }
 
-    def __init__(self, inner_builder: Builder) -> None:
+    def __init__(self, inner_builder: Builder, src_dir: Path) -> None:
+        self.src_dir = src_dir
         self.inner_builder = inner_builder
+        self.wasmer_dir_path = Path(self.src_dir / ".shipit" / "wasmer_dir")
         self.default_env = {
             "SHIPIT_PYTHON_EXTRA_INDEX_URL": "https://pythonindex.wasix.org/simple",
             "SHIPIT_PYTHON_CROSS_PLATFORM": "wasix_wasm32",
@@ -582,14 +579,35 @@ class WasmerBuilder:
     def get_build_path(self) -> Path:
         return Path("/app")
 
+    def build_prepare(self, serve: Serve) -> None:
+        print("Building prepare")
+        inner = cast(Any, self.inner_builder)
+        prepare_dir = inner.mkdir(Path("wasmer") / "prepare")
+        env = {}
+        for dep in serve.deps:
+            if dep.name in self.mapper:
+                dep_env = self.mapper[dep.name].get("env")
+                if dep_env is not None:
+                    env.update(dep_env)
+        if env:
+            env_lines = [f"export {k}={v}" for k, v in env.items()]
+            env_lines = "\n".join(env_lines)
+        else:
+            env_lines = ""
+
+        inner.create_file(
+            Path(prepare_dir) / "prepare.sh",
+            f"#!/bin/bash\ncd /app\n{env_lines}\n{serve.prepare}",
+            mode=0o755,
+        )
+    
+    def finalize_build(self, serve: Serve) -> None:
+        inner = cast(Any, self.inner_builder)
+        inner.finalize_build(serve)
+
     def prepare(self, env: Dict[str, str], prepare: str) -> None:
         inner = cast(Any, self.inner_builder)
         prepare_dir = inner.mkdir(Path("wasmer") / "prepare")
-        inner.create_file(
-            Path(prepare_dir) / "prepare.sh",
-            f"#!/bin/bash\ncd /app\n{prepare}",
-            mode=0o755,
-        )
         self.run_serve_command(
             "bash",
             extra_args=[
@@ -599,7 +617,7 @@ class WasmerBuilder:
             ],
         )
 
-    def buildserve(self, serve: Serve) -> None:
+    def build_serve(self, serve: Serve) -> None:
         from tomlkit import comment, document, nl, table, aot, string
 
         doc = document()
@@ -617,12 +635,6 @@ class WasmerBuilder:
         if serve.prepare:
             if not any(dep.name == "bash" for dep in deps):
                 deps.append(Package("bash"))
-            if any(dep.name == "python" for dep in deps):
-                serve.prepare = """
-export PYTHONEXECUTABLE=/bin/python
-export PYTHONHOME=/cpython
-export HOME=/app
-""" + serve.prepare
 
         if deps:
             console.print(f"[bold]Mapping dependencies:[/bold]")
@@ -638,9 +650,15 @@ export HOME=/app
                     ].split("@")
                     dependencies.add(package_name, version)
                     for script in self.mapper[dep.name]["scripts"]:
-                        binaries[script] = f"{package_name}:{script}"
+                        binaries[script] = {
+                            "script": f"{package_name}:{script}",
+                            "env": self.mapper[dep.name].get("env"),
+                        }
                     for alias, script in self.mapper[dep.name]["aliases"].items():
-                        binaries[alias] = f"{package_name}:{script}"
+                        binaries[alias] = {
+                            "script": f"{package_name}:{script}",
+                            "env": self.mapper[dep.name].get("env"),
+                        }
                 else:
                     raise Exception(
                         f"Dependency {dep.name}@{version} not found in Wasmer"
@@ -668,25 +686,25 @@ export HOME=/app
                 parts = shlex.split(command_line)
                 program = parts[0]
                 command.add("name", command_name)
-                command.add("module", binaries[program])
+                program_binary = binaries[program]
+                command.add("module", program_binary["script"])
                 command.add("runner", "wasi")
                 wasi_args = table()
                 wasi_args.add("cwd", "/app")
                 wasi_args.add("main-args", parts[1:])
-                if program == "python":
+                env = program_binary.get("env")
+                if env is not None:
                     wasi_args.add(
                         "env",
-                        [
-                            "PYTHONEXECUTABLE=/bin/python",
-                            "PYTHONHOME=/cpython",
-                            "HOME=/app",
-                        ],
+                        [f"{k}={v}" for k, v in env.items()],
                     )
                 title = string("annotations.wasi", literal=False)
                 command.add(title, wasi_args)
 
         inner = cast(Any, self.inner_builder)
         wasmer_dir = inner.mkdir(Path("wasmer"))
+        # Dump the wasmer_dir path to a file
+        self.wasmer_dir_path.write_text(str(wasmer_dir))
 
         manifest = doc.as_string().replace(
             '[command."annotations.wasi"]', "[command.annotations.wasi]"
@@ -707,14 +725,13 @@ export HOME=/app
         console.print(manifest_panel, markup=False, highlight=True)
         inner.create_file(Path(wasmer_dir) / "wasmer.toml", manifest)
 
-        # self.inner_builder.buildserve(serve)
+        # self.inner_builder.build_serve(serve)
 
     def run_serve_command(
         self, command: str, extra_args: Optional[List[str]] = None
     ) -> None:
         console.print(f"\n[bold]Serving site[/bold]: running {command} command")
-        inner = cast(Any, self.inner_builder)
-        wasmer_path = inner.mkdir(Path("wasmer"))
+        wasmer_path = self.wasmer_dir_path.read_text()
         extra_args = extra_args or []
         wasmer_registry = self.getenv("SHIPIT_WASMER_REGISTRY")
         if wasmer_registry:
@@ -842,7 +859,6 @@ class Ctx:
         return self.add_step(step)
 
     def serve_mount(self, name: str) -> Optional[str]:
-        print(f"serve_mount called with {name}")
         return self.builder.serve_mount(name)
 
 
@@ -946,7 +962,7 @@ def serve(
     else:
         builder = LocalBuilder(path)
     if wasmer:
-        builder = WasmerBuilder(builder)
+        builder = WasmerBuilder(builder, path)
     if start:
         builder.run_serve_command("start")
 
@@ -977,7 +993,7 @@ def build(
     else:
         builder = LocalBuilder(path)
     if wasmer:
-        builder = WasmerBuilder(builder)
+        builder = WasmerBuilder(builder, path)
 
     ctx = Ctx(builder)
     glb = sl.Globals.standard()
@@ -1016,9 +1032,12 @@ def build(
 
     # Build and serve
     builder.build(env, serve.build)
+    if serve.prepare:
+        builder.build_prepare(serve)
     if serve.assets:
         builder.build_assets(serve.assets)
-    builder.buildserve(serve)
+    builder.build_serve(serve)
+    builder.finalize_build(serve)
     if serve.prepare:
         builder.prepare(env, serve.prepare)
 
@@ -1034,7 +1053,7 @@ def main() -> None:
         app()
     except Exception as e:
         console.print(f"[bold red]{type(e).__name__}[/bold red]: {e}")
-        raise e
+        # raise e
 
 
 if __name__ == "__main__":

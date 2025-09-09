@@ -24,14 +24,27 @@ class MkdocsProvider:
     def provider_kind(self, path: Path) -> str:
         return "mkdocs-site"
 
-    def build_dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self, path: Path) -> list[DependencySpec]:
         return [
-            DependencySpec("python", env_var="SHIPIT_PYTHON_VERSION", default_version="3.13"),
-            DependencySpec("uv", env_var="SHIPIT_UV_VERSION", default_version="0.8.15"),
+            DependencySpec(
+                "python",
+                env_var="SHIPIT_PYTHON_VERSION",
+                default_version="3.13",
+                use_in_build=True,
+            ),
+            DependencySpec(
+                "uv",
+                env_var="SHIPIT_UV_VERSION",
+                default_version="0.8.15",
+                use_in_build=True,
+            ),
+            DependencySpec(
+                "static-web-server",
+                env_var="SHIPIT_SWS_VERSION",
+                default_version="2.38.0",
+                use_in_serve=True,
+            ),
         ]
-
-    def serve_dependencies(self, path: Path) -> list[DependencySpec]:
-        return [DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION", default_version="2.38.0")]
 
     def declarations(self, path: Path) -> Optional[str]:
         return None
@@ -50,7 +63,6 @@ class MkdocsProvider:
                 "run(f\"uv add mkdocs=={mkdocs_version}\", group=\"install\")",
             ]
         return [
-            "use(python, uv)",
             *install_lines,
             "copy(\".\", \".\", ignore=[\".venv\", \".git\", \"__pycache__\"])",
             "run(\"uv run mkdocs build\", outputs=[\".\"], group=\"build\")",
@@ -67,4 +79,3 @@ class MkdocsProvider:
 
     def mounts(self, path: Path) -> Optional[Dict[str, str]]:
         return None
-

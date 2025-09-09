@@ -30,20 +30,20 @@ class HugoProvider:
     def provider_kind(self, path: Path) -> str:
         return "staticsite"
 
-    def build_dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self, path: Path) -> list[DependencySpec]:
         return [
             DependencySpec(
-                "hugo", env_var="SHIPIT_HUGO_VERSION", default_version="0.149.0"
-            )
-        ]
-
-    def serve_dependencies(self, path: Path) -> list[DependencySpec]:
-        return [
+                "hugo",
+                env_var="SHIPIT_HUGO_VERSION",
+                default_version="0.149.0",
+                use_in_build=True,
+            ),
             DependencySpec(
                 "static-web-server",
                 env_var="SHIPIT_SWS_VERSION",
                 default_version="2.38.0",
-            )
+                use_in_serve=True,
+            ),
         ]
 
     def declarations(self, path: Path) -> Optional[str]:
@@ -51,7 +51,6 @@ class HugoProvider:
 
     def build_steps(self, path: Path) -> list[str]:
         return [
-            "use(hugo)",
             'copy(".", ".", ignore=[".git"])',
             'run("hugo build", outputs=["public"], group="build")',
         ]
