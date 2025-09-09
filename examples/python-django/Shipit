@@ -1,49 +1,37 @@
-
- # from .python-version
 python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"
-uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
-cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
-python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
-
 python = dep("python", python_version)
+uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
 uv = dep("uv", uv_version)
 
+cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
+python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
 python_cross_packages_serve_path = ""
 python_cross_packages_path = None
-
 if cross_platform:
   python_cross_packages_path = serve_mount("python-cross-packages")
   if cross_platform == "wasix_wasm32":
     python_cross_packages_serve_path = f"/cpython/lib/python{python_version}/site-packages"
 
+
 serve(
-  name="python-fastapi",
+  name="python-django",
   provider="python",
   build=[
     use(python, uv),
-    run("uv sync --compile --no-managed-python", inputs=["pyproject.toml", "uv.lock", ".python-version"], outputs=["."], group="install"),
-    run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt") if cross_platform else None,
-    run(f"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
+    run(f"uv sync --compile --python python{python_version} --locked --no-managed-python", inputs=["pyproject.toml", "uv.lock", ".python-version"], outputs=["."], group="install"),
+    run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt", inputs=["pyproject.toml"], outputs=["cross-requirements.txt"]) if cross_platform else None,
+    run(f"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile", outputs=["."]) if cross_platform else None,
+    run("rm cross-requirements.txt") if cross_platform else None,
     path(".venv/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    run("rm -rf .venv") if cross_platform else None,
+    run("rm -rf .venv") if cross_platform else None
   ],
   deps=[python],
-  prepare=f"""
-echo "Precompiling Python code..."
-python -m compileall -o 2 {python_cross_packages_serve_path}
-echo "Precompiling package code..."
-python -m compileall -o 2 .
-""",
   commands = {
     "start": "python manage.py runserver 0.0.0.0:8000",
-    "after_deploy": f"python manage.py migrate",
-    "hello": "python -c 'print(\"Hello, World!\")'",
+    "after_deploy": "python manage.py migrate"
   },
-  # workers = [
-  #   "python -m celery ...",
-  # ],
   mounts={
     python_cross_packages_serve_path: python_cross_packages_path
   },
-) # -> (package.webc, app.yaml) (then it can run locally, deploy, ...)
+)

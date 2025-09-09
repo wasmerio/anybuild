@@ -1,11 +1,10 @@
 hugo_version = getenv("SHIPIT_HUGO_VERSION") or "0.149.0"
 hugo = dep("hugo", hugo_version)
-
 staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
 serve(
-  name="staticsite-hugo",
+  name="hugo",
   provider="staticsite",
   build=[
     use(hugo),
