@@ -28,6 +28,7 @@ from rich.rule import Rule
 from rich.syntax import Syntax
 
 from shipit.version import version as shipit_version
+from shipit.generator import generate_shipit
 
 
 console = Console()
@@ -891,13 +892,13 @@ def auto(
         False,
         help="Run the start command after building.",
     ),
-    regenerate: bool = typer.Option(
-        False,
+    regenerate: Optional[Path] = typer.Option(
+        None,
         help="Regenerate the Shipit file.",
     ),
 ):
-    if not (path / "Shipit").exists() or regenerate:
-        generate(path)
+    if not (path / "Shipit").exists() or regenerate is not None:
+        generate(path, out=regenerate)
 
     build(path, wasmer=wasmer, docker=docker)
     if start:
@@ -912,13 +913,16 @@ def generate(
         help="Project path (defaults to current directory).",
         show_default=False,
     ),
+    out: Optional[Path] = typer.Option(
+        None,
+        help="Output path (defaults to the Shipit file in the provided path).",
+    ),
 ):
-    from shipit.generator import generate_shipit
-
-    target = path / "Shipit"
+    if out is None:
+        out = path / "Shipit"
     content = generate_shipit(path)
-    target.write_text(content)
-    console.print(f"[bold]Generated Shipit[/bold] at {target}")
+    out.write_text(content)
+    console.print(f"[bold]Generated Shipit[/bold] at {out.absolute()}")
 
 
 @app.callback(
