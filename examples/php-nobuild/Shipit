@@ -1,14 +1,20 @@
-staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
-staticwebserver = dep("static-web-server", staticwebserver_version)
+php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
+php = dep("php", php_version)
+
+HOME = getenv("HOME")
 
 serve(
   name="php-nobuild",
-  provider="staticfile",
+  provider="php",
   build=[
+    use(php),
     copy(".", ".", ignore=[".git"])
   ],
-  deps=[staticwebserver],
+  assets={
+    "php.ini": get_asset("php/php.ini")
+  },
+  deps=[php],
   commands = {
-    "start": "static-web-server --root {} --log-level=info".format(buildpath("site"))
+    "start": "php -S localhost:8080" -t .
   },
 )
