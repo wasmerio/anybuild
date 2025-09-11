@@ -53,13 +53,15 @@ class LaravelProvider:
         ]
 
     def prepare_script(self, path: Path) -> Optional[str]:
-        return (
-            "mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache\n"
-            "php artisan config:cache\n"
-            "php artisan event:cache\n"
-            "php artisan route:cache\n"
-            "php artisan view:cache\n"
-        )
+        return """
+\"\"\"
+mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache
+php artisan config:cache
+php artisan event:cache
+php artisan route:cache
+php artisan view:cache
+\"\"\"
+"""
 
     def commands(self, path: Path) -> Dict[str, str]:
         return {

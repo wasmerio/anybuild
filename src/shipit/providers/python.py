@@ -58,6 +58,7 @@ class PythonProvider:
             "  python_cross_packages_path = serve_mount(\"python-cross-packages\")\n"
             "  if cross_platform == \"wasix_wasm32\":\n"
             "    python_cross_packages_serve_path = f\"/cpython/lib/python{python_version}/site-packages\"\n"
+            "precompile_python = getenv(\"SHIPIT_PYTHON_PRECOMPILE\") in [\"true\", \"True\", \"TRUE\", \"1\", \"on\", \"yes\", \"y\", \"Y\", \"YES\", \"On\", \"ON\"]\n"
         )
 
     def build_steps(self, path: Path) -> list[str]:
@@ -72,13 +73,14 @@ class PythonProvider:
         ]
 
     def prepare_script(self, path: Path) -> Optional[str]:
-        return None
-        return (
-            "echo \"Precompiling Python code...\"\n"
-            "python -m compileall -o 2 {python_cross_packages_serve_path}\n"
-            "echo \"Precompiling package code...\"\n"
-            "python -m compileall -o 2 .\n"
-        )
+        return """
+f\"\"\"
+echo \"Precompiling Python code...\"
+python -m compileall -o 2 {python_cross_packages_serve_path}
+echo \"Precompiling package code...\"
+python -m compileall -o 2 .
+\"\"\" if precompile_python else None
+"""
 
     def commands(self, path: Path) -> Dict[str, str]:
         if _exists(path, "manage.py"):
