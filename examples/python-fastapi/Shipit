@@ -34,7 +34,7 @@ echo "Precompiling Python code..."
 python -m compileall -o 2 {python_cross_packages_serve_path}
 echo "Precompiling package code..."
 python -m compileall -o 2 .
-""",
+""" if False else None,
   commands = {
     "start": "python src/main.py",
   },

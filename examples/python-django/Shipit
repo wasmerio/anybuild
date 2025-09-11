@@ -11,7 +11,7 @@ if cross_platform:
   python_cross_packages_path = serve_mount("python-cross-packages")
   if cross_platform == "wasix_wasm32":
     python_cross_packages_serve_path = f"/cpython/lib/python{python_version}/site-packages"
-
+precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
 
 serve(
   name="python-django",
@@ -27,6 +27,12 @@ serve(
     run("rm -rf .venv") if cross_platform else None
   ],
   deps=[python],
+  prepare=f"""
+echo "Precompiling Python code..."
+python -m compileall -o 2 {python_cross_packages_serve_path}
+echo "Precompiling package code..."
+python -m compileall -o 2 .
+""" if precompile_python else None,
   commands = {
     "start": "python manage.py runserver 0.0.0.0:8000",
     "after_deploy": "python manage.py migrate"

@@ -32,7 +32,7 @@ echo "Precompiling Python code..."
 python -m compileall -o 2 {python_cross_packages_serve_path}
 echo "Precompiling package code..."
 python -m compileall -o 2 .
-""",
+""" if cross_platform else None,
   deps=[python],
   commands = {
     "start": "python main.py",
