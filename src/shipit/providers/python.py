@@ -77,15 +77,13 @@ class PythonProvider:
             "run(\"rm -rf .venv\") if cross_platform else None",
         ]
 
-    def prepare_script(self, path: Path) -> Optional[str]:
-        return """
-f\"\"\"
-echo \"Precompiling Python code...\"
-python -m compileall -o 2 {python_cross_packages_serve_path}
-echo \"Precompiling package code...\"
-python -m compileall -o 2 .
-\"\"\" if precompile_python else None
-"""
+    def prepare_steps(self, path: Path) -> Optional[list[str]]:
+        return [
+            'run("echo \\\"Precompiling Python code...\\\"") if precompile_python else None',
+            'run(f"python -m compileall -o 2 {python_cross_packages_serve_path}") if precompile_python else None',
+            'run("echo \\\"Precompiling package code...\\\"") if precompile_python else None',
+            'run("python -m compileall -o 2 .") if precompile_python else None',
+        ]
 
     def commands(self, path: Path) -> Dict[str, str]:
         if _exists(path, "manage.py"):

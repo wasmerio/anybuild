@@ -48,7 +48,7 @@ class Serve:
     deps: List["Package"]
     commands: Dict[str, str]
     assets: Optional[Dict[str, str]] = None
-    prepare: Optional[str] = None
+    prepare: Optional[List["PrepareStep"]] = None
     workers: Optional[List[str]] = None
     mounts: Optional[Dict[str, str]] = None
 
@@ -96,6 +96,7 @@ class PathStep:
 
 
 Step = Union[RunStep, CopyStep, EnvStep, PathStep, UseStep]
+PrepareStep = Union[RunStep]
 
 
 @dataclass
@@ -125,7 +126,7 @@ class Builder(Protocol):
     def build_prepare(self, serve: Serve) -> None: ...
     def build_serve(self, serve: Serve) -> None: ...
     def finalize_build(self, serve: Serve) -> None: ...
-    def prepare(self, env: Dict[str, str], prepare: str) -> None: ...
+    def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None: ...
     def getenv(self, name: str) -> Optional[str]: ...
     def run_serve_command(self, command: str) -> None: ...
     def run_command(
@@ -310,7 +311,7 @@ Shipit
         self.mkdir(path)
         return path
 
-    def prepare(self, env: Dict[str, str], prepare: str) -> None:
+    def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         raise NotImplementedError
 
     def build_serve(self, serve: Serve) -> None:
@@ -471,13 +472,21 @@ class LocalBuilder:
     def build_prepare(self, serve: Serve) -> None:
         app_dir = self.get_build_path()
         self.prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
-        self.prepare_bash_script.write_text(f"#!/bin/bash\ncd {app_dir}\n{serve.prepare}")
+        commands: List[str] = []
+        if serve.prepare:
+            for step in serve.prepare:
+                if isinstance(step, RunStep):
+                    commands.append(step.command)
+        content = "#!/bin/bash\ncd {app_dir}\n{body}".format(
+            app_dir=app_dir, body="\n".join(commands)
+        )
+        self.prepare_bash_script.write_text(content)
         self.prepare_bash_script.chmod(0o755)
 
     def finalize_build(self, serve: Serve) -> None:
         pass
 
-    def prepare(self, env: Dict[str, str], prepare: str) -> None:
+    def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         sh.Command(f"{self.prepare_bash_script.absolute()}")(
             _out=write_stdout, _err=write_stderr
         )
@@ -601,9 +610,15 @@ class WasmerBuilder:
         else:
             env_lines = ""
 
+        commands: List[str] = []
+        if serve.prepare:
+            for step in serve.prepare:
+                if isinstance(step, RunStep):
+                    commands.append(step.command)
+        body = "\n".join(filter(None, [env_lines, *commands]))
         inner.create_file(
             Path(prepare_dir) / "prepare.sh",
-            f"#!/bin/bash\ncd /app\n{env_lines}\n{serve.prepare}",
+            f"#!/bin/bash\ncd /app\n{body}",
             mode=0o755,
         )
     
@@ -611,7 +626,7 @@ class WasmerBuilder:
         inner = cast(Any, self.inner_builder)
         inner.finalize_build(serve)
 
-    def prepare(self, env: Dict[str, str], prepare: str) -> None:
+    def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         inner = cast(Any, self.inner_builder)
         prepare_dir = inner.mkdir(Path("wasmer") / "prepare")
         self.run_serve_command(
@@ -858,11 +873,16 @@ class Ctx:
         deps: List[str],
         commands: Dict[str, str],
         assets: Optional[Dict[str, str]] = None,
-        prepare: Optional[str] = None,
+        prepare: Optional[List[str]] = None,
         workers: Optional[List[str]] = None,
         mounts: Optional[Dict[str, str]] = None,
     ) -> str:
         build_refs = [cast(Step, r) for r in self.get_refs(build)]
+        prepare_steps: Optional[List[PrepareStep]] = None
+        if prepare is not None:
+            # Resolve referenced steps and keep only RunStep for prepare
+            resolved = [cast(Step, r) for r in self.get_refs(prepare)]
+            prepare_steps = [cast(RunStep, s) for s in resolved if isinstance(s, RunStep)]
         dep_refs = [cast(Package, r) for r in self.get_refs(deps)]
         serve = Serve(
             name=name,
@@ -871,7 +891,7 @@ class Ctx:
             assets=assets,
             deps=dep_refs,
             commands=commands,
-            prepare=prepare,
+            prepare=prepare_steps,
             workers=workers,
             mounts=mounts,
         )

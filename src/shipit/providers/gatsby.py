@@ -51,7 +51,7 @@ class GatsbyProvider:
             "run(\"npm run build\", outputs=[\"public\"], group=\"build\")",
         ]
 
-    def prepare_script(self, path: Path) -> Optional[str]:
+    def prepare_steps(self, path: Path) -> Optional[list[str]]:
         return None
 
     def commands(self, path: Path) -> Dict[str, str]:

@@ -52,16 +52,14 @@ class LaravelProvider:
             "run(\"pnpm run build\", outputs=[\".\"], group=\"build\")",
         ]
 
-    def prepare_script(self, path: Path) -> Optional[str]:
-        return """
-\"\"\"
-mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache
-php artisan config:cache
-php artisan event:cache
-php artisan route:cache
-php artisan view:cache
-\"\"\"
-"""
+    def prepare_steps(self, path: Path) -> Optional[list[str]]:
+        return [
+            'run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache")',
+            'run("php artisan config:cache")',
+            'run("php artisan event:cache")',
+            'run("php artisan route:cache")',
+            'run("php artisan view:cache")',
+        ]
 
     def commands(self, path: Path) -> Dict[str, str]:
         return {

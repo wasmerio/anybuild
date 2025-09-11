@@ -90,7 +90,7 @@ def generate_shipit(path: Path) -> str:
         declarations=provider.declarations(path),
         dependencies=provider.dependencies(path),
         build_steps=provider.build_steps(path),
-        prepare=provider.prepare_script(path),
+        prepare=provider.prepare_steps(path),
         commands=provider.commands(path),
         assets=provider.assets(path),
         mounts=provider.mounts(path),
@@ -132,7 +132,10 @@ def generate_shipit(path: Path) -> str:
         out.append("  assets=" + assets_block + ",")
     out.append(f"  deps=[{deps_array}],")
     if plan.prepare:
-        out.append(f"  prepare={plan.prepare.lstrip().rstrip()},")
+        prepare_steps_block = ",\n".join([f"    {s}" for s in plan.prepare])
+        out.append("  prepare=[")
+        out.append(prepare_steps_block)
+        out.append("  ],")
     out.append("  commands = {")
     out.append(commands_lines)
     out.append("  },")

@@ -43,7 +43,7 @@ class StaticFileProvider:
     def build_steps(self, path: Path) -> list[str]:
         return ['copy(".", ".", ignore=[".git"])']
 
-    def prepare_script(self, path: Path) -> Optional[str]:
+    def prepare_steps(self, path: Path) -> Optional[list[str]]:
         return None
 
     def declarations(self, path: Path) -> Optional[str]:
