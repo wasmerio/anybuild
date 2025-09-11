@@ -16,7 +16,7 @@ class PythonProvider:
         return "python"
 
     def detect(self, path: Path) -> Optional[DetectResult]:
-        if _exists(path, "pyproject.toml"):
+        if _exists(path, "pyproject.toml", "requirements.txt"):
             if _exists(path, "manage.py"):
                 return DetectResult(self.name(), 70)
             return DetectResult(self.name(), 50)
@@ -63,7 +63,7 @@ class PythonProvider:
 
     def build_steps(self, path: Path) -> list[str]:
         return [
-            "run(f\"uv sync --compile --python python{python_version} --locked --no-managed-python\", inputs=[\"pyproject.toml\", \"uv.lock\", \".python-version\"], outputs=[\".\"], group=\"install\")",
+            "run(f\"uv sync --compile --python python{python_version} --locked --no-managed-python\", inputs=[\"pyproject.toml\", \"uv.lock\"], outputs=[\".\"], group=\"install\")",
             "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", inputs=[\"pyproject.toml\"], outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
             "run(f\"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile\", outputs=[\".\"]) if cross_platform else None",
             "run(\"rm cross-requirements.txt\") if cross_platform else None",
