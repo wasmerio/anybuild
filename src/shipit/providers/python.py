@@ -89,6 +89,8 @@ python -m compileall -o 2 .
             return {"start": start_cmd, "after_deploy": migrate_cmd}
         elif _exists(path, "main.py"):
             start_cmd = '"python main.py"'
+        elif _exists(path, "src/main.py"):
+            start_cmd = '"python src/main.py"'
         else:
             start_cmd = '"python -c \'print(\\\"Hello, World!\\\")\'"'
         return {"start": start_cmd}

@@ -13,6 +13,7 @@ if cross_platform:
     python_cross_packages_serve_path = f"/cpython/lib/python{python_version}/site-packages"
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
 
+
 serve(
   name="python-django",
   provider="python",

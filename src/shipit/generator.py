@@ -132,9 +132,7 @@ def generate_shipit(path: Path) -> str:
         out.append("  assets=" + assets_block + ",")
     out.append(f"  deps=[{deps_array}],")
     if plan.prepare:
-        out.append("  prepare=")
-        out.append(plan.prepare.rstrip("\n"))
-        out.append(",")
+        out.append(f"  prepare={plan.prepare.lstrip().rstrip()},")
     out.append("  commands = {")
     out.append(commands_lines)
     out.append("  },")
