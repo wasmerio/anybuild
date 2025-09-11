@@ -1,11 +1,10 @@
 node_version = getenv("SHIPIT_NODE_VERSION") or "22"
 node = dep("node", node_version)
 npm = dep("npm")
-staticwebserver_version = getenv("SHIPIT_SWS_VERSION")
-staticwebserver = dep("static-web-server", staticwebserver_version)
+staticwebserver = dep("static-web-server")
 
 serve(
-  name="gatsby",
+  name="nextjs",
   provider="staticsite",
   build=[
     use(node, npm),

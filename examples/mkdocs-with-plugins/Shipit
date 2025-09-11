@@ -1,11 +1,9 @@
-
-python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"  # from .python-version
-sws_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
-uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
-
+python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"
 python = dep("python", python_version)
-staticwebserver = dep("static-web-server", sws_version)
+uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
 uv = dep("uv", uv_version)
+staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
+staticwebserver = dep("static-web-server", staticwebserver_version)
 
 serve(
   name="mkdocs-with-plugins",
@@ -19,6 +17,6 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --log-level=info --root {}".format(buildpath("site")),
+    "start": "static-web-server --root {}".format(buildpath("site"))
   },
 )

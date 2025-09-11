@@ -3,7 +3,6 @@ hugo = dep("hugo", hugo_version)
 staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
-
 serve(
   name="hugo",
   provider="staticsite",

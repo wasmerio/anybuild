@@ -2,7 +2,7 @@ staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
 serve(
-  name="staticfile",
+  name="php-wordpress",
   provider="staticfile",
   build=[
     copy(".", ".", ignore=[".git"])

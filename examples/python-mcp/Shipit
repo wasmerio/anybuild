@@ -28,12 +28,12 @@ serve(
     run("rm -rf .venv") if cross_platform else None
   ],
   deps=[python],
-  prepare=f"""
-echo "Precompiling Python code..."
-python -m compileall -o 2 {python_cross_packages_serve_path}
-echo "Precompiling package code..."
-python -m compileall -o 2 .
-""" if precompile_python else None,
+  prepare=[
+    run("echo \"Precompiling Python code...\"") if precompile_python else None,
+    run(f"python -m compileall -o 2 {python_cross_packages_serve_path}") if precompile_python else None,
+    run("echo \"Precompiling package code...\"") if precompile_python else None,
+    run("python -m compileall -o 2 .") if precompile_python else None
+  ],
   commands = {
     "start": "python main.py"
   },

@@ -1,25 +1,24 @@
-
- # from .python-version
-php_version = getenv("php_version") or "8.3"
-HOME = getenv("HOME")
-# COMPOSER_HOME = getenv("COMPOSER_HOME")
-
+php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
 php = dep("php", php_version)
+composer = dep("composer")
+bash = dep("bash")
+
+HOME = getenv("HOME")
 
 serve(
   name="php-api",
   provider="php",
   build=[
-    use(php, dep("composer")),
+    use(php, composer),
     env(HOME=HOME, COMPOSER_FUND="0"),
     run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install"),
-    copy(".", ".", ignore=[".git"]),
+    copy(".", ".", ignore=[".git"])
   ],
   assets={
-    "php.ini": get_asset("php/php.ini"),
+    "php.ini": get_asset("php/php.ini")
   },
-  deps=[php, dep("bash")],
+  deps=[php, bash],
   commands = {
-    "start": "php -S localhost:8080 -t public",
+    "start": "php -S localhost:8080 -t public"
   },
 )
