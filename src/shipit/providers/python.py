@@ -32,11 +32,16 @@ class PythonProvider:
         return "python"
 
     def dependencies(self, path: Path) -> list[DependencySpec]:
+        if _exists(path, ".python-version"):
+            python_version = (path / ".python-version").read_text().strip()
+        else:
+            python_version = "3.13"
+
         return [
             DependencySpec(
                 "python",
                 env_var="SHIPIT_PYTHON_VERSION",
-                default_version="3.13",
+                default_version=python_version,
                 use_in_build=True,
                 use_in_serve=True,
             ),
