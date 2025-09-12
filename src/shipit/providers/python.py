@@ -57,12 +57,11 @@ class PythonProvider:
         return (
             "cross_platform = getenv(\"SHIPIT_PYTHON_CROSS_PLATFORM\")\n"
             "python_extra_index_url = getenv(\"SHIPIT_PYTHON_EXTRA_INDEX_URL\")\n"
-            "python_cross_packages_serve_path = \"\"\n"
+            "python_cross_packages_serve_path = None\n"
             "python_cross_packages_path = None\n"
             "if cross_platform:\n"
             "  python_cross_packages_path = serve_mount(\"python-cross-packages\")\n"
-            "  if cross_platform == \"wasix_wasm32\":\n"
-            "    python_cross_packages_serve_path = \"/.venv/wasix-site-packages\"\n"
+            "  python_cross_packages_serve_path = f\"/.venv/lib/python{python_version}/site-packages\"\n"
             "precompile_python = getenv(\"SHIPIT_PYTHON_PRECOMPILE\") in [\"true\", \"True\", \"TRUE\", \"1\", \"on\", \"yes\", \"y\", \"Y\", \"YES\", \"On\", \"ON\"]\n"
         )
 
@@ -79,8 +78,8 @@ class PythonProvider:
 
     def prepare_steps(self, path: Path) -> Optional[list[str]]:
         return [
-            'run("echo \\\"Precompiling Python code...\\\"") if precompile_python else None',
-            'run(f"python -m compileall -o 2 {python_cross_packages_serve_path}") if precompile_python else None',
+            'run("echo \\\"Precompiling Python code...\\\"") if precompile_python and python_cross_packages_serve_path else None',
+            'run(f"python -m compileall -o 2 {python_cross_packages_serve_path}") if precompile_python and python_cross_packages_serve_path else None',
             'run("echo \\\"Precompiling package code...\\\"") if precompile_python else None',
             'run("python -m compileall -o 2 .") if precompile_python else None',
         ]

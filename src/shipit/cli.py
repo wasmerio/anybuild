@@ -537,7 +537,7 @@ class WasmerBuilder:
             "env": {
                 "PYTHONEXECUTABLE": "/bin/python",
                 "PYTHONHOME": "/cpython",
-                "PYTHONPATH": "/.venv/wasix-site-packages",
+                "PYTHONPATH": "/.venv/lib/python3.13/site-packages",
                 "HOME": "/app",
             },
         },
