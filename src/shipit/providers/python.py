@@ -62,7 +62,7 @@ class PythonProvider:
             "if cross_platform:\n"
             "  python_cross_packages_path = serve_mount(\"python-cross-packages\")\n"
             "  if cross_platform == \"wasix_wasm32\":\n"
-            "    python_cross_packages_serve_path = f\"/cpython/lib/python{python_version}/site-packages\"\n"
+            "    python_cross_packages_serve_path = \"/.venv/wasix-site-packages\"\n"
             "precompile_python = getenv(\"SHIPIT_PYTHON_PRECOMPILE\") in [\"true\", \"True\", \"TRUE\", \"1\", \"on\", \"yes\", \"y\", \"Y\", \"YES\", \"On\", \"ON\"]\n"
         )
 

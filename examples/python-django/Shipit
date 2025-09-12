@@ -1,4 +1,4 @@
-python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.11"
+python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"
 python = dep("python", python_version)
 uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
 uv = dep("uv", uv_version)
@@ -10,7 +10,7 @@ python_cross_packages_path = None
 if cross_platform:
   python_cross_packages_path = serve_mount("python-cross-packages")
   if cross_platform == "wasix_wasm32":
-    python_cross_packages_serve_path = f"/cpython/lib/python{python_version}/site-packages"
+    python_cross_packages_serve_path = "/.venv/wasix-site-packages"
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
 
 
