@@ -172,11 +172,11 @@ class DockerBuilder:
             "linux/amd64",
             ".",
             _cwd=self.src_dir.absolute(),
-            _env=os.environ, # Pass the current environment variables to the Docker client
+            _env=os.environ,  # Pass the current environment variables to the Docker client
             _out=write_stdout,
             _err=write_stderr,
         )
-    
+
     def finalize_build(self, serve: Serve) -> None:
         console.print(f"\n[bold]Building Docker file[/bold]")
         self.build_dockerfile(serve.name)
@@ -185,7 +185,9 @@ class DockerBuilder:
 
     def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
         image_name = self.docker_name_path.read_text()
-        return sh.Command(self.docker_client)(
+        return sh.Command(
+            "docker"
+        )(
             "run",
             "-p",
             "80:80",
@@ -193,7 +195,7 @@ class DockerBuilder:
             image_name,
             command,
             *(extra_args or []),
-            _env=os.environ, # Pass the current environment variables to the Docker client
+            _env=os.environ,  # Pass the current environment variables to the Docker client
             _out=write_stdout,
             _err=write_stderr,
         )
@@ -235,7 +237,9 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
             return
         elif dependency.name == "static-web-server":
             if dependency.version:
-                self.docker_file_contents += f"ENV SWS_INSTALL_VERSION={dependency.version}\n"
+                self.docker_file_contents += (
+                    f"ENV SWS_INSTALL_VERSION={dependency.version}\n"
+                )
             self.docker_file_contents += f"RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n"
             return
         if dependency.version:
@@ -294,7 +298,6 @@ ENV PATH="/root/.wasmer/bin:${PATH}"
 .shipit
 Shipit
 """)
-
 
     def build_assets(self, assets: Dict[str, str]) -> None:
         raise NotImplementedError
@@ -445,7 +448,10 @@ class LocalBuilder:
 
     def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
         return sh.Command(command)(
-            *(extra_args or []), _out=write_stdout, _err=write_stderr, _env=os.environ,
+            *(extra_args or []),
+            _out=write_stdout,
+            _err=write_stderr,
+            _env=os.environ,
         )
 
     def getenv(self, name: str) -> Optional[str]:
@@ -573,12 +579,19 @@ class WasmerBuilder:
         },
     }
 
-    def __init__(self, inner_builder: Builder, src_dir: Path) -> None:
+    def __init__(
+        self,
+        inner_builder: Builder,
+        src_dir: Path,
+        registry: Optional[str] = None,
+        token: Optional[str] = None,
+    ) -> None:
         self.src_dir = src_dir
         self.inner_builder = inner_builder
         # The path where we store the directory of the wasmer app in the inner builder
         self.wasmer_dir_path = Path(self.src_dir / ".shipit" / "wasmer_dir")
-        self.wasmer_registry = os.environ.get("SHIPIT_WASMER_REGISTRY")
+        self.wasmer_registry = registry
+        self.wasmer_token = token
         self.default_env = {
             "SHIPIT_PYTHON_EXTRA_INDEX_URL": "https://pythonindex.wasix.org/simple",
             "SHIPIT_PYTHON_CROSS_PLATFORM": "wasix_wasm32",
@@ -624,7 +637,7 @@ class WasmerBuilder:
             f"#!/bin/bash\ncd /app\n{body}",
             mode=0o755,
         )
-    
+
     def finalize_build(self, serve: Serve) -> None:
         inner = cast(Any, self.inner_builder)
         inner.finalize_build(serve)
@@ -781,7 +794,7 @@ class WasmerBuilder:
         console.print(f"\n[bold]Serving site[/bold]: running {command} command")
         wasmer_path = self.wasmer_dir_path.read_text()
         extra_args = extra_args or []
-        
+
         if self.wasmer_registry:
             extra_args = [f"--registry={self.wasmer_registry}"] + extra_args
         self.inner_builder.run_command(
@@ -800,20 +813,43 @@ class WasmerBuilder:
     ) -> Any:
         return self.inner_builder.run_command(command, extra_args or [])
 
-    def deploy(self) -> str:
-        print("DEPLOYING WASMER APP", self.wasmer_path, self.wasmer_registry)
-        app_owner: str = self.getenv("WASMER_APP_OWNER")
-        app_name: str = self.getenv("WASMER_APP_NAME")
+    def deploy(
+        self, app_owner: Optional[str] = None, app_name: Optional[str] = None
+    ) -> str:
         if not app_owner or not app_name:
-            raise Exception("WASMER_APP_OWNER and WASMER_APP_NAME must be set")
-        wasmer_token: str = self.getenv("WASMER_TOKEN")
-        if not wasmer_token:
-            raise Exception("WASMER_TOKEN must be set")
+            raise Exception("app_owner and app_name must be set")
         extra_args = []
         if self.wasmer_registry:
-            extra_args = ["--registry", self.wasmer_registry]
-        self.inner_builder.run_command("wasmer", ["package", "push", self.wasmer_path, "--namespace", app_owner, "--non-interactive", "--token", wasmer_token, *extra_args])
-        return self.inner_builder.run_command("wasmer", ["deploy", "--publish-package", "--dir", self.wasmer_path, "--app-name", app_name, "--owner", app_owner, "--non-interactive", "--token", wasmer_token, *extra_args])
+            extra_args += ["--registry", self.wasmer_registry]
+        if self.wasmer_token:
+            extra_args += ["--token", self.wasmer_token]
+        self.inner_builder.run_command(
+            "wasmer",
+            [
+                "package",
+                "push",
+                self.wasmer_path,
+                "--namespace",
+                app_owner,
+                "--non-interactive",
+                *extra_args,
+            ],
+        )
+        return self.inner_builder.run_command(
+            "wasmer",
+            [
+                "deploy",
+                "--publish-package",
+                "--dir",
+                self.wasmer_path,
+                "--app-name",
+                app_name,
+                "--owner",
+                app_owner,
+                "--non-interactive",
+                *extra_args,
+            ],
+        )
 
 
 class Ctx:
@@ -885,7 +921,9 @@ class Ctx:
         if prepare is not None:
             # Resolve referenced steps and keep only RunStep for prepare
             resolved = [cast(Step, r) for r in self.get_refs(prepare)]
-            prepare_steps = [cast(RunStep, s) for s in resolved if isinstance(s, RunStep)]
+            prepare_steps = [
+                cast(RunStep, s) for s in resolved if isinstance(s, RunStep)
+            ]
         dep_refs = [cast(Package, r) for r in self.get_refs(deps)]
         serve = Serve(
             name=name,
@@ -955,6 +993,10 @@ def auto(
         False,
         help="Use Docker to build the project.",
     ),
+    docker_client: Optional[str] = typer.Option(
+        None,
+        help="Use a specific Docker client (such as depot, podman, etc.)",
+    ),
     start: bool = typer.Option(
         False,
         help="Run the start command after building.",
@@ -971,13 +1013,40 @@ def auto(
         False,
         help="Deploy the project to Wasmer.",
     ),
+    wasmer_token: Optional[str] = typer.Option(
+        None,
+        help="Wasmer token.",
+    ),
+    wasmer_registry: Optional[str] = typer.Option(
+        None,
+        help="Wasmer registry.",
+    ),
+    wasmer_app_owner: Optional[str] = typer.Option(
+        None,
+        help="Owner of the Wasmer app.",
+    ),
+    wasmer_app_name: Optional[str] = typer.Option(
+        None,
+        help="Name of the Wasmer app.",
+    ),
 ):
     if not (path / "Shipit").exists() or regenerate or regenerate_path is not None:
         generate(path, out=regenerate_path)
 
-    build(path, wasmer=(wasmer or wasmer_deploy), docker=docker)
+    build(path, wasmer=(wasmer or wasmer_deploy), docker=docker, docker_client=docker_client,)
     if start or wasmer_deploy:
-        serve(path, wasmer=wasmer, docker=docker, start=start, wasmer_deploy=wasmer_deploy)
+        serve(
+            path,
+            wasmer=wasmer,
+            docker=docker,
+            docker_client=docker_client,
+            start=start,
+            wasmer_token=wasmer_token,
+            wasmer_registry=wasmer_registry,
+            wasmer_deploy=wasmer_deploy,
+            wasmer_app_owner=wasmer_app_owner,
+            wasmer_app_name=wasmer_app_name,
+        )
     # deploy(path)
 
 
@@ -1046,20 +1115,38 @@ def serve(
         False,
         help="Deploy the project to Wasmer.",
     ),
+    wasmer_token: Optional[str] = typer.Option(
+        None,
+        help="Wasmer token.",
+    ),
+    wasmer_registry: Optional[str] = typer.Option(
+        None,
+        help="Wasmer registry.",
+    ),
+    wasmer_app_owner: Optional[str] = typer.Option(
+        None,
+        help="Owner of the Wasmer app.",
+    ),
+    wasmer_app_name: Optional[str] = typer.Option(
+        None,
+        help="Name of the Wasmer app.",
+    ),
 ) -> None:
     builder: Builder
-    if docker:
+    if docker or docker_client:
         builder = DockerBuilder(path, docker_client)
     else:
         builder = LocalBuilder(path)
     if wasmer or wasmer_deploy:
-        builder = WasmerBuilder(builder, path)
+        builder = WasmerBuilder(
+            builder, path, registry=wasmer_registry, token=wasmer_token
+        )
     if start:
         builder.run_serve_command("start")
 
     if wasmer_deploy:
         if isinstance(builder, WasmerBuilder):
-            builder.deploy()
+            builder.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
         else:
             raise Exception("Wasmer deploy is only supported for Wasmer builders")
 
@@ -1086,10 +1173,12 @@ def build(
 ) -> None:
     ab_file = path / "Shipit"
     if not ab_file.exists():
-        raise FileNotFoundError(f"Shipit file not found at {ab_file}. Please run `shipit generate {path}` to create it.")
+        raise FileNotFoundError(
+            f"Shipit file not found at {ab_file}. Please run `shipit generate {path}` to create it."
+        )
     source = open(ab_file).read()
     builder: Builder
-    if docker:
+    if docker or docker_client:
         builder = DockerBuilder(path, docker_client)
     else:
         builder = LocalBuilder(path)
