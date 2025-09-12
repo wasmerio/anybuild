@@ -5,12 +5,11 @@ uv = dep("uv", uv_version)
 
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
-python_cross_packages_serve_path = ""
+python_cross_packages_serve_path = None
 python_cross_packages_path = None
 if cross_platform:
   python_cross_packages_path = serve_mount("python-cross-packages")
-  if cross_platform == "wasix_wasm32":
-    python_cross_packages_serve_path = "/.venv/wasix-site-packages"
+  python_cross_packages_serve_path = f"/.venv/lib/python{python_version}/site-packages"
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
 
 
@@ -29,8 +28,8 @@ serve(
   ],
   deps=[python],
   prepare=[
-    run("echo \"Precompiling Python code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {python_cross_packages_serve_path}") if precompile_python else None,
+    run("echo \"Precompiling Python code...\"") if precompile_python and python_cross_packages_serve_path else None,
+    run(f"python -m compileall -o 2 {python_cross_packages_serve_path}") if precompile_python and python_cross_packages_serve_path else None,
     run("echo \"Precompiling package code...\"") if precompile_python else None,
     run("python -m compileall -o 2 .") if precompile_python else None
   ],
