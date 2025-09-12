@@ -137,7 +137,7 @@ class Builder(Protocol):
 
 
 class DockerBuilder:
-    def __init__(self, src_dir: Path) -> None:
+    def __init__(self, src_dir: Path, docker_client: Optional[str] = None) -> None:
         self.src_dir = src_dir
         self.docker_file_contents = ""
         self.docker_path = self.src_dir / ".shipit" / "docker"
@@ -145,10 +145,10 @@ class DockerBuilder:
         self.docker_name_path = self.docker_path / "name"
         self.docker_ignore_path = self.docker_path / "Dockerfile.dockerignore"
         self.shipit_docker_path = Path("/shipit")
-
-    env = {
-        "HOME": "/root",
-    }
+        self.docker_client = docker_client or "docker"
+        self.env = {
+            "HOME": "/root",
+        }
 
     def getenv(self, name: str) -> Optional[str]:
         return self.env.get(name) or os.environ.get(name)
@@ -162,7 +162,7 @@ class DockerBuilder:
         self.docker_file_path.write_text(self.docker_file_contents)
         self.docker_name_path.write_text(image_name)
         self.print_dockerfile()
-        sh.Command("docker")(
+        sh.Command(self.docker_client)(
             "build",
             "-f",
             (self.docker_path / "Dockerfile").absolute(),
@@ -172,6 +172,7 @@ class DockerBuilder:
             "linux/amd64",
             ".",
             _cwd=self.src_dir.absolute(),
+            _env=os.environ, # Pass the current environment variables to the Docker client
             _out=write_stdout,
             _err=write_stderr,
         )
@@ -184,7 +185,7 @@ class DockerBuilder:
 
     def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
         image_name = self.docker_name_path.read_text()
-        return sh.Command("docker")(
+        return sh.Command(self.docker_client)(
             "run",
             "-p",
             "80:80",
@@ -192,6 +193,7 @@ class DockerBuilder:
             image_name,
             command,
             *(extra_args or []),
+            _env=os.environ, # Pass the current environment variables to the Docker client
             _out=write_stdout,
             _err=write_stderr,
         )
@@ -1032,6 +1034,10 @@ def serve(
         False,
         help="Use Docker to build the project.",
     ),
+    docker_client: Optional[str] = typer.Option(
+        None,
+        help="Use a specific Docker client (such as depot, podman, etc.)",
+    ),
     start: Optional[bool] = typer.Option(
         True,
         help="Run the start command after building.",
@@ -1043,7 +1049,7 @@ def serve(
 ) -> None:
     builder: Builder
     if docker:
-        builder = DockerBuilder(path)
+        builder = DockerBuilder(path, docker_client)
     else:
         builder = LocalBuilder(path)
     if wasmer or wasmer_deploy:
@@ -1073,6 +1079,10 @@ def build(
         False,
         help="Use Docker to build the project.",
     ),
+    docker_client: Optional[str] = typer.Option(
+        None,
+        help="Use a specific Docker client (such as depot, podman, etc.)",
+    ),
 ) -> None:
     ab_file = path / "Shipit"
     if not ab_file.exists():
@@ -1080,7 +1090,7 @@ def build(
     source = open(ab_file).read()
     builder: Builder
     if docker:
-        builder = DockerBuilder(path)
+        builder = DockerBuilder(path, docker_client)
     else:
         builder = LocalBuilder(path)
     if wasmer:
