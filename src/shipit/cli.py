@@ -3,6 +3,7 @@ import os
 import shlex
 import shutil
 import sys
+import json
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
@@ -141,6 +142,7 @@ class DockerBuilder:
         self.src_dir = src_dir
         self.docker_file_contents = ""
         self.docker_path = self.src_dir / ".shipit" / "docker"
+        self.depot_metadata = self.docker_path / "depot-build.json"
         self.docker_file_path = self.docker_path / "Dockerfile"
         self.docker_name_path = self.docker_path / "name"
         self.docker_ignore_path = self.docker_path / "Dockerfile.dockerignore"
@@ -149,6 +151,10 @@ class DockerBuilder:
         self.env = {
             "HOME": "/root",
         }
+    
+    @property
+    def is_depot(self) -> bool:
+        return self.docker_client == "depot"
 
     def getenv(self, name: str) -> Optional[str]:
         return self.env.get(name) or os.environ.get(name)
@@ -162,6 +168,11 @@ class DockerBuilder:
         self.docker_file_path.write_text(self.docker_file_contents)
         self.docker_name_path.write_text(image_name)
         self.print_dockerfile()
+        extra_args = []
+        if self.is_depot:
+            # We load the docker image back into the local docker daemon
+            # extra_args += ["--load"]
+            extra_args += ["--save", f"--metadata-file={self.depot_metadata.absolute()}"]
         sh.Command(self.docker_client)(
             "build",
             "-f",
@@ -171,11 +182,31 @@ class DockerBuilder:
             "--platform",
             "linux/amd64",
             ".",
+            *extra_args,
             _cwd=self.src_dir.absolute(),
             _env=os.environ,  # Pass the current environment variables to the Docker client
             _out=write_stdout,
             _err=write_stderr,
         )
+        if self.is_depot:
+            json_text = self.depot_metadata.read_text()
+            json_data = json.loads(json_text)
+            build_data = json_data["depot.build"]
+            image_id = build_data["buildID"]
+            project = build_data["projectID"]
+            sh.Command("depot")(
+                "pull",
+                "--platform",
+                "linux/amd64",
+                "--project",
+                project,
+                image_id,
+                _cwd=self.src_dir.absolute(),
+                _env=os.environ,  # Pass the current environment variables to the Docker client
+                _out=write_stdout,
+                _err=write_stderr,
+            )
+            # console.print(f"[bold]Image ID:[/bold] {image_id}")
 
     def finalize_build(self, serve: Serve) -> None:
         console.print(f"\n[bold]Building Docker file[/bold]")
