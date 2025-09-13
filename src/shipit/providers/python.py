@@ -61,7 +61,7 @@ class PythonProvider:
             "python_cross_packages_path = None\n"
             "if cross_platform:\n"
             "  python_cross_packages_path = serve_mount(\"python-cross-packages\")\n"
-            "  python_cross_packages_serve_path = f\"/.venv/lib/python{python_version}/site-packages\"\n"
+            "  python_cross_packages_serve_path = f\"/opt/venv/lib/python{python_version}/site-packages\"\n"
             "precompile_python = getenv(\"SHIPIT_PYTHON_PRECOMPILE\") in [\"true\", \"True\", \"TRUE\", \"1\", \"on\", \"yes\", \"y\", \"Y\", \"YES\", \"On\", \"ON\"]\n"
         )
 

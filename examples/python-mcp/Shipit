@@ -9,7 +9,7 @@ python_cross_packages_serve_path = None
 python_cross_packages_path = None
 if cross_platform:
   python_cross_packages_path = serve_mount("python-cross-packages")
-  python_cross_packages_serve_path = f"/.venv/lib/python{python_version}/site-packages"
+  python_cross_packages_serve_path = f"/opt/venv/lib/python{python_version}/site-packages"
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
 
 
