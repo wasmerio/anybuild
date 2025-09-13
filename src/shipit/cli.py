@@ -692,7 +692,7 @@ class WasmerBuilder:
         self.default_env = {
             "SHIPIT_PYTHON_EXTRA_INDEX_URL": "https://pythonindex.wasix.org/simple",
             "SHIPIT_PYTHON_CROSS_PLATFORM": "wasix_wasm32",
-            # "SHIPIT_PYTHON_PRECOMPILE": "true",
+            "SHIPIT_PYTHON_PRECOMPILE": "true",
         }
 
     def getenv(self, name: str) -> Optional[str]:
@@ -709,8 +709,8 @@ class WasmerBuilder:
 
     def build_prepare(self, serve: Serve) -> None:
         print("Building prepare")
-        inner = cast(Any, self.inner_builder)
-        prepare_dir = inner.mkdir(Path("wasmer") / "prepare")
+        prepare_dir = (self.wasmer_dir_path / "prepare")
+        prepare_dir.mkdir(parents=True, exist_ok=True)
         env = serve.env or {}
         for dep in serve.deps:
             if dep.name in self.mapper:
@@ -729,19 +729,17 @@ class WasmerBuilder:
                 if isinstance(step, RunStep):
                     commands.append(step.command)
         body = "\n".join(filter(None, [env_lines, *commands]))
-        inner.create_file(
-            Path(prepare_dir) / "prepare.sh",
+        (prepare_dir / "prepare.sh").write_text(
             f"#!/bin/bash\ncd /app\n{body}",
-            mode=0o755,
         )
+        (prepare_dir / "prepare.sh").chmod(0o755)
 
     def finalize_build(self, serve: Serve) -> None:
         inner = cast(Any, self.inner_builder)
         inner.finalize_build(serve)
 
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
-        inner = cast(Any, self.inner_builder)
-        prepare_dir = inner.mkdir(Path("wasmer") / "prepare")
+        prepare_dir = (self.wasmer_dir_path / "prepare")
         self.run_serve_command(
             "bash",
             extra_args=[
@@ -1153,7 +1151,7 @@ def auto(
     if not (path / "Shipit").exists() or regenerate or regenerate_path is not None:
         generate(path, out=regenerate_path)
 
-    build(path, wasmer=(wasmer or wasmer_deploy), docker=docker, docker_client=docker_client,)
+    build(path, wasmer=(wasmer or wasmer_deploy), docker=docker, docker_client=docker_client, wasmer_registry=wasmer_registry, wasmer_token=wasmer_token)
     if start or wasmer_deploy:
         serve(
             path,
@@ -1282,6 +1280,14 @@ def build(
         False,
         help="Use Wasmer to build and serve the project.",
     ),
+    wasmer_registry: Optional[str] = typer.Option(
+        None,
+        help="Wasmer registry.",
+    ),
+    wasmer_token: Optional[str] = typer.Option(
+        None,
+        help="Wasmer token.",
+    ),
     docker: bool = typer.Option(
         False,
         help="Use Docker to build the project.",
@@ -1303,7 +1309,7 @@ def build(
     else:
         builder = LocalBuilder(path)
     if wasmer:
-        builder = WasmerBuilder(builder, path)
+        builder = WasmerBuilder(builder, path, registry=wasmer_registry, token=wasmer_token)
 
     ctx = Ctx(builder)
     glb = sl.Globals.standard()
