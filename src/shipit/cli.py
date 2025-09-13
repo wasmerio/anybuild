@@ -40,6 +40,12 @@ app = typer.Typer(invoke_without_command=True)
 DIR_PATH = Path(__file__).resolve().parent
 ASSETS_PATH = DIR_PATH / "assets"
 
+@dataclass
+class Mount:
+    name: str
+    build_path: Path
+    serve_path: Path
+
 
 @dataclass
 class Serve:
@@ -51,7 +57,8 @@ class Serve:
     assets: Optional[Dict[str, str]] = None
     prepare: Optional[List["PrepareStep"]] = None
     workers: Optional[List[str]] = None
-    mounts: Optional[Dict[str, str]] = None
+    mounts: Optional[List[Mount]] = None
+    env: Optional[Dict[str, str]] = None
 
 
 @dataclass
@@ -69,6 +76,11 @@ class RunStep:
     inputs: Optional[List[str]] = None
     outputs: Optional[List[str]] = None
     group: Optional[str] = None
+
+
+@dataclass
+class WorkdirStep:
+    path: Path
 
 
 @dataclass
@@ -96,7 +108,7 @@ class PathStep:
     path: str
 
 
-Step = Union[RunStep, CopyStep, EnvStep, PathStep, UseStep]
+Step = Union[RunStep, CopyStep, EnvStep, PathStep, UseStep, WorkdirStep]
 PrepareStep = Union[RunStep]
 
 
@@ -122,7 +134,7 @@ class MapperItem(TypedDict):
 
 
 class Builder(Protocol):
-    def build(self, env: Dict[str, str], steps: List[Step]) -> None: ...
+    def build(self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None: ...
     def build_assets(self, assets: Dict[str, str]) -> None: ...
     def build_prepare(self, serve: Serve) -> None: ...
     def build_serve(self, serve: Serve) -> None: ...
@@ -135,6 +147,8 @@ class Builder(Protocol):
     ) -> Any: ...
     def serve_mount(self, name: str) -> str: ...
     def get_asset(self, name: str) -> str: ...
+    def get_build_mount_path(self, name: str) -> Path: ...
+    def get_serve_mount_path(self, name: str) -> Path: ...
 
 
 class DockerBuilder:
@@ -142,6 +156,7 @@ class DockerBuilder:
         self.src_dir = src_dir
         self.docker_file_contents = ""
         self.docker_path = self.src_dir / ".shipit" / "docker"
+        self.docker_out_path = self.docker_path / "out"
         self.depot_metadata = self.docker_path / "depot-build.json"
         self.docker_file_path = self.docker_path / "Dockerfile"
         self.docker_name_path = self.docker_path / "name"
@@ -151,7 +166,20 @@ class DockerBuilder:
         self.env = {
             "HOME": "/root",
         }
-    
+
+    def get_mount_path(self, name: str) -> Path:
+        if name == "app":
+            return Path("app")
+        else:
+            return Path("opt") / name
+
+    def get_build_mount_path(self, name: str) -> Path:
+        path = Path("/") / self.get_mount_path(name)
+        return path
+
+    def get_serve_mount_path(self, name: str) -> Path:
+        return self.docker_out_path / self.get_mount_path(name)
+
     @property
     def is_depot(self) -> bool:
         return self.docker_client == "depot"
@@ -169,10 +197,10 @@ class DockerBuilder:
         self.docker_name_path.write_text(image_name)
         self.print_dockerfile()
         extra_args = []
-        if self.is_depot:
-            # We load the docker image back into the local docker daemon
-            # extra_args += ["--load"]
-            extra_args += ["--save", f"--metadata-file={self.depot_metadata.absolute()}"]
+        # if self.is_depot:
+        #     # We load the docker image back into the local docker daemon
+        #     # extra_args += ["--load"]
+        #     extra_args += ["--save", f"--metadata-file={self.depot_metadata.absolute()}"]
         sh.Command(self.docker_client)(
             "build",
             "-f",
@@ -181,6 +209,8 @@ class DockerBuilder:
             image_name,
             "--platform",
             "linux/amd64",
+            "--output",
+            self.docker_out_path.absolute(),
             ".",
             *extra_args,
             _cwd=self.src_dir.absolute(),
@@ -188,25 +218,25 @@ class DockerBuilder:
             _out=write_stdout,
             _err=write_stderr,
         )
-        if self.is_depot:
-            json_text = self.depot_metadata.read_text()
-            json_data = json.loads(json_text)
-            build_data = json_data["depot.build"]
-            image_id = build_data["buildID"]
-            project = build_data["projectID"]
-            sh.Command("depot")(
-                "pull",
-                "--platform",
-                "linux/amd64",
-                "--project",
-                project,
-                image_id,
-                _cwd=self.src_dir.absolute(),
-                _env=os.environ,  # Pass the current environment variables to the Docker client
-                _out=write_stdout,
-                _err=write_stderr,
-            )
-            # console.print(f"[bold]Image ID:[/bold] {image_id}")
+        # if self.is_depot:
+        #     json_text = self.depot_metadata.read_text()
+        #     json_data = json.loads(json_text)
+        #     build_data = json_data["depot.build"]
+        #     image_id = build_data["buildID"]
+        #     project = build_data["projectID"]
+        #     sh.Command("depot")(
+        #         "pull",
+        #         "--platform",
+        #         "linux/amd64",
+        #         "--project",
+        #         project,
+        #         image_id,
+        #         _cwd=self.src_dir.absolute(),
+        #         _env=os.environ,  # Pass the current environment variables to the Docker client
+        #         _out=write_stdout,
+        #         _err=write_stderr,
+        #     )
+        #     # console.print(f"[bold]Image ID:[/bold] {image_id}")
 
     def finalize_build(self, serve: Serve) -> None:
         console.print(f"\n[bold]Building Docker file[/bold]")
@@ -280,11 +310,11 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
         else:
             self.docker_file_contents += f"RUN pkgm install {dependency.name}\n"
 
-    def build(self, env: Dict[str, str], steps: List[Step]) -> None:
+    def build(self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
         base_path = self.docker_path
         shutil.rmtree(base_path, ignore_errors=True)
         base_path.mkdir(parents=True, exist_ok=True)
-        self.docker_file_contents = "FROM debian:bookworm-slim\n"
+        self.docker_file_contents = "FROM debian:bookworm-slim AS build\n"
         self.docker_file_contents += """
 RUN apt-get update \\
     && apt-get -y --no-install-recommends install sudo curl ca-certificates locate git zip unzip \\
@@ -295,13 +325,17 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl https://pkgx.sh | sh
 """
         # docker_file_contents += "RUN curl https://mise.run | sh\n"
-        self.docker_file_contents += """
-RUN curl https://get.wasmer.io -sSfL | sh -s "v6.1.0-rc.3"
-ENV PATH="/root/.wasmer/bin:${PATH}"
-"""
-        self.docker_file_contents += "WORKDIR /app\n"
+#         self.docker_file_contents += """
+# RUN curl https://get.wasmer.io -sSfL | sh -s "v6.1.0-rc.3"
+# ENV PATH="/root/.wasmer/bin:${PATH}"
+# """
+        for mount in mounts:
+            self.docker_file_contents += f"RUN mkdir -p {mount.build_path.absolute()}\n"
+
         for step in steps:
-            if isinstance(step, RunStep):
+            if isinstance(step, WorkdirStep):
+                self.docker_file_contents += f"WORKDIR {step.path.absolute()}\n"
+            elif isinstance(step, RunStep):
                 if step.inputs:
                     pre = "\\\n  " + "".join(
                         [
@@ -324,6 +358,12 @@ ENV PATH="/root/.wasmer/bin:${PATH}"
             elif isinstance(step, UseStep):
                 for dependency in step.dependencies:
                     self.add_dependency(dependency)
+
+        self.docker_file_contents += """
+FROM scratch
+"""
+        for mount in mounts:
+            self.docker_file_contents += f"COPY --from=build {mount.build_path} {mount.build_path}\n"
 
         self.docker_ignore_path.write_text("""
 .shipit
@@ -384,14 +424,33 @@ class LocalBuilder:
         self.src_dir = src_dir
         self.local_path = self.src_dir / ".shipit" / "local"
         self.prepare_bash_script = self.local_path / "prepare" / "prepare.sh"
+        self.build_path = self.local_path / "build"
+        self.workdir = self.build_path
 
-    def execute_step(self, step: Step, env: Dict[str, str], build_path: Path) -> None:
+    def get_mount_path(self, name: str) -> Path:
+        if name == "app":
+            return self.build_path / "app"
+        else:
+            return self.build_path / "opt" / name
+
+    def get_build_mount_path(self, name: str) -> Path:
+        return self.get_mount_path(name)
+
+    def get_serve_mount_path(self, name: str) -> Path:
+        return self.get_mount_path(name)
+
+    def execute_step(self, step: Step, env: Dict[str, str]) -> None:
+        build_path = self.workdir
         if isinstance(step, UseStep):
             console.print(f"[bold]Using dependencies:[/bold] {step.dependencies}")
+        elif isinstance(step, WorkdirStep):
+            console.print(f"[bold]Working in {step.path}[/bold]")
+            self.workdir = step.path
         elif isinstance(step, RunStep):
             extra = ""
             if step.inputs:
                 for input in step.inputs:
+                    print(f"Copying {input} to {build_path / input}")
                     copy((self.src_dir / input), (build_path / input))
                 all_inputs = ", ".join(step.inputs)
                 extra = f" [bright_black]# using {all_inputs}[/bright_black]"
@@ -448,17 +507,17 @@ class LocalBuilder:
         else:
             raise Exception(f"Unknown step type: {type(step)}")
 
-    def build(self, env: Dict[str, str], steps: List[Step]) -> None:
+    def build(self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
         console.print(f"\n[bold]Building package[/bold]")
         base_path = self.local_path
         shutil.rmtree(base_path, ignore_errors=True)
         base_path.mkdir(parents=True, exist_ok=True)
-        temp_path = base_path / "build"
-        temp_path.mkdir(exist_ok=False)
-        logging.info(f"Initialized temporary build path: {temp_path}")
+        self.build_path.mkdir(exist_ok=True)
+        for mount in mounts:
+            mount.build_path.mkdir(parents=True, exist_ok=True)
         for step in steps:
             console.print(Rule(characters="-", style="bright_black"))
-            self.execute_step(step, env, temp_path)
+            self.execute_step(step, env)
 
         if "PATH" in env:
             path = base_path / ".path"
@@ -565,6 +624,15 @@ class LocalBuilder:
 
 
 class WasmerBuilder:
+    def get_build_mount_path(self, name: str) -> Path:
+        return self.inner_builder.get_build_mount_path(name)
+
+    def get_serve_mount_path(self, name: str) -> Path:
+        if name == "app":
+            return Path("/app")
+        else:
+            return Path("/opt") / name
+
     mapper: Dict[str, MapperItem] = {
         "python": {
             "dependencies": {
@@ -576,8 +644,6 @@ class WasmerBuilder:
             "env": {
                 "PYTHONEXECUTABLE": "/bin/python",
                 "PYTHONHOME": "/cpython",
-                "PYTHONPATH": "/opt/venv/lib/python3.13/site-packages",
-                "HOME": "/app",
             },
         },
         "php": {
@@ -620,7 +686,7 @@ class WasmerBuilder:
         self.src_dir = src_dir
         self.inner_builder = inner_builder
         # The path where we store the directory of the wasmer app in the inner builder
-        self.wasmer_dir_path = Path(self.src_dir / ".shipit" / "wasmer_dir")
+        self.wasmer_dir_path = Path(self.src_dir / ".shipit" / "wasmer")
         self.wasmer_registry = registry
         self.wasmer_token = token
         self.default_env = {
@@ -632,8 +698,8 @@ class WasmerBuilder:
     def getenv(self, name: str) -> Optional[str]:
         return self.inner_builder.getenv(name) or self.default_env.get(name)
 
-    def build(self, env: Dict[str, str], build: List[Step]) -> None:
-        return self.inner_builder.build(env, build)
+    def build(self, env: Dict[str, str], mounts: List[Mount], build: List[Step]) -> None:
+        return self.inner_builder.build(env, mounts, build)
 
     def build_assets(self, assets: Dict[str, str]) -> None:
         return self.inner_builder.build_assets(assets)
@@ -645,7 +711,7 @@ class WasmerBuilder:
         print("Building prepare")
         inner = cast(Any, self.inner_builder)
         prepare_dir = inner.mkdir(Path("wasmer") / "prepare")
-        env = {}
+        env = serve.env or {}
         for dep in serve.deps:
             if dep.name in self.mapper:
                 dep_env = self.mapper[dep.name].get("env")
@@ -739,10 +805,10 @@ class WasmerBuilder:
         inner = cast(Any, self.inner_builder)
         if serve.assets:
             fs.add("/assets", str((inner.get_path() / "assets").absolute()))
-        fs.add("/app", str(inner.get_build_path().absolute()))
+        # fs.add("/app", str(inner.get_build_path().absolute()))
         if serve.mounts:
             for mount in serve.mounts:
-                fs.add(mount, serve.mounts[mount])
+                fs.add(str(mount.serve_path.absolute()), str(self.inner_builder.get_serve_mount_path(mount.name).absolute()))
 
         doc.add(nl())
         if serve.commands:
@@ -760,8 +826,10 @@ class WasmerBuilder:
                 wasi_args = table()
                 wasi_args.add("cwd", "/app")
                 wasi_args.add("main-args", parts[1:])
-                env = program_binary.get("env")
-                if env is not None:
+                env = program_binary.get("env") or {}
+                if serve.env:
+                    env.update(serve.env)
+                if env:
                     wasi_args.add(
                         "env",
                         [f"{k}={v}" for k, v in env.items()],
@@ -770,9 +838,7 @@ class WasmerBuilder:
                 command.add(title, wasi_args)
 
         inner = cast(Any, self.inner_builder)
-        wasmer_dir = inner.mkdir(Path("wasmer"))
-        # Dump the wasmer_dir path to a file
-        self.wasmer_dir_path.write_text(str(wasmer_dir))
+        self.wasmer_dir_path.mkdir(parents=True, exist_ok=True)
 
         manifest = doc.as_string().replace(
             '[command."annotations.wasi"]', "[command.annotations.wasi]"
@@ -791,7 +857,7 @@ class WasmerBuilder:
             expand=False,
         )
         console.print(manifest_panel, markup=False, highlight=True)
-        inner.create_file(Path(wasmer_dir) / "wasmer.toml", manifest)
+        (self.wasmer_dir_path / "wasmer.toml").write_text(manifest)
 
         # Crete app.yaml
         yaml_config = {
@@ -811,7 +877,7 @@ class WasmerBuilder:
         }
 
         app_yaml = yaml.dump(yaml_config)
-        inner.create_file(Path(wasmer_dir) / "app.yaml", app_yaml)
+        (self.wasmer_dir_path / "app.yaml").write_text(app_yaml)
 
         # self.inner_builder.build_serve(serve)
 
@@ -823,14 +889,13 @@ class WasmerBuilder:
         self, command: str, extra_args: Optional[List[str]] = None
     ) -> None:
         console.print(f"\n[bold]Serving site[/bold]: running {command} command")
-        wasmer_path = self.wasmer_dir_path.read_text()
         extra_args = extra_args or []
 
         if self.wasmer_registry:
             extra_args = [f"--registry={self.wasmer_registry}"] + extra_args
-        self.inner_builder.run_command(
+        self.run_command(
             "wasmer",
-            ["run", str(wasmer_path), "--net", f"--command={command}", *extra_args],
+            ["run", str(self.wasmer_dir_path.absolute()), "--net", f"--command={command}", *extra_args],
         )
 
     def serve_mount(self, name: str) -> str:
@@ -842,7 +907,7 @@ class WasmerBuilder:
     def run_command(
         self, command: str, extra_args: Optional[List[str]] | None = None
     ) -> Any:
-        return self.inner_builder.run_command(command, extra_args or [])
+        sh.Command(command)(*(extra_args or []), _out=write_stdout, _err=write_stderr, _env=os.environ)
 
     def deploy(
         self, app_owner: Optional[str] = None, app_name: Optional[str] = None
@@ -854,7 +919,7 @@ class WasmerBuilder:
             extra_args += ["--registry", self.wasmer_registry]
         if self.wasmer_token:
             extra_args += ["--token", self.wasmer_token]
-        self.inner_builder.run_command(
+        self.run_command(
             "wasmer",
             [
                 "package",
@@ -866,7 +931,7 @@ class WasmerBuilder:
                 *extra_args,
             ],
         )
-        return self.inner_builder.run_command(
+        return self.run_command(
             "wasmer",
             [
                 "deploy",
@@ -890,6 +955,7 @@ class Ctx:
         self.builds: List[Build] = []
         self.steps: List[Step] = []
         self.serves: Dict[str, Serve] = {}
+        self.mounts: List[Mount] = []
 
     def add_package(self, package: Package) -> str:
         index = f"{package.name}@{package.version}" if package.version else package.name
@@ -905,6 +971,8 @@ class Ctx:
             return self.serves[index[len("ref:serve:") :]]
         elif index.startswith("ref:step:"):
             return self.steps[int(index[len("ref:step:") :])]
+        elif index.startswith("ref:mount:"):
+            return self.mounts[int(index[len("ref:mount:") :])]
         else:
             raise Exception(f"Invalid reference: {index}")
 
@@ -945,7 +1013,8 @@ class Ctx:
         assets: Optional[Dict[str, str]] = None,
         prepare: Optional[List[str]] = None,
         workers: Optional[List[str]] = None,
-        mounts: Optional[Dict[str, str]] = None,
+        mounts: Optional[List[Mount]] = None,
+        env: Optional[Dict[str, str]] = None,
     ) -> str:
         build_refs = [cast(Step, r) for r in self.get_refs(build)]
         prepare_steps: Optional[List[PrepareStep]] = None
@@ -965,7 +1034,8 @@ class Ctx:
             commands=commands,
             prepare=prepare_steps,
             workers=workers,
-            mounts=mounts,
+            mounts=self.get_refs([mount["ref"] for mount in mounts]) if mounts else None,
+            env=env,
         )
         return self.add_serve(serve)
 
@@ -982,6 +1052,10 @@ class Ctx:
         step = RunStep(*args, **kwargs)
         return self.add_step(step)
 
+    def workdir(self, path: str) -> Optional[str]:
+        step = WorkdirStep(Path(path))
+        return self.add_step(step)
+
     def copy(
         self, source: str, target: str, ignore: Optional[List[str]] = None
     ) -> Optional[str]:
@@ -994,6 +1068,21 @@ class Ctx:
     def env(self, **env_vars: str) -> Optional[str]:
         step = EnvStep(env_vars)
         return self.add_step(step)
+
+    def add_mount(self, mount: Mount) -> Optional[str]:
+        self.mounts.append(mount)
+        return f"ref:mount:{len(self.mounts) - 1}"
+
+    def mount(self, name: str) -> Optional[str]:
+        build_path = self.builder.get_build_mount_path(name)
+        serve_path = self.builder.get_serve_mount_path(name)
+        mount = Mount(name, build_path, serve_path)
+        ref = self.add_mount(mount)
+        return {
+            "ref": ref,
+            "build": str(build_path.absolute()),
+            "serve": str(serve_path.absolute()),
+        }
 
     def serve_mount(self, name: str) -> Optional[str]:
         return self.builder.serve_mount(name)
@@ -1224,13 +1313,15 @@ def build(
     mod.add_callable("dep", ctx.dep)
     mod.add_callable("serve", ctx.serve)
     mod.add_callable("run", ctx.run)
-    mod.add_callable("use", ctx.run)
+    mod.add_callable("mount", ctx.mount)
+    mod.add_callable("workdir", ctx.workdir)
     mod.add_callable("copy", ctx.copy)
     mod.add_callable("path", ctx.path)
     mod.add_callable("buildpath", ctx.buildpath)
     mod.add_callable("get_asset", ctx.get_asset)
     mod.add_callable("env", ctx.env)
     mod.add_callable("use", ctx.use)
+    # REMOVE ME
     mod.add_callable("serve_mount", ctx.serve_mount)
 
     dialect = sl.Dialect.extended()
@@ -1252,7 +1343,7 @@ def build(
     serve = next(iter(ctx.serves.values()))
 
     # Build and serve
-    builder.build(env, serve.build)
+    builder.build(env, serve.mounts, serve.build)
     if serve.prepare:
         builder.build_prepare(serve)
     if serve.assets:

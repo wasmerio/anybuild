@@ -5,31 +5,38 @@ uv = dep("uv", uv_version)
 
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
-python_cross_packages_serve_path = None
-python_cross_packages_path = None
-if cross_platform:
-  python_cross_packages_path = serve_mount("python-cross-packages")
-  python_cross_packages_serve_path = f"/opt/venv/lib/python{python_version}/site-packages"
+
+app = mount("app") # It returns the path in the builder
+venv = mount("venv")
+local_venv = mount("local_venv") 
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
 
+python_cross_packages_path = venv["build"] + f"/lib/python{python_version}/site-packages"
 
 serve(
   name="python-django",
   provider="python",
+  # root=app,
   build=[
     use(python, uv),
+    workdir(app["build"]),
+    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
     run(f"uv sync --compile --python python{python_version} --locked --no-managed-python", inputs=["pyproject.toml", "uv.lock"], outputs=["."], group="install"),
     run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt", inputs=["pyproject.toml"], outputs=["cross-requirements.txt"]) if cross_platform else None,
     run(f"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile", outputs=["."]) if cross_platform else None,
     run("rm cross-requirements.txt") if cross_platform else None,
-    path(".venv/bin"),
+    path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
+    run("which python"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    run("rm -rf .venv") if cross_platform else None
+    # run("cp -r {} {}".format(local_venv["build"] + "/bin", venv["build"] + "/bin")) if cross_platform else None,
   ],
+  env={
+    "PYTHONPATH": "{}/lib/python{}/site-packages".format(venv["serve"], python_version)
+  },
   deps=[python],
   prepare=[
-    run("echo \"Precompiling Python code...\"") if precompile_python and python_cross_packages_serve_path else None,
-    run(f"python -m compileall -o 2 {python_cross_packages_serve_path}") if precompile_python and python_cross_packages_serve_path else None,
+    run("echo \"Precompiling Python code...\"") if precompile_python else None,
+    run("python -m compileall -o 2 $PYTHONPATH") if precompile_python else None,
     run("echo \"Precompiling package code...\"") if precompile_python else None,
     run("python -m compileall -o 2 .") if precompile_python else None
   ],
@@ -37,7 +44,5 @@ serve(
     "start": "python manage.py runserver 0.0.0.0:8000",
     "after_deploy": "python manage.py migrate"
   },
-  mounts={
-    python_cross_packages_serve_path: python_cross_packages_path
-  },
+  mounts=[app, venv],
 )
