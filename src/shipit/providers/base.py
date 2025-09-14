@@ -25,7 +25,7 @@ class Provider(Protocol):
     def prepare_steps(self, path: Path) -> Optional[List[str]]: ...
     def commands(self, path: Path) -> Dict[str, str]: ...
     def assets(self, path: Path) -> Optional[Dict[str, str]]: ...
-    def mounts(self, path: Path) -> Optional[Dict[str, str]]: ...
+    def mounts(self, path: Path) -> Dict[str, str]: ...
 
 
 @dataclass
@@ -42,13 +42,13 @@ class DependencySpec:
 class ProviderPlan:
     serve_name: str
     provider: str
+    mounts: Dict[str, str]
     declarations: Optional[str] = None
     dependencies: List[DependencySpec] = field(default_factory=list)
     build_steps: List[str] = field(default_factory=list)
     prepare: Optional[List[str]] = None
     commands: Dict[str, str] = field(default_factory=dict)
     assets: Optional[Dict[str, str]] = None
-    mounts: Optional[Dict[str, str]] = None
 
 
 def _exists(path: Path, *candidates: str) -> bool:

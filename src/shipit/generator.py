@@ -87,13 +87,12 @@ def generate_shipit(path: Path) -> str:
     plan = ProviderPlan(
         serve_name=provider.serve_name(path),
         provider=provider.provider_kind(path),
+        mounts=provider.mounts(path),
         declarations=provider.declarations(path),
         dependencies=provider.dependencies(path),
         build_steps=provider.build_steps(path),
         prepare=provider.prepare_steps(path),
         commands=provider.commands(path),
-        assets=provider.assets(path),
-        mounts=provider.mounts(path),
     )
 
     # Declare dependency variables (combined) and collect serve deps
@@ -113,12 +112,14 @@ def generate_shipit(path: Path) -> str:
     assets_block = _render_assets(plan.assets)
     mounts_block = None
     if plan.mounts:
-        mounts_block = ",\n".join([f"    {k}: {v}" for k, v in plan.mounts.items()])
+        mounts_block = ",\n".join([f"    {k}" for k in plan.mounts.keys()])
 
     out: List[str] = []
     if dep_block:
         out.append(dep_block)
         out.append("")
+    for mount_var, mount_name in plan.mounts.items():
+        out.append(f"{mount_var} = mount(\"{mount_name}\")")
     if plan.declarations:
         out.append(plan.declarations)
         out.append("")
@@ -140,9 +141,9 @@ def generate_shipit(path: Path) -> str:
     out.append(commands_lines)
     out.append("  },")
     if mounts_block:
-        out.append("  mounts={")
+        out.append("  mounts=[")
         out.append(mounts_block)
-        out.append("  },")
+        out.append("  ],")
     out.append(")")
     out.append("")
     return "\n".join(out)

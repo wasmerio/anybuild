@@ -57,29 +57,26 @@ class PythonProvider:
         return (
             "cross_platform = getenv(\"SHIPIT_PYTHON_CROSS_PLATFORM\")\n"
             "python_extra_index_url = getenv(\"SHIPIT_PYTHON_EXTRA_INDEX_URL\")\n"
-            "python_cross_packages_serve_path = None\n"
-            "python_cross_packages_path = None\n"
-            "if cross_platform:\n"
-            "  python_cross_packages_path = serve_mount(\"python-cross-packages\")\n"
-            "  python_cross_packages_serve_path = f\"/opt/venv/lib/python{python_version}/site-packages\"\n"
             "precompile_python = getenv(\"SHIPIT_PYTHON_PRECOMPILE\") in [\"true\", \"True\", \"TRUE\", \"1\", \"on\", \"yes\", \"y\", \"Y\", \"YES\", \"On\", \"ON\"]\n"
+            "python_cross_packages_path = venv[\"build\"] + f\"/lib/python{python_version}/site-packages\""
         )
 
     def build_steps(self, path: Path) -> list[str]:
         return [
+            "workdir(app[\"build\"])",
+            "env(UV_PROJECT_ENVIRONMENT=local_venv[\"build\"] if cross_platform else venv[\"build\"])",
             "run(f\"uv sync --compile --python python{python_version} --locked --no-managed-python\", inputs=[\"pyproject.toml\", \"uv.lock\"], outputs=[\".\"], group=\"install\")",
             "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", inputs=[\"pyproject.toml\"], outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
             "run(f\"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile\", outputs=[\".\"]) if cross_platform else None",
             "run(\"rm cross-requirements.txt\") if cross_platform else None",
-            "path(\".venv/bin\")",
+            "path((local_venv[\"build\"] if cross_platform else venv[\"build\"]) + \"/bin\")",
             "copy(\".\", \".\", ignore=[\".venv\", \".git\", \"__pycache__\"])",
-            "run(\"rm -rf .venv\") if cross_platform else None",
         ]
 
     def prepare_steps(self, path: Path) -> Optional[list[str]]:
         return [
-            'run("echo \\\"Precompiling Python code...\\\"") if precompile_python and python_cross_packages_serve_path else None',
-            'run(f"python -m compileall -o 2 {python_cross_packages_serve_path}") if precompile_python and python_cross_packages_serve_path else None',
+            'run("echo \\\"Precompiling Python code...\\\"") if precompile_python else None',
+            'run("python -m compileall -o 2 $PYTHONPATH") if precompile_python else None',
             'run("echo \\\"Precompiling package code...\\\"") if precompile_python else None',
             'run("python -m compileall -o 2 .") if precompile_python else None',
         ]
@@ -101,4 +98,8 @@ class PythonProvider:
         return None
 
     def mounts(self, path: Path) -> Optional[Dict[str, str]]:
-        return {"python_cross_packages_serve_path": "python_cross_packages_path"}
+        return {
+            "app": "app",
+            "venv": "venv",
+            "local_venv": "local_venv"
+        }

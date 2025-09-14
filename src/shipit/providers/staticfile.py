@@ -41,7 +41,10 @@ class StaticFileProvider:
         ]
 
     def build_steps(self, path: Path) -> list[str]:
-        return ['copy(".", ".", ignore=[".git"])']
+        return [
+            'workdir(app["build"])',
+            'copy(".", ".", ignore=[".git"])'
+        ]
 
     def prepare_steps(self, path: Path) -> Optional[list[str]]:
         return None
@@ -57,5 +60,7 @@ class StaticFileProvider:
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
-        return None
+    def mounts(self, path: Path) -> Dict[str, str]:
+        return {
+            "app": "app"
+        }

@@ -65,17 +65,19 @@ class MkdocsProvider:
         return [
             *install_lines,
             "copy(\".\", \".\", ignore=[\".venv\", \".git\", \"__pycache__\"])",
-            "run(\"uv run mkdocs build\", outputs=[\".\"], group=\"build\")",
+            "run(\"uv run mkdocs build --site-dir={}\".format(app[\"build\"]), outputs=[\".\"], group=\"build\")",
         ]
 
     def prepare_steps(self, path: Path) -> Optional[list[str]]:
         return None
 
     def commands(self, path: Path) -> Dict[str, str]:
-        return {"start": '"static-web-server --root {}".format(buildpath("site"))'}
+        return {"start": '"static-web-server --root /app"'}
 
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
-        return None
+    def mounts(self, path: Path) -> Dict[str, str]:
+        return {
+            "app": "app"
+        }

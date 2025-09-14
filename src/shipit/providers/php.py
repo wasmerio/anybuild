@@ -48,7 +48,9 @@ class PhpProvider:
         return "HOME = getenv(\"HOME\")"
 
     def build_steps(self, path: Path) -> list[str]:
-        steps = []
+        steps = [
+            "workdir(app[\"build\"])",
+        ]
 
         if self.has_composer(path):
             steps.append("env(HOME=HOME, COMPOSER_FUND=\"0\")")
@@ -69,5 +71,7 @@ class PhpProvider:
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return {"php.ini": "get_asset(\"php/php.ini\")"}
 
-    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
-        return None
+    def mounts(self, path: Path) -> Dict[str, str]:
+        return {
+            "app": "app"
+        }

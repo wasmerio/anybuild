@@ -49,16 +49,19 @@ class GatsbyProvider:
             "run(\"npm install\", inputs=[\"package.json\", \"package-lock.json\"], group=\"install\")",
             "copy(\".\", \".\", ignore=[\"node_modules\", \".git\"])",
             "run(\"npm run build\", outputs=[\"public\"], group=\"build\")",
+            "run(\"cp -R public/* {}/\".format(app[\"build\"]))",
         ]
 
     def prepare_steps(self, path: Path) -> Optional[list[str]]:
         return None
 
     def commands(self, path: Path) -> Dict[str, str]:
-        return {"start": '"static-web-server --root /app/public"'}
+        return {"start": '"static-web-server --root /app"'}
 
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
-        return None
+    def mounts(self, path: Path) -> Dict[str, str]:
+        return {
+            "app": "app",
+        }

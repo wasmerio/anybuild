@@ -45,6 +45,7 @@ class LaravelProvider:
     def build_steps(self, path: Path) -> list[str]:
         return [
             "env(HOME=HOME, COMPOSER_FUND=\"0\")",
+            "workdir(app[\"build\"])",
             "run(\"pie install php/pdo_pgsql\")",
             "run(\"composer install --optimize-autoloader --no-scripts --no-interaction\", inputs=[\"composer.json\", \"composer.lock\", \"artisan\"], outputs=[\".\"], group=\"install\")",
             "run(\"pnpm install\", inputs=[\"package.json\", \"package-lock.json\"], outputs=[\".\"], group=\"install\")",
@@ -54,6 +55,7 @@ class LaravelProvider:
 
     def prepare_steps(self, path: Path) -> Optional[list[str]]:
         return [
+            'workdir(app["serve"])',
             'run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache")',
             'run("php artisan config:cache")',
             'run("php artisan event:cache")',
@@ -70,5 +72,7 @@ class LaravelProvider:
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
-        return None
+    def mounts(self, path: Path) -> Dict[str, str]:
+        return {
+            "app": "app"
+        }

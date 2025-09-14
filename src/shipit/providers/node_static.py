@@ -49,6 +49,7 @@ class NodeStaticProvider:
             "run(\"npm install\", inputs=[\"package.json\", \"package-lock.json\"], group=\"install\")",
             "copy(\".\", \".\", ignore=[\"node_modules\", \".git\"])",
             f"run(\"npm run build\", outputs=[\"{output_dir}\"], group=\"build\")",
+            f"run(\"cp -R {output_dir}/* {{}}/\".format(app[\"build\"]))",
         ]
 
     def prepare_steps(self, path: Path) -> Optional[list[str]]:
@@ -61,5 +62,7 @@ class NodeStaticProvider:
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
-        return None
+    def mounts(self, path: Path) -> Dict[str, str]:
+        return {
+            "app": "app"
+        }
