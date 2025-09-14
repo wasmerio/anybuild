@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists
+from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
 
 
 class PhpProvider:
@@ -71,10 +71,8 @@ class PhpProvider:
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return {"php.ini": "get_asset(\"php/php.ini\")"}
 
-    def mounts(self, path: Path) -> Dict[str, str]:
-        return {
-            "app": "app"
-        }
+    def mounts(self, path: Path) -> list[MountSpec]:
+        return [MountSpec("app")]
 
     def env(self, path: Path) -> Optional[Dict[str, str]]:
         return None

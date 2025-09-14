@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists, _has_dependency
+from .base import DetectResult, DependencySpec, Provider, _exists, _has_dependency, MountSpec
 
 
 class NodeStaticProvider:
@@ -62,10 +62,8 @@ class NodeStaticProvider:
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> Dict[str, str]:
-        return {
-            "app": "app"
-        }
+    def mounts(self, path: Path) -> list[MountSpec]:
+        return [MountSpec("app")]
 
     def env(self, path: Path) -> Optional[Dict[str, str]]:
         return None

@@ -8,6 +8,7 @@ from .base import (
     DependencySpec,
     Provider,
     _exists,
+    MountSpec,
 )
 
 
@@ -97,12 +98,12 @@ class PythonProvider:
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> Optional[Dict[str, str]]:
-        return {
-            "app": "app",
-            "venv": "venv",
-            "local_venv": "local_venv"
-        }
+    def mounts(self, path: Path) -> list[MountSpec]:
+        return [
+            MountSpec("app"),
+            MountSpec("venv"),
+            MountSpec("local_venv", attach_to_serve=False),
+        ]
 
     def env(self, path: Path) -> Optional[Dict[str, str]]:
         # For Django projects, generate an empty env dict to surface the field

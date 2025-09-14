@@ -25,7 +25,7 @@ class Provider(Protocol):
     def prepare_steps(self, path: Path) -> Optional[List[str]]: ...
     def commands(self, path: Path) -> Dict[str, str]: ...
     def assets(self, path: Path) -> Optional[Dict[str, str]]: ...
-    def mounts(self, path: Path) -> Dict[str, str]: ...
+    def mounts(self, path: Path) -> List["MountSpec"]: ...
     def env(self, path: Path) -> Optional[Dict[str, str]]: ...
 
 
@@ -40,10 +40,17 @@ class DependencySpec:
 
 
 @dataclass
+class MountSpec:
+    name: str
+    attach_to_build: bool = True
+    attach_to_serve: bool = True
+
+
+@dataclass
 class ProviderPlan:
     serve_name: str
     provider: str
-    mounts: Dict[str, str]
+    mounts: List[MountSpec]
     declarations: Optional[str] = None
     dependencies: List[DependencySpec] = field(default_factory=list)
     build_steps: List[str] = field(default_factory=list)

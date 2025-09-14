@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from shipit.providers.base import DependencySpec, Provider, ProviderPlan, DetectResult
+from shipit.providers.base import DependencySpec, Provider, ProviderPlan, DetectResult, MountSpec
 from shipit.providers.registry import providers as registry_providers
 
 
@@ -119,14 +119,15 @@ def generate_shipit(path: Path) -> str:
     assets_block = _render_assets(plan.assets)
     mounts_block = None
     if plan.mounts:
-        mounts_block = ",\n".join([f"    {k}" for k in plan.mounts.keys()])
+        mounts = filter(lambda m: m.attach_to_serve, plan.mounts)
+        mounts_block = ",\n".join([f"    {m.name}" for m in mounts])
 
     out: List[str] = []
     if dep_block:
         out.append(dep_block)
         out.append("")
-    for mount_var, mount_name in plan.mounts.items():
-        out.append(f"{mount_var} = mount(\"{mount_name}\")")
+    for m in plan.mounts:
+        out.append(f"{m.name} = mount(\"{m.name}\")")
     if plan.declarations:
         out.append(plan.declarations)
         out.append("")
