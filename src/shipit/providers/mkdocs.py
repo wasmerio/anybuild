@@ -81,3 +81,6 @@ class MkdocsProvider:
         return {
             "app": "app"
         }
+
+    def env(self, path: Path) -> Optional[Dict[str, str]]:
+        return None

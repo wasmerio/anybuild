@@ -93,6 +93,7 @@ def generate_shipit(path: Path) -> str:
         build_steps=provider.build_steps(path),
         prepare=provider.prepare_steps(path),
         commands=provider.commands(path),
+        env=provider.env(path),
     )
 
     # Declare dependency variables (combined) and collect serve deps
@@ -109,6 +110,12 @@ def generate_shipit(path: Path) -> str:
     build_steps_block = ",\n".join([f"    {s}" for s in build_steps])
     deps_array = ", ".join(serve_dep_vars)
     commands_lines = ",\n".join([f'    "{k}": {v}' for k, v in plan.commands.items()])
+    env_lines = None
+    if plan.env is not None:
+        if len(plan.env) == 0:
+            env_lines = "{}"
+        else:
+            env_lines = ",\n".join([f'    "{k}": {v}' for k, v in plan.env.items()])
     assets_block = _render_assets(plan.assets)
     mounts_block = None
     if plan.mounts:
@@ -137,6 +144,13 @@ def generate_shipit(path: Path) -> str:
         out.append("  prepare=[")
         out.append(prepare_steps_block)
         out.append("  ],")
+    if env_lines is not None:
+        if env_lines == "{}":
+            out.append("  env = {},")
+        else:
+            out.append("  env = {")
+            out.append(env_lines)
+            out.append("  },")
     out.append("  commands = {")
     out.append(commands_lines)
     out.append("  },")

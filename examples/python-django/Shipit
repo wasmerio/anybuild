@@ -6,7 +6,6 @@ uv = dep("uv", uv_version)
 app = mount("app")
 venv = mount("venv")
 local_venv = mount("local_venv")
-
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
@@ -15,7 +14,6 @@ python_cross_packages_path = venv["build"] + f"/lib/python{python_version}/site-
 serve(
   name="python-django",
   provider="python",
-  # root=app,
   build=[
     use(python, uv),
     workdir(app["build"]),
@@ -25,13 +23,8 @@ serve(
     run(f"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile", outputs=["."]) if cross_platform else None,
     run("rm cross-requirements.txt") if cross_platform else None,
     path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
-    run("which python"),
-    copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    # run("cp -r {} {}".format(local_venv["build"] + "/bin", venv["build"] + "/bin")) if cross_platform else None,
+    copy(".", ".", ignore=[".venv", ".git", "__pycache__"])
   ],
-  env={
-    "PYTHONPATH": "{}/lib/python{}/site-packages".format(venv["serve"], python_version)
-  },
   deps=[python],
   prepare=[
     run("echo \"Precompiling Python code...\"") if precompile_python else None,
@@ -39,9 +32,15 @@ serve(
     run("echo \"Precompiling package code...\"") if precompile_python else None,
     run("python -m compileall -o 2 .") if precompile_python else None
   ],
+  env = {
+    "PYTHONPATH": "{}/lib/python{}/site-packages".format(venv["serve"], python_version)
+  },
   commands = {
     "start": "python manage.py runserver 0.0.0.0:8000",
     "after_deploy": "python manage.py migrate"
   },
-  mounts=[app, venv],
+  mounts=[
+    app,
+    venv
+  ],
 )

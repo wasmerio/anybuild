@@ -26,6 +26,7 @@ class Provider(Protocol):
     def commands(self, path: Path) -> Dict[str, str]: ...
     def assets(self, path: Path) -> Optional[Dict[str, str]]: ...
     def mounts(self, path: Path) -> Dict[str, str]: ...
+    def env(self, path: Path) -> Optional[Dict[str, str]]: ...
 
 
 @dataclass
@@ -49,6 +50,7 @@ class ProviderPlan:
     prepare: Optional[List[str]] = None
     commands: Dict[str, str] = field(default_factory=dict)
     assets: Optional[Dict[str, str]] = None
+    env: Optional[Dict[str, str]] = None
 
 
 def _exists(path: Path, *candidates: str) -> bool:

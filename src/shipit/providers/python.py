@@ -103,3 +103,10 @@ class PythonProvider:
             "venv": "venv",
             "local_venv": "local_venv"
         }
+
+    def env(self, path: Path) -> Optional[Dict[str, str]]:
+        # For Django projects, generate an empty env dict to surface the field
+        # in the Shipit file. Other Python projects omit it by default.
+        return {
+            "PYTHONPATH": "\"{}/lib/python{}/site-packages\".format(venv[\"serve\"], python_version)"
+        }
