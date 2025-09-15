@@ -74,7 +74,7 @@ class PythonProvider:
             inputs = ", ".join([f"\"{input}\"" for input in input_files])
             steps += [
                 "env(UV_PROJECT_ENVIRONMENT=local_venv[\"build\"] if cross_platform else venv[\"build\"])",
-                f"run(f\"uv sync --compile --python python{{python_version}} --locked --no-managed-python\", inputs=[{inputs}], group=\"install\")",
+                "run(f\"uv sync --compile --python python{python_version} --locked --no-managed-python\", inputs=[{" + inputs + "}], group=\"install\")",
                 "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", inputs=[\"pyproject.toml\"], outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
                 "run(f\"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile\") if cross_platform else None",
                 "run(\"rm cross-requirements.txt\") if cross_platform else None",
@@ -82,9 +82,9 @@ class PythonProvider:
         if _exists(path, "requirements.txt"):
             steps += [
                 "env(UV_PROJECT_ENVIRONMENT=local_venv[\"build\"] if cross_platform else venv[\"build\"])",
-                "run(\"uv init --no-managed-python --python python{{python_version}}\", inputs=[], outputs=[\"uv.lock\"], group=\"install\")",
+                "run(f\"uv init --no-managed-python --python python{python_version}\", inputs=[], outputs=[\"uv.lock\"], group=\"install\")",
                 "run(f\"uv add -r requirements.txt\", inputs=[\"requirements.txt\"], group=\"install\")",
-                "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", inputs=[\"pyproject.toml\"], outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
+                "run(f\"uv pip compile requirements.txt --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", inputs=[\"requirements.txt\"], outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
                 "run(f\"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile\") if cross_platform else None",
                 "run(\"rm cross-requirements.txt\") if cross_platform else None",
             ]
