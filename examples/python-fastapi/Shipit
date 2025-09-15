@@ -18,7 +18,7 @@ serve(
     use(python, uv),
     workdir(app["build"]),
     env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
-    run(f"uv sync --compile --python python{python_version} --locked --no-managed-python", inputs=["pyproject.toml", "uv.lock"], group="install"),
+    run(f"uv sync --compile --python python{python_version} --no-managed-python --locked", inputs=["pyproject.toml", "uv.lock"], group="install"),
     run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt", inputs=["pyproject.toml"], outputs=["cross-requirements.txt"]) if cross_platform else None,
     run(f"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
     run("rm cross-requirements.txt") if cross_platform else None,
@@ -27,6 +27,7 @@ serve(
   ],
   deps=[python],
   prepare=[
+    workdir(app["serve"]),
     run("echo \"Precompiling Python code...\"") if precompile_python else None,
     run("python -m compileall -o 2 $PYTHONPATH") if precompile_python else None,
     run("echo \"Precompiling package code...\"") if precompile_python else None,

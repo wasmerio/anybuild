@@ -7,6 +7,8 @@ from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
 
 
 class PhpProvider:
+    def __init__(self, path: Path):
+        self.path = path
     @classmethod
     def name(cls) -> str:
         return "php"
@@ -19,19 +21,19 @@ class PhpProvider:
             return DetectResult(cls.name(), 10)
         return None
 
-    def initialize(self, path: Path) -> None:
+    def initialize(self) -> None:
         pass
 
-    def serve_name(self, path: Path) -> str:
-        return path.name
+    def serve_name(self) -> str:
+        return self.path.name
 
-    def provider_kind(self, path: Path) -> str:
+    def provider_kind(self) -> str:
         return "php"
 
-    def has_composer(self, path: Path) -> bool:
-        return _exists(path, "composer.json", "composer.lock")
+    def has_composer(self) -> bool:
+        return _exists(self.path, "composer.json", "composer.lock")
 
-    def dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self) -> list[DependencySpec]:
         deps = [
             DependencySpec(
                 "php",
@@ -41,40 +43,40 @@ class PhpProvider:
                 use_in_serve=True,
             ),
         ]
-        if self.has_composer(path):
+        if self.has_composer():
             deps.append(DependencySpec("composer", use_in_build=True))
             deps.append(DependencySpec("bash", use_in_serve=True))
         return deps
 
-    def declarations(self, path: Path) -> Optional[str]:
+    def declarations(self) -> Optional[str]:
         return "HOME = getenv(\"HOME\")"
 
-    def build_steps(self, path: Path) -> list[str]:
+    def build_steps(self) -> list[str]:
         steps = [
             "workdir(app[\"build\"])",
         ]
 
-        if self.has_composer(path):
+        if self.has_composer():
             steps.append("env(HOME=HOME, COMPOSER_FUND=\"0\")")
             steps.append("run(\"composer install --optimize-autoloader --no-scripts --no-interaction\", inputs=[\"composer.json\", \"composer.lock\"], outputs=[\".\"], group=\"install\")")
 
         steps.append("copy(\".\", \".\", ignore=[\".git\"])")
         return steps
 
-    def prepare_steps(self, path: Path) -> Optional[list[str]]:
+    def prepare_steps(self) -> Optional[list[str]]:
         return None
 
-    def commands(self, path: Path) -> Dict[str, str]:
-        if _exists(path, "public/index.php"):
+    def commands(self) -> Dict[str, str]:
+        if _exists(self.path, "public/index.php"):
             return {"start": '"php -S localhost:8080 -t public"'}
-        elif _exists(path, "index.php"):
+        elif _exists(self.path, "index.php"):
             return {"start": '"php -S localhost:8080" -t .'}
 
-    def assets(self, path: Path) -> Optional[Dict[str, str]]:
+    def assets(self) -> Optional[Dict[str, str]]:
         return {"php.ini": "get_asset(\"php/php.ini\")"}
 
-    def mounts(self, path: Path) -> list[MountSpec]:
+    def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
 
-    def env(self, path: Path) -> Optional[Dict[str, str]]:
+    def env(self) -> Optional[Dict[str, str]]:
         return None

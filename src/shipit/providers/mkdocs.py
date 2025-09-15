@@ -7,6 +7,8 @@ from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
 
 
 class MkdocsProvider:
+    def __init__(self, path: Path):
+        self.path = path
     @classmethod
     def name(cls) -> str:
         return "mkdocs"
@@ -17,16 +19,16 @@ class MkdocsProvider:
             return DetectResult(cls.name(), 85)
         return None
 
-    def initialize(self, path: Path) -> None:
+    def initialize(self) -> None:
         pass
 
-    def serve_name(self, path: Path) -> str:
-        return path.name
+    def serve_name(self) -> str:
+        return self.path.name
 
-    def provider_kind(self, path: Path) -> str:
+    def provider_kind(self) -> str:
         return "mkdocs-site"
 
-    def dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self) -> list[DependencySpec]:
         return [
             DependencySpec(
                 "python",
@@ -48,11 +50,11 @@ class MkdocsProvider:
             ),
         ]
 
-    def declarations(self, path: Path) -> Optional[str]:
+    def declarations(self) -> Optional[str]:
         return None
 
-    def build_steps(self, path: Path) -> list[str]:
-        has_requirements = _exists(path, "requirements.txt")
+    def build_steps(self) -> list[str]:
+        has_requirements = _exists(self.path, "requirements.txt")
         if has_requirements:
             install_lines = [
                 "run(\"uv init --no-managed-python\", inputs=[], outputs=[\".\"], group=\"install\")",
@@ -70,17 +72,17 @@ class MkdocsProvider:
             "run(\"uv run mkdocs build --site-dir={}\".format(app[\"build\"]), outputs=[\".\"], group=\"build\")",
         ]
 
-    def prepare_steps(self, path: Path) -> Optional[list[str]]:
+    def prepare_steps(self) -> Optional[list[str]]:
         return None
 
-    def commands(self, path: Path) -> Dict[str, str]:
+    def commands(self) -> Dict[str, str]:
         return {"start": '"static-web-server --root /app"'}
 
-    def assets(self, path: Path) -> Optional[Dict[str, str]]:
+    def assets(self) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> list[MountSpec]:
+    def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
 
-    def env(self, path: Path) -> Optional[Dict[str, str]]:
+    def env(self) -> Optional[Dict[str, str]]:
         return None

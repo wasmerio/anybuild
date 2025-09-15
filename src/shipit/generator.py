@@ -7,22 +7,19 @@ from shipit.providers.base import DependencySpec, Provider, ProviderPlan, Detect
 from shipit.providers.registry import providers as registry_providers
 
 
-def _providers() -> list[Provider]:
-    # Load providers from modular registry
+def _providers() -> list[type[Provider]]:
+    # Load provider classes from modular registry
     return registry_providers()
 
 
 def detect_provider(path: Path) -> Provider:
-    matches: list[tuple[Provider, DetectResult]] = []
-    for p in _providers():
-        res = p.detect(path)
+    matches: list[tuple[type[Provider], DetectResult]] = []
+    for provider_cls in _providers():
+        res = provider_cls.detect(path)
         if res:
-            matches.append((p, res))
+            matches.append((provider_cls, res))
     if not matches:
-        # Default to static site as the safest fallback
-        from shipit.providers.staticfile import StaticFileProvider
-
-        return StaticFileProvider()
+        raise Exception("Shipit could not detect a provider for this project")
     # Highest score wins; tie-breaker by order
     matches.sort(key=lambda x: x[1].score, reverse=True)
     return matches[0][0]
@@ -80,20 +77,20 @@ def _render_assets(assets: Optional[Dict[str, str]]) -> Optional[str]:
 
 
 def generate_shipit(path: Path) -> str:
-    provider = detect_provider(path)
-    provider.initialize(path)
+    provider_cls = detect_provider(path)
+    provider = provider_cls(path)
 
     # Collect parts
     plan = ProviderPlan(
-        serve_name=provider.serve_name(path),
-        provider=provider.provider_kind(path),
-        mounts=provider.mounts(path),
-        declarations=provider.declarations(path),
-        dependencies=provider.dependencies(path),
-        build_steps=provider.build_steps(path),
-        prepare=provider.prepare_steps(path),
-        commands=provider.commands(path),
-        env=provider.env(path),
+        serve_name=provider.serve_name(),
+        provider=provider.provider_kind(),
+        mounts=provider.mounts(),
+        declarations=provider.declarations(),
+        dependencies=provider.dependencies(),
+        build_steps=provider.build_steps(),
+        prepare=provider.prepare_steps(),
+        commands=provider.commands(),
+        env=provider.env(),
     )
 
     # Declare dependency variables (combined) and collect serve deps

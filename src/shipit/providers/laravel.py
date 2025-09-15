@@ -7,6 +7,8 @@ from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
 
 
 class LaravelProvider:
+    def __init__(self, path: Path):
+        self.path = path
     @classmethod
     def name(cls) -> str:
         return "laravel"
@@ -17,16 +19,16 @@ class LaravelProvider:
             return DetectResult(cls.name(), 95)
         return None
 
-    def initialize(self, path: Path) -> None:
+    def initialize(self) -> None:
         pass
 
-    def serve_name(self, path: Path) -> str:
-        return path.name
+    def serve_name(self) -> str:
+        return self.path.name
 
-    def provider_kind(self, path: Path) -> str:
+    def provider_kind(self) -> str:
         return "php"
 
-    def dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self) -> list[DependencySpec]:
         return [
             DependencySpec(
                 "php",
@@ -41,10 +43,10 @@ class LaravelProvider:
             DependencySpec("bash", use_in_serve=True),
         ]
 
-    def declarations(self, path: Path) -> Optional[str]:
+    def declarations(self) -> Optional[str]:
         return "HOME = getenv(\"HOME\")"
 
-    def build_steps(self, path: Path) -> list[str]:
+    def build_steps(self) -> list[str]:
         return [
             "env(HOME=HOME, COMPOSER_FUND=\"0\")",
             "workdir(app[\"build\"])",
@@ -55,7 +57,7 @@ class LaravelProvider:
             "run(\"pnpm run build\", outputs=[\".\"], group=\"build\")",
         ]
 
-    def prepare_steps(self, path: Path) -> Optional[list[str]]:
+    def prepare_steps(self) -> Optional[list[str]]:
         return [
             'workdir(app["serve"])',
             'run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache")',
@@ -65,17 +67,17 @@ class LaravelProvider:
             'run("php artisan view:cache")',
         ]
 
-    def commands(self, path: Path) -> Dict[str, str]:
+    def commands(self) -> Dict[str, str]:
         return {
             "start": '"php -S localhost:8080 -t public"',
             "after_deploy": '"php artisan migrate"',
         }
 
-    def assets(self, path: Path) -> Optional[Dict[str, str]]:
+    def assets(self) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> list[MountSpec]:
+    def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
 
-    def env(self, path: Path) -> Optional[Dict[str, str]]:
+    def env(self) -> Optional[Dict[str, str]]:
         return None

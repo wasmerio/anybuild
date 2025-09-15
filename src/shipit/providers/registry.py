@@ -11,16 +11,15 @@ from .python import PythonProvider
 from .staticfile import StaticFileProvider
 
 
-def providers() -> list[Provider]:
+def providers() -> list[type[Provider]]:
     # Order matters: more specific providers first
     return [
-        LaravelProvider(),
-        GatsbyProvider(),
-        HugoProvider(),
-        MkdocsProvider(),
-        PythonProvider(),
-        PhpProvider(),
-        NodeStaticProvider(),
-        StaticFileProvider(),
+        LaravelProvider,
+        GatsbyProvider,
+        HugoProvider,
+        MkdocsProvider,
+        PythonProvider,
+        PhpProvider,
+        NodeStaticProvider,
+        StaticFileProvider,
     ]
-

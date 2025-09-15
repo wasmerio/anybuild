@@ -7,6 +7,8 @@ from .base import DetectResult, DependencySpec, Provider, _exists, _has_dependen
 
 
 class NodeStaticProvider:
+    def __init__(self, path: Path):
+        self.path = path
     @classmethod
     def name(cls) -> str:
         return "node-static"
@@ -21,16 +23,16 @@ class NodeStaticProvider:
             return DetectResult(cls.name(), 40)
         return None
 
-    def initialize(self, path: Path) -> None:
+    def initialize(self) -> None:
         pass
 
-    def serve_name(self, path: Path) -> str:
-        return path.name
+    def serve_name(self) -> str:
+        return self.path.name
 
-    def provider_kind(self, path: Path) -> str:
+    def provider_kind(self) -> str:
         return "staticsite"
 
-    def dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self) -> list[DependencySpec]:
         return [
             DependencySpec(
                 "node",
@@ -42,11 +44,11 @@ class NodeStaticProvider:
             DependencySpec("static-web-server", use_in_serve=True),
         ]
 
-    def declarations(self, path: Path) -> Optional[str]:
+    def declarations(self) -> Optional[str]:
         return None
 
-    def build_steps(self, path: Path) -> list[str]:
-        output_dir = "dist" if (path / "dist").exists() else "public"
+    def build_steps(self) -> list[str]:
+        output_dir = "dist" if (self.path / "dist").exists() else "public"
         return [
             "run(\"npm install\", inputs=[\"package.json\", \"package-lock.json\"], group=\"install\")",
             "copy(\".\", \".\", ignore=[\"node_modules\", \".git\"])",
@@ -54,18 +56,18 @@ class NodeStaticProvider:
             f"run(\"cp -R {output_dir}/* {{}}/\".format(app[\"build\"]))",
         ]
 
-    def prepare_steps(self, path: Path) -> Optional[list[str]]:
+    def prepare_steps(self) -> Optional[list[str]]:
         return None
 
-    def commands(self, path: Path) -> Dict[str, str]:
-        output_dir = "dist" if (path / "dist").exists() else "public"
+    def commands(self) -> Dict[str, str]:
+        output_dir = "dist" if (self.path / "dist").exists() else "public"
         return {"start": f'"static-web-server --root /app/{output_dir}"'}
 
-    def assets(self, path: Path) -> Optional[Dict[str, str]]:
+    def assets(self) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> list[MountSpec]:
+    def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
 
-    def env(self, path: Path) -> Optional[Dict[str, str]]:
+    def env(self) -> Optional[Dict[str, str]]:
         return None

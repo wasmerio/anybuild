@@ -7,6 +7,8 @@ from .base import DetectResult, DependencySpec, Provider, _exists, _has_dependen
 
 
 class GatsbyProvider:
+    def __init__(self, path: Path):
+        self.path = path
     @classmethod
     def name(cls) -> str:
         return "gatsby"
@@ -22,19 +24,19 @@ class GatsbyProvider:
             return DetectResult(cls.name(), 90)
         return None
 
-    def initialize(self, path: Path) -> None:
+    def initialize(self) -> None:
         pass
 
-    def serve_name(self, path: Path) -> str:
-        return path.name
+    def serve_name(self) -> str:
+        return self.path.name
 
-    def provider_kind(self, path: Path) -> str:
+    def provider_kind(self) -> str:
         return "staticsite"
 
-    def declarations(self, path: Path) -> Optional[str]:
+    def declarations(self) -> Optional[str]:
         return None
 
-    def dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self) -> list[DependencySpec]:
         return [
             DependencySpec(
                 "node",
@@ -46,7 +48,7 @@ class GatsbyProvider:
             DependencySpec("static-web-server", env_var="SHIPIT_SWS_VERSION", use_in_serve=True),
         ]
 
-    def build_steps(self, path: Path) -> list[str]:
+    def build_steps(self) -> list[str]:
         return [
             "run(\"npm install\", inputs=[\"package.json\", \"package-lock.json\"], group=\"install\")",
             "copy(\".\", \".\", ignore=[\"node_modules\", \".git\"])",
@@ -54,17 +56,17 @@ class GatsbyProvider:
             "run(\"cp -R public/* {}/\".format(app[\"build\"]))",
         ]
 
-    def prepare_steps(self, path: Path) -> Optional[list[str]]:
+    def prepare_steps(self) -> Optional[list[str]]:
         return None
 
-    def commands(self, path: Path) -> Dict[str, str]:
+    def commands(self) -> Dict[str, str]:
         return {"start": '"static-web-server --root /app"'}
 
-    def assets(self, path: Path) -> Optional[Dict[str, str]]:
+    def assets(self) -> Optional[Dict[str, str]]:
         return None
 
-    def mounts(self, path: Path) -> list[MountSpec]:
+    def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
 
-    def env(self, path: Path) -> Optional[Dict[str, str]]:
+    def env(self) -> Optional[Dict[str, str]]:
         return None

@@ -23,13 +23,13 @@ class HugoProvider(StaticFileProvider):
             return DetectResult(cls.name(), 40)
         return None
 
-    def serve_name(self, path: Path) -> str:
-        return path.name
+    def serve_name(self) -> str:
+        return self.path.name
 
-    def provider_kind(self, path: Path) -> str:
+    def provider_kind(self) -> str:
         return "staticsite"
 
-    def dependencies(self, path: Path) -> list[DependencySpec]:
+    def dependencies(self) -> list[DependencySpec]:
         return [
             DependencySpec(
                 "hugo",
@@ -37,10 +37,10 @@ class HugoProvider(StaticFileProvider):
                 default_version="0.149.0",
                 use_in_build=True,
             ),
-            *super().dependencies(path),
+            *super().dependencies(),
         ]
 
-    def build_steps(self, path: Path) -> list[str]:
+    def build_steps(self) -> list[str]:
         return [
             'copy(".", ".", ignore=[".git"])',
             'run("hugo build --destination={}".format(app["build"]), group="build")',
