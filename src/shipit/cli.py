@@ -873,22 +873,16 @@ class WasmerBuilder:
         console.print(manifest_panel, markup=False, highlight=True)
         (self.wasmer_dir_path / "wasmer.toml").write_text(manifest)
 
-        # Crete app.yaml
-        yaml_config = {
-            "kind": "wasmer.io/App.v0",
-            "package": ".",
-            # "capabilities": {
-            #     "database": {
-            #         "engine": "mysql"
-            #     }
-            # },
-            # "volumes": [
-            #     {
-            #         "name": "wp-content",
-            #         "mount": "/app/wp-content"
-            #     }
-            # ]
-        }
+        original_app_yaml_path = self.src_dir / "app.yaml"
+        if original_app_yaml_path.exists():
+            console.print(f"[bold]Using original app.yaml found in source directory[/bold]")
+            yaml_config = yaml.safe_load(original_app_yaml_path.read_text())
+        else:
+            yaml_config = {
+                "kind": "wasmer.io/App.v0",
+            }
+        # Update the app to use the new package
+        yaml_config["package"] = "."
 
         app_yaml = yaml.dump(yaml_config)
         (self.wasmer_dir_path / "app.yaml").write_text(app_yaml)
@@ -930,25 +924,27 @@ class WasmerBuilder:
     def deploy(
         self, app_owner: Optional[str] = None, app_name: Optional[str] = None
     ) -> str:
-        if not app_owner or not app_name:
-            raise Exception("app_owner and app_name must be set")
         extra_args = []
         if self.wasmer_registry:
             extra_args += ["--registry", self.wasmer_registry]
         if self.wasmer_token:
             extra_args += ["--token", self.wasmer_token]
-        self.run_command(
-            self.bin,
-            [
-                "package",
-                "push",
-                self.wasmer_dir_path,
-                "--namespace",
-                app_owner,
-                "--non-interactive",
-                *extra_args,
-            ],
-        )
+        if app_owner:
+            extra_args += ["--owner", app_owner]
+        if app_name:
+            extra_args += ["--app-name", app_name]
+        # self.run_command(
+        #     self.bin,
+        #     [
+        #         "package",
+        #         "push",
+        #         self.wasmer_dir_path,
+        #         "--namespace",
+        #         app_owner,
+        #         "--non-interactive",
+        #         *extra_args,
+        #     ],
+        # )
         return self.run_command(
             self.bin,
             [
@@ -956,10 +952,6 @@ class WasmerBuilder:
                 "--publish-package",
                 "--dir",
                 self.wasmer_dir_path,
-                "--app-name",
-                app_name,
-                "--owner",
-                app_owner,
                 "--non-interactive",
                 *extra_args,
             ],
