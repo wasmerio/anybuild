@@ -5,6 +5,7 @@ uv = dep("uv", uv_version)
 staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
+app = mount("app")
 serve(
   name="mkdocs",
   provider="mkdocs-site",
@@ -14,10 +15,13 @@ serve(
     run("uv init --no-managed-python", inputs=[], outputs=[".venv"], group="install"),
     run(f"uv add mkdocs=={mkdocs_version}", group="install"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    run("uv run mkdocs build", outputs=["."], group="build")
+    run("uv run mkdocs build --site-dir={}".format(app["build"]), outputs=["."], group="build")
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root {}".format(buildpath("site"))
+    "start": "static-web-server --root /app"
   },
+  mounts=[
+    app
+  ],
 )

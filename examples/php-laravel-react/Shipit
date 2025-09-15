@@ -5,6 +5,7 @@ pie = dep("pie")
 pnpm = dep("pnpm")
 bash = dep("bash")
 
+app = mount("app")
 HOME = getenv("HOME")
 
 serve(
@@ -13,6 +14,7 @@ serve(
   build=[
     use(php, composer, pie, pnpm),
     env(HOME=HOME, COMPOSER_FUND="0"),
+    workdir(app["build"]),
     run("pie install php/pdo_pgsql"),
     run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install"),
     run("pnpm install", inputs=["package.json", "package-lock.json"], outputs=["."], group="install"),
@@ -21,6 +23,7 @@ serve(
   ],
   deps=[php, bash],
   prepare=[
+    workdir(app["serve"]),
     run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache"),
     run("php artisan config:cache"),
     run("php artisan event:cache"),
@@ -31,4 +34,7 @@ serve(
     "start": "php -S localhost:8080 -t public",
     "after_deploy": "php artisan migrate"
   },
+  mounts=[
+    app
+  ],
 )

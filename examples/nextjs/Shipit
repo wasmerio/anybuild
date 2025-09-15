@@ -3,6 +3,7 @@ node = dep("node", node_version)
 npm = dep("npm")
 staticwebserver = dep("static-web-server")
 
+app = mount("app")
 serve(
   name="nextjs",
   provider="staticsite",
@@ -10,10 +11,14 @@ serve(
     use(node, npm),
     run("npm install", inputs=["package.json", "package-lock.json"], group="install"),
     copy(".", ".", ignore=["node_modules", ".git"]),
-    run("npm run build", outputs=["public"], group="build")
+    run("npm run build", outputs=["public"], group="build"),
+    run("cp -R public/* {}/".format(app["build"]))
   ],
   deps=[staticwebserver],
   commands = {
     "start": "static-web-server --root /app/public"
   },
+  mounts=[
+    app
+  ],
 )

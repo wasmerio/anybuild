@@ -3,6 +3,7 @@ php = dep("php", php_version)
 composer = dep("composer")
 bash = dep("bash")
 
+app = mount("app")
 HOME = getenv("HOME")
 
 serve(
@@ -10,15 +11,16 @@ serve(
   provider="php",
   build=[
     use(php, composer),
+    workdir(app["build"]),
     env(HOME=HOME, COMPOSER_FUND="0"),
     run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install"),
     copy(".", ".", ignore=[".git"])
   ],
-  assets={
-    "php.ini": get_asset("php/php.ini")
-  },
   deps=[php, bash],
   commands = {
     "start": "php -S localhost:8080 -t public"
   },
+  mounts=[
+    app
+  ],
 )

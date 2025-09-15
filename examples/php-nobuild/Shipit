@@ -1,6 +1,7 @@
 php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
 php = dep("php", php_version)
 
+app = mount("app")
 HOME = getenv("HOME")
 
 serve(
@@ -8,13 +9,14 @@ serve(
   provider="php",
   build=[
     use(php),
+    workdir(app["build"]),
     copy(".", ".", ignore=[".git"])
   ],
-  assets={
-    "php.ini": get_asset("php/php.ini")
-  },
   deps=[php],
   commands = {
     "start": "php -S localhost:8080" -t .
   },
+  mounts=[
+    app
+  ],
 )

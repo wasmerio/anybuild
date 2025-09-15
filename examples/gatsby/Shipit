@@ -4,6 +4,7 @@ npm = dep("npm")
 staticwebserver_version = getenv("SHIPIT_SWS_VERSION")
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
+app = mount("app")
 serve(
   name="gatsby",
   provider="staticsite",
@@ -11,10 +12,14 @@ serve(
     use(node, npm),
     run("npm install", inputs=["package.json", "package-lock.json"], group="install"),
     copy(".", ".", ignore=["node_modules", ".git"]),
-    run("npm run build", outputs=["public"], group="build")
+    run("npm run build", outputs=["public"], group="build"),
+    run("cp -R public/* {}/".format(app["build"]))
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root /app/public"
+    "start": "static-web-server --root /app"
   },
+  mounts=[
+    app
+  ],
 )
