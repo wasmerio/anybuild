@@ -7,8 +7,6 @@ from .base import DetectResult, DependencySpec, Provider, _exists
 from .staticfile import StaticFileProvider
 
 class HugoProvider(StaticFileProvider):
-    static_dir = "public"
-
     def name(self) -> str:
         return "hugo"
 

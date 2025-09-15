@@ -7,8 +7,6 @@ from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
 
 
 class StaticFileProvider:
-    static_dir = "site"
-
     def name(self) -> str:
         return "staticfile"
 
@@ -54,7 +52,7 @@ class StaticFileProvider:
 
     def commands(self, path: Path) -> Dict[str, str]:
         return {
-            "start": f'"static-web-server --root {{}} --log-level=info".format(buildpath("{self.static_dir}"))'
+            "start": '"static-web-server --root=/app --log-level=info"'
         }
 
     def assets(self, path: Path) -> Optional[Dict[str, str]]:
