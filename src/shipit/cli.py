@@ -696,7 +696,7 @@ class WasmerBuilder:
         self.src_dir = src_dir
         self.inner_builder = inner_builder
         # The path where we store the directory of the wasmer app in the inner builder
-        self.wasmer_dir_path = Path(self.src_dir / ".shipit" / "wasmer")
+        self.wasmer_dir_path = self.src_dir / ".shipit" / "wasmer"
         self.wasmer_registry = registry
         self.wasmer_token = token
         self.bin = bin.absolute() if bin else "wasmer"
@@ -895,10 +895,6 @@ class WasmerBuilder:
 
         # self.inner_builder.build_serve(serve)
 
-    @property
-    def wasmer_path(self) -> Path:
-        return self.wasmer_dir_path.read_text()
-
     def run_serve_command(
         self, command: str, extra_args: Optional[List[str]] = None
     ) -> None:
@@ -946,7 +942,7 @@ class WasmerBuilder:
             [
                 "package",
                 "push",
-                self.wasmer_path,
+                self.wasmer_dir_path,
                 "--namespace",
                 app_owner,
                 "--non-interactive",
@@ -959,7 +955,7 @@ class WasmerBuilder:
                 "deploy",
                 "--publish-package",
                 "--dir",
-                self.wasmer_path,
+                self.wasmer_dir_path,
                 "--app-name",
                 app_name,
                 "--owner",
