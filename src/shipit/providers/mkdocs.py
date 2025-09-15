@@ -7,12 +7,14 @@ from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
 
 
 class MkdocsProvider:
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         return "mkdocs"
 
-    def detect(self, path: Path) -> Optional[DetectResult]:
+    @classmethod
+    def detect(cls, path: Path) -> Optional[DetectResult]:
         if _exists(path, "mkdocs.yml", "mkdocs.yaml"):
-            return DetectResult(self.name(), 85)
+            return DetectResult(cls.name(), 85)
         return None
 
     def initialize(self, path: Path) -> None:

@@ -7,17 +7,19 @@ from .base import DetectResult, DependencySpec, Provider, _exists, _has_dependen
 
 
 class GatsbyProvider:
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         return "gatsby"
 
-    def detect(self, path: Path) -> Optional[DetectResult]:
+    @classmethod
+    def detect(cls, path: Path) -> Optional[DetectResult]:
         pkg = path / "package.json"
         if not pkg.exists():
             return None
         if _exists(path, "gatsby-config.js", "gatsby-config.ts") or _has_dependency(
             pkg, "gatsby"
         ):
-            return DetectResult(self.name(), 90)
+            return DetectResult(cls.name(), 90)
         return None
 
     def initialize(self, path: Path) -> None:

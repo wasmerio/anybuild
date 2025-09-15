@@ -13,14 +13,16 @@ from .base import (
 
 
 class PythonProvider:
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         return "python"
 
-    def detect(self, path: Path) -> Optional[DetectResult]:
+    @classmethod
+    def detect(cls, path: Path) -> Optional[DetectResult]:
         if _exists(path, "pyproject.toml", "requirements.txt"):
             if _exists(path, "manage.py"):
-                return DetectResult(self.name(), 70)
-            return DetectResult(self.name(), 50)
+                return DetectResult(cls.name(), 70)
+            return DetectResult(cls.name(), 50)
         return None
 
     def initialize(self, path: Path) -> None:

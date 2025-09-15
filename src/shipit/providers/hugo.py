@@ -7,18 +7,20 @@ from .base import DetectResult, DependencySpec, Provider, _exists
 from .staticfile import StaticFileProvider
 
 class HugoProvider(StaticFileProvider):
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         return "hugo"
 
-    def detect(self, path: Path) -> Optional[DetectResult]:
+    @classmethod
+    def detect(cls, path: Path) -> Optional[DetectResult]:
         if _exists(path, "hugo.toml", "hugo.json", "hugo.yaml", "hugo.yml"):
-            return DetectResult(self.name(), 80)
+            return DetectResult(cls.name(), 80)
         if (
             _exists(path, "config.toml", "config.json", "config.yaml", "config.yml")
             and _exists(path, "content")
             and (_exists(path, "static") or _exists(path, "themes"))
         ):
-            return DetectResult(self.name(), 40)
+            return DetectResult(cls.name(), 40)
         return None
 
     def serve_name(self, path: Path) -> str:

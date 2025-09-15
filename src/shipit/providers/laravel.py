@@ -7,12 +7,14 @@ from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
 
 
 class LaravelProvider:
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         return "laravel"
 
-    def detect(self, path: Path) -> Optional[DetectResult]:
+    @classmethod
+    def detect(cls, path: Path) -> Optional[DetectResult]:
         if _exists(path, "artisan") and _exists(path, "composer.json"):
-            return DetectResult(self.name(), 95)
+            return DetectResult(cls.name(), 95)
         return None
 
     def initialize(self, path: Path) -> None:

@@ -7,14 +7,16 @@ from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
 
 
 class PhpProvider:
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         return "php"
 
-    def detect(self, path: Path) -> Optional[DetectResult]:
+    @classmethod
+    def detect(cls, path: Path) -> Optional[DetectResult]:
         if _exists(path, "composer.json") and _exists(path, "public/index.php"):
-            return DetectResult(self.name(), 60)
+            return DetectResult(cls.name(), 60)
         if _exists(path, "index.php") and not _exists(path, "composer.json"):
-            return DetectResult(self.name(), 10)
+            return DetectResult(cls.name(), 10)
         return None
 
     def initialize(self, path: Path) -> None:

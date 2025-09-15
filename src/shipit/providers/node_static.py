@@ -7,16 +7,18 @@ from .base import DetectResult, DependencySpec, Provider, _exists, _has_dependen
 
 
 class NodeStaticProvider:
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         return "node-static"
 
-    def detect(self, path: Path) -> Optional[DetectResult]:
+    @classmethod
+    def detect(cls, path: Path) -> Optional[DetectResult]:
         pkg = path / "package.json"
         if not pkg.exists():
             return None
         static_generators = ["astro", "vite", "next", "nuxt"]
         if any(_has_dependency(pkg, dep) for dep in static_generators):
-            return DetectResult(self.name(), 40)
+            return DetectResult(cls.name(), 40)
         return None
 
     def initialize(self, path: Path) -> None:

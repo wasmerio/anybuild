@@ -7,16 +7,18 @@ from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
 
 
 class StaticFileProvider:
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         return "staticfile"
 
-    def detect(self, path: Path) -> Optional[DetectResult]:
+    @classmethod
+    def detect(cls, path: Path) -> Optional[DetectResult]:
         if _exists(path, "Staticfile"):
-            return DetectResult(self.name(), 50)
+            return DetectResult(cls.name(), 50)
         if _exists(path, "index.html") and not _exists(
             path, "package.json", "pyproject.toml", "composer.json"
         ):
-            return DetectResult(self.name(), 10)
+            return DetectResult(cls.name(), 10)
         return None
 
     def initialize(self, path: Path) -> None:
