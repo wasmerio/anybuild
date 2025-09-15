@@ -1157,7 +1157,7 @@ def auto(
     if not (path / "Shipit").exists() or regenerate or regenerate_path is not None:
         generate(path, out=regenerate_path)
 
-    build(path, wasmer=(wasmer or wasmer_deploy), docker=docker, docker_client=docker_client, wasmer_registry=wasmer_registry, wasmer_token=wasmer_token)
+    build(path, wasmer=(wasmer or wasmer_deploy), docker=docker, docker_client=docker_client, wasmer_registry=wasmer_registry, wasmer_token=wasmer_token, wasmer_bin=wasmer_bin)
     if start or wasmer_deploy:
         serve(
             path,
