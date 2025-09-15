@@ -40,6 +40,7 @@ app = typer.Typer(invoke_without_command=True)
 DIR_PATH = Path(__file__).resolve().parent
 ASSETS_PATH = DIR_PATH / "assets"
 
+
 @dataclass
 class Mount:
     name: str
@@ -134,7 +135,9 @@ class MapperItem(TypedDict):
 
 
 class Builder(Protocol):
-    def build(self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None: ...
+    def build(
+        self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
+    ) -> None: ...
     def build_assets(self, assets: Dict[str, str]) -> None: ...
     def build_prepare(self, serve: Serve) -> None: ...
     def build_serve(self, serve: Serve) -> None: ...
@@ -310,7 +313,9 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
         else:
             self.docker_file_contents += f"RUN pkgm install {dependency.name}\n"
 
-    def build(self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
+    def build(
+        self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
+    ) -> None:
         base_path = self.docker_path
         shutil.rmtree(base_path, ignore_errors=True)
         base_path.mkdir(parents=True, exist_ok=True)
@@ -325,10 +330,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl https://pkgx.sh | sh
 """
         # docker_file_contents += "RUN curl https://mise.run | sh\n"
-#         self.docker_file_contents += """
-# RUN curl https://get.wasmer.io -sSfL | sh -s "v6.1.0-rc.3"
-# ENV PATH="/root/.wasmer/bin:${PATH}"
-# """
+        #         self.docker_file_contents += """
+        # RUN curl https://get.wasmer.io -sSfL | sh -s "v6.1.0-rc.3"
+        # ENV PATH="/root/.wasmer/bin:${PATH}"
+        # """
         for mount in mounts:
             self.docker_file_contents += f"RUN mkdir -p {mount.build_path.absolute()}\n"
 
@@ -363,7 +368,9 @@ RUN curl https://pkgx.sh | sh
 FROM scratch
 """
         for mount in mounts:
-            self.docker_file_contents += f"COPY --from=build {mount.build_path} {mount.build_path}\n"
+            self.docker_file_contents += (
+                f"COPY --from=build {mount.build_path} {mount.build_path}\n"
+            )
 
         self.docker_ignore_path.write_text("""
 .shipit
@@ -507,7 +514,9 @@ class LocalBuilder:
         else:
             raise Exception(f"Unknown step type: {type(step)}")
 
-    def build(self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
+    def build(
+        self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
+    ) -> None:
         console.print(f"\n[bold]Building package[/bold]")
         base_path = self.local_path
         shutil.rmtree(base_path, ignore_errors=True)
@@ -700,7 +709,9 @@ class WasmerBuilder:
     def getenv(self, name: str) -> Optional[str]:
         return self.inner_builder.getenv(name) or self.default_env.get(name)
 
-    def build(self, env: Dict[str, str], mounts: List[Mount], build: List[Step]) -> None:
+    def build(
+        self, env: Dict[str, str], mounts: List[Mount], build: List[Step]
+    ) -> None:
         return self.inner_builder.build(env, mounts, build)
 
     def build_assets(self, assets: Dict[str, str]) -> None:
@@ -711,7 +722,7 @@ class WasmerBuilder:
 
     def build_prepare(self, serve: Serve) -> None:
         print("Building prepare")
-        prepare_dir = (self.wasmer_dir_path / "prepare")
+        prepare_dir = self.wasmer_dir_path / "prepare"
         prepare_dir.mkdir(parents=True, exist_ok=True)
         env = serve.env or {}
         for dep in serve.deps:
@@ -741,7 +752,7 @@ class WasmerBuilder:
         inner.finalize_build(serve)
 
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
-        prepare_dir = (self.wasmer_dir_path / "prepare")
+        prepare_dir = self.wasmer_dir_path / "prepare"
         self.run_serve_command(
             "bash",
             extra_args=[
@@ -808,7 +819,10 @@ class WasmerBuilder:
         # fs.add("/app", str(inner.get_build_path().absolute()))
         if serve.mounts:
             for mount in serve.mounts:
-                fs.add(str(mount.serve_path.absolute()), str(self.inner_builder.get_serve_mount_path(mount.name).absolute()))
+                fs.add(
+                    str(mount.serve_path.absolute()),
+                    str(self.inner_builder.get_serve_mount_path(mount.name).absolute()),
+                )
 
         doc.add(nl())
         if serve.commands:
@@ -895,7 +909,13 @@ class WasmerBuilder:
             extra_args = [f"--registry={self.wasmer_registry}"] + extra_args
         self.run_command(
             self.bin,
-            ["run", str(self.wasmer_dir_path.absolute()), "--net", f"--command={command}", *extra_args],
+            [
+                "run",
+                str(self.wasmer_dir_path.absolute()),
+                "--net",
+                f"--command={command}",
+                *extra_args,
+            ],
         )
 
     def serve_mount(self, name: str) -> str:
@@ -907,7 +927,9 @@ class WasmerBuilder:
     def run_command(
         self, command: str, extra_args: Optional[List[str]] | None = None
     ) -> Any:
-        sh.Command(command)(*(extra_args or []), _out=write_stdout, _err=write_stderr, _env=os.environ)
+        sh.Command(command)(
+            *(extra_args or []), _out=write_stdout, _err=write_stderr, _env=os.environ
+        )
 
     def deploy(
         self, app_owner: Optional[str] = None, app_name: Optional[str] = None
@@ -1034,7 +1056,9 @@ class Ctx:
             commands=commands,
             prepare=prepare_steps,
             workers=workers,
-            mounts=self.get_refs([mount["ref"] for mount in mounts]) if mounts else None,
+            mounts=self.get_refs([mount["ref"] for mount in mounts])
+            if mounts
+            else None,
             env=env,
         )
         return self.add_serve(serve)
@@ -1121,6 +1145,10 @@ def auto(
         None,
         help="Use a specific Docker client (such as depot, podman, etc.)",
     ),
+    skip_prepare: bool = typer.Option(
+        False,
+        help="Run the prepare command after building (defaults to True).",
+    ),
     start: bool = typer.Option(
         False,
         help="Run the start command after building.",
@@ -1154,10 +1182,22 @@ def auto(
         help="Name of the Wasmer app.",
     ),
 ):
+    if not path.exists():
+        raise Exception(f"The path {path} does not exist")
+
     if not (path / "Shipit").exists() or regenerate or regenerate_path is not None:
         generate(path, out=regenerate_path)
 
-    build(path, wasmer=(wasmer or wasmer_deploy), docker=docker, docker_client=docker_client, wasmer_registry=wasmer_registry, wasmer_token=wasmer_token, wasmer_bin=wasmer_bin)
+    build(
+        path,
+        wasmer=(wasmer or wasmer_deploy),
+        docker=docker,
+        docker_client=docker_client,
+        wasmer_registry=wasmer_registry,
+        wasmer_token=wasmer_token,
+        wasmer_bin=wasmer_bin,
+        skip_prepare=skip_prepare,
+    )
     if start or wasmer_deploy:
         serve(
             path,
@@ -1187,6 +1227,9 @@ def generate(
         help="Output path (defaults to the Shipit file in the provided path).",
     ),
 ):
+    if not path.exists():
+        raise Exception(f"The path {path} does not exist")
+
     if out is None:
         out = path / "Shipit"
     content = generate_shipit(path)
@@ -1261,6 +1304,9 @@ def serve(
         help="Name of the Wasmer app.",
     ),
 ) -> None:
+    if not path.exists():
+        raise Exception(f"The path {path} does not exist")
+
     builder: Builder
     if docker or docker_client:
         builder = DockerBuilder(path, docker_client)
@@ -1291,6 +1337,10 @@ def build(
         False,
         help="Use Wasmer to build and serve the project.",
     ),
+    skip_prepare: bool = typer.Option(
+        False,
+        help="Run the prepare command after building (defaults to True).",
+    ),
     wasmer_bin: Optional[Path] = typer.Option(
         None,
         help="The path to the Wasmer binary.",
@@ -1312,10 +1362,13 @@ def build(
         help="Use a specific Docker client (such as depot, podman, etc.)",
     ),
 ) -> None:
+    if not path.exists():
+        raise Exception(f"The path {path} does not exist")
+
     ab_file = path / "Shipit"
     if not ab_file.exists():
         raise FileNotFoundError(
-            f"Shipit file not found at {ab_file}. Please run `shipit generate {path}` to create it."
+            f"Shipit file not found at {ab_file}. Run `shipit generate {path}` to create it."
         )
     source = open(ab_file).read()
     builder: Builder
@@ -1324,7 +1377,9 @@ def build(
     else:
         builder = LocalBuilder(path)
     if wasmer:
-        builder = WasmerBuilder(builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin)
+        builder = WasmerBuilder(
+            builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
+        )
 
     ctx = Ctx(builder)
     glb = sl.Globals.standard()
@@ -1371,7 +1426,7 @@ def build(
         builder.build_assets(serve.assets)
     builder.build_serve(serve)
     builder.finalize_build(serve)
-    if serve.prepare:
+    if serve.prepare and not skip_prepare:
         builder.prepare(env, serve.prepare)
 
 
@@ -1386,7 +1441,7 @@ def main() -> None:
         app()
     except Exception as e:
         console.print(f"[bold red]{type(e).__name__}[/bold red]: {e}")
-        # raise e
+        raise e
 
 
 if __name__ == "__main__":
