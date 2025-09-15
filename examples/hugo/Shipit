@@ -14,7 +14,7 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root {} --log-level=info".format(buildpath("public"))
+    "start": "static-web-server --root={} --log-level=info".format(app["serve"])
   },
   mounts=[
     app

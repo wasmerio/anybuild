@@ -584,6 +584,8 @@ class LocalBuilder:
             for step in serve.prepare:
                 if isinstance(step, RunStep):
                     commands.append(step.command)
+                elif isinstance(step, WorkdirStep):
+                    commands.append(f"cd {step.path}")
         content = "#!/bin/bash\ncd {app_dir}\n{body}".format(
             app_dir=app_dir, body="\n".join(commands)
         )
@@ -741,9 +743,11 @@ class WasmerBuilder:
             for step in serve.prepare:
                 if isinstance(step, RunStep):
                     commands.append(step.command)
+                elif isinstance(step, WorkdirStep):
+                    commands.append(f"cd {step.path}")
         body = "\n".join(filter(None, [env_lines, *commands]))
         (prepare_dir / "prepare.sh").write_text(
-            f"#!/bin/bash\ncd /app\n{body}",
+            f"#!/bin/bash\n\n{body}",
         )
         (prepare_dir / "prepare.sh").chmod(0o755)
 

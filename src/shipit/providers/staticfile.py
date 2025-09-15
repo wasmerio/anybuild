@@ -52,7 +52,7 @@ class StaticFileProvider:
 
     def commands(self, path: Path) -> Dict[str, str]:
         return {
-            "start": '"static-web-server --root=/app --log-level=info"'
+            "start": '"static-web-server --root={} --log-level=info".format(app["serve"])'
         }
 
     def assets(self, path: Path) -> Optional[Dict[str, str]]:

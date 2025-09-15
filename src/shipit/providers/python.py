@@ -97,6 +97,7 @@ class PythonProvider:
 
     def prepare_steps(self, path: Path) -> Optional[list[str]]:
         return [
+            'workdir(app["serve"])',
             'run("echo \\\"Precompiling Python code...\\\"") if precompile_python else None',
             'run("python -m compileall -o 2 $PYTHONPATH") if precompile_python else None',
             'run("echo \\\"Precompiling package code...\\\"") if precompile_python else None',
