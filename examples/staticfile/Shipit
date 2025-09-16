@@ -5,6 +5,7 @@ app = mount("app")
 serve(
   name="staticfile",
   provider="staticfile",
+  cwd=app["serve"],
   build=[
     workdir(app["build"]),
     copy(".", ".", ignore=[".git"])

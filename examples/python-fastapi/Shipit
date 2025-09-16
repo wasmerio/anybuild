@@ -16,6 +16,7 @@ python_serve_path = "{}/lib/python{}/site-packages".format(venv["serve"], python
 serve(
   name="python-fastapi",
   provider="python",
+  cwd=app["serve"],
   build=[
     use(python, uv),
     workdir(app["build"]),
@@ -38,7 +39,7 @@ serve(
     "PYTHONPATH": python_serve_path
   },
   commands = {
-    "start": "python -m uvicorn src.main:app --host 0.0.0.0 --port 8000"
+    "start": "python -m hypercorn src.main:app --bind 0.0.0.0 --port 8000"
   },
   mounts=[
     app,

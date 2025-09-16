@@ -8,6 +8,7 @@ app = mount("app")
 serve(
   name="gatsby",
   provider="staticsite",
+  cwd=app["serve"],
   build=[
     use(node, npm),
     run("npm install", inputs=["package.json", "package-lock.json"], group="install"),

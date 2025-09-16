@@ -9,6 +9,7 @@ app = mount("app")
 serve(
   name="mkdocs-with-plugins",
   provider="mkdocs-site",
+  cwd=app["serve"],
   build=[
     use(python, uv),
     run("uv init --no-managed-python", inputs=[], outputs=["."], group="install"),

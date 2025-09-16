@@ -16,6 +16,7 @@ python_serve_path = "{}/lib/python{}/site-packages".format(venv["serve"], python
 serve(
   name="python-django",
   provider="python",
+  cwd=app["serve"],
   build=[
     use(python, uv),
     workdir(app["build"]),

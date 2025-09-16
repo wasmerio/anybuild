@@ -9,6 +9,7 @@ app = mount("app")
 serve(
   name="mkdocs",
   provider="mkdocs-site",
+  cwd=app["serve"],
   build=[
     use(python, uv),
     mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1",

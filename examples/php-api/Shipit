@@ -9,6 +9,7 @@ HOME = getenv("HOME")
 serve(
   name="php-api",
   provider="php",
+  cwd=app["serve"],
   build=[
     use(php, composer),
     workdir(app["build"]),

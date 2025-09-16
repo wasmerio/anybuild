@@ -11,6 +11,7 @@ HOME = getenv("HOME")
 serve(
   name="php-laravel-react",
   provider="php",
+  cwd=app["serve"],
   build=[
     use(php, composer, pie, pnpm),
     env(HOME=HOME, COMPOSER_FUND="0"),
