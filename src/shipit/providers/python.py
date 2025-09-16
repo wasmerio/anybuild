@@ -297,7 +297,7 @@ class PythonProvider:
             elif _exists(self.path, "Home.py"):
                 path = "Home.py"
 
-            start_cmd = f'"python -m streamlit run {path} --server.port 8000 --server.address 0.0.0.0"'
+            start_cmd = f'"python -m streamlit run {path} --server.port 8000 --server.address 0.0.0.0 --server.headless true"'
         elif self.framework == PythonFramework.Flask:
             if _exists(self.path, "main.py"):
                 path = "main:app"
@@ -334,10 +334,13 @@ class PythonProvider:
     def env(self) -> Optional[Dict[str, str]]:
         # For Django projects, generate an empty env dict to surface the field
         # in the Shipit file. Other Python projects omit it by default.
-        return {
+        env_vars = {
             "PYTHONPATH": "python_serve_path",
             "HOME": "app[\"serve\"]"
         }
+        if self.framework == PythonFramework.Streamlit:
+            env_vars["STREAMLIT_SERVER_HEADLESS"] = '"true"'
+        return env_vars
 
 def format_app_import(asgi_application: str) -> str:
     # Transform "mysite.asgi.application" to "mysite.asgi:application" using regex

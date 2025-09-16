@@ -37,10 +37,11 @@ serve(
   ],
   env = {
     "PYTHONPATH": python_serve_path,
-    "HOME": app["serve"]
+    "HOME": app["serve"],
+    "STREAMLIT_SERVER_HEADLESS": "true"
   },
   commands = {
-    "start": "python -m streamlit run streamlit_app.py --server.port 8000 --server.address 0.0.0.0"
+    "start": "python -m streamlit run streamlit_app.py --server.port 8000 --server.address 0.0.0.0 --server.headless true"
   },
   mounts=[
     app,
