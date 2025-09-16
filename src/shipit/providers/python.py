@@ -71,10 +71,10 @@ class PythonProvider:
         )
 
         # ASGI/WSGI Server
-        if "hypercorn" in found_deps:
-            server = PythonServer.Hypercorn
-        elif "uvicorn" in found_deps:
+        if "uvicorn" in found_deps:
             server = PythonServer.Uvicorn
+        elif "hypercorn" in found_deps:
+            server = PythonServer.Hypercorn
         # elif "gunicorn" in found_deps:
         #     server = PythonServer.Gunicorn
         elif "daphne" in found_deps:
@@ -269,9 +269,9 @@ class PythonProvider:
             if self.server == PythonServer.Uvicorn:
                 start_cmd = f'"python -m uvicorn {path} --host 0.0.0.0 --port 8000"'
             elif self.server == PythonServer.Hypercorn:
-                start_cmd = f'"python -m hypercorn {path} --bind 0.0.0.0 --port 8000"'
+                start_cmd = f'"python -m hypercorn {path} --bind 0.0.0.0:8000"'
             else:
-                start_cmd = f'"echo \"No server specified\", please specify the start command manually"'
+                start_cmd = '"python -c \'print(\\\"No start command detected, please provide a start command manually\\\")\'"'
             return {"start": start_cmd}
         elif self.framework == PythonFramework.FastHTML:
             if _exists(self.path, "main.py"):
@@ -284,7 +284,7 @@ class PythonProvider:
         elif _exists(self.path, "src/main.py"):
             start_cmd = '"python src/main.py"'
         else:
-            start_cmd = '"python -c \'print(\\\"Hello, World!\\\")\'"'
+            start_cmd = '"python -c \'print(\\\"No start command detected, please provide a start command manually\\\")\'"'
         return {"start": start_cmd}
 
     def assets(self) -> Optional[Dict[str, str]]:

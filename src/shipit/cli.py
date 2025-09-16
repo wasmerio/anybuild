@@ -580,6 +580,8 @@ class LocalBuilder:
     def build_prepare(self, serve: Serve) -> None:
         self.prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
         commands: List[str] = []
+        if serve.cwd:
+            commands.append(f"cd {serve.cwd}")
         if serve.prepare:
             for step in serve.prepare:
                 if isinstance(step, RunStep):
@@ -589,6 +591,20 @@ class LocalBuilder:
         content = "#!/bin/bash\n{body}".format(
             body="\n".join(commands)
         )
+        console.print(f"\n[bold]Created prepare.sh script to run before packaging ✅[/bold]")
+        manifest_panel = Panel(
+            Syntax(
+                content,
+                "bash",
+                theme="monokai",
+                background_color="default",
+                line_numbers=True,
+            ),
+            box=box.SQUARE,
+            border_style="bright_black",
+            expand=False,
+        )
+        console.print(manifest_panel, markup=False, highlight=True)
         self.prepare_bash_script.write_text(content)
         self.prepare_bash_script.chmod(0o755)
 
@@ -739,15 +755,35 @@ class WasmerBuilder:
             env_lines = ""
 
         commands: List[str] = []
+        if serve.cwd:
+            commands.append(f"cd {serve.cwd}")
+
         if serve.prepare:
             for step in serve.prepare:
                 if isinstance(step, RunStep):
                     commands.append(step.command)
                 elif isinstance(step, WorkdirStep):
                     commands.append(f"cd {step.path}")
+
         body = "\n".join(filter(None, [env_lines, *commands]))
+        content = f"#!/bin/bash\n\n{body}"
+        console.print(f"\n[bold]Created prepare.sh script to run before packaging ✅[/bold]")
+        manifest_panel = Panel(
+            Syntax(
+                content,
+                "bash",
+                theme="monokai",
+                background_color="default",
+                line_numbers=True,
+            ),
+            box=box.SQUARE,
+            border_style="bright_black",
+            expand=False,
+        )
+        console.print(manifest_panel, markup=False, highlight=True)
+
         (prepare_dir / "prepare.sh").write_text(
-            f"#!/bin/bash\n\n{body}",
+            content,
         )
         (prepare_dir / "prepare.sh").chmod(0o755)
 
@@ -842,7 +878,8 @@ class WasmerBuilder:
                 command.add("module", program_binary["script"])
                 command.add("runner", "wasi")
                 wasi_args = table()
-                wasi_args.add("cwd", "/app")
+                if serve.cwd:
+                    wasi_args.add("cwd", serve.cwd)
                 wasi_args.add("main-args", parts[1:])
                 env = program_binary.get("env") or {}
                 if serve.env:
