@@ -37,10 +37,11 @@ serve(
     run("python -m compileall -o 2 {}".format(app["serve"])) if precompile_python else None
   ],
   env = {
-    "PYTHONPATH": python_serve_path
+    "PYTHONPATH": python_serve_path,
+    "HOME": app["serve"]
   },
   commands = {
-    "start": "python -mflask --app main:app run --debug --host 0.0.0.0 --port 8000"
+    "start": "python -m uvicorn main:app --interface=wsgi --host 0.0.0.0 --port 8000"
   },
   mounts=[
     app,
