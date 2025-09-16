@@ -115,8 +115,10 @@ def generate_shipit(path: Path) -> str:
             env_lines = ",\n".join([f'    "{k}": {v}' for k, v in plan.env.items()])
     assets_block = _render_assets(plan.assets)
     mounts_block = None
+    attach_serve_names: list[str] = []
     if plan.mounts:
-        mounts = filter(lambda m: m.attach_to_serve, plan.mounts)
+        mounts = list(filter(lambda m: m.attach_to_serve, plan.mounts))
+        attach_serve_names = [m.name for m in mounts]
         mounts_block = ",\n".join([f"    {m.name}" for m in mounts])
 
     out: List[str] = []
@@ -131,6 +133,9 @@ def generate_shipit(path: Path) -> str:
     out.append("serve(")
     out.append(f'  name="{plan.serve_name}",')
     out.append(f'  provider="{plan.provider}",')
+    # If app is mounted for serve, set cwd to the app serve path
+    if "app" in attach_serve_names:
+        out.append('  cwd=app["serve"],')
     out.append("  build=[")
     out.append(build_steps_block)
     out.append("  ],")

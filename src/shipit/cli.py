@@ -55,6 +55,7 @@ class Serve:
     build: List["Step"]
     deps: List["Package"]
     commands: Dict[str, str]
+    cwd: Optional[str] = None
     assets: Optional[Dict[str, str]] = None
     prepare: Optional[List["PrepareStep"]] = None
     workers: Optional[List[str]] = None
@@ -1023,6 +1024,7 @@ class Ctx:
         build: List[str],
         deps: List[str],
         commands: Dict[str, str],
+        cwd: Optional[str] = None,
         assets: Optional[Dict[str, str]] = None,
         prepare: Optional[List[str]] = None,
         workers: Optional[List[str]] = None,
@@ -1042,6 +1044,7 @@ class Ctx:
             name=name,
             provider=provider,
             build=build_refs,
+            cwd=cwd,
             assets=assets,
             deps=dep_refs,
             commands=commands,

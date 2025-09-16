@@ -265,8 +265,20 @@ class PythonProvider:
                 path = "main:app"
             elif _exists(self.path, "src/main.py"):
                 path = "src.main:app"
-            start_cmd = f'"python -m uvicorn {path} --host 0.0.0.0 --port 8000"'
+            
+            if self.server == PythonServer.Uvicorn:
+                start_cmd = f'"python -m uvicorn {path} --host 0.0.0.0 --port 8000"'
+            elif self.server == PythonServer.Hypercorn:
+                start_cmd = f'"python -m hypercorn {path} --bind 0.0.0.0 --port 8000"'
+            else:
+                start_cmd = f'"echo \"No server specified\", please specify the start command manually"'
             return {"start": start_cmd}
+        elif self.framework == PythonFramework.FastHTML:
+            if _exists(self.path, "main.py"):
+                path = "main:app"
+            elif _exists(self.path, "src/main.py"):
+                path = "src.main:app"
+            start_cmd = f'"python -m uvicorn {path} --host 0.0.0.0 --port 8000"'
         elif _exists(self.path, "main.py"):
             start_cmd = '"python main.py"'
         elif _exists(self.path, "src/main.py"):
