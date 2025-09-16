@@ -10,6 +10,8 @@ cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
 python_cross_packages_path = venv["build"] + f"/lib/python{python_version}/site-packages"
+python_serve_path = "{}/lib/python{}/site-packages".format(venv["serve"], python_version)
+
 
 serve(
   name="python-fastapi",
@@ -20,24 +22,23 @@ serve(
     env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
     run(f"uv sync --compile --python python{python_version} --no-managed-python --locked", inputs=["pyproject.toml", "uv.lock"], group="install"),
     run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt", inputs=["pyproject.toml"], outputs=["cross-requirements.txt"]) if cross_platform else None,
-    run(f"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
+    run(f"uvx pip install -r cross-requirements.txt  --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
     run("rm cross-requirements.txt") if cross_platform else None,
     path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"])
   ],
   deps=[python],
   prepare=[
-    workdir(app["serve"]),
     run("echo \"Precompiling Python code...\"") if precompile_python else None,
-    run("python -m compileall -o 2 $PYTHONPATH") if precompile_python else None,
+    run(f"python -m compileall -o 2 {python_serve_path}") if precompile_python else None,
     run("echo \"Precompiling package code...\"") if precompile_python else None,
-    run("python -m compileall -o 2 .") if precompile_python else None
+    run("python -m compileall -o 2 {}".format(app["serve"])) if precompile_python else None
   ],
   env = {
-    "PYTHONPATH": "{}/lib/python{}/site-packages".format(venv["serve"], python_version)
+    "PYTHONPATH": python_serve_path
   },
   commands = {
-    "start": "python src/main.py"
+    "start": "python -m uvicorn src.main:app --host 0.0.0.0 --port 8000"
   },
   mounts=[
     app,

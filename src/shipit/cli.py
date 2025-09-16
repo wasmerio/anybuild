@@ -577,7 +577,6 @@ class LocalBuilder:
             self.create_file(asset_path, assets[asset])
 
     def build_prepare(self, serve: Serve) -> None:
-        app_dir = self.get_build_path()
         self.prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
         commands: List[str] = []
         if serve.prepare:
@@ -586,8 +585,8 @@ class LocalBuilder:
                     commands.append(step.command)
                 elif isinstance(step, WorkdirStep):
                     commands.append(f"cd {step.path}")
-        content = "#!/bin/bash\ncd {app_dir}\n{body}".format(
-            app_dir=app_dir, body="\n".join(commands)
+        content = "#!/bin/bash\n{body}".format(
+            body="\n".join(commands)
         )
         self.prepare_bash_script.write_text(content)
         self.prepare_bash_script.chmod(0o755)
@@ -1433,7 +1432,7 @@ def main() -> None:
         app()
     except Exception as e:
         console.print(f"[bold red]{type(e).__name__}[/bold red]: {e}")
-        raise e
+        # raise e
 
 
 if __name__ == "__main__":
