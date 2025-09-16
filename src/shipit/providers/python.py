@@ -112,6 +112,9 @@ class PythonProvider:
                 self.server = PythonServer.Uvicorn
         elif "flask" in found_deps:
             framework = PythonFramework.Flask
+            if not self.server:
+                self.extra_dependencies = {"uvicorn"}
+                self.server = PythonServer.Uvicorn
         elif "fastapi" in found_deps:
             framework = PythonFramework.FastAPI
         elif "flask" in found_deps:
@@ -200,6 +203,7 @@ class PythonProvider:
             "workdir(app[\"build\"])"
         ]
 
+        extra_deps = ", ".join([f"{dep}" for dep in self.extra_dependencies])
         if _exists(self.path, "pyproject.toml"):
             input_files = ["pyproject.toml"]
             extra_args = ""
@@ -207,8 +211,7 @@ class PythonProvider:
                 input_files.append("uv.lock")
                 extra_args = " --locked"
             inputs = ", ".join([f"\"{input}\"" for input in input_files])
-            extra_deps = ", ".join([f"{dep}" for dep in self.extra_dependencies])
-            steps += list(filter(None, [
+            steps += [
                 "env(UV_PROJECT_ENVIRONMENT=local_venv[\"build\"] if cross_platform else venv[\"build\"])",
                 "run(f\"uv sync --compile --python python{python_version} --no-managed-python" + extra_args + "\", inputs=[" + inputs + "], group=\"install\")",
                 "copy(\"pyproject.toml\", \"pyproject.toml\")",
@@ -216,14 +219,14 @@ class PythonProvider:
                 "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
                 f"run(f\"uvx pip install -r cross-requirements.txt {extra_deps} --target {{python_cross_packages_path}} --platform {{cross_platform}} --only-binary=:all: --python-version={{python_version}} --compile\") if cross_platform else None",
                 "run(\"rm cross-requirements.txt\") if cross_platform else None",
-            ]))
+            ]
         if _exists(self.path, "requirements.txt"):
             steps += [
                 "env(UV_PROJECT_ENVIRONMENT=local_venv[\"build\"] if cross_platform else venv[\"build\"])",
                 "run(f\"uv init --no-managed-python --python python{python_version}\", inputs=[], outputs=[\"uv.lock\"], group=\"install\")",
-                "run(f\"uv add -r requirements.txt\", inputs=[\"requirements.txt\"], group=\"install\")",
+                f"run(\"uv add -r requirements.txt {extra_deps}\", inputs=[\"requirements.txt\"], group=\"install\")" if extra_deps else None,
                 "run(f\"uv pip compile requirements.txt --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", inputs=[\"requirements.txt\"], outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
-                "run(f\"uvx pip install -r cross-requirements.txt --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile\") if cross_platform else None",
+                f"run(f\"uvx pip install -r cross-requirements.txt {extra_deps} --target {{python_cross_packages_path}} --platform {{cross_platform}} --only-binary=:all: --python-version={{python_version}} --compile\") if cross_platform else None",
                 "run(\"rm cross-requirements.txt\") if cross_platform else None",
             ]
 
@@ -231,7 +234,7 @@ class PythonProvider:
             "path((local_venv[\"build\"] if cross_platform else venv[\"build\"]) + \"/bin\")",
             "copy(\".\", \".\", ignore=[\".venv\", \".git\", \"__pycache__\"])",
         ]
-        return steps
+        return list(filter(None, steps))
 
     def prepare_steps(self) -> Optional[list[str]]:
         return [
@@ -274,6 +277,15 @@ class PythonProvider:
             else:
                 start_cmd = '"python -c \'print(\\\"No start command detected, please provide a start command manually\\\")\'"'
             return {"start": start_cmd}
+        elif self.framework == PythonFramework.Flask:
+            if _exists(self.path, "main.py"):
+                path = "main:app"
+            if _exists(self.path, "app.py"):
+                path = "app:app"
+            elif _exists(self.path, "src/main.py"):
+                path = "src.main:app"
+            # start_cmd = f'"python -m flask --app {path} run --debug --host 0.0.0.0 --port 8000"'
+            start_cmd = f'"python -m uvicorn {path} --interface=wsgi --host 0.0.0.0 --port 8000"'
         elif self.framework == PythonFramework.FastHTML:
             if _exists(self.path, "main.py"):
                 path = "main:app"
