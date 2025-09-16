@@ -499,12 +499,18 @@ class LocalBuilder:
             ignore_matches = step.ignore if step.ignore else []
             ignore_matches.append(".shipit")
             ignore_matches.append("Shipit")
-            copytree(
-                (self.src_dir / step.source),
-                (build_path / step.target),
-                dirs_exist_ok=True,
-                ignore=ignore_patterns(*ignore_matches),
-            )
+            if (self.src_dir / step.source).is_dir():
+                copytree(
+                    (self.src_dir / step.source),
+                    (build_path / step.target),
+                    dirs_exist_ok=True,
+                    ignore=ignore_patterns(*ignore_matches),
+                )
+            else:
+                copy(
+                    (self.src_dir / step.source),
+                    (build_path / step.target),
+                )
         elif isinstance(step, EnvStep):
             print(f"Setting environment variables: {step}")
             env.update(step.variables)
