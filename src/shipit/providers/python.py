@@ -211,8 +211,9 @@ class PythonProvider:
             steps += list(filter(None, [
                 "env(UV_PROJECT_ENVIRONMENT=local_venv[\"build\"] if cross_platform else venv[\"build\"])",
                 "run(f\"uv sync --compile --python python{python_version} --no-managed-python" + extra_args + "\", inputs=[" + inputs + "], group=\"install\")",
-                f"run(\"uv add {extra_deps}\", inputs=[\"pyproject.toml\"], group=\"install\")" if extra_deps else None,
-                "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", inputs=[\"pyproject.toml\"], outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
+                "copy(\"pyproject.toml\", \"pyproject.toml\")",
+                f"run(\"uv add {extra_deps}\", group=\"install\")" if extra_deps else None,
+                "run(f\"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
                 f"run(f\"uvx pip install -r cross-requirements.txt {extra_deps} --target {{python_cross_packages_path}} --platform {{cross_platform}} --only-binary=:all: --python-version={{python_version}} --compile\") if cross_platform else None",
                 "run(\"rm cross-requirements.txt\") if cross_platform else None",
             ]))
