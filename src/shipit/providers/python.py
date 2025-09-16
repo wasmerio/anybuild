@@ -20,6 +20,7 @@ class PythonFramework(Enum):
     FastAPI = "fastapi"
     Flask = "flask"
     FastHTML = "python-fasthtml"
+    MCP = "mcp"
 
 
 class PythonServer(Enum):
@@ -61,6 +62,7 @@ class PythonProvider:
         found_deps = self.check_deps(
             "streamlit",
             "django",
+            "mcp",
             "fastapi",
             "flask",
             "python-fasthtml",
@@ -109,6 +111,9 @@ class PythonProvider:
                     self.server = PythonServer.Uvicorn
         elif "streamlit" in found_deps:
             framework = PythonFramework.Streamlit
+        elif "mcp" in found_deps:
+            framework = PythonFramework.MCP
+            self.extra_dependencies = {"mcp[cli]"}
         elif "fastapi" in found_deps:
             framework = PythonFramework.FastAPI
             if not self.server:
@@ -119,10 +124,6 @@ class PythonProvider:
             if not self.server:
                 self.extra_dependencies = {"uvicorn"}
                 self.server = PythonServer.Uvicorn
-        elif "fastapi" in found_deps:
-            framework = PythonFramework.FastAPI
-        elif "flask" in found_deps:
-            framework = PythonFramework.Flask
         elif "python-fasthtml" in found_deps:
             framework = PythonFramework.FastHTML
         else:
@@ -238,6 +239,11 @@ class PythonProvider:
             "path((local_venv[\"build\"] if cross_platform else venv[\"build\"]) + \"/bin\")",
             "copy(\".\", \".\", ignore=[\".venv\", \".git\", \"__pycache__\"])",
         ]
+        if self.framework == PythonFramework.MCP:
+            steps += [
+                "run(\"mkdir -p {}/bin\".format(venv[\"build\"])) if cross_platform else None",
+                "run(\"cp {}/bin/mcp {}/bin/mcp\".format(local_venv[\"build\"], venv[\"build\"])) if cross_platform else None",
+            ]
         return list(filter(None, steps))
 
     def prepare_steps(self) -> Optional[list[str]]:
@@ -307,6 +313,16 @@ class PythonProvider:
                 path = "src.main:app"
             # start_cmd = f'"python -m flask --app {path} run --debug --host 0.0.0.0 --port 8000"'
             start_cmd = f'"python -m uvicorn {path} --interface=wsgi --host 0.0.0.0 --port 8000"'
+        elif self.framework == PythonFramework.MCP:
+            if _exists(self.path, "main.py"):
+                path = "main.py"
+            else:
+                path = next(self.path.glob( "**/main.py"))
+                if path:
+                    path = path.relative_to(self.path)
+                else:
+                    path = "main.py"
+            start_cmd = f'"python {{}}/bin/mcp run {path} --transport=streamable-http".format(venv[\"serve\"])'
         elif self.framework == PythonFramework.FastHTML:
             if _exists(self.path, "main.py"):
                 path = "main:app"
@@ -340,6 +356,9 @@ class PythonProvider:
         }
         if self.framework == PythonFramework.Streamlit:
             env_vars["STREAMLIT_SERVER_HEADLESS"] = '"true"'
+        elif self.framework == PythonFramework.MCP:
+            env_vars["FASTMCP_HOST"] = "\"0.0.0.0\""
+            env_vars["FASTMCP_PORT"] = "\"8000\""
         return env_vars
 
 def format_app_import(asgi_application: str) -> str:

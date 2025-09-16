@@ -22,11 +22,15 @@ serve(
     workdir(app["build"]),
     env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
     run(f"uv sync --compile --python python{python_version} --no-managed-python --locked", inputs=["pyproject.toml", "uv.lock"], group="install"),
-    run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt", inputs=["pyproject.toml"], outputs=["cross-requirements.txt"]) if cross_platform else None,
-    run(f"uvx pip install -r cross-requirements.txt  --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
+    copy("pyproject.toml", "pyproject.toml"),
+    run("uv add mcp[cli]", group="install"),
+    run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,
+    run(f"uvx pip install -r cross-requirements.txt mcp[cli] --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
     run("rm cross-requirements.txt") if cross_platform else None,
     path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
-    copy(".", ".", ignore=[".venv", ".git", "__pycache__"])
+    copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
+    run("mkdir -p {}/bin".format(venv["build"])) if cross_platform else None,
+    run("cp {}/bin/mcp {}/bin/mcp".format(local_venv["build"], venv["build"])) if cross_platform else None
   ],
   deps=[python],
   prepare=[
@@ -36,10 +40,13 @@ serve(
     run("python -m compileall -o 2 {}".format(app["serve"])) if precompile_python else None
   ],
   env = {
-    "PYTHONPATH": python_serve_path
+    "PYTHONPATH": python_serve_path,
+    "HOME": app["serve"],
+    "FASTMCP_HOST": "0.0.0.0",
+    "FASTMCP_PORT": "8000"
   },
   commands = {
-    "start": "python main.py"
+    "start": "python {}/bin/mcp run main.py --transport=streamable-http".format(venv["serve"])
   },
   mounts=[
     app,
