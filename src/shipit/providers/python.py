@@ -16,6 +16,7 @@ from .base import (
 
 class PythonFramework(Enum):
     Django = "django"
+    Streamlit = "streamlit"
     FastAPI = "fastapi"
     Flask = "flask"
     FastHTML = "python-fasthtml"
@@ -58,6 +59,7 @@ class PythonProvider:
             "psycopg2-binary"}
         mysql_deps = {"mysqlclient", "pymysql", "mysql-connector-python", "aiomysql"}
         found_deps = self.check_deps(
+            "streamlit",
             "django",
             "fastapi",
             "flask",
@@ -105,6 +107,8 @@ class PythonProvider:
                     # gunicorn can't run with Wasmer atm
                     self.extra_dependencies = {"uvicorn"}
                     self.server = PythonServer.Uvicorn
+        elif "streamlit" in found_deps:
+            framework = PythonFramework.Streamlit
         elif "fastapi" in found_deps:
             framework = PythonFramework.FastAPI
             if not self.server:
@@ -277,6 +281,23 @@ class PythonProvider:
             else:
                 start_cmd = '"python -c \'print(\\\"No start command detected, please provide a start command manually\\\")\'"'
             return {"start": start_cmd}
+        elif self.framework == PythonFramework.Streamlit:
+            if _exists(self.path, "main.py"):
+                path = "main.py"
+            elif _exists(self.path, "src/main.py"):
+                path = "src/main.py"
+            if _exists(self.path, "app.py"):
+                path = "app.py"
+            elif _exists(self.path, "src/app.py"):
+                path = "src/app.py"
+            elif _exists(self.path, "src/streamlit_app.py"):
+                path = "src/streamlit_app.py"
+            elif _exists(self.path, "streamlit_app.py"):
+                path = "streamlit_app.py"
+            elif _exists(self.path, "Home.py"):
+                path = "Home.py"
+
+            start_cmd = f'"python -m streamlit run {path} --server.port 8000 --server.address 0.0.0.0"'
         elif self.framework == PythonFramework.Flask:
             if _exists(self.path, "main.py"):
                 path = "main:app"
@@ -314,7 +335,8 @@ class PythonProvider:
         # For Django projects, generate an empty env dict to surface the field
         # in the Shipit file. Other Python projects omit it by default.
         return {
-            "PYTHONPATH": "python_serve_path"
+            "PYTHONPATH": "python_serve_path",
+            "HOME": "app[\"serve\"]"
         }
 
 def format_app_import(asgi_application: str) -> str:
