@@ -228,7 +228,7 @@ class PythonProvider:
         if _exists(self.path, "requirements.txt"):
             steps += [
                 "env(UV_PROJECT_ENVIRONMENT=local_venv[\"build\"] if cross_platform else venv[\"build\"])",
-                "run(f\"uv init --no-managed-python --python python{python_version}\", inputs=[], outputs=[\"uv.lock\"], group=\"install\")",
+                "run(f\"uv init --no-workspace --no-managed-python --python python{python_version}\", inputs=[], outputs=[\"uv.lock\"], group=\"install\")",
                 f"run(\"uv add -r requirements.txt {extra_deps}\", inputs=[\"requirements.txt\"], group=\"install\")",
                 "run(f\"uv pip compile requirements.txt --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --only-binary :all: -o cross-requirements.txt\", inputs=[\"requirements.txt\"], outputs=[\"cross-requirements.txt\"]) if cross_platform else None",
                 f"run(f\"uvx pip install -r cross-requirements.txt {extra_deps} --target {{python_cross_packages_path}} --platform {{cross_platform}} --only-binary=:all: --python-version={{python_version}} --compile\") if cross_platform else None",
