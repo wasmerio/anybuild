@@ -46,7 +46,7 @@ serve(
     "FASTMCP_PORT": "8000"
   },
   commands = {
-    "start": "python {}/bin/mcp run main.py --transport=streamable-http".format(venv["serve"])
+    "start": "python main.py"
   },
   mounts=[
     app,

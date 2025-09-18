@@ -45,6 +45,7 @@ class PythonProvider:
     uses_ffmpeg: bool = False
     uses_pandoc: bool = False
     only_build: bool = False
+    install_requires_all_files: bool = False
 
     def __init__(
         self,
@@ -75,6 +76,7 @@ class PythonProvider:
         }
         mysql_deps = {"mysqlclient", "pymysql", "mysql-connector-python", "aiomysql"}
         found_deps = self.check_deps(
+            "file://",  # This is not really a dependency, but as a way to check if the install script requires all files
             "streamlit",
             "django",
             "mcp",
@@ -91,6 +93,9 @@ class PythonProvider:
             *mysql_deps,
             *pg_deps,
         )
+
+        if "file://" in found_deps:
+            self.install_requires_all_files = True
 
         # ASGI/WSGI Server
         if "uvicorn" in found_deps:
@@ -114,7 +119,10 @@ class PythonProvider:
         if _exists(self.path, "manage.py") and ("django" in found_deps):
             framework = PythonFramework.Django
             # Find the settings.py file using glob
-            settings_file = next(self.path.glob("**/settings.py"))
+            try:
+                settings_file = next(self.path.glob("**/settings.py"))
+            except StopIteration:
+                settings_file = None
             if settings_file:
                 asgi_match = re.search(
                     r"ASGI_APPLICATION\s*=\s*['\"](.*)['\"]", settings_file.read_text()
@@ -253,8 +261,11 @@ class PythonProvider:
             inputs = ", ".join([f'"{input}"' for input in input_files])
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"])',
+                'copy(".", ".")' if self.install_requires_all_files else None,
                 f'run(f"uv sync --compile --python python{{python_version}} --no-managed-python{extra_args}", inputs=[{inputs}], group="install")',
-                'copy("pyproject.toml", "pyproject.toml")',
+                'copy("pyproject.toml", "pyproject.toml")'
+                if not self.install_requires_all_files
+                else None,
                 f'run("uv add {extra_deps}", group="install")' if extra_deps else None,
             ]
             if not self.only_build:
@@ -267,6 +278,7 @@ class PythonProvider:
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"])',
                 'run(f"uv init --no-workspace --no-managed-python --python python{python_version}", inputs=[], outputs=["uv.lock"], group="install")',
+                'copy(".", ".")' if self.install_requires_all_files else None,
             ]
             if has_requirements:
                 steps += [
@@ -304,6 +316,24 @@ class PythonProvider:
             'run("python -m compileall -o 2 {}".format(app["serve"])) if precompile_python else None',
         ]
 
+    def get_main_file(self) -> Optional[str]:
+        paths_to_try = ["main.py", "app.py", "streamlit_app.py", "Home.py", "*_app.py"]
+        for path in paths_to_try:
+            if "*" in path:
+                continue  # This is for the glob finder
+            if _exists(self.path, path):
+                return path
+            if _exists(self.path, f"src/{path}"):
+                return f"src/{path}"
+        for path in paths_to_try:
+            try:
+                found_path = next(self.path.glob(f"**/{path}.py"))
+            except StopIteration:
+                found_path = None
+            if found_path:
+                return found_path.relative_to(self.path)
+        return None
+
     def commands(self) -> Dict[str, str]:
         if self.only_build:
             return {}
@@ -328,12 +358,16 @@ class PythonProvider:
                 start_cmd = '"python manage.py runserver 0.0.0.0:8000"'
             migrate_cmd = '"python manage.py migrate"'
             return {"start": start_cmd, "after_deploy": migrate_cmd}
-        elif self.framework == PythonFramework.FastAPI:
-            if _exists(self.path, "main.py"):
-                path = "main:app"
-            elif _exists(self.path, "src/main.py"):
-                path = "src.main:app"
 
+        main_file = self.get_main_file()
+
+        if not main_file:
+            start_cmd = '"python -c \'print(\\"No start command detected, please provide a start command manually\\")\'"'
+            return {"start": start_cmd}
+
+        if self.framework == PythonFramework.FastAPI:
+            python_path = file_to_python_path(main_file)
+            path = f"{python_path}:app"
             if self.server == PythonServer.Uvicorn:
                 start_cmd = f'"python -m uvicorn {path} --host 0.0.0.0 --port 8000"'
             elif self.server == PythonServer.Hypercorn:
@@ -341,54 +375,31 @@ class PythonProvider:
             else:
                 start_cmd = '"python -c \'print(\\"No start command detected, please provide a start command manually\\")\'"'
             return {"start": start_cmd}
-        elif self.framework == PythonFramework.Streamlit:
-            if _exists(self.path, "main.py"):
-                path = "main.py"
-            elif _exists(self.path, "src/main.py"):
-                path = "src/main.py"
-            if _exists(self.path, "app.py"):
-                path = "app.py"
-            elif _exists(self.path, "src/app.py"):
-                path = "src/app.py"
-            elif _exists(self.path, "src/streamlit_app.py"):
-                path = "src/streamlit_app.py"
-            elif _exists(self.path, "streamlit_app.py"):
-                path = "streamlit_app.py"
-            elif _exists(self.path, "Home.py"):
-                path = "Home.py"
 
-            start_cmd = f'"python -m streamlit run {path} --server.port 8000 --server.address 0.0.0.0 --server.headless true"'
+        elif self.framework == PythonFramework.Streamlit:
+            start_cmd = f'"python -m streamlit run {main_file} --server.port 8000 --server.address 0.0.0.0 --server.headless true"'
+
         elif self.framework == PythonFramework.Flask:
-            if _exists(self.path, "main.py"):
-                path = "main:app"
-            if _exists(self.path, "app.py"):
-                path = "app:app"
-            elif _exists(self.path, "src/main.py"):
-                path = "src.main:app"
+            python_path = file_to_python_path(main_file)
+            path = f"{python_path}:app"
             # start_cmd = f'"python -m flask --app {path} run --debug --host 0.0.0.0 --port 8000"'
             start_cmd = f'"python -m uvicorn {path} --interface=wsgi --host 0.0.0.0 --port 8000"'
+
         elif self.framework == PythonFramework.MCP:
-            if _exists(self.path, "main.py"):
-                path = "main.py"
+            contents = (self.path / main_file).read_text()
+            if 'if __name__ == "__main__"' in contents or "mcp.run" in contents:
+                start_cmd = f'"python {main_file}"'
             else:
-                path = next(self.path.glob("**/main.py"))
-                if path:
-                    path = path.relative_to(self.path)
-                else:
-                    path = "main.py"
-            start_cmd = f'"python {{}}/bin/mcp run {path} --transport=streamable-http".format(venv["serve"])'
+                start_cmd = f'"python {{}}/bin/mcp run {main_file} --transport=streamable-http".format(venv["serve"])'
+
         elif self.framework == PythonFramework.FastHTML:
-            if _exists(self.path, "main.py"):
-                path = "main:app"
-            elif _exists(self.path, "src/main.py"):
-                path = "src.main:app"
+            python_path = file_to_python_path(main_file)
+            path = f"{python_path}:app"
             start_cmd = f'"python -m uvicorn {path} --host 0.0.0.0 --port 8000"'
-        elif _exists(self.path, "main.py"):
-            start_cmd = '"python main.py"'
-        elif _exists(self.path, "src/main.py"):
-            start_cmd = '"python src/main.py"'
+
         else:
-            start_cmd = '"python -c \'print(\\"No start command detected, please provide a start command manually\\")\'"'
+            start_cmd = f'"python {main_file}"'
+
         return {"start": start_cmd}
 
     def assets(self) -> Optional[Dict[str, str]]:
@@ -422,3 +433,7 @@ class PythonProvider:
 def format_app_import(asgi_application: str) -> str:
     # Transform "mysite.asgi.application" to "mysite.asgi:application" using regex
     return re.sub(r"\.([^.]+)$", r":\1", asgi_application)
+
+
+def file_to_python_path(path: str) -> str:
+    return path.rstrip(".py").replace("/", ".").replace("\\", ".")
