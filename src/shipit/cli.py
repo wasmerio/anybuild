@@ -594,10 +594,10 @@ class LocalBuilder:
                     commands.append(step.command)
                 elif isinstance(step, WorkdirStep):
                     commands.append(f"cd {step.path}")
-        content = "#!/bin/bash\n{body}".format(
-            body="\n".join(commands)
+        content = "#!/bin/bash\n{body}".format(body="\n".join(commands))
+        console.print(
+            f"\n[bold]Created prepare.sh script to run before packaging ✅[/bold]"
         )
-        console.print(f"\n[bold]Created prepare.sh script to run before packaging ✅[/bold]")
         manifest_panel = Panel(
             Syntax(
                 content,
@@ -669,8 +669,8 @@ class WasmerBuilder:
     mapper: Dict[str, MapperItem] = {
         "python": {
             "dependencies": {
-                "latest": "wasmer/python-native@=0.1.11",
-                "3.13": "wasmer/python-native@=0.1.11",
+                "latest": "python/python@=3.13.1",
+                "3.13": "python/python@=3.13.1",
             },
             "scripts": {"python"},
             "aliases": {},
@@ -780,7 +780,9 @@ class WasmerBuilder:
 
         body = "\n".join(filter(None, [env_lines, *commands]))
         content = f"#!/bin/bash\n\n{body}"
-        console.print(f"\n[bold]Created prepare.sh script to run before packaging ✅[/bold]")
+        console.print(
+            f"\n[bold]Created prepare.sh script to run before packaging ✅[/bold]"
+        )
         manifest_panel = Panel(
             Syntax(
                 content,
@@ -931,7 +933,9 @@ class WasmerBuilder:
 
         original_app_yaml_path = self.src_dir / "app.yaml"
         if original_app_yaml_path.exists():
-            console.print(f"[bold]Using original app.yaml found in source directory[/bold]")
+            console.print(
+                f"[bold]Using original app.yaml found in source directory[/bold]"
+            )
             yaml_config = yaml.safe_load(original_app_yaml_path.read_text())
         else:
             yaml_config = {
