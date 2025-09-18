@@ -679,6 +679,13 @@ class WasmerBuilder:
                 "PYTHONHOME": "/cpython",
             },
         },
+        "pandoc": {
+            "dependencies": {
+                "latest": "wasmer/pandoc@=0.0.1",
+                "3.5": "wasmer/pandoc@=0.0.1",
+            },
+            "scripts": {"pandoc"},
+        },
         "php": {
             "dependencies": {
                 "latest": "php/php-32@=8.3.2104",
@@ -840,12 +847,14 @@ class WasmerBuilder:
                         version
                     ].split("@")
                     dependencies.add(package_name, version)
-                    for script in self.mapper[dep.name]["scripts"]:
+                    scripts = self.mapper[dep.name].get("scripts") or []
+                    for script in scripts:
                         binaries[script] = {
                             "script": f"{package_name}:{script}",
                             "env": self.mapper[dep.name].get("env"),
                         }
-                    for alias, script in self.mapper[dep.name]["aliases"].items():
+                    aliases = self.mapper[dep.name].get("aliases") or {}
+                    for alias, script in aliases.items():
                         binaries[alias] = {
                             "script": f"{package_name}:{script}",
                             "env": self.mapper[dep.name].get("env"),

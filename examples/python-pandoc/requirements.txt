@@ -1,0 +1,2 @@
+pypandoc
+fastapi>=0.116.1

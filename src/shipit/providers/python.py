@@ -214,7 +214,7 @@ class PythonProvider:
         return "python"
 
     def dependencies(self) -> list[DependencySpec]:
-        return [
+        deps = [
             DependencySpec(
                 "python",
                 env_var="SHIPIT_PYTHON_VERSION",
@@ -229,6 +229,16 @@ class PythonProvider:
                 use_in_build=True,
             ),
         ]
+        if self.uses_pandoc:
+            deps.append(
+                DependencySpec(
+                    "pandoc",
+                    env_var="SHIPIT_PANDOC_VERSION",
+                    use_in_build=False,
+                    use_in_serve=True,
+                )
+            )
+        return deps
 
     def declarations(self) -> Optional[str]:
         if self.only_build:
