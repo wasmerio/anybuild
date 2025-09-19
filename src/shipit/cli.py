@@ -16,6 +16,7 @@ from typing import (
     Set,
     TypedDict,
     Union,
+    Literal,
     cast,
 )
 from shutil import copy, copytree, ignore_patterns
@@ -49,6 +50,12 @@ class Mount:
 
 
 @dataclass
+class Service:
+    name: str
+    provider: Literal["postgres", "mysql", "redis"] # Right now we only support postgres and mysql
+
+
+@dataclass
 class Serve:
     name: str
     provider: str
@@ -61,6 +68,7 @@ class Serve:
     workers: Optional[List[str]] = None
     mounts: Optional[List[Mount]] = None
     env: Optional[Dict[str, str]] = None
+    services: Optional[List[Service]] = None
 
 
 @dataclass
@@ -961,8 +969,46 @@ class WasmerBuilder:
             }
         # Update the app to use the new package
         yaml_config["package"] = "."
+        if serve.services:
+            capabilities = yaml_config.get("capabilities", {})
+            has_mysql = any(service.provider == "mysql" for service in serve.services)
+            # has_postgres = any(service.provider == "postgres" for service in serve.services)
+            # has_redis = any(service.provider == "redis" for service in serve.services)
+            if has_mysql:
+                capabilities["database"] = {
+                    "engine": "mysql"
+                }
+            yaml_config["capabilities"] = capabilities
+
+        if "after_deploy" in serve.commands:
+            jobs = yaml_config.get("jobs", [])
+            jobs.append({
+                "name": "after_deploy",
+                "trigger": "post-deployment",
+                "action": {
+                    "execute": {
+                        "command": "after_deploy"
+                    }
+                }
+            })
+            yaml_config["jobs"] = jobs
 
         app_yaml = yaml.dump(yaml_config)
+
+        console.print(f"\n[bold]Created app.yaml manifest ✅[/bold]")
+        app_yaml_panel = Panel(
+            Syntax(
+                app_yaml.strip(),
+                "yaml",
+                theme="monokai",
+                background_color="default",
+                line_numbers=True,
+            ),
+            box=box.SQUARE,
+            border_style="bright_black",
+            expand=False,
+        )
+        console.print(app_yaml_panel, markup=False, highlight=True)
         (self.wasmer_dir_path / "app.yaml").write_text(app_yaml)
 
         # self.inner_builder.build_serve(serve)
@@ -1044,11 +1090,16 @@ class Ctx:
         self.steps: List[Step] = []
         self.serves: Dict[str, Serve] = {}
         self.mounts: List[Mount] = []
+        self.services: Dict[str, Service] = {}
 
     def add_package(self, package: Package) -> str:
         index = f"{package.name}@{package.version}" if package.version else package.name
         self.packages[index] = package
         return f"ref:package:{index}"
+
+    def add_service(self, service: Service) -> str:
+        self.services[service.name] = service
+        return f"ref:service:{service.name}"
 
     def get_ref(self, index: str) -> Any:
         if index.startswith("ref:package:"):
@@ -1061,6 +1112,8 @@ class Ctx:
             return self.steps[int(index[len("ref:step:") :])]
         elif index.startswith("ref:mount:"):
             return self.mounts[int(index[len("ref:mount:") :])]
+        elif index.startswith("ref:service:"):
+            return self.services[index[len("ref:service:") :]]
         else:
             raise Exception(f"Invalid reference: {index}")
 
@@ -1090,6 +1143,10 @@ class Ctx:
     def dep(self, name: str, version: Optional[str] = None) -> str:
         package = Package(name, version)
         return self.add_package(package)
+    
+    def service(self, name: str, provider: Literal["postgres", "mysql", "redis"]) -> str:
+        service = Service(name, provider)
+        return self.add_service(service)
 
     def serve(
         self,
@@ -1104,6 +1161,7 @@ class Ctx:
         workers: Optional[List[str]] = None,
         mounts: Optional[List[Mount]] = None,
         env: Optional[Dict[str, str]] = None,
+        services: Optional[List[str]] = None,
     ) -> str:
         build_refs = [cast(Step, r) for r in self.get_refs(build)]
         prepare_steps: Optional[List[PrepareStep]] = None
@@ -1128,6 +1186,7 @@ class Ctx:
             if mounts
             else None,
             env=env,
+            services=self.get_refs(services) if services else None,
         )
         return self.add_serve(serve)
 
@@ -1453,6 +1512,7 @@ def build(
     glb = sl.Globals.standard()
     mod = sl.Module()
 
+    mod.add_callable("service", ctx.service)
     mod.add_callable("getenv", ctx.getenv)
     mod.add_callable("dep", ctx.dep)
     mod.add_callable("serve", ctx.serve)

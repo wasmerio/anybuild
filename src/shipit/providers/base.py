@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Protocol
+from typing import Dict, List, Optional, Protocol, Literal
 
 
 @dataclass
@@ -28,6 +28,7 @@ class Provider(Protocol):
     def prepare_steps(self) -> Optional[List[str]]: ...
     def commands(self) -> Dict[str, str]: ...
     def assets(self) -> Optional[Dict[str, str]]: ...
+    def services(self) -> List["ServiceSpec"]: ...
     def mounts(self) -> List["MountSpec"]: ...
     def env(self) -> Optional[Dict[str, str]]: ...
 
@@ -50,6 +51,12 @@ class MountSpec:
 
 
 @dataclass
+class ServiceSpec:
+    name: str
+    provider: Literal["postgres", "mysql", "redis"]
+
+
+@dataclass
 class ProviderPlan:
     serve_name: str
     provider: str
@@ -58,6 +65,7 @@ class ProviderPlan:
     dependencies: List[DependencySpec] = field(default_factory=list)
     build_steps: List[str] = field(default_factory=list)
     prepare: Optional[List[str]] = None
+    services: List[ServiceSpec] = field(default_factory=list)
     commands: Dict[str, str] = field(default_factory=dict)
     assets: Optional[Dict[str, str]] = None
     env: Optional[Dict[str, str]] = None

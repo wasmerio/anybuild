@@ -89,6 +89,7 @@ def generate_shipit(path: Path) -> str:
         dependencies=provider.dependencies(),
         build_steps=provider.build_steps(),
         prepare=provider.prepare_steps(),
+        services=provider.services(),
         commands=provider.commands(),
         env=provider.env(),
     )
@@ -127,6 +128,10 @@ def generate_shipit(path: Path) -> str:
         out.append("")
     for m in plan.mounts:
         out.append(f"{m.name} = mount(\"{m.name}\")")
+    if plan.services:
+        for s in plan.services:
+            out.append(f"{s.name} = service(\n  name=\"{s.name}\",\n  provider=\"{s.provider}\"\n)")
+
     if plan.declarations:
         out.append(plan.declarations)
         out.append("")
@@ -157,6 +162,11 @@ def generate_shipit(path: Path) -> str:
     out.append("  commands = {")
     out.append(commands_lines)
     out.append("  },")
+    if plan.services:
+        out.append("  services=[")
+        for s in plan.services:
+            out.append(f"    {s.name},")
+        out.append("  ],")
     if mounts_block:
         out.append("  mounts=[")
         out.append(mounts_block)

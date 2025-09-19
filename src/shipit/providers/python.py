@@ -11,6 +11,7 @@ from .base import (
     Provider,
     _exists,
     MountSpec,
+    ServiceSpec,
 )
 
 
@@ -74,7 +75,7 @@ class PythonProvider:
             "psycopg-binary",
             "psycopg2-binary",
         }
-        mysql_deps = {"mysqlclient", "pymysql", "mysql-connector-python", "aiomysql"}
+        mysql_deps = {"mysqlclient", "pymysql", "mysql-connector-python", "aiomysql", "asyncmy"}
         found_deps = self.check_deps(
             "file://",  # This is not really a dependency, but as a way to check if the install script requires all files
             "streamlit",
@@ -447,6 +448,13 @@ class PythonProvider:
             env_vars["FASTMCP_HOST"] = '"0.0.0.0"'
             env_vars["FASTMCP_PORT"] = '"8000"'
         return env_vars
+    
+    def services(self) -> list[ServiceSpec]:
+        if self.database == DatabaseType.MySQL:
+            return [ServiceSpec(name="database", provider="mysql")]
+        elif self.database == DatabaseType.PostgreSQL:
+            return [ServiceSpec(name="database", provider="postgres")]
+        return []
 
 
 def format_app_import(asgi_application: str) -> str:

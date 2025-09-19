@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists, _has_dependency, MountSpec
+from .base import DetectResult, DependencySpec, Provider, _exists, _has_dependency, MountSpec, ServiceSpec
 
 
 class GatsbyProvider:
@@ -70,3 +70,6 @@ class GatsbyProvider:
 
     def env(self) -> Optional[Dict[str, str]]:
         return None
+    
+    def services(self) -> list[ServiceSpec]:
+        return []

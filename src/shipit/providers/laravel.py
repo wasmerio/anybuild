@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
+from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec, ServiceSpec
 
 
 class LaravelProvider:
@@ -81,3 +81,6 @@ class LaravelProvider:
 
     def env(self) -> Optional[Dict[str, str]]:
         return None
+    
+    def services(self) -> list[ServiceSpec]:
+        return []

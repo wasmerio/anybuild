@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec
+from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec, ServiceSpec
 from .staticfile import StaticFileProvider
 from .python import PythonProvider
 
@@ -58,3 +58,6 @@ class MkdocsProvider(StaticFileProvider):
 
     def env(self) -> Optional[Dict[str, str]]:
         return self.python_provider.env()
+    
+    def services(self) -> list[ServiceSpec]:
+        return []
