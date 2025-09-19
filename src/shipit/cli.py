@@ -624,20 +624,31 @@ class LocalBuilder:
 
     def build_serve(self, serve: Serve) -> None:
         console.print("\n[bold]Building serve[/bold]")
-        build_path = self.get_build_path()
         serve_command_path = self.get_serve_path() / "bin"
         serve_command_path.mkdir(parents=True, exist_ok=False)
         path = self.get_path() / ".path"
-        # path_resolved = [str((build_path/path).resolve()) for path in path.read_text().split(os.pathsep) if path]
-        # path_text = os.pathsep.join(path_resolved)
         path_text = path.read_text()
         console.print(f"[bold]Serve Commands:[/bold]")
         for command in serve.commands:
             console.print(f"* {command}")
             command_path = serve_command_path / command
+            content = f"#!/bin/bash\ncd {serve.cwd}\nPATH={path_text}:$PATH {serve.commands[command]}"
             command_path.write_text(
-                f"#!/bin/bash\ncd {build_path}\nPATH={path_text}:$PATH {serve.commands[command]}"
+                content
             )
+            manifest_panel = Panel(
+                Syntax(
+                    content.strip(),
+                    "bash",
+                    theme="monokai",
+                    background_color="default",
+                    line_numbers=True,
+                ),
+                box=box.SQUARE,
+                border_style="bright_black",
+                expand=False,
+            )
+            console.print(manifest_panel, markup=False, highlight=True)
             command_path.chmod(0o755)
 
     def run_serve_command(self, command: str) -> None:
@@ -685,6 +696,13 @@ class WasmerBuilder:
                 "3.5": "wasmer/pandoc@=0.0.1",
             },
             "scripts": {"pandoc"},
+        },
+        "ffmpeg": {
+            "dependencies": {
+                "latest": "wasmer/ffmpeg@=1.0.5",
+                "N-111519": "wasmer/ffmpeg@=1.0.5",
+            },
+            "scripts": {"ffmpeg"},
         },
         "php": {
             "dependencies": {

@@ -238,6 +238,15 @@ class PythonProvider:
                     use_in_serve=True,
                 )
             )
+        if self.uses_ffmpeg:
+            deps.append(
+                DependencySpec(
+                    "ffmpeg",
+                    env_var="SHIPIT_FFMPEG_VERSION",
+                    use_in_build=False,
+                    use_in_serve=True,
+                )
+            )
         return deps
 
     def declarations(self) -> Optional[str]:
