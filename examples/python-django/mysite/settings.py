@@ -79,10 +79,25 @@ WSGI_APPLICATION = 'mysite.wsgi.application'
 def get_db_config():
     database_url = os.environ.get('DATABASE_URL')
     if not database_url:
-        return {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
+        db_name = os.environ.get('DB_NAME')
+        db_user = os.environ.get('DB_USERNAME')
+        db_password = os.environ.get('DB_PASSWORD')
+        db_host = os.environ.get('DB_HOST')
+        db_port = os.environ.get('DB_PORT')
+        if db_name and db_user and db_host and db_port:
+            return {
+                'ENGINE': 'django.db.backends.mysql',
+                'NAME': db_name,
+                'USER': db_user,
+                'PASSWORD': db_password,
+                'HOST': db_host,
+                'PORT': db_port,
+            }
+        else:
+            return {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
     url = urlparse(database_url)
     return {
         'ENGINE': 'django.db.backends.postgresql',
