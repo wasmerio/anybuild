@@ -317,10 +317,10 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
             return
         if dependency.version:
             self.docker_file_contents += (
-                f"RUN pkgm install {dependency.name}@{dependency.version}\n"
+                f"RUN mise use --global {dependency.name}@{dependency.version}\n"
             )
         else:
-            self.docker_file_contents += f"RUN pkgm install {dependency.name}\n"
+            self.docker_file_contents += f"RUN mise use --global {dependency.name}\n"
 
     def build(
         self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
@@ -328,15 +328,26 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
         base_path = self.docker_path
         shutil.rmtree(base_path, ignore_errors=True)
         base_path.mkdir(parents=True, exist_ok=True)
-        self.docker_file_contents = "FROM debian:bookworm-slim AS build\n"
+        self.docker_file_contents = "FROM debian:trixie-slim AS build\n"
+
         self.docker_file_contents += """
 RUN apt-get update \\
-    && apt-get -y --no-install-recommends install sudo curl ca-certificates locate git zip unzip \\
+    && apt-get -y --no-install-recommends install \\
+        build-essential gcc make \\
+        dpkg-dev pkg-config \\
+        libmariadb-dev libmariadb-dev-compat libpq-dev \\
+        sudo curl ca-certificates \\
     && rm -rf /var/lib/apt/lists/*
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV MISE_DATA_DIR="/mise"
+ENV MISE_CONFIG_DIR="/mise"
+ENV MISE_CACHE_DIR="/mise/cache"
+ENV MISE_INSTALL_PATH="/usr/local/bin/mise"
+ENV PATH="/mise/shims:$PATH"
+# ENV MISE_VERSION="..."
 
-RUN curl https://pkgx.sh | sh
+RUN curl https://mise.run | sh
 """
         # docker_file_contents += "RUN curl https://mise.run | sh\n"
         #         self.docker_file_contents += """
