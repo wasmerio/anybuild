@@ -50,6 +50,12 @@ class Mount:
 
 
 @dataclass
+class Volume:
+    name: str
+    serve_path: Path
+
+
+@dataclass
 class Service:
     name: str
     provider: Literal["postgres", "mysql", "redis"] # Right now we only support postgres and mysql
@@ -67,6 +73,7 @@ class Serve:
     prepare: Optional[List["PrepareStep"]] = None
     workers: Optional[List[str]] = None
     mounts: Optional[List[Mount]] = None
+    volumes: Optional[List[Volume]] = None
     env: Optional[Dict[str, str]] = None
     services: Optional[List[Service]] = None
 
@@ -258,13 +265,23 @@ class DockerBuilder:
 
     def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
         image_name = self.docker_name_path.read_text()
-        return sh.Command(
-            "docker"
-        )(
+        docker_args: List[str] = [
             "run",
             "-p",
             "80:80",
             "--rm",
+        ]
+        # Attach volumes if present
+        # if serve.volumes:
+        #     for vol in serve.volumes:
+        #         docker_args += [
+        #             "--mount",
+        #             f"type=volume,source={vol.name},target={str(vol.serve_path)}",
+        #         ]
+        return sh.Command(
+            "docker"
+        )(
+            *docker_args,
             image_name,
             command,
             *(extra_args or []),
@@ -642,6 +659,7 @@ class LocalBuilder:
         )
 
     def build_serve(self, serve: Serve) -> None:
+        # Remember serve configuration for run-time
         console.print("\n[bold]Building serve[/bold]")
         serve_command_path = self.get_serve_path() / "bin"
         serve_command_path.mkdir(parents=True, exist_ok=False)
@@ -990,6 +1008,23 @@ class WasmerBuilder:
                     "engine": "mysql"
                 }
             yaml_config["capabilities"] = capabilities
+        
+        # Attach declared volumes to the app manifest (serve-time mounts)
+        if serve.volumes:
+            volumes_yaml = yaml_config.get("volumes", [])
+            for vol in serve.volumes:
+                volumes_yaml.append({
+                    "name": vol.name,
+                    "mount": str(vol.serve_path),
+                })
+            yaml_config["volumes"] = volumes_yaml
+        
+        # If it has a php dependency, set the scaling mode to single_concurrency
+        has_php = any(dep.name == "php" for dep in serve.deps)
+        if has_php:
+            scaling = yaml_config.get("scaling", {})
+            scaling["mode"] = "single_concurrency"
+            yaml_config["scaling"] = scaling
 
         if "after_deploy" in serve.commands:
             jobs = yaml_config.get("jobs", [])
@@ -1101,6 +1136,7 @@ class Ctx:
         self.steps: List[Step] = []
         self.serves: Dict[str, Serve] = {}
         self.mounts: List[Mount] = []
+        self.volumes: List[Volume] = []
         self.services: Dict[str, Service] = {}
 
     def add_package(self, package: Package) -> str:
@@ -1123,6 +1159,8 @@ class Ctx:
             return self.steps[int(index[len("ref:step:") :])]
         elif index.startswith("ref:mount:"):
             return self.mounts[int(index[len("ref:mount:") :])]
+        elif index.startswith("ref:volume:"):
+            return self.volumes[int(index[len("ref:volume:") :])]
         elif index.startswith("ref:service:"):
             return self.services[index[len("ref:service:") :]]
         else:
@@ -1171,6 +1209,7 @@ class Ctx:
         prepare: Optional[List[str]] = None,
         workers: Optional[List[str]] = None,
         mounts: Optional[List[Mount]] = None,
+        volumes: Optional[List[Volume]] = None,
         env: Optional[Dict[str, str]] = None,
         services: Optional[List[str]] = None,
     ) -> str:
@@ -1195,6 +1234,9 @@ class Ctx:
             workers=workers,
             mounts=self.get_refs([mount["ref"] for mount in mounts])
             if mounts
+            else None,
+            volumes=self.get_refs([volume["ref"] for volume in volumes])
+            if volumes
             else None,
             env=env,
             services=self.get_refs(services) if services else None,
@@ -1248,6 +1290,19 @@ class Ctx:
 
     def serve_mount(self, name: str) -> Optional[str]:
         return self.builder.serve_mount(name)
+
+    def add_volume(self, volume: Volume) -> Optional[str]:
+        self.volumes.append(volume)
+        return f"ref:volume:{len(self.volumes) - 1}"
+
+    def volume(self, name: str, serve: str) -> Optional[str]:
+        volume = Volume(name=name, serve_path=Path(serve))
+        ref = self.add_volume(volume)
+        return {
+            "ref": ref,
+            "name": name,
+            "serve": str(volume.serve_path),
+        }
 
 
 def print_help() -> None:
@@ -1529,6 +1584,7 @@ def build(
     mod.add_callable("serve", ctx.serve)
     mod.add_callable("run", ctx.run)
     mod.add_callable("mount", ctx.mount)
+    mod.add_callable("volume", ctx.volume)
     mod.add_callable("workdir", ctx.workdir)
     mod.add_callable("copy", ctx.copy)
     mod.add_callable("path", ctx.path)
@@ -1580,7 +1636,7 @@ def main() -> None:
         app()
     except Exception as e:
         console.print(f"[bold red]{type(e).__name__}[/bold red]: {e}")
-        # raise e
+        raise e
 
 
 if __name__ == "__main__":

@@ -3,7 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from shipit.providers.base import DependencySpec, Provider, ProviderPlan, DetectResult, MountSpec
+from shipit.providers.base import (
+    DependencySpec,
+    Provider,
+    ProviderPlan,
+    DetectResult,
+    MountSpec,
+    VolumeSpec,
+)
 from shipit.providers.registry import providers as registry_providers
 
 
@@ -85,6 +92,7 @@ def generate_shipit(path: Path) -> str:
         serve_name=provider.serve_name(),
         provider=provider.provider_kind(),
         mounts=provider.mounts(),
+        volumes=provider.volumes(),
         declarations=provider.declarations(),
         dependencies=provider.dependencies(),
         build_steps=provider.build_steps(),
@@ -116,11 +124,16 @@ def generate_shipit(path: Path) -> str:
             env_lines = ",\n".join([f'    "{k}": {v}' for k, v in plan.env.items()])
     assets_block = _render_assets(plan.assets)
     mounts_block = None
+    volumes_block = None
     attach_serve_names: list[str] = []
     if plan.mounts:
         mounts = list(filter(lambda m: m.attach_to_serve, plan.mounts))
         attach_serve_names = [m.name for m in mounts]
         mounts_block = ",\n".join([f"    {m.name}" for m in mounts])
+    if plan.volumes:
+        volumes_block = ",\n".join(
+            [f"    {v.name}" for v in plan.volumes]
+        )
 
     out: List[str] = []
     if dep_block:
@@ -128,6 +141,9 @@ def generate_shipit(path: Path) -> str:
         out.append("")
     for m in plan.mounts:
         out.append(f"{m.name} = mount(\"{m.name}\")")
+    if plan.volumes:
+        for v in plan.volumes:
+            out.append(f"{v.name} = volume(\"{v.name}\", \"{v.serve_path}\")")
     if plan.services:
         for s in plan.services:
             out.append(f"{s.name} = service(\n  name=\"{s.name}\",\n  provider=\"{s.provider}\"\n)")
@@ -170,6 +186,10 @@ def generate_shipit(path: Path) -> str:
     if mounts_block:
         out.append("  mounts=[")
         out.append(mounts_block)
+        out.append("  ],")
+    if volumes_block:
+        out.append("  volumes=[")
+        out.append(volumes_block)
         out.append("  ],")
     out.append(")")
     out.append("")

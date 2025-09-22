@@ -3,7 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists, MountSpec, ServiceSpec
+from .base import (
+    DetectResult,
+    DependencySpec,
+    Provider,
+    _exists,
+    MountSpec,
+    ServiceSpec,
+    VolumeSpec,
+)
 
 
 class StaticFileProvider:
@@ -65,6 +73,9 @@ class StaticFileProvider:
 
     def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
+
+    def volumes(self) -> list[VolumeSpec]:
+        return []
 
     def env(self) -> Optional[Dict[str, str]]:
         return None

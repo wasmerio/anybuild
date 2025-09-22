@@ -12,6 +12,7 @@ from .base import (
     _exists,
     MountSpec,
     ServiceSpec,
+    VolumeSpec,
 )
 
 
@@ -435,6 +436,9 @@ class PythonProvider:
             MountSpec("venv"),
             MountSpec("local_venv", attach_to_serve=False),
         ]
+
+    def volumes(self) -> list[VolumeSpec]:
+        return []
 
     def env(self) -> Optional[Dict[str, str]]:
         if self.only_build:

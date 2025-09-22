@@ -30,6 +30,7 @@ class Provider(Protocol):
     def assets(self) -> Optional[Dict[str, str]]: ...
     def services(self) -> List["ServiceSpec"]: ...
     def mounts(self) -> List["MountSpec"]: ...
+    def volumes(self) -> List["VolumeSpec"]: ...
     def env(self) -> Optional[Dict[str, str]]: ...
 
 
@@ -51,6 +52,13 @@ class MountSpec:
 
 
 @dataclass
+class VolumeSpec:
+    name: str
+    # Absolute path inside the serve/runtime environment where the volume is mounted
+    serve_path: str
+
+
+@dataclass
 class ServiceSpec:
     name: str
     provider: Literal["postgres", "mysql", "redis"]
@@ -61,6 +69,7 @@ class ProviderPlan:
     serve_name: str
     provider: str
     mounts: List[MountSpec]
+    volumes: List[VolumeSpec] = field(default_factory=list)
     declarations: Optional[str] = None
     dependencies: List[DependencySpec] = field(default_factory=list)
     build_steps: List[str] = field(default_factory=list)

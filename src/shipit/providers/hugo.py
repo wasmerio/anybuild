@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists, ServiceSpec
+from .base import DetectResult, DependencySpec, Provider, _exists, ServiceSpec, VolumeSpec
 from .staticfile import StaticFileProvider
 
 class HugoProvider(StaticFileProvider):
@@ -47,4 +47,7 @@ class HugoProvider(StaticFileProvider):
         ]
     
     def services(self) -> list[ServiceSpec]:
+        return []
+
+    def volumes(self) -> list[VolumeSpec]:
         return []

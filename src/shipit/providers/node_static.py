@@ -3,7 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists, _has_dependency, MountSpec, ServiceSpec
+from .base import (
+    DetectResult,
+    DependencySpec,
+    Provider,
+    _exists,
+    _has_dependency,
+    MountSpec,
+    ServiceSpec,
+    VolumeSpec,
+)
 
 
 class NodeStaticProvider:
@@ -68,6 +77,9 @@ class NodeStaticProvider:
 
     def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
+
+    def volumes(self) -> list[VolumeSpec]:
+        return []
 
     def env(self) -> Optional[Dict[str, str]]:
         return None
