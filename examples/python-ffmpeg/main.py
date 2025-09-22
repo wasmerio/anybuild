@@ -1,11 +1,11 @@
 """
-FastAPI app that serves a tiny web UI (pure Python-rendered HTML) to upload a video
-and extract the frame at 1 second using ffmpeg-python.
+FastAPI app that serves a tiny web UI (pure Python-rendered HTML) to enter a video URL,
+downloads it with requests, and extracts the frame at 1 second using ffmpeg-python.
 
 Quickstart (run these in your terminal):
 
     python -m venv .venv && source .venv/bin/activate
-    pip install fastapi uvicorn ffmpeg-python python-multipart Jinja2
+    pip install fastapi uvicorn ffmpeg-python requests Jinja2
     # Ensure ffmpeg binary is installed on your system and on PATH:
     #   macOS (brew):   brew install ffmpeg
     #   Ubuntu/Debian:  sudo apt-get install -y ffmpeg
@@ -17,20 +17,21 @@ Visit http://127.0.0.1:8000/ to use the UI.
 
 from __future__ import annotations
 
-import os
-import uuid
+import base64
 import tempfile
 from pathlib import Path
+import uuid
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+import requests
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 import ffmpeg
 
-# Directory to write extracted images
-OUTPUT_DIR = Path("outputs")
+# Directory to write extracted images (temporary)
+OUTPUT_DIR = Path("/app/outputs")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-app = FastAPI(title="1s Video Screenshot (FastAPI + ffmpeg-python)")
+app = FastAPI(title="1s Video Screenshot (URL + ffmpeg-python)")
 
 
 INDEX_HTML = """
@@ -44,21 +45,22 @@ INDEX_HTML = """
       body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 2rem; }
       .card { max-width: 640px; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
       h1 { margin-top: 0; }
-      input[type=file] { margin: 0.5rem 0 1rem; }
+      input[type=url] { width: 100%; padding: .5rem; margin: 0.5rem 0 1rem; border-radius: 6px; border: 1px solid #d1d5db; }
       button { padding: .6rem 1rem; border-radius: 10px; border: 1px solid #111827; background: white; cursor: pointer; }
-      .result { margin-top: 1.25rem; }
       .footer { color: #6b7280; font-size: .875rem; margin-top: .75rem; }
     </style>
   </head>
   <body>
     <div class="card">
-      <h1>Take screenshot at 1s</h1>
-      <form action="/upload" method="post" enctype="multipart/form-data">
-        <label for="video">Choose a video file (mp4, mov, webm, mkv, etc.)</label><br />
-        <input id="video" name="video" type="file" accept="video/*" required /> <br />
+      <h1>Take screenshot at 1s from a video URL</h1>
+      <form action="/process" method="get">
+        <label for="url">Video URL</label><br />
+        <input id="url" name="url" type="url" placeholder="https://..." value="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" required /> <br />
+        <label for="time">Time in seconds</label><br />
+        <input id="time" name="time" type="number" placeholder="1" value="1" required /> <br />
         <button type="submit">Extract frame</button>
       </form>
-      <div class="footer">Powered by FastAPI + ffmpeg-python</div>
+      <div class="footer">Powered by FastAPI + ffmpeg-python + requests</div>
     </div>
   </body>
 </html>
@@ -77,22 +79,16 @@ RESULT_HTML = """
       .card { max-width: 720px; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
       h1 { margin-top: 0; }
       img { max-width: 100%; height: auto; border-radius: 10px; border: 1px solid #e5e7eb; }
-      .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
-      .actions a { display: inline-block; margin-right: 0.75rem; padding: .5rem .9rem; border: 1px solid #111827; border-radius: 10px; text-decoration: none; color: #111827; }
       .footer { color: #6b7280; font-size: .875rem; margin-top: .75rem; }
     </style>
   </head>
   <body>
     <div class="card">
-      <h1>Frame extracted at 1s</h1>
-      <div class="row">
-        <img src="/image/{image_name}" alt="Screenshot at 1s" />
+      <h1>Frame extracted at {time}s</h1>
+      <div>
+        <img src="data:image/jpeg;base64,{image_b64}" alt="Screenshot from a video URL" />
       </div>
-      <div class="actions" style="margin-top:1rem;">
-        <a href="/image/{image_name}" download>Download image</a>
-        <a href="/">Process another video</a>
-      </div>
-      <div class="footer">Saved as <code>{image_name}</code> in <code>outputs/</code></div>
+      <div class="footer">Embedded as base64 JPEG</div>
     </div>
   </body>
 </html>
@@ -104,56 +100,59 @@ async def index() -> HTMLResponse:
     return HTMLResponse(INDEX_HTML)
 
 
-@app.post("/upload", response_class=HTMLResponse)
-async def upload(video: UploadFile = File(...)) -> HTMLResponse:
-    # Basic validation
-    if not video.content_type or not video.content_type.startswith("video/"):
-        raise HTTPException(status_code=400, detail="Please upload a valid video file.")
+@app.get("/process", response_class=HTMLResponse)
+async def process(url: str = Query(..., description="Video URL"), time: int = Query(1, description="Time in seconds")) -> HTMLResponse:
+    # Download video to a temp file
+    try:
+        resp = requests.get(url, stream=True, timeout=30)
+        resp.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not download video: {e}")
 
-    # Persist upload to a temp file
-    suffix = Path(video.filename or "uploaded").suffix or ".mp4"
+    suffix = ".mp4"  # default extension
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         temp_path = Path(tmp.name)
-        content = await video.read()
-        tmp.write(content)
+        for chunk in resp.iter_content(chunk_size=8192):
+            if chunk:
+                tmp.write(chunk)
 
     # Prepare output image path
-    image_name = f"{uuid.uuid4().hex}.jpg"
-    out_path = OUTPUT_DIR / image_name
+    out_path = OUTPUT_DIR / f"{uuid.uuid4().hex}.jpg"
+
 
     # Use ffmpeg-python to seek to 1 second and write 1 frame
-    # Equivalent shell command: ffmpeg -ss 1 -i input.mp4 -frames:v 1 output.jpg
     try:
         (
             ffmpeg
-            .input(str(temp_path), ss=1)
+            .input(str(temp_path), ss=time)
             .output(str(out_path), vframes=1, format='image2', vcodec='mjpeg')
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )
     except ffmpeg.Error as e:
-        # surface stderr to help debug common issues
         err = e.stderr.decode(errors="ignore") if isinstance(e.stderr, (bytes, bytearray)) else str(e)
-        # Clean up temp file on failure
         try:
-            temp_path.unlink(missing_ok=True)  # type: ignore[arg-type]
+            temp_path.unlink(missing_ok=True)
         finally:
             pass
         raise HTTPException(status_code=500, detail=f"ffmpeg failed: {err}")
     finally:
-        # Best-effort cleanup of uploaded temp file
         try:
-            temp_path.unlink(missing_ok=True)  # type: ignore[arg-type]
+            temp_path.unlink(missing_ok=True)
         except Exception:
             pass
 
-    # Return result page with the generated image
-    return HTMLResponse(RESULT_HTML.replace("{image_name}", image_name))
+    # Read image and encode as base64
+    try:
+        with open(out_path, "rb") as f:
+            img_bytes = f.read()
+        image_b64 = base64.b64encode(img_bytes).decode("ascii")
+    except Exception:
+        raise HTTPException(status_code=500, detail=f"Failed to read image (did the video has less than {time} seconds?)")
+    finally:
+        try:
+            out_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
-
-@app.get("/image/{image_name}")
-async def get_image(image_name: str) -> FileResponse:
-    image_path = OUTPUT_DIR / image_name
-    if not image_path.exists():
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(path=str(image_path), media_type="image/jpeg", filename=image_name)
+    return HTMLResponse(RESULT_HTML.replace("{time}", str(time)).replace("{image_b64}", image_b64))
