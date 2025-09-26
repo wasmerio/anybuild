@@ -5,6 +5,7 @@ import shutil
 import sys
 import json
 import yaml
+import base64
 from dataclasses import dataclass
 from pathlib import Path
 from typing import (
@@ -58,7 +59,9 @@ class Volume:
 @dataclass
 class Service:
     name: str
-    provider: Literal["postgres", "mysql", "redis"] # Right now we only support postgres and mysql
+    provider: Literal[
+        "postgres", "mysql", "redis"
+    ]  # Right now we only support postgres and mysql
 
 
 @dataclass
@@ -69,7 +72,6 @@ class Serve:
     deps: List["Package"]
     commands: Dict[str, str]
     cwd: Optional[str] = None
-    assets: Optional[Dict[str, str]] = None
     prepare: Optional[List["PrepareStep"]] = None
     workers: Optional[List[str]] = None
     mounts: Optional[List[Mount]] = None
@@ -105,6 +107,8 @@ class CopyStep:
     source: str
     target: str
     ignore: Optional[List[str]] = None
+    # We can copy from the app source or from the shipit assets folder
+    base: Literal["source", "assets"] = "source"
 
 
 @dataclass
@@ -154,7 +158,6 @@ class Builder(Protocol):
     def build(
         self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
     ) -> None: ...
-    def build_assets(self, assets: Dict[str, str]) -> None: ...
     def build_prepare(self, serve: Serve) -> None: ...
     def build_serve(self, serve: Serve) -> None: ...
     def finalize_build(self, serve: Serve) -> None: ...
@@ -164,8 +167,6 @@ class Builder(Protocol):
     def run_command(
         self, command: str, extra_args: Optional[List[str]] | None = None
     ) -> Any: ...
-    def serve_mount(self, name: str) -> str: ...
-    def get_asset(self, name: str) -> str: ...
     def get_build_mount_path(self, name: str) -> Path: ...
     def get_serve_mount_path(self, name: str) -> Path: ...
 
@@ -389,7 +390,24 @@ RUN curl https://mise.run | sh
                     pre = ""
                 self.docker_file_contents += f"RUN {pre}{step.command}\n"
             elif isinstance(step, CopyStep):
-                self.docker_file_contents += f"COPY {step.source} {step.target}\n"
+                if step.base == "assets":
+                    # Detect if the asset exists and is a file
+                    if (ASSETS_PATH / step.source).is_file():
+                        # Read the file content and write it to the target file
+                        content_base64 = base64.b64encode(
+                            (ASSETS_PATH / step.source).read_bytes()
+                        )
+                        self.docker_file_contents += (
+                            f"RUN echo '{content_base64}' | base64 -d > {step.target}\n"
+                        )
+                    elif (ASSETS_PATH / step.source).is_dir():
+                        raise Exception(
+                            f"Asset {step.source} is a directory, shipit doesn't currently support coppying assets directories inside Docker"
+                        )
+                    else:
+                        raise Exception(f"Asset {step.source} does not exist")
+                else:
+                    self.docker_file_contents += f"COPY {step.source} {step.target}\n"
             elif isinstance(step, EnvStep):
                 env_vars = " ".join(
                     [f"{key}={value}" for key, value in step.variables.items()]
@@ -414,9 +432,6 @@ FROM scratch
 Shipit
 """)
 
-    def build_assets(self, assets: Dict[str, str]) -> None:
-        raise NotImplementedError
-
     def get_path(self) -> Path:
         return Path("/")
 
@@ -425,11 +440,6 @@ Shipit
 
     def get_serve_path(self) -> Path:
         return self.get_path() / "serve"
-
-    def get_assets_path(self) -> Path:
-        path = self.get_path() / "assets"
-        self.mkdir(path)
-        return path
 
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         raise NotImplementedError
@@ -449,14 +459,6 @@ Shipit
                 f"#!/bin/bash\ncd {build_path}\n{serve.commands[command]}",
                 mode=0o755,
             )
-
-    def serve_mount(self, name: str) -> str:
-        path = self.mkdir(Path("serve") / "mounts" / name)
-        return str(path.absolute())
-
-    def get_asset(self, name: str) -> str:
-        asset_path = ASSETS_PATH / name
-        return asset_path.read_text()
 
     def run_serve_command(self, command: str) -> None:
         path = self.shipit_docker_path / "serve" / "bin" / command
@@ -535,18 +537,27 @@ class LocalBuilder:
             ignore_matches = step.ignore if step.ignore else []
             ignore_matches.append(".shipit")
             ignore_matches.append("Shipit")
-            if (self.src_dir / step.source).is_dir():
+            if step.base == "source":
+                base = self.src_dir
+            elif step.base == "assets":
+                base = ASSETS_PATH
+            else:
+                raise Exception(f"Unknown base: {step.base}")
+
+            if (base / step.source).is_dir():
                 copytree(
-                    (self.src_dir / step.source),
+                    (base / step.source),
                     (build_path / step.target),
                     dirs_exist_ok=True,
                     ignore=ignore_patterns(*ignore_matches),
                 )
-            else:
+            elif (base / step.source).is_file():
                 copy(
-                    (self.src_dir / step.source),
+                    (base / step.source),
                     (build_path / step.target),
                 )
+            else:
+                raise Exception(f"Source {step.source} is not a file or directory")
         elif isinstance(step, EnvStep):
             print(f"Setting environment variables: {step}")
             env.update(step.variables)
@@ -608,17 +619,6 @@ class LocalBuilder:
     def get_serve_path(self) -> Path:
         return self.get_path() / "serve"
 
-    def get_assets_path(self) -> Path:
-        path = self.get_path() / "assets"
-        self.mkdir(path)
-        return path
-
-    def build_assets(self, assets: Dict[str, str]) -> None:
-        assets_path = self.get_assets_path()
-        for asset in assets:
-            asset_path = assets_path / asset
-            self.create_file(asset_path, assets[asset])
-
     def build_prepare(self, serve: Serve) -> None:
         self.prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
         commands: List[str] = []
@@ -670,9 +670,7 @@ class LocalBuilder:
             console.print(f"* {command}")
             command_path = serve_command_path / command
             content = f"#!/bin/bash\ncd {serve.cwd}\nPATH={path_text}:$PATH {serve.commands[command]}"
-            command_path.write_text(
-                content
-            )
+            command_path.write_text(content)
             manifest_panel = Panel(
                 Syntax(
                     content.strip(),
@@ -693,15 +691,6 @@ class LocalBuilder:
         base_path = self.get_serve_path() / "bin"
         command_path = base_path / command
         sh.Command(str(command_path))(_out=write_stdout, _err=write_stderr)
-
-    def serve_mount(self, name: str) -> str:
-        base_path = self.get_serve_path() / "mounts" / name
-        base_path.mkdir(parents=True, exist_ok=True)
-        return str(base_path.absolute())
-
-    def get_asset(self, name: str) -> str:
-        asset_path = ASSETS_PATH / name
-        return asset_path.read_text()
 
 
 class WasmerBuilder:
@@ -799,9 +788,6 @@ class WasmerBuilder:
         self, env: Dict[str, str], mounts: List[Mount], build: List[Step]
     ) -> None:
         return self.inner_builder.build(env, mounts, build)
-
-    def build_assets(self, assets: Dict[str, str]) -> None:
-        return self.inner_builder.build_assets(assets)
 
     def get_build_path(self) -> Path:
         return Path("/app")
@@ -926,9 +912,6 @@ class WasmerBuilder:
         fs = table()
         doc.add("fs", fs)
         inner = cast(Any, self.inner_builder)
-        if serve.assets:
-            fs.add("/assets", str((inner.get_path() / "assets").absolute()))
-        # fs.add("/app", str(inner.get_build_path().absolute()))
         if serve.mounts:
             for mount in serve.mounts:
                 fs.add(
@@ -1004,21 +987,21 @@ class WasmerBuilder:
             # has_postgres = any(service.provider == "postgres" for service in serve.services)
             # has_redis = any(service.provider == "redis" for service in serve.services)
             if has_mysql:
-                capabilities["database"] = {
-                    "engine": "mysql"
-                }
+                capabilities["database"] = {"engine": "mysql"}
             yaml_config["capabilities"] = capabilities
-        
+
         # Attach declared volumes to the app manifest (serve-time mounts)
         if serve.volumes:
             volumes_yaml = yaml_config.get("volumes", [])
             for vol in serve.volumes:
-                volumes_yaml.append({
-                    "name": vol.name,
-                    "mount": str(vol.serve_path),
-                })
+                volumes_yaml.append(
+                    {
+                        "name": vol.name,
+                        "mount": str(vol.serve_path),
+                    }
+                )
             yaml_config["volumes"] = volumes_yaml
-        
+
         # If it has a php dependency, set the scaling mode to single_concurrency
         has_php = any(dep.name == "php" for dep in serve.deps)
         if has_php:
@@ -1028,15 +1011,13 @@ class WasmerBuilder:
 
         if "after_deploy" in serve.commands:
             jobs = yaml_config.get("jobs", [])
-            jobs.append({
-                "name": "after_deploy",
-                "trigger": "post-deployment",
-                "action": {
-                    "execute": {
-                        "command": "after_deploy"
-                    }
+            jobs.append(
+                {
+                    "name": "after_deploy",
+                    "trigger": "post-deployment",
+                    "action": {"execute": {"command": "after_deploy"}},
                 }
-            })
+            )
             yaml_config["jobs"] = jobs
 
         app_yaml = yaml.dump(yaml_config)
@@ -1077,12 +1058,6 @@ class WasmerBuilder:
                 *extra_args,
             ],
         )
-
-    def serve_mount(self, name: str) -> str:
-        return self.inner_builder.serve_mount(name)
-
-    def get_asset(self, name: str) -> str:
-        return self.inner_builder.get_asset(name)
 
     def run_command(
         self, command: str, extra_args: Optional[List[str]] | None = None
@@ -1186,14 +1161,13 @@ class Ctx:
     def getenv(self, name: str) -> Optional[str]:
         return self.builder.getenv(name)
 
-    def get_asset(self, name: str) -> Optional[str]:
-        return self.builder.get_asset(name)
-
     def dep(self, name: str, version: Optional[str] = None) -> str:
         package = Package(name, version)
         return self.add_package(package)
-    
-    def service(self, name: str, provider: Literal["postgres", "mysql", "redis"]) -> str:
+
+    def service(
+        self, name: str, provider: Literal["postgres", "mysql", "redis"]
+    ) -> str:
         service = Service(name, provider)
         return self.add_service(service)
 
@@ -1205,7 +1179,6 @@ class Ctx:
         deps: List[str],
         commands: Dict[str, str],
         cwd: Optional[str] = None,
-        assets: Optional[Dict[str, str]] = None,
         prepare: Optional[List[str]] = None,
         workers: Optional[List[str]] = None,
         mounts: Optional[List[Mount]] = None,
@@ -1227,7 +1200,6 @@ class Ctx:
             provider=provider,
             build=build_refs,
             cwd=cwd,
-            assets=assets,
             deps=dep_refs,
             commands=commands,
             prepare=prepare_steps,
@@ -1261,13 +1233,14 @@ class Ctx:
         return self.add_step(step)
 
     def copy(
-        self, source: str, target: str, ignore: Optional[List[str]] = None
+        self,
+        source: str,
+        target: str,
+        ignore: Optional[List[str]] = None,
+        base: Optional[Literal["source", "assets"]] = None,
     ) -> Optional[str]:
-        step = CopyStep(source, target, ignore)
+        step = CopyStep(source, target, ignore, base or "source")
         return self.add_step(step)
-
-    def buildpath(self, name: str) -> str:
-        return str((self.builder.get_build_path() / name).absolute())
 
     def env(self, **env_vars: str) -> Optional[str]:
         step = EnvStep(env_vars)
@@ -1287,9 +1260,6 @@ class Ctx:
             "build": str(build_path.absolute()),
             "serve": str(serve_path.absolute()),
         }
-
-    def serve_mount(self, name: str) -> Optional[str]:
-        return self.builder.serve_mount(name)
 
     def add_volume(self, volume: Volume) -> Optional[str]:
         self.volumes.append(volume)
@@ -1588,12 +1558,8 @@ def build(
     mod.add_callable("workdir", ctx.workdir)
     mod.add_callable("copy", ctx.copy)
     mod.add_callable("path", ctx.path)
-    mod.add_callable("buildpath", ctx.buildpath)
-    mod.add_callable("get_asset", ctx.get_asset)
     mod.add_callable("env", ctx.env)
     mod.add_callable("use", ctx.use)
-    # REMOVE ME
-    mod.add_callable("serve_mount", ctx.serve_mount)
 
     dialect = sl.Dialect.extended()
     dialect.enable_f_strings = True
@@ -1601,9 +1567,7 @@ def build(
     ast = sl.parse("shipit", source, dialect=dialect)
 
     sl.eval(mod, ast, glb)
-    # assert len(ctx.builds) == 1, "Only one build is allowed for now"
     assert len(ctx.serves) <= 1, "Only one serve is allowed for now"
-    # build = ctx.builds[0]
     env = {
         "PATH": "",
         "COLORTERM": os.environ.get("COLORTERM", ""),
@@ -1617,8 +1581,6 @@ def build(
     builder.build(env, serve.mounts, serve.build)
     if serve.prepare:
         builder.build_prepare(serve)
-    if serve.assets:
-        builder.build_assets(serve.assets)
     builder.build_serve(serve)
     builder.finalize_build(serve)
     if serve.prepare and not skip_prepare:
@@ -1636,7 +1598,7 @@ def main() -> None:
         app()
     except Exception as e:
         console.print(f"[bold red]{type(e).__name__}[/bold red]: {e}")
-        raise e
+        # raise e
 
 
 if __name__ == "__main__":

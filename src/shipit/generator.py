@@ -76,13 +76,6 @@ def _emit_dependencies_declarations(
     return "\n".join(lines), serve_vars, build_vars
 
 
-def _render_assets(assets: Optional[Dict[str, str]]) -> Optional[str]:
-    if not assets:
-        return None
-    inner = ",\n".join([f'    "{k}": {v}' for k, v in assets.items()])
-    return f"{{\n{inner}\n  }}"
-
-
 def generate_shipit(path: Path) -> str:
     provider_cls = detect_provider(path)
     provider = provider_cls(path)
@@ -122,7 +115,6 @@ def generate_shipit(path: Path) -> str:
             env_lines = "{}"
         else:
             env_lines = ",\n".join([f'    "{k}": {v}' for k, v in plan.env.items()])
-    assets_block = _render_assets(plan.assets)
     mounts_block = None
     volumes_block = None
     attach_serve_names: list[str] = []
@@ -143,7 +135,7 @@ def generate_shipit(path: Path) -> str:
         out.append(f"{m.name} = mount(\"{m.name}\")")
     if plan.volumes:
         for v in plan.volumes:
-            out.append(f"{v.name} = volume(\"{v.name}\", \"{v.serve_path}\")")
+            out.append(f"{v.name} = volume(\"{v.name}\", {v.serve_path})")
     if plan.services:
         for s in plan.services:
             out.append(f"{s.name} = service(\n  name=\"{s.name}\",\n  provider=\"{s.provider}\"\n)")
@@ -160,8 +152,6 @@ def generate_shipit(path: Path) -> str:
     out.append("  build=[")
     out.append(build_steps_block)
     out.append("  ],")
-    if assets_block:
-        out.append("  assets=" + assets_block + ",")
     out.append(f"  deps=[{deps_array}],")
     if plan.prepare:
         prepare_steps_block = ",\n".join([f"    {s}" for s in plan.prepare])

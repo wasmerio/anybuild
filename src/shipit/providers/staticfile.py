@@ -68,9 +68,6 @@ class StaticFileProvider:
             "start": '"static-web-server --root={} --log-level=info".format(app["serve"])'
         }
 
-    def assets(self) -> Optional[Dict[str, str]]:
-        return None
-
     def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
 

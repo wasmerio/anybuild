@@ -81,9 +81,6 @@ class LaravelProvider:
             "after_deploy": '"php artisan migrate"',
         }
 
-    def assets(self) -> Optional[Dict[str, str]]:
-        return None
-
     def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
 

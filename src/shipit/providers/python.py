@@ -423,9 +423,6 @@ class PythonProvider:
 
         return {"start": start_cmd}
 
-    def assets(self) -> Optional[Dict[str, str]]:
-        return None
-
     def mounts(self) -> list[MountSpec]:
         if self.only_build:
             return [

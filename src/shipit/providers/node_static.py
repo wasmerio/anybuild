@@ -72,9 +72,6 @@ class NodeStaticProvider:
         output_dir = "dist" if (self.path / "dist").exists() else "public"
         return {"start": f'"static-web-server --root /app/{output_dir}"'}
 
-    def assets(self) -> Optional[Dict[str, str]]:
-        return None
-
     def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
 

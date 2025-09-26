@@ -63,6 +63,10 @@ class PhpProvider:
         steps = [
             "workdir(app[\"build\"])",
         ]
+        if _exists(self.path, "php.ini"):
+            steps.append('copy("php.ini", "{}/php.ini".format(assets["build"]))')
+        else:
+            steps.append('copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets")')
 
         if self.has_composer():
             steps.append("env(HOME=HOME, COMPOSER_FUND=\"0\")")
@@ -78,19 +82,21 @@ class PhpProvider:
         if _exists(self.path, "public/index.php"):
             return {"start": '"php -S localhost:8080 -t public"'}
         elif _exists(self.path, "index.php"):
-            return {"start": '"php -S localhost:8080" -t .'}
-
-    def assets(self) -> Optional[Dict[str, str]]:
-        return {"php.ini": "get_asset(\"php/php.ini\")"}
+            return {"start": '"php -S localhost:8080 -t ."'}
 
     def mounts(self) -> list[MountSpec]:
-        return [MountSpec("app")]
+        return [
+            MountSpec("app"),
+            MountSpec("assets"),
+        ]
 
     def volumes(self) -> list[VolumeSpec]:
         return []
 
     def env(self) -> Optional[Dict[str, str]]:
-        return None
+        return {
+            "PHP_INI_FILE": '"{}/php.ini".format(assets["serve"])',
+        }
     
     def services(self) -> list[ServiceSpec]:
         return []

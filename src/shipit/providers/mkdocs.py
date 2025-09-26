@@ -58,9 +58,6 @@ class MkdocsProvider(StaticFileProvider):
     def prepare_steps(self) -> Optional[list[str]]:
         return self.python_provider.prepare_steps()
 
-    def assets(self) -> Optional[Dict[str, str]]:
-        return None
-
     def mounts(self) -> list[MountSpec]:
         return [MountSpec("app"), *self.python_provider.mounts()]
 

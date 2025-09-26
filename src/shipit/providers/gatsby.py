@@ -71,9 +71,6 @@ class GatsbyProvider:
     def commands(self) -> Dict[str, str]:
         return {"start": '"static-web-server --root /app"'}
 
-    def assets(self) -> Optional[Dict[str, str]]:
-        return None
-
     def mounts(self) -> list[MountSpec]:
         return [MountSpec("app")]
 
