@@ -55,6 +55,7 @@ class VolumeSpec:
     name: str
     # Absolute path inside the serve/runtime environment where the volume is mounted
     serve_path: str
+    var_name: Optional[str] = None
 
 
 @dataclass

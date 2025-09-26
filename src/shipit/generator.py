@@ -124,7 +124,7 @@ def generate_shipit(path: Path) -> str:
         mounts_block = ",\n".join([f"    {m.name}" for m in mounts])
     if plan.volumes:
         volumes_block = ",\n".join(
-            [f"    {v.name}" for v in plan.volumes]
+            [f"    {v.var_name or v.name}" for v in plan.volumes]
         )
 
     out: List[str] = []
@@ -135,7 +135,7 @@ def generate_shipit(path: Path) -> str:
         out.append(f"{m.name} = mount(\"{m.name}\")")
     if plan.volumes:
         for v in plan.volumes:
-            out.append(f"{v.name} = volume(\"{v.name}\", {v.serve_path})")
+            out.append(f"{v.var_name or v.name} = volume(\"{v.name}\", {v.serve_path})")
     if plan.services:
         for s in plan.services:
             out.append(f"{s.name} = service(\n  name=\"{s.name}\",\n  provider=\"{s.provider}\"\n)")

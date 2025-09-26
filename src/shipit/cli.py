@@ -1,4 +1,5 @@
 import logging
+import requests
 import os
 import shlex
 import shutil
@@ -110,6 +111,8 @@ class CopyStep:
     # We can copy from the app source or from the shipit assets folder
     base: Literal["source", "assets"] = "source"
 
+    def is_download(self) -> bool:
+        return self.source.startswith("http://") or self.source.startswith("https://")
 
 @dataclass
 class EnvStep:
@@ -390,7 +393,9 @@ RUN curl https://mise.run | sh
                     pre = ""
                 self.docker_file_contents += f"RUN {pre}{step.command}\n"
             elif isinstance(step, CopyStep):
-                if step.base == "assets":
+                if step.is_download():
+                    self.docker_file_contents += "ADD " + step.source + " " + step.target + "\n"
+                elif step.base == "assets":
                     # Detect if the asset exists and is a file
                     if (ASSETS_PATH / step.source).is_file():
                         # Read the file content and write it to the target file
@@ -537,27 +542,31 @@ class LocalBuilder:
             ignore_matches = step.ignore if step.ignore else []
             ignore_matches.append(".shipit")
             ignore_matches.append("Shipit")
-            if step.base == "source":
-                base = self.src_dir
-            elif step.base == "assets":
-                base = ASSETS_PATH
-            else:
-                raise Exception(f"Unknown base: {step.base}")
 
-            if (base / step.source).is_dir():
-                copytree(
-                    (base / step.source),
-                    (build_path / step.target),
-                    dirs_exist_ok=True,
-                    ignore=ignore_patterns(*ignore_matches),
-                )
-            elif (base / step.source).is_file():
-                copy(
-                    (base / step.source),
-                    (build_path / step.target),
-                )
+            if step.is_download():
+                download_file(step.source, (build_path / step.target))
             else:
-                raise Exception(f"Source {step.source} is not a file or directory")
+                if step.base == "source":
+                    base = self.src_dir
+                elif step.base == "assets":
+                    base = ASSETS_PATH
+                else:
+                    raise Exception(f"Unknown base: {step.base}")
+
+                if (base / step.source).is_dir():
+                    copytree(
+                        (base / step.source),
+                        (build_path / step.target),
+                        dirs_exist_ok=True,
+                        ignore=ignore_patterns(*ignore_matches),
+                    )
+                elif (base / step.source).is_file():
+                    copy(
+                        (base / step.source),
+                        (build_path / step.target),
+                    )
+                else:
+                    raise Exception(f"Source {step.source} is not a file or directory")
         elif isinstance(step, EnvStep):
             print(f"Setting environment variables: {step}")
             env.update(step.variables)
@@ -732,8 +741,8 @@ class WasmerBuilder:
         },
         "php": {
             "dependencies": {
-                "latest": "php/php-32@=8.3.2104",
-                "8.3": "php/php-32@=8.3.2104",
+                "latest": "php/php-32@=8.3.2102",
+                "8.3": "php/php-32@=8.3.2102",
             },
             "scripts": {"php"},
             "aliases": {},
@@ -1285,6 +1294,13 @@ def print_help() -> None:
     console.print(panel)
 
 
+def download_file(url: str, path: Path) -> None:
+    response = requests.get(url)
+    response.raise_for_status()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(response.content)
+
+
 @app.command(name="auto")
 def auto(
     path: Path = typer.Argument(
@@ -1598,7 +1614,7 @@ def main() -> None:
         app()
     except Exception as e:
         console.print(f"[bold red]{type(e).__name__}[/bold red]: {e}")
-        # raise e
+        raise e
 
 
 if __name__ == "__main__":

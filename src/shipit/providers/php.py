@@ -57,7 +57,7 @@ class PhpProvider:
         return deps
 
     def declarations(self) -> Optional[str]:
-        return "HOME = getenv(\"HOME\")"
+        return "HOME = getenv(\"HOME\")\n"
 
     def build_steps(self) -> list[str]:
         steps = [
