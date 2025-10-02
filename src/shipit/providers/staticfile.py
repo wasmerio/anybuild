@@ -11,25 +11,29 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
+    CustomCommands,
 )
 
 
 class StaticFileProvider:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
+        self.custom_commands = custom_commands
 
     @classmethod
     def name(cls) -> str:
         return "staticfile"
 
     @classmethod
-    def detect(cls, path: Path) -> Optional[DetectResult]:
+    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
         if _exists(path, "Staticfile"):
             return DetectResult(cls.name(), 50)
         if _exists(path, "index.html") and not _exists(
             path, "package.json", "pyproject.toml", "composer.json"
         ):
             return DetectResult(cls.name(), 10)
+        if custom_commands.start and custom_commands.start.startswith("static-web-server "):
+            return DetectResult(cls.name(), 70)
         return None
 
     def initialize(self) -> None:

@@ -12,20 +12,22 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
+    CustomCommands,
 )
 from .php import PhpProvider
 
 
 class WordPressProvider(PhpProvider):
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
+        self.custom_commands = custom_commands
 
     @classmethod
     def name(cls) -> str:
         return "wordpress"
 
     @classmethod
-    def detect(cls, path: Path) -> Optional[DetectResult]:
+    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
         if _exists(path, "wp-content") and _exists(path, "index.php") and _exists(path, "wp-load.php"):
             return DetectResult(cls.name(), 80)
         return None

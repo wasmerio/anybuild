@@ -12,18 +12,21 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
+    CustomCommands,
 )
 
 
 class GatsbyProvider:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
+        self.custom_commands = custom_commands
+
     @classmethod
     def name(cls) -> str:
         return "gatsby"
 
     @classmethod
-    def detect(cls, path: Path) -> Optional[DetectResult]:
+    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
         pkg = path / "package.json"
         if not pkg.exists():
             return None

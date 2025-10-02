@@ -34,6 +34,8 @@ from rich.syntax import Syntax
 
 from shipit.version import version as shipit_version
 from shipit.generator import generate_shipit
+from shipit.providers.base import CustomCommands
+from shipit.procfile import Procfile
 
 
 console = Console()
@@ -113,6 +115,7 @@ class CopyStep:
 
     def is_download(self) -> bool:
         return self.source.startswith("http://") or self.source.startswith("https://")
+
 
 @dataclass
 class EnvStep:
@@ -394,7 +397,9 @@ RUN curl https://mise.run | sh
                 self.docker_file_contents += f"RUN {pre}{step.command}\n"
             elif isinstance(step, CopyStep):
                 if step.is_download():
-                    self.docker_file_contents += "ADD " + step.source + " " + step.target + "\n"
+                    self.docker_file_contents += (
+                        "ADD " + step.source + " " + step.target + "\n"
+                    )
                 elif step.base == "assets":
                     # Detect if the asset exists and is a file
                     if (ASSETS_PATH / step.source).is_file():
@@ -678,7 +683,11 @@ class LocalBuilder:
         for command in serve.commands:
             console.print(f"* {command}")
             command_path = serve_command_path / command
-            content = f"#!/bin/bash\ncd {serve.cwd}\nPATH={path_text}:$PATH {serve.commands[command]}"
+            env_vars = ""
+            if serve.env:
+                env_vars = " ".join([f"{k}={v}" for k, v in serve.env.items()])
+
+            content = f"#!/bin/bash\ncd {serve.cwd}\nPATH={path_text}:$PATH {env_vars} {serve.commands[command]}"
             command_path.write_text(content)
             manifest_panel = Panel(
                 Syntax(
@@ -1360,12 +1369,35 @@ def auto(
         None,
         help="Name of the Wasmer app.",
     ),
+    use_procfile: bool = typer.Option(
+        True,
+        help="Use the Procfile to generate the default custom commands (install, build, start, after_deploy).",
+    ),
+    install_command: Optional[str] = typer.Option(
+        None,
+        help="The install command to use (overwrites the default)",
+    ),
+    build_command: Optional[str] = typer.Option(
+        None,
+        help="The build command to use (overwrites the default)",
+    ),
+    start_command: Optional[str] = typer.Option(
+        None,
+        help="The start command to use (overwrites the default)",
+    ),
 ):
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
     if not (path / "Shipit").exists() or regenerate or regenerate_path is not None:
-        generate(path, out=regenerate_path)
+        generate(
+            path,
+            out=regenerate_path,
+            use_procfile=use_procfile,
+            install_command=install_command,
+            build_command=build_command,
+            start_command=start_command,
+        )
 
     build(
         path,
@@ -1405,13 +1437,53 @@ def generate(
         None,
         help="Output path (defaults to the Shipit file in the provided path).",
     ),
+    use_procfile: bool = typer.Option(
+        True,
+        help="Use the Procfile to generate the default custom commands (install, build, start, after_deploy).",
+    ),
+    install_command: Optional[str] = typer.Option(
+        None,
+        help="The install command to use (overwrites the default)",
+    ),
+    build_command: Optional[str] = typer.Option(
+        None,
+        help="The build command to use (overwrites the default)",
+    ),
+    start_command: Optional[str] = typer.Option(
+        None,
+        help="The start command to use (overwrites the default)",
+    ),
 ):
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
     if out is None:
         out = path / "Shipit"
-    content = generate_shipit(path)
+    custom_commands = CustomCommands()
+    # if (path / "Dockerfile").exists():
+    #     # We get the start command from the Dockerfile
+    #     with open(path / "Dockerfile", "r") as f:
+    #         cmd = None
+    #         for line in f:
+    #             if line.startswith("CMD "):
+    #                 cmd = line[4:].strip()
+    #                 cmd = json.loads(cmd)
+    #         # We get the last command
+    #         if cmd:
+    #             if isinstance(cmd, list):
+    #                 cmd = " ".join(cmd)
+    #             custom_commands.start = cmd
+    if use_procfile:
+        if (path / "Procfile").exists():
+            procfile = Procfile.loads((path / "Procfile").read_text())
+            custom_commands.start = procfile.get_start_command()
+    if start_command:
+        custom_commands.start = start_command
+    if install_command:
+        custom_commands.install = install_command
+    if build_command:
+        custom_commands.build = build_command
+    content = generate_shipit(path, custom_commands)
     out.write_text(content)
     console.print(f"[bold]Generated Shipit[/bold] at {out.absolute()}")
 

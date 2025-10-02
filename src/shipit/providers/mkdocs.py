@@ -11,22 +11,23 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
+    CustomCommands,
 )
 from .staticfile import StaticFileProvider
 from .python import PythonProvider
 
 
 class MkdocsProvider(StaticFileProvider):
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
-        self.python_provider = PythonProvider(path, only_build=True, extra_dependencies={"mkdocs"})
+        self.python_provider = PythonProvider(path, custom_commands, only_build=True, extra_dependencies={"mkdocs"})
 
     @classmethod
     def name(cls) -> str:
         return "mkdocs"
 
     @classmethod
-    def detect(cls, path: Path) -> Optional[DetectResult]:
+    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
         if _exists(path, "mkdocs.yml", "mkdocs.yaml"):
             return DetectResult(cls.name(), 85)
         return None

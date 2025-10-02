@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -11,22 +12,27 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
+    CustomCommands,
 )
 
 
 class PhpProvider:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
+        self.custom_commands = custom_commands
+    
     @classmethod
     def name(cls) -> str:
         return "php"
 
     @classmethod
-    def detect(cls, path: Path) -> Optional[DetectResult]:
+    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
         if _exists(path, "composer.json") and _exists(path, "public/index.php"):
             return DetectResult(cls.name(), 60)
         if _exists(path, "index.php") and not _exists(path, "composer.json"):
             return DetectResult(cls.name(), 10)
+        if custom_commands.start and custom_commands.start.startswith("php "):
+            return DetectResult(cls.name(), 70)
         return None
 
     def initialize(self) -> None:
@@ -79,6 +85,12 @@ class PhpProvider:
         return None
 
     def commands(self) -> Dict[str, str]:
+        commands = self.base_commands()
+        if self.custom_commands.start:
+            commands["start"] = json.dumps(self.custom_commands.start)
+        return commands
+
+    def base_commands(self) -> Dict[str, str]:
         if _exists(self.path, "public/index.php"):
             return {"start": '"php -S localhost:8080 -t public"'}
         elif _exists(self.path, "index.php"):

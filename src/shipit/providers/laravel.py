@@ -11,18 +11,21 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
+    CustomCommands,
 )
 
 
 class LaravelProvider:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
+        self.custom_commands = custom_commands
+
     @classmethod
     def name(cls) -> str:
         return "laravel"
 
     @classmethod
-    def detect(cls, path: Path) -> Optional[DetectResult]:
+    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
         if _exists(path, "artisan") and _exists(path, "composer.json"):
             return DetectResult(cls.name(), 95)
         return None

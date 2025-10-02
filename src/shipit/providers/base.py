@@ -11,12 +11,20 @@ class DetectResult:
     score: int  # Higher score wins when multiple providers match
 
 
+@dataclass
+class CustomCommands:
+    install: Optional[str] = None
+    build: Optional[str] = None
+    start: Optional[str] = None
+    after_deploy: Optional[str] = None
+
+
 class Provider(Protocol):
     def __init__(self, path: Path): ...
     @classmethod
     def name(cls) -> str: ...
     @classmethod
-    def detect(cls, path: Path) -> Optional[DetectResult]: ...
+    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]: ...
     def initialize(self) -> None: ...
     # Structured plan steps (no path args; use self.path)
     def serve_name(self) -> str: ...

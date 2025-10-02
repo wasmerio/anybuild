@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Dict, Optional, Set
 from enum import Enum
+from functools import cached_property
 
 from .base import (
     DetectResult,
@@ -13,6 +15,7 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
+    CustomCommands,
 )
 
 
@@ -48,10 +51,12 @@ class PythonProvider:
     uses_pandoc: bool = False
     only_build: bool = False
     install_requires_all_files: bool = False
+    custom_commands: CustomCommands
 
     def __init__(
         self,
         path: Path,
+        custom_commands: CustomCommands,
         only_build: bool = False,
         extra_dependencies: Optional[Set[str]] = None,
     ):
@@ -63,6 +68,7 @@ class PythonProvider:
         self.default_python_version = python_version
         self.extra_dependencies = set()
         self.only_build = only_build
+        self.custom_commands = custom_commands
         self.extra_dependencies = extra_dependencies or set()
 
         if self.only_build:
@@ -116,6 +122,11 @@ class PythonProvider:
             self.uses_ffmpeg = True
         if "pandoc" in found_deps:
             self.uses_pandoc = True
+
+        if self.custom_commands.start and self.custom_commands.start.startswith("uvicorn "):
+            self.server = PythonServer.Uvicorn
+            self.custom_commands.start = self.custom_commands.start.replace("uvicorn ", "python -m uvicorn ")
+            self.extra_dependencies = {"uvicorn"}
 
         # Set framework
         if _exists(self.path, "manage.py") and ("django" in found_deps):
@@ -199,11 +210,14 @@ class PythonProvider:
         return "python"
 
     @classmethod
-    def detect(cls, path: Path) -> Optional[DetectResult]:
+    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
         if _exists(path, "pyproject.toml", "requirements.txt"):
             if _exists(path, "manage.py"):
                 return DetectResult(cls.name(), 70)
             return DetectResult(cls.name(), 50)
+        if custom_commands.start:
+            if custom_commands.start.startswith("python ") or custom_commands.start.startswith("uv ") or custom_commands.start.startswith("uvicorn "):
+                return DetectResult(cls.name(), 80)
         return None
 
     def initialize(self) -> None:
@@ -262,7 +276,8 @@ class PythonProvider:
             'python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")\n'
             'precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]\n'
             'python_cross_packages_path = venv["build"] + f"/lib/python{python_version}/site-packages"\n'
-            'python_serve_path = "{}/lib/python{}/site-packages".format(venv["serve"], python_version)\n'
+            'python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv["serve"], python_version)\n'
+            'app_serve_path = app["serve"]\n'
         )
 
     def build_steps(self) -> list[str]:
@@ -279,6 +294,17 @@ class PythonProvider:
             if _exists(self.path, "uv.lock"):
                 input_files.append("uv.lock")
                 extra_args = " --locked"
+
+            # Extra input files check, as glob pattern
+            globs = ["README*", "LICENSE*", "LICENCE*", "MAINTAINERS*", "AUTHORS*"]
+            # Glob check
+            for glob in globs:
+                for path in self.path.glob(glob):
+                    # make path relative to self.path
+                    path = str(path.relative_to(self.path))
+                    input_files.append(path)
+
+            # Join inputs
             inputs = ", ".join([f'"{input}"' for input in input_files])
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"])',
@@ -332,12 +358,13 @@ class PythonProvider:
             return []
         return [
             'run("echo \\"Precompiling Python code...\\"") if precompile_python else None',
-            'run(f"python -m compileall -o 2 {python_serve_path}") if precompile_python else None',
+            'run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None',
             'run("echo \\"Precompiling package code...\\"") if precompile_python else None',
-            'run("python -m compileall -o 2 {}".format(app["serve"])) if precompile_python else None',
+            'run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None',
         ]
 
-    def get_main_file(self) -> Optional[str]:
+    @cached_property
+    def main_file(self) -> Optional[str]:
         paths_to_try = ["main.py", "app.py", "streamlit_app.py", "Home.py", "*_app.py"]
         for path in paths_to_try:
             if "*" in path:
@@ -348,14 +375,20 @@ class PythonProvider:
                 return f"src/{path}"
         for path in paths_to_try:
             try:
-                found_path = next(self.path.glob(f"**/{path}.py"))
+                found_path = next(self.path.glob(f"**/{path}"))
             except StopIteration:
                 found_path = None
             if found_path:
-                return found_path.relative_to(self.path)
+                return str(found_path.relative_to(self.path))
         return None
 
     def commands(self) -> Dict[str, str]:
+        commands = self.base_commands()
+        if self.custom_commands.start:
+            commands["start"] = json.dumps(self.custom_commands.start)
+        return commands
+
+    def base_commands(self) -> Dict[str, str]:
         if self.only_build:
             return {}
         if self.framework == PythonFramework.Django:
@@ -380,7 +413,7 @@ class PythonProvider:
             migrate_cmd = '"python manage.py migrate"'
             return {"start": start_cmd, "after_deploy": migrate_cmd}
 
-        main_file = self.get_main_file()
+        main_file = self.main_file
 
         if not main_file:
             start_cmd = '"python -c \'print(\\"No start command detected, please provide a start command manually\\")\'"'
@@ -442,7 +475,13 @@ class PythonProvider:
             return {}
         # For Django projects, generate an empty env dict to surface the field
         # in the Shipit file. Other Python projects omit it by default.
-        env_vars = {"PYTHONPATH": "python_serve_path", "HOME": 'app["serve"]'}
+        python_path = "f\"{app_serve_path}:{python_serve_site_packages_path}\""
+        main_file = self.main_file
+        if main_file and main_file.startswith("src/"):
+            python_path = "f\"{app_serve_path}:{app_serve_path}/src:{python_serve_site_packages_path}\""
+        else:
+            python_path =  "f\"{app_serve_path}:{python_serve_site_packages_path}\""
+        env_vars = {"PYTHONPATH": python_path, "HOME": 'app["serve"]'}
         if self.framework == PythonFramework.Streamlit:
             env_vars["STREAMLIT_SERVER_HEADLESS"] = '"true"'
         elif self.framework == PythonFramework.MCP:

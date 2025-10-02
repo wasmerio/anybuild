@@ -10,6 +10,7 @@ from shipit.providers.base import (
     DetectResult,
     MountSpec,
     VolumeSpec,
+    CustomCommands,
 )
 from shipit.providers.registry import providers as registry_providers
 
@@ -19,10 +20,10 @@ def _providers() -> list[type[Provider]]:
     return registry_providers()
 
 
-def detect_provider(path: Path) -> Provider:
+def detect_provider(path: Path, custom_commands: CustomCommands) -> Provider:
     matches: list[tuple[type[Provider], DetectResult]] = []
     for provider_cls in _providers():
-        res = provider_cls.detect(path)
+        res = provider_cls.detect(path, custom_commands)
         if res:
             matches.append((provider_cls, res))
     if not matches:
@@ -76,9 +77,9 @@ def _emit_dependencies_declarations(
     return "\n".join(lines), serve_vars, build_vars
 
 
-def generate_shipit(path: Path) -> str:
-    provider_cls = detect_provider(path)
-    provider = provider_cls(path)
+def generate_shipit(path: Path, custom_commands: CustomCommands) -> str:
+    provider_cls = detect_provider(path, custom_commands)
+    provider = provider_cls(path, custom_commands)
 
     # Collect parts
     plan = ProviderPlan(
