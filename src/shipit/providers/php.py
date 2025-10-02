@@ -107,7 +107,7 @@ class PhpProvider:
 
     def env(self) -> Optional[Dict[str, str]]:
         return {
-            "PHP_INI_FILE": '"{}/php.ini".format(assets["serve"])',
+            "PHP_INI_SCAN_DIR": '"{}".format(assets["serve"])',
         }
     
     def services(self) -> list[ServiceSpec]:
