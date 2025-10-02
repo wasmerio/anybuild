@@ -4,7 +4,9 @@ composer = dep("composer")
 bash = dep("bash")
 
 app = mount("app")
+assets = mount("assets")
 HOME = getenv("HOME")
+
 
 serve(
   name="php-api",
@@ -13,15 +15,20 @@ serve(
   build=[
     use(php, composer),
     workdir(app["build"]),
+    copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets"),
     env(HOME=HOME, COMPOSER_FUND="0"),
     run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install"),
     copy(".", ".", ignore=[".git"])
   ],
   deps=[php, bash],
+  env = {
+    "PHP_INI_SCAN_DIR": "{}".format(assets["serve"])
+  },
   commands = {
     "start": "php -S localhost:8080 -t public"
   },
   mounts=[
-    app
+    app,
+    assets
   ],
 )

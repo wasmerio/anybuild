@@ -2,7 +2,9 @@ php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
 php = dep("php", php_version)
 
 app = mount("app")
+assets = mount("assets")
 HOME = getenv("HOME")
+
 
 serve(
   name="php-nobuild",
@@ -11,13 +13,18 @@ serve(
   build=[
     use(php),
     workdir(app["build"]),
+    copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets"),
     copy(".", ".", ignore=[".git"])
   ],
   deps=[php],
+  env = {
+    "PHP_INI_SCAN_DIR": "{}".format(assets["serve"])
+  },
   commands = {
-    "start": "php -S localhost:8080" -t .
+    "start": "php -S localhost:8080 -t ."
   },
   mounts=[
-    app
+    app,
+    assets
   ],
 )

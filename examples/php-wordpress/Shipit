@@ -1,19 +1,49 @@
-staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
-staticwebserver = dep("static-web-server", staticwebserver_version)
+php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
+php = dep("php", php_version)
+bash = dep("bash")
 
 app = mount("app")
+assets = mount("assets")
+wp_content = volume("wp-content", "{}/wp-content/".format(app["serve"]))
+database = service(
+  name="database",
+  provider="mysql"
+)
+HOME = getenv("HOME")
+wp_cli_version = getenv("SHIPIT_WPCLI_VERSION")
+if wp_cli_version:
+    wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar"
+else:
+    wp_cli_download_url = "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"
+
+
 serve(
   name="php-wordpress",
-  provider="staticfile",
+  provider="php",
+  cwd=app["serve"],
   build=[
+    use(php),
+    copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets["build"])),
+    copy("wordpress/install.sh", "{}/wordpress-install.sh".format(assets["build"]), base="assets"),
+    copy("wordpress/wp-config.php", "{}/wp-config.php".format(app["build"]), base="assets"),
     workdir(app["build"]),
+    copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets"),
     copy(".", ".", ignore=[".git"])
   ],
-  deps=[staticwebserver],
+  deps=[php, bash],
   commands = {
-    "start": "static-web-server --root={} --log-level=info".format(app["serve"])
+    "start": "php -S localhost:8080 -t .",
+    "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"]),
+    "after_deploy": "bash {}/wordpress-install.sh".format(assets["serve"])
   },
+  services=[
+    database,
+  ],
   mounts=[
-    app
+    app,
+    assets
+  ],
+  volumes=[
+    wp_content
   ],
 )
