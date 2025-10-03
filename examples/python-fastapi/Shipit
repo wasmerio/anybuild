@@ -24,7 +24,7 @@ serve(
     env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
     run(f"uv sync --compile --python python{python_version} --no-managed-python --locked", inputs=["pyproject.toml", "uv.lock", "README.md"], group="install"),
     copy("pyproject.toml", "pyproject.toml"),
-    run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,
+    run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,
     run(f"uvx pip install -r cross-requirements.txt  --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
     run("rm cross-requirements.txt") if cross_platform else None,
     path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
