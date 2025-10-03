@@ -43,6 +43,7 @@ class HugoProvider(StaticFileProvider):
 
     def build_steps(self) -> list[str]:
         return [
+            'workdir("/base")',
             'copy(".", ".", ignore=[".git"])',
             'run("hugo build --destination={}".format(app["build"]), group="build")',
         ]

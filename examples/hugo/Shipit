@@ -10,6 +10,7 @@ serve(
   cwd=app["serve"],
   build=[
     use(hugo),
+    workdir("/base"),
     copy(".", ".", ignore=[".git"]),
     run("hugo build --destination={}".format(app["build"]), group="build")
   ],

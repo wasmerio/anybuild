@@ -181,6 +181,16 @@ class Builder(Protocol):
 
 
 class DockerBuilder:
+    mise_mapper = {
+        "php": {
+            "source": "ubi:adwinying/php",
+        },
+        "composer": {
+            "source": "ubi:composer/composer",
+            "postinstall": """composer_dir=$(mise where ubi:composer/composer); ln -s "$composer_dir/composer.phar" /usr/local/bin/composer""",
+        },
+    }
+
     def __init__(self, src_dir: Path, docker_client: Optional[str] = None) -> None:
         self.src_dir = src_dir
         self.docker_file_contents = ""
@@ -342,12 +352,17 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
                 )
             self.docker_file_contents += f"RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n"
             return
+
+        mapped_dependency = self.mise_mapper.get(dependency.name, {})
+        package_name = mapped_dependency.get("source", dependency.name)
         if dependency.version:
             self.docker_file_contents += (
-                f"RUN mise use --global {dependency.name}@{dependency.version}\n"
+                f"RUN mise use --global {package_name}@{dependency.version}\n"
             )
         else:
-            self.docker_file_contents += f"RUN mise use --global {dependency.name}\n"
+            self.docker_file_contents += f"RUN mise use --global {package_name}\n"
+        if mapped_dependency.get("postinstall"):
+            self.docker_file_contents += f"RUN {mapped_dependency.get('postinstall')}\n"
 
     def build(
         self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
@@ -360,8 +375,8 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
         self.docker_file_contents += """
 RUN apt-get update \\
     && apt-get -y --no-install-recommends install \\
-        build-essential gcc make \\
-        dpkg-dev pkg-config \\
+        build-essential gcc make autoconf libtool bison \\
+        dpkg-dev pkg-config re2c locate \\
         libmariadb-dev libmariadb-dev-compat libpq-dev \\
         sudo curl ca-certificates \\
     && rm -rf /var/lib/apt/lists/*
@@ -409,7 +424,7 @@ RUN curl https://mise.run | sh
                         # Read the file content and write it to the target file
                         content_base64 = base64.b64encode(
                             (ASSETS_PATH / step.source).read_bytes()
-                        )
+                        ).decode("utf-8")
                         self.docker_file_contents += (
                             f"RUN echo '{content_base64}' | base64 -d > {step.target}\n"
                         )
