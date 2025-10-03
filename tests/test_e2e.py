@@ -31,13 +31,46 @@ class E2ECase(NamedTuple):
 @pytest.mark.parametrize(
     "case",
     [
+        # Simple PHP site that calls phpinfo()
         E2ECase(
             path="examples/php-nobuild",
             serve_pattern=(
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:8080\) started"
             ),
             http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
-        )
+        ),
+        # PHP API example with JSON at / and greeting endpoint
+        E2ECase(
+            path="examples/php-api",
+            serve_pattern=(
+                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:8080\) started"
+            ),
+            http=[
+                HTTPRequest(path="/", body_match=r"\"version\"\s*:\s*\"8\.3\.[0-9]+\""),
+                HTTPRequest(path="/api/greet/Alice", body_match=r"Hello, Alice!"),
+            ],
+        ),
+        # WordPress skeleton that echoes a simple string
+        E2ECase(
+            path="examples/php-wordpress",
+            serve_pattern=(
+                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:8080\) started"
+            ),
+            http=[HTTPRequest(path="/", body_match=r"WordPress")],
+        ),
+        # Static site copied as-is (no build step beyond copy)
+        E2ECase(
+            path="examples/static-nobuild",
+            # static-web-server banner varies; rely on HTTP check with generous pattern
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Test")],
+        ),
+        # Staticfile provider serving content under site/
+        E2ECase(
+            path="examples/staticfile",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from static site!")],
+        ),
     ],
 )
 async def test_end_to_end(case: E2ECase):
@@ -70,7 +103,7 @@ async def test_end_to_end(case: E2ECase):
         *cmd,
         cwd=str(repo_root),
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
+        stderr=asyncio.subprocess.PIPE,
         start_new_session=start_new_session,
         creationflags=creationflags,
     )
@@ -79,77 +112,81 @@ async def test_end_to_end(case: E2ECase):
     found_build = asyncio.Event()
     found_serve = asyncio.Event()
 
-    async def reader() -> None:
-        assert proc.stdout is not None
+    async def reader(label: str, stream: asyncio.StreamReader) -> None:
         while True:
-            line_b = await proc.stdout.readline()
+            line_b = await stream.readline()
             if not line_b:
                 break
             line = line_b.decode("utf-8", errors="replace")
-            output_lines.append(line)
+            output_lines.append(f"[{label}] {line}")
             if (not found_build.is_set()) and (build_phrase in line):
                 found_build.set()
             if (not found_serve.is_set()) and serve_re.search(line):
                 found_serve.set()
 
-    reader_task = asyncio.create_task(reader())
+    assert proc.stdout is not None and proc.stderr is not None
+    reader_out_task = asyncio.create_task(reader("stdout", proc.stdout))
+    reader_err_task = asyncio.create_task(reader("stderr", proc.stderr))
 
     try:
-        await asyncio.wait_for(
-            asyncio.gather(found_build.wait(), found_serve.wait()),
-            timeout=180,
-        )
-    except asyncio.TimeoutError:
-        # We'll handle assertion below after cleanup
-        pass
+        # Wait until both events are seen, the process exits, or timeout elapses.
+        loop = asyncio.get_running_loop()
+        end = loop.time() + 180
+        while loop.time() < end:
+            if found_build.is_set() and found_serve.is_set():
+                break
+            if proc.returncode is not None:
+                # Process ended early; stop waiting
+                break
+            await asyncio.sleep(0.05)
 
-    # If we saw the serve banner, exercise the HTTP endpoint before shutting
-    # down to ensure it actually serves content.
-    if found_serve.is_set():
-        for req in case.http:
-            ok = await _wait_for_http_contains(
-                host="localhost",
-                port=8080,
-                method=req.method,
-                path=req.path,
-                pattern=req.body_match,
-                timeout=20.0,
-            )
-            if not ok:
-                full_output = "".join(output_lines)
-                pytest.fail(
-                    "Server did not return expected HTTP content.\n\n"
-                    f"Expected body regex: '{req.body_match}' at path '{req.path}'\n\n"
-                    f"--- Captured output start ---\n{full_output}\n"
-                    "--- Captured output end ---"
+        # If we saw the serve banner, exercise the HTTP endpoint before shutting
+        # down to ensure it actually serves content.
+        if found_serve.is_set():
+            for req in case.http:
+                ok = await _wait_for_http_contains(
+                    host="localhost",
+                    port=8080,
+                    method=req.method,
+                    path=req.path,
+                    pattern=req.body_match,
+                    timeout=20.0,
                 )
-
-    # Terminate the server no matter what
-    try:
-        if os.name != "nt":
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-        else:
-            proc.terminate()
-    except Exception:
-        pass
-
-    # Wait briefly for process to exit, then force kill if needed
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=10)
-    except asyncio.TimeoutError:
+                if not ok:
+                    full_output = "".join(output_lines)
+                    pytest.fail(
+                        "Server did not return expected HTTP content.\n\n"
+                        f"Expected body regex: '{req.body_match}' at path '{req.path}'\n\n"
+                        f"--- Captured output start ---\n{full_output}\n"
+                        "--- Captured output end ---"
+                    )
+    finally:
+        # Try graceful shutdown first with Ctrl-C (SIGINT), then kill if needed
         try:
+            if os.name != "nt":
+                os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+            else:
+                # For Windows with CREATE_NEW_PROCESS_GROUP
+                proc.send_signal(signal.CTRL_BREAK_EVENT)
+        except Exception:
+            pass
+
+        # Wait briefly for graceful exit, then force kill if still running
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=2)
+        except asyncio.TimeoutError:
             if os.name != "nt":
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             else:
                 proc.kill()
-        except Exception:
-            pass
 
-    # Ensure reader task is finished
-    if not reader_task.done():
-        reader_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await reader_task
+        # Ensure reader tasks are finished
+        for t in (reader_out_task, reader_err_task):
+            if not t.done():
+                t.cancel()
+        for t in (reader_out_task, reader_err_task):
+            with contextlib.suppress(asyncio.CancelledError):
+                await t
 
     full_output = "".join(output_lines)
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Optional
+import json
+import yaml
 
 from .base import (
     DetectResult,
@@ -16,9 +18,17 @@ from .base import (
 
 
 class StaticFileProvider:
+    config: Optional[dict] = None
+
     def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
         self.custom_commands = custom_commands
+        if (self.path / "Staticfile").exists():
+            try:
+                self.config = yaml.safe_load((self.path / "Staticfile").read_text())
+            except yaml.YAMLError as e:
+                print(f"Error loading Staticfile: {e}")
+                pass
 
     @classmethod
     def name(cls) -> str:
@@ -58,7 +68,7 @@ class StaticFileProvider:
     def build_steps(self) -> list[str]:
         return [
             'workdir(app["build"])',
-            'copy(".", ".", ignore=[".git"])'
+            'copy({}, ".", ignore=[".git"])'.format(json.dumps(self.config and self.config.get("root") or "."))
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:
@@ -69,7 +79,7 @@ class StaticFileProvider:
 
     def commands(self) -> Dict[str, str]:
         return {
-            "start": '"static-web-server --root={} --log-level=info".format(app["serve"])'
+            "start": '"static-web-server --root={} --log-level=info --port=8080".format(app["serve"])'
         }
 
     def mounts(self) -> list[MountSpec]:

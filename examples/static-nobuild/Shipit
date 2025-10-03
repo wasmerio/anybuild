@@ -12,7 +12,7 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root={} --log-level=info".format(app["serve"])
+    "start": "static-web-server --root={} --log-level=info --port=8080".format(app["serve"])
   },
   mounts=[
     app

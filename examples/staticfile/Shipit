@@ -8,11 +8,11 @@ serve(
   cwd=app["serve"],
   build=[
     workdir(app["build"]),
-    copy(".", ".", ignore=[".git"])
+    copy("site", ".", ignore=[".git"])
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root={} --log-level=info".format(app["serve"])
+    "start": "static-web-server --root={} --log-level=info --port=8080".format(app["serve"])
   },
   mounts=[
     app
