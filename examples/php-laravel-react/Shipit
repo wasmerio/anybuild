@@ -6,6 +6,8 @@ pnpm = dep("pnpm")
 bash = dep("bash")
 
 app = mount("app")
+
+PORT = getenv("PORT") or 8080
 HOME = getenv("HOME")
 
 serve(

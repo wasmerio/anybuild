@@ -79,7 +79,7 @@ class StaticFileProvider:
 
     def commands(self) -> Dict[str, str]:
         return {
-            "start": '"static-web-server --root={} --log-level=info --port=8080".format(app["serve"])'
+            "start": '"static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT)'
         }
 
     def mounts(self) -> list[MountSpec]:

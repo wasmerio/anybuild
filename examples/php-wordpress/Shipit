@@ -3,12 +3,17 @@ php = dep("php", php_version)
 bash = dep("bash")
 
 app = mount("app")
+
 assets = mount("assets")
+
 wp_content = volume("wp-content", "{}/wp-content/".format(app["serve"]))
+
 database = service(
   name="database",
   provider="mysql"
 )
+
+PORT = getenv("PORT") or 8080
 HOME = getenv("HOME")
 wp_cli_version = getenv("SHIPIT_WPCLI_VERSION")
 if wp_cli_version:
@@ -32,7 +37,7 @@ serve(
   ],
   deps=[php, bash],
   commands = {
-    "start": "php -S localhost:8080 -t .",
+    "start": f"php -S localhost:{PORT} -t .",
     "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"]),
     "after_deploy": "bash {}/wordpress-install.sh".format(assets["serve"])
   },

@@ -119,31 +119,43 @@ def generate_shipit(path: Path, custom_commands: CustomCommands) -> str:
     mounts_block = None
     volumes_block = None
     attach_serve_names: list[str] = []
+
     if plan.mounts:
         mounts = list(filter(lambda m: m.attach_to_serve, plan.mounts))
         attach_serve_names = [m.name for m in mounts]
         mounts_block = ",\n".join([f"    {m.name}" for m in mounts])
+
     if plan.volumes:
         volumes_block = ",\n".join(
             [f"    {v.var_name or v.name}" for v in plan.volumes]
         )
 
     out: List[str] = []
+
     if dep_block:
         out.append(dep_block)
         out.append("")
+
     for m in plan.mounts:
         out.append(f"{m.name} = mount(\"{m.name}\")")
+        out.append("")
+
     if plan.volumes:
         for v in plan.volumes:
             out.append(f"{v.var_name or v.name} = volume(\"{v.name}\", {v.serve_path})")
+        out.append("")
+
     if plan.services:
         for s in plan.services:
             out.append(f"{s.name} = service(\n  name=\"{s.name}\",\n  provider=\"{s.provider}\"\n)")
+        out.append("")
+
+    out.append("PORT = getenv(\"PORT\") or 8080")
 
     if plan.declarations:
         out.append(plan.declarations)
-        out.append("")
+    
+    out.append("")
     out.append("serve(")
     out.append(f'  name="{plan.serve_name}",')
     out.append(f'  provider="{plan.provider}",')

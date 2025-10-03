@@ -4,6 +4,9 @@ npm = dep("npm")
 staticwebserver = dep("static-web-server")
 
 app = mount("app")
+
+PORT = getenv("PORT") or 8080
+
 serve(
   name="nextjs",
   provider="staticsite",

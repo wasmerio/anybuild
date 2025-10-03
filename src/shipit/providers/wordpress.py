@@ -70,7 +70,7 @@ class WordPressProvider(PhpProvider):
 
     def commands(self) -> Dict[str, str]:
         return {
-            "start": '"php -S localhost:8080 -t ."',
+            "start": 'f"php -S localhost:{PORT} -t ."',
             "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets[\"serve\"], app[\"serve\"])',
             "after_deploy": '"bash {}/wordpress-install.sh".format(assets["serve"])',
         }

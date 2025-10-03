@@ -396,20 +396,20 @@ class PythonProvider:
             if self.server == PythonServer.Daphne and self.asgi_application:
                 asgi_application = format_app_import(self.asgi_application)
                 start_cmd = (
-                    f'"python -m daphne {asgi_application} --bind 0.0.0.0 --port 8000"'
+                    f'f"python -m daphne {asgi_application} --bind 0.0.0.0 --port {{PORT}}"'
                 )
             elif self.server == PythonServer.Uvicorn:
                 if self.asgi_application:
                     asgi_application = format_app_import(self.asgi_application)
-                    start_cmd = f'"python -m uvicorn {asgi_application} --host 0.0.0.0 --port 8000"'
+                    start_cmd = f'f"python -m uvicorn {asgi_application} --host 0.0.0.0 --port {{PORT}}"'
                 elif self.wsgi_application:
                     wsgi_application = format_app_import(self.wsgi_application)
-                    start_cmd = f'"python -m uvicorn {wsgi_application} --interface=wsgi --host 0.0.0.0 --port 8000"'
+                    start_cmd = f'f"python -m uvicorn {wsgi_application} --interface=wsgi --host 0.0.0.0 --port {{PORT}}"'
             # elif self.server == PythonServer.Gunicorn:
-            #     start_cmd = f'"python -m gunicorn {self.wsgi_application} --bind 0.0.0.0 --port 8000"'
+            #     start_cmd = f'"fpython -m gunicorn {self.wsgi_application} --bind 0.0.0.0 --port {{PORT}}"'
             if not start_cmd:
                 # We run the default runserver command if no server is specified
-                start_cmd = '"python manage.py runserver 0.0.0.0:8000"'
+                start_cmd = 'f"python manage.py runserver 0.0.0.0:{PORT}"'
             migrate_cmd = '"python manage.py migrate"'
             return {"start": start_cmd, "after_deploy": migrate_cmd}
 
@@ -423,9 +423,9 @@ class PythonProvider:
             python_path = file_to_python_path(main_file)
             path = f"{python_path}:app"
             if self.server == PythonServer.Uvicorn:
-                start_cmd = f'"python -m uvicorn {path} --host 0.0.0.0 --port 8000"'
+                start_cmd = f'f"python -m uvicorn {path} --host 0.0.0.0 --port {{PORT}}"'
             elif self.server == PythonServer.Hypercorn:
-                start_cmd = f'"python -m hypercorn {path} --bind 0.0.0.0:8000"'
+                start_cmd = f'f"python -m hypercorn {path} --bind 0.0.0.0:{{PORT}}"'
             else:
                 start_cmd = '"python -c \'print(\\"No start command detected, please provide a start command manually\\")\'"'
             return {"start": start_cmd}
@@ -436,8 +436,8 @@ class PythonProvider:
         elif self.framework == PythonFramework.Flask:
             python_path = file_to_python_path(main_file)
             path = f"{python_path}:app"
-            # start_cmd = f'"python -m flask --app {path} run --debug --host 0.0.0.0 --port 8000"'
-            start_cmd = f'"python -m uvicorn {path} --interface=wsgi --host 0.0.0.0 --port 8000"'
+            # start_cmd = f'f"python -m flask --app {path} run --debug --host 0.0.0.0 --port {{PORT}}"'
+            start_cmd = f'f"python -m uvicorn {path} --interface=wsgi --host 0.0.0.0 --port {{PORT}}"'
 
         elif self.framework == PythonFramework.MCP:
             contents = (self.path / main_file).read_text()
@@ -449,7 +449,7 @@ class PythonProvider:
         elif self.framework == PythonFramework.FastHTML:
             python_path = file_to_python_path(main_file)
             path = f"{python_path}:app"
-            start_cmd = f'"python -m uvicorn {path} --host 0.0.0.0 --port 8000"'
+            start_cmd = f'f"python -m uvicorn {path} --host 0.0.0.0 --port {{PORT}}"'
 
         else:
             start_cmd = f'"python {main_file}"'
@@ -487,7 +487,7 @@ class PythonProvider:
             env_vars["STREAMLIT_SERVER_HEADLESS"] = '"true"'
         elif self.framework == PythonFramework.MCP:
             env_vars["FASTMCP_HOST"] = '"0.0.0.0"'
-            env_vars["FASTMCP_PORT"] = '"8000"'
+            env_vars["FASTMCP_PORT"] = 'PORT'
         return env_vars
     
     def services(self) -> list[ServiceSpec]:

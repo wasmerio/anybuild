@@ -6,8 +6,12 @@ staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
 app = mount("app")
+
 temp = mount("temp")
+
 local_venv = mount("local_venv")
+
+PORT = getenv("PORT") or 8080
 mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 venv = local_venv
@@ -30,7 +34,7 @@ serve(
   deps=[python, staticwebserver],
   env = {},
   commands = {
-    "start": "static-web-server --root={} --log-level=info --port=8080".format(app["serve"])
+    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT)
   },
   mounts=[
     app

@@ -5,6 +5,9 @@ staticwebserver_version = getenv("SHIPIT_SWS_VERSION")
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
 app = mount("app")
+
+PORT = getenv("PORT") or 8080
+
 serve(
   name="gatsby",
   provider="staticsite",

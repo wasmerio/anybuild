@@ -2,6 +2,9 @@ staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
 app = mount("app")
+
+PORT = getenv("PORT") or 8080
+
 serve(
   name="staticfile",
   provider="staticfile",
@@ -12,7 +15,7 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root={} --log-level=info --port=8080".format(app["serve"])
+    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT)
   },
   mounts=[
     app
