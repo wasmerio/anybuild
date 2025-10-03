@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse
 import ffmpeg
 
 # Directory to write extracted images (temporary)
-OUTPUT_DIR = Path("/app/outputs")
+OUTPUT_DIR = Path(__file__).parent / "outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(title="1s Video Screenshot (URL + ffmpeg-python)")
