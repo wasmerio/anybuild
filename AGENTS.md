@@ -21,8 +21,11 @@ for popular frameworks.
 
 ## Bash commands
 
+- `uv run shipit` – Generate the Shipit, build and serve the project.
+- `uv run shipit generate` – Generate the `Shipit` file.
 - `uv run shipit build` – Build the project defined by the `Shipit` file.
-- `uv run shipit serve` – Build and run the project.
+- `uv run shipit serve` – Serve the built project.
+- `uv run python` – Run Python
 - `uv run pytest` – Run the test suite (if tests exist).
 
 ## Testing
