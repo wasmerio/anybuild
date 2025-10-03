@@ -284,7 +284,7 @@ class PythonProvider:
         if not self.only_build:
             steps = ['workdir(app["build"])']
         else:
-            steps = []
+            steps = ['workdir("/base")']
 
         extra_deps = ", ".join([f"{dep}" for dep in self.extra_dependencies])
         has_requirements = _exists(self.path, "requirements.txt")
@@ -337,7 +337,7 @@ class PythonProvider:
                 ]
             if not self.only_build:
                 steps += [
-                    'run(f"uv pip compile requirements.txt --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url -o cross-requirements.txt", inputs=["requirements.txt"], outputs=["cross-requirements.txt"]) if cross_platform else None',
+                    'run(f"uv pip compile requirements.txt --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", inputs=["requirements.txt"], outputs=["cross-requirements.txt"]) if cross_platform else None',
                     f'run(f"uvx pip install -r cross-requirements.txt {extra_deps} --target {{python_cross_packages_path}} --platform {{cross_platform}} --only-binary=:all: --python-version={{python_version}} --compile") if cross_platform else None',
                     'run("rm cross-requirements.txt") if cross_platform else None',
                 ]

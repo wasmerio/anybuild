@@ -18,6 +18,7 @@ serve(
   cwd=app["serve"],
   build=[
     use(python, uv),
+    workdir("/base"),
     env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
     run(f"uv init --no-workspace --no-managed-python --python python{python_version}", inputs=[], outputs=["uv.lock"], group="install"),
     run("uv add mkdocs", group="install"),

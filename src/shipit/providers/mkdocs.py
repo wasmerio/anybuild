@@ -30,6 +30,8 @@ class MkdocsProvider(StaticFileProvider):
     def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
         if _exists(path, "mkdocs.yml", "mkdocs.yaml"):
             return DetectResult(cls.name(), 85)
+        if custom_commands.build and custom_commands.build.startswith("mkdocs "):
+            return DetectResult(cls.name(), 85)
         return None
 
     def initialize(self) -> None:
