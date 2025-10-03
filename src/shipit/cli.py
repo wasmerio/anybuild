@@ -446,12 +446,6 @@ Shipit
     def get_path(self) -> Path:
         return Path("/")
 
-    def get_build_path(self) -> Path:
-        return self.get_path() / "app"
-
-    def get_serve_path(self) -> Path:
-        return self.get_path() / "serve"
-
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         raise NotImplementedError
 
@@ -461,13 +455,12 @@ Shipit
         for dep in serve.deps:
             self.add_dependency(dep)
 
-        build_path = self.get_build_path()
         for command in serve.commands:
             console.print(f"* {command}")
             command_path = serve_command_path / command
             self.create_file(
                 command_path,
-                f"#!/bin/bash\ncd {build_path}\n{serve.commands[command]}",
+                f"#!/bin/bash\ncd {serve.cwd}\n{serve.commands[command]}",
                 mode=0o755,
             )
 
@@ -480,6 +473,7 @@ class LocalBuilder:
     def __init__(self, src_dir: Path) -> None:
         self.src_dir = src_dir
         self.local_path = self.src_dir / ".shipit" / "local"
+        self.serve_bin_path = self.local_path / "serve" / "bin"
         self.prepare_bash_script = self.local_path / "prepare" / "prepare.sh"
         self.build_path = self.local_path / "build"
         self.workdir = self.build_path
@@ -628,12 +622,6 @@ class LocalBuilder:
     def get_path(self) -> Path:
         return self.local_path
 
-    def get_build_path(self) -> Path:
-        return self.get_path() / "build"
-
-    def get_serve_path(self) -> Path:
-        return self.get_path() / "serve"
-
     def build_prepare(self, serve: Serve) -> None:
         self.prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
         commands: List[str] = []
@@ -676,14 +664,13 @@ class LocalBuilder:
     def build_serve(self, serve: Serve) -> None:
         # Remember serve configuration for run-time
         console.print("\n[bold]Building serve[/bold]")
-        serve_command_path = self.get_serve_path() / "bin"
-        serve_command_path.mkdir(parents=True, exist_ok=False)
+        self.serve_bin_path.mkdir(parents=True, exist_ok=False)
         path = self.get_path() / ".path"
         path_text = path.read_text()
         console.print(f"[bold]Serve Commands:[/bold]")
         for command in serve.commands:
             console.print(f"* {command}")
-            command_path = serve_command_path / command
+            command_path = self.serve_bin_path / command
             env_vars = ""
             if serve.env:
                 env_vars = " ".join([f"{k}={v}" for k, v in serve.env.items()])
@@ -707,8 +694,7 @@ class LocalBuilder:
 
     def run_serve_command(self, command: str) -> None:
         console.print(f"\n[bold]Running {command} command[/bold]")
-        base_path = self.get_serve_path() / "bin"
-        command_path = base_path / command
+        command_path = self.serve_bin_path / command
         sh.Command(str(command_path))(_out=write_stdout, _err=write_stderr)
 
 
@@ -807,9 +793,6 @@ class WasmerBuilder:
         self, env: Dict[str, str], mounts: List[Mount], build: List[Step]
     ) -> None:
         return self.inner_builder.build(env, mounts, build)
-
-    def get_build_path(self) -> Path:
-        return Path("/app")
 
     def build_prepare(self, serve: Serve) -> None:
         print("Building prepare")
