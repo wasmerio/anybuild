@@ -148,10 +148,12 @@ class Build:
 
 def write_stdout(line: str) -> None:
     sys.stdout.write(line)  # print to console
+    sys.stdout.flush()
 
 
 def write_stderr(line: str) -> None:
     sys.stderr.write(line)  # print to console
+    sys.stderr.flush()
 
 
 class MapperItem(TypedDict):
@@ -1687,7 +1689,7 @@ def main() -> None:
         app()
     except Exception as e:
         console.print(f"[bold red]{type(e).__name__}[/bold red]: {e}")
-        raise e
+        # raise e
 
 
 if __name__ == "__main__":

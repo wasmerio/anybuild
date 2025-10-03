@@ -22,6 +22,7 @@ class HTTPRequest:
 
 class E2ECase(NamedTuple):
     path: str
+    port: int
     serve_pattern: str
     http: List[HTTPRequest]
 
@@ -34,6 +35,7 @@ class E2ECase(NamedTuple):
         # Simple PHP site that calls phpinfo()
         E2ECase(
             path="examples/php-nobuild",
+            port=8080,
             serve_pattern=(
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:8080\) started"
             ),
@@ -42,6 +44,7 @@ class E2ECase(NamedTuple):
         # PHP API example with JSON at / and greeting endpoint
         E2ECase(
             path="examples/php-api",
+            port=8080,
             serve_pattern=(
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:8080\) started"
             ),
@@ -53,6 +56,7 @@ class E2ECase(NamedTuple):
         # WordPress skeleton that echoes a simple string
         E2ECase(
             path="examples/php-wordpress",
+            port=8080,
             serve_pattern=(
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:8080\) started"
             ),
@@ -61,6 +65,7 @@ class E2ECase(NamedTuple):
         # Static site copied as-is (no build step beyond copy)
         E2ECase(
             path="examples/static-nobuild",
+            port=8080,
             # static-web-server banner varies; rely on HTTP check with generous pattern
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Test")],
@@ -68,26 +73,86 @@ class E2ECase(NamedTuple):
         # Staticfile provider serving content under site/
         E2ECase(
             path="examples/staticfile",
+            port=8080,
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Hello from static site!")],
         ),
         # Hugo static site (built via Hugo, served with static-web-server)
         E2ECase(
             path="examples/hugo",
+            port=8080,
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"My New Hugo Site")],
         ),
         # MkDocs site (built with mkdocs, served with static-web-server)
         E2ECase(
             path="examples/mkdocs",
+            port=8080,
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Welcome to MkDocs")],
         ),
         # MkDocs with plugins
         E2ECase(
             path="examples/mkdocs-with-plugins",
+            port=8080,
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Welcome to MkDocs with Plugins")],
+        ),
+        # Python FastAPI app on Uvicorn
+        E2ECase(
+            path="examples/python-fastapi",
+            port=8000,
+            serve_pattern=r"Uvicorn running on .*",
+            http=[HTTPRequest(path="/", body_match=r"Hello World from fastapi!")],
+        ),
+        # Python Flask app served via Uvicorn WSGI
+        E2ECase(
+            path="examples/python-flask",
+            port=8000,
+            serve_pattern=r"Uvicorn running on .*",
+            http=[HTTPRequest(path="/", body_match=r"Welcome to Flask")],
+        ),
+        # Python Django via Uvicorn WSGI (check admin login)
+        E2ECase(
+            path="examples/python-django",
+            port=8000,
+            serve_pattern=r"Uvicorn running on .*",
+            http=[HTTPRequest(path="/", body_match=r"Django")],
+        ),
+        # Python ffmpeg demo (FastAPI), homepage is static HTML form
+        E2ECase(
+            path="examples/python-ffmpeg",
+            port=8000,
+            serve_pattern=r"Uvicorn running on .*",
+            http=[HTTPRequest(path="/", body_match=r"Take screenshot at 1s")],
+        ),
+        # Python Pillow demo (FastAPI), homepage has form title
+        E2ECase(
+            path="examples/python-pillow",
+            port=8000,
+            serve_pattern=r"Uvicorn running on .*",
+            http=[HTTPRequest(path="/", body_match=r"Image Crop\s*&\s*Rotate")],
+        ),
+        # Python Pandoc demo: app may require pandoc binary; only assert serve started
+        E2ECase(
+            path="examples/python-pandoc",
+            port=8000,
+            serve_pattern=r"Uvicorn running on .*",
+            http=[],
+        ),
+        # Python Procfile demo using python -m http.server
+        E2ECase(
+            path="examples/python-procfile",
+            port=8000,
+            serve_pattern=r"Serving HTTP on .*",
+            http=[HTTPRequest(path="/", body_match=r"Test")],
+        ),
+        # Python Streamlit app
+        E2ECase(
+            path="examples/python-streamlit",
+            port=8000,
+            serve_pattern=r".*You can now view your Streamlit app in your browser.*",
+            http=[HTTPRequest(path="/", body_match=r"Streamlit")],
         ),
     ],
 )
@@ -105,6 +170,8 @@ async def test_end_to_end(case: E2ECase):
         case.path,
         "--skip-prepare",
         "--start",
+        "--wasmer",
+        "--docker",
         "--regenerate",
     ]
 
@@ -131,11 +198,9 @@ async def test_end_to_end(case: E2ECase):
     found_serve = asyncio.Event()
 
     async def reader(label: str, stream: asyncio.StreamReader) -> None:
-        while True:
-            line_b = await stream.readline()
-            if not line_b:
-                break
-            line = line_b.decode("utf-8", errors="replace")
+        async for line in stream:
+            line = line.decode("utf-8", errors="replace")
+            print(f"[{label}] {line}", end='')
             output_lines.append(f"[{label}] {line}")
             if (not found_build.is_set()) and (build_phrase in line):
                 found_build.set()
@@ -164,7 +229,7 @@ async def test_end_to_end(case: E2ECase):
             for req in case.http:
                 ok = await _wait_for_http_contains(
                     host="localhost",
-                    port=8080,
+                    port=case.port,
                     method=req.method,
                     path=req.path,
                     pattern=req.body_match,
