@@ -35,5 +35,10 @@ only-include = ["src/shipit", "tests"]
 
 [tool.uv]
 dev-dependencies = [
+    "aiohttp>=3.12.15",
     "pytest>=8.2",
+    "pytest-asyncio>=1.2.0",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
