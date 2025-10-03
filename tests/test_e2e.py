@@ -71,6 +71,24 @@ class E2ECase(NamedTuple):
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Hello from static site!")],
         ),
+        # Hugo static site (built via Hugo, served with static-web-server)
+        E2ECase(
+            path="examples/hugo",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"My New Hugo Site")],
+        ),
+        # MkDocs site (built with mkdocs, served with static-web-server)
+        E2ECase(
+            path="examples/mkdocs",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Welcome to MkDocs")],
+        ),
+        # MkDocs with plugins
+        E2ECase(
+            path="examples/mkdocs-with-plugins",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Welcome to MkDocs with Plugins")],
+        ),
     ],
 )
 async def test_end_to_end(case: E2ECase):

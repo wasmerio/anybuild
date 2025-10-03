@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from shipit.generator import generate_shipit
+from shipit.procfile import Procfile
+from shipit.providers.base import CustomCommands
 
 
 def _example_dirs_with_shipit() -> list[Path]:
@@ -25,7 +27,12 @@ def test_generate_shipit_matches_example(example_dir: Path) -> None:
     This validates provider detection and the Shipit generator formatting for
     each example that includes a `Shipit` file.
     """
-    generated = generate_shipit(example_dir)
+    custom_commands = CustomCommands()
+    if (example_dir / "Procfile").exists():
+        procfile = Procfile.loads((example_dir / "Procfile").read_text())
+        custom_commands.start = procfile.get_start_command()
+
+    generated = generate_shipit(example_dir, custom_commands=custom_commands)
     expected = (example_dir / "Shipit").read_text()
     # Use raw assert to let pytest show a unified diff on mismatch
     assert generated == expected
