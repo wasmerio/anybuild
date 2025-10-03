@@ -11,6 +11,13 @@ import pytest
 import shutil
 import contextlib
 import aiohttp
+from enum import Enum
+
+
+class BuildMode(Enum):
+    Wasmer = "wasmer"
+    WasmerAndDocker = "docker"
+    Local = "local"
 
 
 @dataclass(frozen=True)
@@ -156,7 +163,8 @@ class E2ECase(NamedTuple):
         ),
     ],
 )
-async def test_end_to_end(case: E2ECase):
+@pytest.mark.parametrize("build_mode", [BuildMode.Wasmer, BuildMode.WasmerAndDocker, BuildMode.Local])
+async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     # Skip if `uv` is not available in PATH
     if not shutil.which("uv"):
         pytest.skip("`uv` is not available in PATH")
@@ -170,10 +178,18 @@ async def test_end_to_end(case: E2ECase):
         case.path,
         "--skip-prepare",
         "--start",
-        "--wasmer",
-        "--docker",
+        # "--wasmer",
+        # "--docker",
         "--regenerate",
     ]
+    if build_mode == BuildMode.Wasmer:
+        cmd.append("--wasmer")
+    elif build_mode == BuildMode.WasmerAndDocker:
+        cmd.append("--wasmer")
+        cmd.append("--docker")
+    elif build_mode == BuildMode.Local:
+        # The default
+        pass
 
     build_phrase = "Build complete ✅"
     serve_re = re.compile(case.serve_pattern)

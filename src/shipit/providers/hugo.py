@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists, ServiceSpec, VolumeSpec, CustomCommands
+from .base import DetectResult, DependencySpec, Provider, _exists, ServiceSpec, VolumeSpec, CustomCommands, MountSpec
 from .staticfile import StaticFileProvider
 
 class HugoProvider(StaticFileProvider):
@@ -43,11 +43,14 @@ class HugoProvider(StaticFileProvider):
 
     def build_steps(self) -> list[str]:
         return [
-            'workdir("/base")',
+            'workdir(temp["build"])',
             'copy(".", ".", ignore=[".git"])',
             'run("hugo build --destination={}".format(app["build"]), group="build")',
         ]
-    
+
+    def mounts(self) -> list[MountSpec]:
+        return [MountSpec("temp", attach_to_serve=False), *super().mounts()]
+
     def services(self) -> list[ServiceSpec]:
         return []
 

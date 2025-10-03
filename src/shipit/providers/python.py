@@ -284,7 +284,7 @@ class PythonProvider:
         if not self.only_build:
             steps = ['workdir(app["build"])']
         else:
-            steps = ['workdir("/base")']
+            steps = ['workdir(temp["build"])']
 
         extra_deps = ", ".join([f"{dep}" for dep in self.extra_dependencies])
         has_requirements = _exists(self.path, "requirements.txt")
@@ -459,6 +459,7 @@ class PythonProvider:
     def mounts(self) -> list[MountSpec]:
         if self.only_build:
             return [
+                MountSpec("temp", attach_to_serve=False),
                 MountSpec("local_venv", attach_to_serve=False),
             ]
         return [

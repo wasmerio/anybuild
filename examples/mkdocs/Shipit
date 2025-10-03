@@ -6,6 +6,7 @@ staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
 app = mount("app")
+temp = mount("temp")
 local_venv = mount("local_venv")
 mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
@@ -18,7 +19,7 @@ serve(
   cwd=app["serve"],
   build=[
     use(python, uv),
-    workdir("/base"),
+    workdir(temp["build"]),
     env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
     run(f"uv init --no-workspace --no-managed-python --python python{python_version}", inputs=[], outputs=["uv.lock"], group="install"),
     run("uv add mkdocs", group="install"),

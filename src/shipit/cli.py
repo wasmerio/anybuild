@@ -514,6 +514,8 @@ class LocalBuilder:
         elif isinstance(step, WorkdirStep):
             console.print(f"[bold]Working in {step.path}[/bold]")
             self.workdir = step.path
+            # We make sure the dir exists
+            step.path.mkdir(parents=True, exist_ok=True)
         elif isinstance(step, RunStep):
             extra = ""
             if step.inputs:

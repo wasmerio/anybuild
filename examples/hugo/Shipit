@@ -3,6 +3,7 @@ hugo = dep("hugo", hugo_version)
 staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
+temp = mount("temp")
 app = mount("app")
 serve(
   name="hugo",
@@ -10,7 +11,7 @@ serve(
   cwd=app["serve"],
   build=[
     use(hugo),
-    workdir("/base"),
+    workdir(temp["build"]),
     copy(".", ".", ignore=[".git"]),
     run("hugo build --destination={}".format(app["build"]), group="build")
   ],
