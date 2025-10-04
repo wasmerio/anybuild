@@ -34,6 +34,12 @@ class E2ECase(NamedTuple):
     serve_pattern: str
     http: List[HTTPRequest]
 
+    def __str__(self):
+        return self.path
+
+    def __repr__(self):
+        return self.path
+
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
@@ -147,6 +153,7 @@ class E2ECase(NamedTuple):
             http=[HTTPRequest(path="/", body_match=r"Streamlit")],
         ),
     ],
+    ids=lambda c: str(c),
 )
 @pytest.mark.parametrize(
     "build_mode",
