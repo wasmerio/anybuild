@@ -20,7 +20,7 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root /app/public"
+    "start": "static-web-server --root /app/public".replace("$PORT", PORT)
   },
   mounts=[
     app

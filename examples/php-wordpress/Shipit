@@ -37,9 +37,9 @@ serve(
   ],
   deps=[php, bash],
   commands = {
-    "start": f"php -S localhost:{PORT} -t .",
-    "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"]),
-    "after_deploy": "bash {}/wordpress-install.sh".format(assets["serve"])
+    "start": f"php -S localhost:{PORT} -t .".replace("$PORT", PORT),
+    "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"]).replace("$PORT", PORT),
+    "after_deploy": "bash {}/wordpress-install.sh".format(assets["serve"]).replace("$PORT", PORT)
   },
   services=[
     database,

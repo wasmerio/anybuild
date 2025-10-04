@@ -109,7 +109,7 @@ def generate_shipit(path: Path, custom_commands: CustomCommands) -> str:
 
     build_steps_block = ",\n".join([f"    {s}" for s in build_steps])
     deps_array = ", ".join(serve_dep_vars)
-    commands_lines = ",\n".join([f'    "{k}": {v}' for k, v in plan.commands.items()])
+    commands_lines = ",\n".join([f'    "{k}": {v}.replace("$PORT", PORT)' for k, v in plan.commands.items()])
     env_lines = None
     if plan.env is not None:
         if len(plan.env) == 0:

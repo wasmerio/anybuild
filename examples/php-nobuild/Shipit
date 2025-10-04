@@ -24,7 +24,7 @@ serve(
     "PHP_INI_SCAN_DIR": "{}".format(assets["serve"])
   },
   commands = {
-    "start": f"php -S localhost:{PORT} -t ."
+    "start": f"php -S localhost:{PORT} -t .".replace("$PORT", PORT)
   },
   mounts=[
     app,

@@ -21,7 +21,7 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT)
+    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT)
   },
   mounts=[
     app

@@ -34,8 +34,8 @@ serve(
     run("php artisan view:cache")
   ],
   commands = {
-    "start": "php -S localhost:8080 -t public",
-    "after_deploy": "php artisan migrate"
+    "start": f"php -S localhost:{PORT} -t public".replace("$PORT", PORT),
+    "after_deploy": "php artisan migrate".replace("$PORT", PORT)
   },
   mounts=[
     app

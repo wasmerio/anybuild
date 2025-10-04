@@ -431,7 +431,7 @@ class PythonProvider:
             return {"start": start_cmd}
 
         elif self.framework == PythonFramework.Streamlit:
-            start_cmd = f'"python -m streamlit run {main_file} --server.port 8000 --server.address 0.0.0.0 --server.headless true"'
+            start_cmd = f'f"python -m streamlit run {main_file} --server.port {{PORT}} --server.address 0.0.0.0 --server.headless true"'
 
         elif self.framework == PythonFramework.Flask:
             python_path = file_to_python_path(main_file)

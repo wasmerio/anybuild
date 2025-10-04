@@ -47,7 +47,7 @@ serve(
     "STREAMLIT_SERVER_HEADLESS": "true"
   },
   commands = {
-    "start": "python -m streamlit run streamlit_app.py --server.port 8000 --server.address 0.0.0.0 --server.headless true"
+    "start": f"python -m streamlit run streamlit_app.py --server.port {PORT} --server.address 0.0.0.0 --server.headless true".replace("$PORT", PORT)
   },
   mounts=[
     app,
