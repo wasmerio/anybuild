@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Any, Dict, Optional, Set
 from enum import Enum
 from functools import cached_property
+
+try:  # pragma: no cover - Python >=3.11
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover
+    tomllib = None  # type: ignore[assignment]
 
 from .base import (
     DetectResult,
@@ -17,6 +23,135 @@ from .base import (
     VolumeSpec,
     CustomCommands,
 )
+
+
+_SINGLE_FILE_IGNORE_DIRS = {
+    "__pycache__",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "env",
+    "node_modules",
+    "venv",
+}
+
+
+_UV_SCRIPT_BLOCK_RE = re.compile(
+    r"^#\s*///\s*script\s*$([\s\S]*?)^#\s*///\s*$",
+    re.MULTILINE,
+)
+
+
+def _iter_project_python_files(path: Path) -> list[Path]:
+    python_files: list[Path] = []
+    for candidate in path.rglob("*.py"):
+        try:
+            relative = candidate.relative_to(path)
+        except ValueError:
+            continue
+        if any(
+            part in _SINGLE_FILE_IGNORE_DIRS or part.startswith(".")
+            for part in relative.parts[:-1]
+        ):
+            continue
+        python_files.append(candidate)
+    return python_files
+
+
+def _is_single_file_project(path: Path) -> bool:
+    if _exists(path, "pyproject.toml", "requirements.txt"):
+        return False
+    python_files = _iter_project_python_files(path)
+    return len(python_files) == 1
+
+
+def _parse_uv_script_metadata(text: str) -> tuple[list[str], Optional[str]]:
+    match = _UV_SCRIPT_BLOCK_RE.search(text)
+    if not match:
+        return [], None
+    block = match.group(1)
+    comment_lines: list[str] = []
+    for raw_line in block.splitlines():
+        stripped = raw_line.lstrip()
+        if not stripped.startswith("#"):
+            continue
+        comment_lines.append(stripped[1:].lstrip())
+    cleaned = "\n".join(comment_lines).strip()
+    if not cleaned:
+        return [], None
+
+    metadata: dict[str, Any] = {}
+    if tomllib:
+        try:
+            metadata = tomllib.loads(cleaned)
+        except Exception:
+            metadata = {}
+    if not metadata:
+        metadata = {}
+        dep_match = re.search(r"dependencies\s*=\s*(\[[^\]]*\])", cleaned, re.DOTALL)
+        if dep_match:
+            try:
+                metadata["dependencies"] = ast.literal_eval(dep_match.group(1))
+            except Exception:
+                metadata["dependencies"] = []
+        python_match = re.search(r"python\s*=\s*([^\n]+)", cleaned)
+        if python_match:
+            value = python_match.group(1).strip()
+            try:
+                metadata["python"] = ast.literal_eval(value)
+            except Exception:
+                metadata["python"] = value.strip('\'"')
+
+    dependencies: list[str] = []
+    python_requirement: Optional[str] = None
+    deps = metadata.get("dependencies")
+    if isinstance(deps, list):
+        dependencies = [str(dep) for dep in deps if isinstance(dep, str)]
+    python_value = metadata.get("python")
+    if isinstance(python_value, str):
+        python_requirement = python_value.strip()
+    elif isinstance(python_value, (int, float)):
+        python_requirement = str(python_value)
+    return dependencies, python_requirement
+
+
+def _normalize_python_requirement(requirement: Optional[str]) -> Optional[str]:
+    if requirement is None:
+        return None
+    requirement = requirement.strip()
+    if not requirement:
+        return None
+    if requirement[0] in {"<", ">", "=", "!"}:
+        return requirement
+    return f">={requirement}"
+
+
+def _python_version_from_requirement(requirement: str) -> Optional[str]:
+    match = re.search(r"\d+(?:\.\d+)*", requirement)
+    if match:
+        return match.group(0)
+    return None
+
+
+def _sanitize_project_name(path: Path) -> str:
+    candidate = re.sub(r"[^a-zA-Z0-9_-]+", "-", path.name.lower())
+    candidate = candidate.strip("-")
+    return candidate or "app"
+
+
+_DEFAULT_MAIN_FILE_PATTERNS = [
+    "main.py",
+    "app.py",
+    "streamlit_app.py",
+    "Home.py",
+    "*_app.py",
+]
 
 
 class PythonFramework(Enum):
@@ -70,9 +205,15 @@ class PythonProvider:
         self.only_build = only_build
         self.custom_commands = custom_commands
         self.extra_dependencies = extra_dependencies or set()
+        self.single_file_main: Optional[str] = None
+        self.is_single_file_app = False
 
         if self.only_build:
             return
+
+        if _is_single_file_project(self.path):
+            self.is_single_file_app = True
+            self._prepare_single_file_app()
 
         pg_deps = {
             "asyncpg",
@@ -188,6 +329,76 @@ class PythonProvider:
             database = None
         self.database = database
 
+    def _prepare_single_file_app(self) -> None:
+        python_files = _iter_project_python_files(self.path)
+        if len(python_files) != 1:
+            return
+        script_path = python_files[0]
+        script_text = script_path.read_text()
+        dependencies, python_requirement = _parse_uv_script_metadata(script_text)
+        target_path = self._single_file_destination(script_path)
+        if target_path != script_path:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            if target_path.exists():
+                target_path.unlink()
+            script_path.replace(target_path)
+            script_path = target_path
+        self.single_file_main = str(script_path.relative_to(self.path))
+
+        normalized_requirement = _normalize_python_requirement(python_requirement)
+        if normalized_requirement:
+            version = _python_version_from_requirement(normalized_requirement)
+            if version:
+                self.default_python_version = version
+
+        if dependencies:
+            self._ensure_pyproject_with_dependencies(dependencies, normalized_requirement)
+
+    def _single_file_destination(self, script_path: Path) -> Path:
+        try:
+            relative = script_path.relative_to(self.path)
+        except ValueError:
+            return script_path
+
+        if len(relative.parts) == 1:
+            name = relative.name
+            for pattern in _DEFAULT_MAIN_FILE_PATTERNS:
+                if "*" in pattern:
+                    if Path(name).match(pattern):
+                        return script_path
+                elif name == pattern:
+                    return script_path
+
+        for candidate_name in ("app.py", "main.py"):
+            candidate = self.path / candidate_name
+            if candidate == script_path:
+                return script_path
+            if not candidate.exists():
+                return candidate
+        return script_path
+
+    def _ensure_pyproject_with_dependencies(
+        self,
+        dependencies: list[str],
+        python_requirement: Optional[str],
+    ) -> None:
+        pyproject_path = self.path / "pyproject.toml"
+        if pyproject_path.exists():
+            return
+        lines = [
+            "[project]",
+            f'name = "{_sanitize_project_name(self.path)}"',
+            'version = "0.1.0"',
+        ]
+        if python_requirement:
+            lines.append(f'requires-python = "{python_requirement}"')
+        lines.append("dependencies = [")
+        for dep in dependencies:
+            lines.append(f'    "{dep}",')
+        lines.append("]")
+        lines.append("")
+        pyproject_path.write_text("\n".join(lines))
+
     def check_deps(self, *deps: str) -> Set[str]:
         deps = set([dep.lower() for dep in deps])
         initial_deps = set(deps)
@@ -215,8 +426,15 @@ class PythonProvider:
             if _exists(path, "manage.py"):
                 return DetectResult(cls.name(), 70)
             return DetectResult(cls.name(), 50)
+        if _is_single_file_project(path):
+            return DetectResult(cls.name(), 40)
         if custom_commands.start:
-            if custom_commands.start.startswith("python ") or custom_commands.start.startswith("uv ") or custom_commands.start.startswith("uvicorn "):
+            start = custom_commands.start
+            if (
+                start.startswith("python ")
+                or start.startswith("uv ")
+                or start.startswith("uvicorn ")
+            ):
                 return DetectResult(cls.name(), 80)
         return None
 
@@ -365,7 +583,9 @@ class PythonProvider:
 
     @cached_property
     def main_file(self) -> Optional[str]:
-        paths_to_try = ["main.py", "app.py", "streamlit_app.py", "Home.py", "*_app.py"]
+        if self.single_file_main:
+            return self.single_file_main
+        paths_to_try = list(_DEFAULT_MAIN_FILE_PATTERNS)
         for path in paths_to_try:
             if "*" in path:
                 continue  # This is for the glob finder
