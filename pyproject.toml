@@ -38,6 +38,7 @@ dev-dependencies = [
     "aiohttp>=3.12.15",
     "pytest>=8.2",
     "pytest-asyncio>=1.2.0",
+    "pytest-rerunfailures>=16.0.1",
     "pytest-xdist>=3.8.0",
 ]
 
