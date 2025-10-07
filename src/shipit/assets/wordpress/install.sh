@@ -12,7 +12,7 @@ echo "" > wp-content/upgrade/.keep
 
 echo "Installing WordPress core..."
 
-wp-cli core install \
+wp core install \
   --url="$WASMER_APP_URL"  \
   --title="$WP_SITE_TITLE" \
   --admin_user="$WP_ADMIN_USERNAME" \
@@ -21,13 +21,8 @@ wp-cli core install \
   --locale="$WP_LOCALE"
 
 
-if [ -z "$WASMER_FIRST_DEPLOYMENT" ]; then
-    wp-cli core update-db
-fi    
-
-echo "Installing theme..."
-wp-cli wasmer-aio-install install \
-  --locale="$WP_LOCALE" \
-  --theme=twentytwentyfive || true
+if [ -z "$WP_UPDATE_DB" ]; then
+    wp core update-db
+fi
 
 echo "Installation complete"

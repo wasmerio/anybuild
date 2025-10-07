@@ -33,6 +33,7 @@ class E2ECase(NamedTuple):
     path: str
     serve_pattern: str
     http: List[HTTPRequest]
+    use_random_port: bool = True
 
     def __str__(self):
         return self.path
@@ -53,6 +54,15 @@ class E2ECase(NamedTuple):
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
             ),
             http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
+        ),
+        # Simple PHP site that calls phpinfo() with no port
+        E2ECase(
+            path="examples/php-nobuild",
+            serve_pattern=(
+                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+            ),
+            http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
+            use_random_port=False,
         ),
         # PHP API example with JSON at / and greeting endpoint
         E2ECase(
@@ -200,12 +210,17 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
         subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     )
 
-    port = get_free_port()
+    env = os.environ.copy()
+    if case.use_random_port:
+        port = get_free_port()
+        env["PORT"] = str(port)
+    else:
+        port = 8080 # This is the default port if not specified
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=str(repo_root),
-        env={"PORT": str(port), **os.environ},
+        env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         start_new_session=start_new_session,
