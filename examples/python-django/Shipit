@@ -14,7 +14,7 @@ database = service(
   provider="mysql"
 )
 
-PORT = getenv("PORT") or 8080
+PORT = getenv("PORT") or"8080"
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]

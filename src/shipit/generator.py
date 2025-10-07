@@ -150,7 +150,7 @@ def generate_shipit(path: Path, custom_commands: CustomCommands) -> str:
             out.append(f"{s.name} = service(\n  name=\"{s.name}\",\n  provider=\"{s.provider}\"\n)")
         out.append("")
 
-    out.append("PORT = getenv(\"PORT\") or 8080")
+    out.append("PORT = getenv(\"PORT\") or\"8080\"")
 
     if plan.declarations:
         out.append(plan.declarations)

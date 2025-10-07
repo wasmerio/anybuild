@@ -13,7 +13,7 @@ database = service(
   provider="mysql"
 )
 
-PORT = getenv("PORT") or 8080
+PORT = getenv("PORT") or"8080"
 HOME = getenv("HOME")
 wp_cli_version = getenv("SHIPIT_WPCLI_VERSION")
 if wp_cli_version:

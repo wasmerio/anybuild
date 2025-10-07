@@ -11,7 +11,7 @@ temp = mount("temp")
 
 local_venv = mount("local_venv")
 
-PORT = getenv("PORT") or 8080
+PORT = getenv("PORT") or"8080"
 mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 venv = local_venv
