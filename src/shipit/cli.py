@@ -305,7 +305,7 @@ class DockerBuilder:
             image_name,
             command,
             *(extra_args or []),
-            _env=os.environ,  # Pass the current environment variables to the Docker client
+            _env={"DOCKER_BUILDKIT": "1", **os.environ},  # Pass the current environment variables to the Docker client
             _out=write_stdout,
             _err=write_stderr,
         )
@@ -370,7 +370,8 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
         base_path = self.docker_path
         shutil.rmtree(base_path, ignore_errors=True)
         base_path.mkdir(parents=True, exist_ok=True)
-        self.docker_file_contents = "FROM debian:trixie-slim AS build\n"
+        self.docker_file_contents = "# syntax=docker/dockerfile:1.7-labs\n"
+        self.docker_file_contents += "FROM debian:trixie-slim AS build\n"
 
         self.docker_file_contents += """
 RUN apt-get update \\
@@ -378,6 +379,8 @@ RUN apt-get update \\
         build-essential gcc make autoconf libtool bison \\
         dpkg-dev pkg-config re2c locate \\
         libmariadb-dev libmariadb-dev-compat libpq-dev \\
+        libvips-dev default-libmysqlclient-dev libmagickwand-dev \\
+        libicu-dev libxml2-dev libxslt-dev \\
         sudo curl ca-certificates \\
     && rm -rf /var/lib/apt/lists/*
 
@@ -435,7 +438,11 @@ RUN curl https://mise.run | sh
                     else:
                         raise Exception(f"Asset {step.source} does not exist")
                 else:
-                    self.docker_file_contents += f"COPY {step.source} {step.target}\n"
+                    if step.ignore:
+                        exclude = " \\\n" +" \\\n".join([f"  --exclude={ignore}" for ignore in step.ignore]) + " \\\n "
+                    else:
+                        exclude = ""
+                    self.docker_file_contents += f"COPY{exclude} {step.source} {step.target}\n"
             elif isinstance(step, EnvStep):
                 env_vars = " ".join(
                     [f"{key}={value}" for key, value in step.variables.items()]
