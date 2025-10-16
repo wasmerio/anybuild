@@ -821,7 +821,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "aiohttp", specifier = ">=3.12.15" },
-    { name = "pytest", specifier = ">=8.2" },
+    { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-rerunfailures", specifier = ">=16.0.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
