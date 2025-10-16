@@ -19,6 +19,8 @@ from .base import (
 
 class StaticFileProvider:
     config: Optional[dict] = None
+    path: Path
+    custom_commands: CustomCommands
 
     def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path

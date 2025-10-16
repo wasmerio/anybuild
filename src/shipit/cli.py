@@ -538,9 +538,10 @@ class LocalBuilder:
             exe = shutil.which(program, path=PATH)
             if not exe:
                 raise Exception(f"Program is not installed: {program}")
-            cmd = sh.Command(exe)  # "grep"
+            cmd = sh.Command("bash")  # "grep"
             result = cmd(
-                *parts[1:],
+                "-c",
+                command_line,
                 _env={**env, "PATH": PATH},
                 _cwd=build_path,
                 _out=write_stdout,
