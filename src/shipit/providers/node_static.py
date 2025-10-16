@@ -31,7 +31,7 @@ class PackageManager(Enum):
         dep_name = {
             PackageManager.NPM: "npm",
             PackageManager.PNPM: "pnpm",
-            PackageManager.YARN:  "yarn",
+            PackageManager.YARN: "yarn",
             PackageManager.BUN: "bun",
         }[self]
 
@@ -51,16 +51,18 @@ class PackageManager(Enum):
             default_version=default_version,
         )
 
-    def lockfile(self) -> (str):
+    def lockfile(self) -> str:
         return {
             PackageManager.NPM: "package-lock.json",
             PackageManager.PNPM: "pnpm-lock.yaml",
             PackageManager.YARN: "yarn.lock",
             PackageManager.BUN: "bun.lockb",
         }[self]
-    
+
     @classmethod
     def pnpm_lockfile_version(cls, lockfile: Path) -> Optional[str]:
+        if not lockfile.exists():
+            return None
         # Read line by line and return the lockfileVersion
         with open(lockfile, "r") as f:
             for line in f:
@@ -109,6 +111,8 @@ class StaticGenerator(Enum):
     REMIX = "remix"
     NUXT_OLD = "nuxt"
     NUXT_V3 = "nuxt3"
+    REMIX_OLD = "remix-old"
+    REMIX_V2 = "remix-v2"
 
 
 class NodeStaticProvider(StaticFileProvider):
@@ -139,8 +143,12 @@ class NodeStaticProvider(StaticFileProvider):
             self.static_generator = StaticGenerator.DOCUSAURUS
         elif self.has_dependency(self.package_json, "svelte"):
             self.static_generator = StaticGenerator.SVELTE
+        elif self.has_dependency(
+            self.package_json, "@remix-run/dev", "1"
+        ) or self.has_dependency(self.package_json, "@remix-run/dev", "0"):
+            self.static_generator = StaticGenerator.REMIX_OLD
         elif self.has_dependency(self.package_json, "@remix-run/dev"):
-            self.static_generator = StaticGenerator.REMIX
+            self.static_generator = StaticGenerator.REMIX_V2
         elif self.has_dependency(self.package_json, "vite"):
             self.static_generator = StaticGenerator.VITE
         elif self.has_dependency(self.package_json, "next"):
@@ -151,7 +159,7 @@ class NodeStaticProvider(StaticFileProvider):
             self.static_generator = StaticGenerator.NUXT_OLD
         elif self.has_dependency(self.package_json, "nuxt"):
             self.static_generator = StaticGenerator.NUXT_V3
-        
+
         # if self.has_dependency(self.package_json, "sharp"):
         #     self.extra_dependencies.add("libvips")
 
@@ -171,7 +179,10 @@ class NodeStaticProvider(StaticFileProvider):
 
     @classmethod
     def has_dependency(
-        cls, package_json: Optional[Dict[str, Any]], dep: str, version: Optional[str] = None
+        cls,
+        package_json: Optional[Dict[str, Any]],
+        dep: str,
+        version: Optional[str] = None,
     ) -> bool:
         if not package_json:
             return False
@@ -199,7 +210,16 @@ class NodeStaticProvider(StaticFileProvider):
         package_json = cls.parse_package_json(path)
         if not package_json:
             return None
-        static_generators = ["astro", "vite", "next", "nuxt", "gatsby", "svelte", "@docusaurus/core", "@remix-run/dev"]
+        static_generators = [
+            "astro",
+            "vite",
+            "next",
+            "nuxt",
+            "gatsby",
+            "svelte",
+            "@docusaurus/core",
+            "@remix-run/dev",
+        ]
         if any(cls.has_dependency(package_json, dep) for dep in static_generators):
             return DetectResult(cls.name(), 40)
         return None
@@ -233,11 +253,22 @@ class NodeStaticProvider(StaticFileProvider):
     def get_output_dir(self) -> str:
         if self.static_generator == StaticGenerator.NEXT:
             return "out"
-        elif self.static_generator in [StaticGenerator.ASTRO, StaticGenerator.VITE, StaticGenerator.NUXT_OLD, StaticGenerator.NUXT_V3]:
+        elif self.static_generator in [
+            StaticGenerator.ASTRO,
+            StaticGenerator.VITE,
+            StaticGenerator.NUXT_OLD,
+            StaticGenerator.NUXT_V3,
+            StaticGenerator.REMIX_V2,
+        ]:
             return "dist"
-        elif self.static_generator in [StaticGenerator.GATSBY, StaticGenerator.REMIX]:
+        elif self.static_generator == StaticGenerator.GATSBY:
             return "public"
-        elif self.static_generator in [StaticGenerator.DOCUSAURUS, StaticGenerator.SVELTE]:
+        elif self.static_generator == StaticGenerator.REMIX_OLD:
+            return "build/client"
+        elif self.static_generator in [
+            StaticGenerator.DOCUSAURUS,
+            StaticGenerator.SVELTE,
+        ]:
             return "build"
         else:
             return "dist"
@@ -252,8 +283,10 @@ class NodeStaticProvider(StaticFileProvider):
             return self.package_manager.run_execute_command("gatsby build")
         if self.static_generator == StaticGenerator.ASTRO:
             return self.package_manager.run_execute_command("astro build")
-        elif self.static_generator == StaticGenerator.REMIX:
+        elif self.static_generator == StaticGenerator.REMIX_OLD:
             return self.package_manager.run_execute_command("remix-ssg build")
+        elif self.static_generator == StaticGenerator.REMIX_V2:
+            return self.package_manager.run_execute_command("vite build")
         elif self.static_generator == StaticGenerator.DOCUSAURUS:
             return self.package_manager.run_execute_command("docusaurus build")
         elif self.static_generator == StaticGenerator.SVELTE:
@@ -273,7 +306,9 @@ class NodeStaticProvider(StaticFileProvider):
         get_build_command = self.get_build_command()
         lockfile = self.package_manager.lockfile()
         has_lockfile = (self.path / lockfile).exists()
-        install_command = self.package_manager.install_command(has_lockfile=has_lockfile)
+        install_command = self.package_manager.install_command(
+            has_lockfile=has_lockfile
+        )
         input_files = ["package.json"]
         if has_lockfile:
             input_files.append(lockfile)
