@@ -16,7 +16,7 @@ def providers() -> list[type[Provider]]:
     # Order matters: more specific providers first
     return [
         LaravelProvider,
-        GatsbyProvider,
+        # GatsbyProvider,
         HugoProvider,
         MkdocsProvider,
         PythonProvider,
