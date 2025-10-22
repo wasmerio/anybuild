@@ -28,9 +28,11 @@ function get_env_var(string $name, string $default = ''): string
 	    return $_ENV[$name];
     }
 
-    $stderr = fopen("php://stderr", "wb");
-    fwrite($stderr, "Configuration error: environment variable " . $name . " not provided. Using default value: " . $default . PHP_EOL);
-    fclose($stderr);
+    if ($default === '') {
+        $stderr = fopen("php://stderr", "wb");
+        fwrite($stderr, "Configuration error: environment variable " . $name . " not provided. Using default value: " . $default . PHP_EOL);
+        fclose($stderr);
+    }
 
     return $default;
 }

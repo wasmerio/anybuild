@@ -37,14 +37,18 @@ class StaticFileProvider:
         return "staticfile"
 
     @classmethod
-    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
+    def detect(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> Optional[DetectResult]:
         if _exists(path, "Staticfile"):
             return DetectResult(cls.name(), 50)
         if _exists(path, "index.html") and not _exists(
             path, "package.json", "pyproject.toml", "composer.json"
         ):
             return DetectResult(cls.name(), 10)
-        if custom_commands.start and custom_commands.start.startswith("static-web-server "):
+        if custom_commands.start and custom_commands.start.startswith(
+            "static-web-server "
+        ):
             return DetectResult(cls.name(), 70)
         return None
 
@@ -70,7 +74,9 @@ class StaticFileProvider:
     def build_steps(self) -> list[str]:
         return [
             'workdir(app["build"])',
-            'copy({}, ".", ignore=[".git"])'.format(json.dumps(self.config and self.config.get("root") or "."))
+            'copy({}, ".", ignore=[".git"])'.format(
+                json.dumps(self.config and self.config.get("root") or ".")
+            ),
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:
@@ -92,6 +98,6 @@ class StaticFileProvider:
 
     def env(self) -> Optional[Dict[str, str]]:
         return None
-    
+
     def services(self) -> list[ServiceSpec]:
         return []

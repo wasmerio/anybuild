@@ -90,6 +90,8 @@ class Package:
     version: Optional[str] = None
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
+        if self.version is None:
+            return self.name
         return f"{self.name}@{self.version}"
 
 
@@ -298,14 +300,15 @@ class DockerBuilder:
         #             "--mount",
         #             f"type=volume,source={vol.name},target={str(vol.serve_path)}",
         #         ]
-        return sh.Command(
-            "docker"
-        )(
+        return sh.Command("docker")(
             *docker_args,
             image_name,
             command,
             *(extra_args or []),
-            _env={"DOCKER_BUILDKIT": "1", **os.environ},  # Pass the current environment variables to the Docker client
+            _env={
+                "DOCKER_BUILDKIT": "1",
+                **os.environ,
+            },  # Pass the current environment variables to the Docker client
             _out=write_stdout,
             _err=write_stderr,
         )
@@ -439,10 +442,18 @@ RUN curl https://mise.run | sh
                         raise Exception(f"Asset {step.source} does not exist")
                 else:
                     if step.ignore:
-                        exclude = " \\\n" +" \\\n".join([f"  --exclude={ignore}" for ignore in step.ignore]) + " \\\n "
+                        exclude = (
+                            " \\\n"
+                            + " \\\n".join(
+                                [f"  --exclude={ignore}" for ignore in step.ignore]
+                            )
+                            + " \\\n "
+                        )
                     else:
                         exclude = ""
-                    self.docker_file_contents += f"COPY{exclude} {step.source} {step.target}\n"
+                    self.docker_file_contents += (
+                        f"COPY{exclude} {step.source} {step.target}\n"
+                    )
             elif isinstance(step, EnvStep):
                 env_vars = " ".join(
                     [f"{key}={value}" for key, value in step.variables.items()]
@@ -517,7 +528,9 @@ class LocalBuilder:
     def execute_step(self, step: Step, env: Dict[str, str]) -> None:
         build_path = self.workdir
         if isinstance(step, UseStep):
-            console.print(f"[bold]Using dependencies:[/bold] {step.dependencies}")
+            console.print(
+                f"[bold]Using dependencies:[/bold] {', '.join([str(dep) for dep in step.dependencies])}"
+            )
         elif isinstance(step, WorkdirStep):
             console.print(f"[bold]Working in {step.path}[/bold]")
             self.workdir = step.path
@@ -560,17 +573,14 @@ class LocalBuilder:
                 ignore_extra = (
                     f" [bright_black]# ignoring {', '.join(step.ignore)}[/bright_black]"
                 )
-            if step.target == ".":
-                console.print(f"[bold]Copy from {step.source}[/bold]{ignore_extra}")
-            else:
-                console.print(
-                    f"[bold]Copy to {step.target} from {step.source}[/bold]{ignore_extra}"
-                )
             ignore_matches = step.ignore if step.ignore else []
             ignore_matches.append(".shipit")
             ignore_matches.append("Shipit")
 
             if step.is_download():
+                console.print(
+                    f"[bold]Download from {step.source} to {step.target}[/bold]"
+                )
                 download_file(step.source, (build_path / step.target))
             else:
                 if step.base == "source":
@@ -579,6 +589,10 @@ class LocalBuilder:
                     base = ASSETS_PATH
                 else:
                     raise Exception(f"Unknown base: {step.base}")
+
+                console.print(
+                    f"[bold]Copy to {step.target} from {step.source}[/bold]{ignore_extra}"
+                )
 
                 if (base / step.source).is_dir():
                     copytree(
@@ -607,7 +621,7 @@ class LocalBuilder:
     def build(
         self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
     ) -> None:
-        console.print(f"\n[bold]Building package[/bold]")
+        console.print(f"\n[bold]Building... 🚀[/bold]")
         base_path = self.local_path
         shutil.rmtree(base_path, ignore_errors=True)
         base_path.mkdir(parents=True, exist_ok=True)
@@ -907,7 +921,7 @@ class WasmerBuilder:
                 deps.append(Package("bash"))
 
         if deps:
-            console.print(f"[bold]Mapping dependencies:[/bold]")
+            console.print(f"[bold]Mapping dependencies to Wasmer packages:[/bold]")
         for dep in deps:
             if dep.name in self.mapper:
                 version = dep.version or "latest"
@@ -970,9 +984,7 @@ class WasmerBuilder:
                     env.update(serve.env)
                 if env:
                     arr = array([f"{k}={v}" for k, v in env.items()]).multiline(True)
-                    wasi_args.add(
-                        "env", arr
-                    )
+                    wasi_args.add("env", arr)
                 title = string("annotations.wasi", literal=False)
                 command.add(title, wasi_args)
 
@@ -1049,7 +1061,9 @@ class WasmerBuilder:
             )
             yaml_config["jobs"] = jobs
 
-        app_yaml = yaml.dump(yaml_config,)
+        app_yaml = yaml.dump(
+            yaml_config,
+        )
 
         console.print(f"\n[bold]Created app.yaml manifest ✅[/bold]")
         app_yaml_panel = Panel(
@@ -1344,6 +1358,10 @@ def auto(
         None,
         help="Use a specific Docker client (such as depot, podman, etc.)",
     ),
+    skip_docker_if_safe_build: Optional[bool] = typer.Option(
+        True,
+        help="Skip Docker if the build can be done safely locally (only copy commands).",
+    ),
     skip_prepare: bool = typer.Option(
         False,
         help="Run the prepare command after building (defaults to True).",
@@ -1419,6 +1437,7 @@ def auto(
         wasmer=(wasmer or wasmer_deploy),
         docker=docker,
         docker_client=docker_client,
+        skip_docker_if_safe_build=skip_docker_if_safe_build,
         wasmer_registry=wasmer_registry,
         wasmer_token=wasmer_token,
         wasmer_bin=wasmer_bin,
@@ -1628,6 +1647,10 @@ def build(
         None,
         help="Use a specific Docker client (such as depot, podman, etc.)",
     ),
+    skip_docker_if_safe_build: Optional[bool] = typer.Option(
+        True,
+        help="Skip Docker if the build can be done safely locally (only copy commands).",
+    ),
     env_name: Optional[str] = typer.Option(
         None,
         help="The environment to use (defaults to `.env`, it will use .env.<env_name> if provided)",
@@ -1684,6 +1707,28 @@ def build(
         "CLICOLOR": os.environ.get("CLICOLOR", "0"),
     }
     serve = next(iter(ctx.serves.values()))
+
+    if skip_docker_if_safe_build and serve.build and len(serve.build) > 0:
+        # If it doesn't have a run step, then it's safe to skip Docker and run all the
+        # steps locally.
+        has_run = any(isinstance(step, RunStep) for step in serve.build)
+        if not has_run:
+            console.print(
+                f"[bold]ℹ️ Building locally instead of Docker to speed up the build, as all commands are safe to run locally[/bold]"
+            )
+            return build(
+                path,
+                wasmer=wasmer,
+                skip_prepare=skip_prepare,
+                wasmer_bin=wasmer_bin,
+                wasmer_registry=wasmer_registry,
+                wasmer_token=wasmer_token,
+                docker=False,
+                docker_client=None,
+                skip_docker_if_safe_build=False,
+                env_name=env_name,
+            )
+
     serve.env = serve.env or {}
     if (path / ".env").exists():
         env_vars = dotenv_values(path / ".env")
@@ -1719,6 +1764,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 def flatten(xss):
     return [x for xs in xss for x in xs]

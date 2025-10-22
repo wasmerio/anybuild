@@ -27,8 +27,14 @@ class WordPressProvider(PhpProvider):
         return "wordpress"
 
     @classmethod
-    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
-        if _exists(path, "wp-content") and _exists(path, "index.php") and _exists(path, "wp-load.php"):
+    def detect(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> Optional[DetectResult]:
+        if (
+            _exists(path, "wp-content")
+            and _exists(path, "index.php")
+            and _exists(path, "wp-load.php")
+        ):
             return DetectResult(cls.name(), 80)
         return None
 
@@ -49,11 +55,11 @@ class WordPressProvider(PhpProvider):
 
     def declarations(self) -> Optional[str]:
         return super().declarations() + (
-            "wp_cli_version = getenv(\"SHIPIT_WPCLI_VERSION\")\n"
+            'wp_cli_version = getenv("SHIPIT_WPCLI_VERSION")\n'
             "if wp_cli_version:\n"
-            "    wp_cli_download_url = f\"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar\"\n"
+            '    wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar"\n'
             "else:\n"
-            "    wp_cli_download_url = \"https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar\"\n"
+            '    wp_cli_download_url = "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"\n'
         )
 
     def build_steps(self) -> list[str]:
@@ -62,27 +68,39 @@ class WordPressProvider(PhpProvider):
             'copy("wordpress/install.sh", "{}/wordpress-install.sh".format(assets["build"]), base="assets")',
         ]
         if not _exists(self.path, "wp-config.php"):
-            steps.append('copy("wordpress/wp-config.php", "{}/wp-config.php".format(app["build"]), base="assets")')
+            steps.append(
+                'copy("wordpress/wp-config.php", "{}/wp-config.php".format(app["build"]), base="assets")'
+            )
         return steps + super().build_steps()
 
     def prepare_steps(self) -> Optional[list[str]]:
         return super().prepare_steps()
 
     def commands(self) -> Dict[str, str]:
+        commands = super().commands()
         return {
-            "start": 'f"php -S localhost:{PORT} -t ."',
-            "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets[\"serve\"], app[\"serve\"])',
+            "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"])',
             "after_deploy": '"bash {}/wordpress-install.sh".format(assets["serve"])',
+            **commands,
         }
 
     def mounts(self) -> list[MountSpec]:
         return super().mounts()
 
     def volumes(self) -> list[VolumeSpec]:
-        return [VolumeSpec(name="wp-content", serve_path="\"{}/wp-content/\".format(app[\"serve\"])", var_name="wp_content")]
+        return [
+            VolumeSpec(
+                name="wp-content",
+                serve_path='"{}/wp-content/".format(app["serve"])',
+                var_name="wp_content",
+            )
+        ]
 
     def env(self) -> Optional[Dict[str, str]]:
-        return None
-    
+        return {
+            "PAGER": '"cat"',
+            **(super().env() or {}),
+        }
+
     def services(self) -> list[ServiceSpec]:
         return [ServiceSpec(name="database", provider="mysql")]

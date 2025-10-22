@@ -29,7 +29,7 @@ class PhpProvider:
     def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
         if _exists(path, "composer.json") and _exists(path, "public/index.php"):
             return DetectResult(cls.name(), 60)
-        if _exists(path, "index.php") and not _exists(path, "composer.json"):
+        if _exists(path, "index.php") or _exists(path, "public/index.php") or _exists(path, "app/index.php"):
             return DetectResult(cls.name(), 10)
         if custom_commands.start and custom_commands.start.startswith("php "):
             return DetectResult(cls.name(), 70)
@@ -92,9 +92,12 @@ class PhpProvider:
 
     def base_commands(self) -> Dict[str, str]:
         if _exists(self.path, "public/index.php"):
-            return {"start": 'f"php -S localhost:{PORT} -t public"'}
+            return {"start": '"php -S localhost:{} -t {}/public".format(PORT, app["serve"])'}
+        elif _exists(self.path, "app/index.php"):
+            return {"start": '"php -S localhost:{} -t {}/app".format(PORT, app["serve"])'}
         elif _exists(self.path, "index.php"):
-            return {"start": 'f"php -S localhost:{PORT} -t ."'}
+            return {"start": '"php -S localhost:{} -t {}".format(PORT, app["serve"])'}
+        return {}
 
     def mounts(self) -> list[MountSpec]:
         return [

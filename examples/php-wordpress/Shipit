@@ -36,10 +36,14 @@ serve(
     copy(".", ".", ignore=[".git"])
   ],
   deps=[php, bash],
+  env = {
+    "PAGER": "cat",
+    "PHP_INI_SCAN_DIR": "{}".format(assets["serve"])
+  },
   commands = {
-    "start": f"php -S localhost:{PORT} -t .".replace("$PORT", PORT),
     "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"]).replace("$PORT", PORT),
-    "after_deploy": "bash {}/wordpress-install.sh".format(assets["serve"]).replace("$PORT", PORT)
+    "after_deploy": "bash {}/wordpress-install.sh".format(assets["serve"]).replace("$PORT", PORT),
+    "start": "php -S localhost:{} -t {}".format(PORT, app["serve"]).replace("$PORT", PORT)
   },
   services=[
     database,

@@ -1,7 +1,10 @@
 node_version = getenv("SHIPIT_NODE_VERSION") or "22"
 node = dep("node", node_version)
-npm = dep("npm")
+npm_version = getenv("SHIPIT_NPM_VERSION")
+npm = dep("npm", npm_version)
 staticwebserver = dep("static-web-server")
+
+temp = mount("temp")
 
 app = mount("app")
 
@@ -13,14 +16,15 @@ serve(
   cwd=app["serve"],
   build=[
     use(node, npm),
-    run("npm install", inputs=["package.json", "package-lock.json"], group="install"),
+    workdir(temp["build"]),
+    run("npm ci", inputs=["package.json", "package-lock.json"], group="install"),
     copy(".", ".", ignore=["node_modules", ".git"]),
-    run("npm run build", outputs=["public"], group="build"),
-    run("cp -R public/* {}/".format(app["build"]))
+    run("npm run build", outputs=["dist"], group="build"),
+    run("cp -R dist/* {}/".format(app["build"]))
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root /app/public".replace("$PORT", PORT)
+    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT)
   },
   mounts=[
     app

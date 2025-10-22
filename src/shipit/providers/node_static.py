@@ -327,7 +327,7 @@ class NodeStaticProvider(StaticFileProvider):
         return None
 
     def mounts(self) -> list[MountSpec]:
-        return [MountSpec("temp"), *super().mounts()]
+        return [MountSpec("temp", attach_to_serve=False), *super().mounts()]
 
     def volumes(self) -> list[VolumeSpec]:
         return []
