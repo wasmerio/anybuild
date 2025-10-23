@@ -21,7 +21,6 @@ define( 'WP_AUTO_UPDATE_CORE', false); // Disable automatic aupdates and checks
  * @package WordPress
  */
 
-
 function get_env_var(string $name, string $default = ''): string
 {
     if (isset($_ENV[$name])) {
@@ -29,12 +28,15 @@ function get_env_var(string $name, string $default = ''): string
     }
 
     if ($default === '') {
-        $stderr = fopen("php://stderr", "wb");
-        fwrite($stderr, "Configuration error: environment variable " . $name . " not provided. Using default value: " . $default . PHP_EOL);
-        fclose($stderr);
+        error_log("Configuration error: environment variable " . $name . " not provided.");
     }
 
     return $default;
+}
+
+function get_env_var_bool(string $name, bool $default = false): bool
+{
+    return in_array(get_env_var($name, $default ? "1" : "0"), ["1", "true", "yes", "on", "y"], true);
 }
 
 // ** Database settings - You can get this info from your web host ** //
@@ -87,14 +89,14 @@ define('NONCE_SALT', get_env_var('NONCE_SALT', 'no secret provided'));
 $scheme = isset( $_SERVER['HTTPS'] ) && '1' === (string) $_SERVER['HTTPS'] ? "https://" : "http://";
 
 if (!defined('WP_HOME')) {
-    define( 'WP_HOME',  isset($_SERVER['HTTP_HOST']) ? ($scheme . $_SERVER['HTTP_HOST'] ): "http://localhost");
+    define( 'WP_HOME',  get_env_var('WP_HOME', isset($_SERVER['HTTP_HOST']) ? ($scheme . $_SERVER['HTTP_HOST'] ): "http://localhost"));
 }
 
-define( 'WP_SITEURL', WP_HOME . '/' );
+define( 'WP_SITEURL', get_env_var('WP_SITEURL', WP_HOME . '/') );
 
-define( 'WP_MEMORY_LIMIT', '256M' );
-define( 'WP_MAX_MEMORY_LIMIT', '256M' );
-define( 'WP_POST_REVISIONS', false );
+define( 'WP_MEMORY_LIMIT', get_env_var('WP_MEMORY_LIMIT', '256M') );
+define( 'WP_MAX_MEMORY_LIMIT', get_env_var('WP_MAX_MEMORY_LIMIT', '256M') );
+define( 'WP_POST_REVISIONS', get_env_var_bool('WP_POST_REVISIONS', false));
 
 /**#@-*/
 
@@ -118,11 +120,20 @@ $table_prefix = 'wp_';
  *
  * @link https://wordpress.org/support/article/debugging-in-wordpress/
  */
-define( 'WP_DEBUG', false );
+define( 'WP_DEBUG', get_env_var_bool('WP_DEBUG', false) );
 
 /* Add any custom values between this line and the "stop editing" line. */
 
+// Optionally include an additional wp-config.php file if defined
+if ( getenv('WP_ADDITIONAL_CONFIG') ) {
+    $extra_config_path = getenv('WP_ADDITIONAL_CONFIG');
 
+    if ( file_exists( $extra_config_path ) ) {
+        require_once $extra_config_path;
+    } else {
+        error_log( "WP_ADDITIONAL_CONFIG defined but file not found: {$extra_config_path}" );
+    }
+}
 
 /* That's all, stop editing! Happy publishing. */
 
