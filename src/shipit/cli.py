@@ -1610,7 +1610,7 @@ def generate(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
 def _default(ctx: typer.Context) -> None:
-    if ctx.invoked_subcommand is None:
+    if ctx.invoked_subcommand in ["auto", "generate", "build", "serve", "deploy", None]:
         print_help()
 
 
