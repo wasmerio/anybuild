@@ -46,6 +46,7 @@ class DependencySpec:
     name: str
     env_var: Optional[str] = None
     default_version: Optional[str] = None
+    architecture_var: Optional[str] = None
     alias: Optional[str] = None  # Variable name in Shipit plan
     use_in_build: bool = False
     use_in_serve: bool = False

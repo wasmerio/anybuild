@@ -19,8 +19,7 @@ from .php import PhpProvider
 
 class WordPressProvider(PhpProvider):
     def __init__(self, path: Path, custom_commands: CustomCommands):
-        self.path = path
-        self.custom_commands = custom_commands
+        super().__init__(path, custom_commands)
 
     @classmethod
     def name(cls) -> str:
@@ -54,7 +53,7 @@ class WordPressProvider(PhpProvider):
         ]
 
     def declarations(self) -> Optional[str]:
-        return super().declarations() + (
+        return (super().declarations() or "") + (
             'wp_cli_version = getenv("SHIPIT_WPCLI_VERSION")\n'
             "if wp_cli_version:\n"
             '    wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar"\n'
@@ -65,7 +64,7 @@ class WordPressProvider(PhpProvider):
     def build_steps(self) -> list[str]:
         steps = [
             'copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets["build"]))',
-            'copy("wordpress/install.sh", "{}/wordpress-install.sh".format(assets["build"]), base="assets")',
+            'copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets["build"]), base="assets")',
         ]
         if not _exists(self.path, "wp-config.php"):
             steps.append(
@@ -80,7 +79,7 @@ class WordPressProvider(PhpProvider):
         commands = super().commands()
         return {
             "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"])',
-            "after_deploy": '"bash {}/wordpress-install.sh".format(assets["serve"])',
+            "after_deploy": '"bash {}/setup-wp.sh".format(assets["serve"])',
             **commands,
         }
 

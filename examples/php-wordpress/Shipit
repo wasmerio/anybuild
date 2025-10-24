@@ -1,5 +1,6 @@
 php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
-php = dep("php", php_version)
+php_architecture = getenv("SHIPIT_PHP_ARCHITECTURE")
+php = dep("php", php_version, architecture=php_architecture)
 bash = dep("bash")
 
 app = mount("app")
@@ -13,8 +14,7 @@ database = service(
   provider="mysql"
 )
 
-PORT = getenv("PORT") or"8080"
-HOME = getenv("HOME")
+PORT = getenv("PORT") or "8080"
 wp_cli_version = getenv("SHIPIT_WPCLI_VERSION")
 if wp_cli_version:
     wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar"
@@ -29,7 +29,7 @@ serve(
   build=[
     use(php),
     copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets["build"])),
-    copy("wordpress/install.sh", "{}/wordpress-install.sh".format(assets["build"]), base="assets"),
+    copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets["build"]), base="assets"),
     copy("wordpress/wp-config.php", "{}/wp-config.php".format(app["build"]), base="assets"),
     workdir(app["build"]),
     copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets"),
@@ -42,7 +42,7 @@ serve(
   },
   commands = {
     "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"]).replace("$PORT", PORT),
-    "after_deploy": "bash {}/wordpress-install.sh".format(assets["serve"]).replace("$PORT", PORT),
+    "after_deploy": "bash {}/setup-wp.sh".format(assets["serve"]).replace("$PORT", PORT),
     "start": "php -S localhost:{} -t {}".format(PORT, app["serve"]).replace("$PORT", PORT)
   },
   services=[

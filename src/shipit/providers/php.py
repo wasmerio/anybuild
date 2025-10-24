@@ -20,16 +20,23 @@ class PhpProvider:
     def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
         self.custom_commands = custom_commands
-    
+        self.has_composer = _exists(self.path, "composer.json", "composer.lock")
+
     @classmethod
     def name(cls) -> str:
         return "php"
 
     @classmethod
-    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
+    def detect(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> Optional[DetectResult]:
         if _exists(path, "composer.json") and _exists(path, "public/index.php"):
             return DetectResult(cls.name(), 60)
-        if _exists(path, "index.php") or _exists(path, "public/index.php") or _exists(path, "app/index.php"):
+        if (
+            _exists(path, "index.php")
+            or _exists(path, "public/index.php")
+            or _exists(path, "app/index.php")
+        ):
             return DetectResult(cls.name(), 10)
         if custom_commands.start and custom_commands.start.startswith("php "):
             return DetectResult(cls.name(), 70)
@@ -44,41 +51,45 @@ class PhpProvider:
     def provider_kind(self) -> str:
         return "php"
 
-    def has_composer(self) -> bool:
-        return _exists(self.path, "composer.json", "composer.lock")
-
     def dependencies(self) -> list[DependencySpec]:
         deps = [
             DependencySpec(
                 "php",
                 env_var="SHIPIT_PHP_VERSION",
                 default_version="8.3",
+                architecture_var="SHIPIT_PHP_ARCHITECTURE",
                 use_in_build=True,
                 use_in_serve=True,
             ),
         ]
-        if self.has_composer():
+        if self.has_composer:
             deps.append(DependencySpec("composer", use_in_build=True))
             deps.append(DependencySpec("bash", use_in_serve=True))
         return deps
 
     def declarations(self) -> Optional[str]:
-        return "HOME = getenv(\"HOME\")\n"
+        if self.has_composer:
+            return 'HOME = getenv("HOME")\n'
+        return None
 
     def build_steps(self) -> list[str]:
         steps = [
-            "workdir(app[\"build\"])",
+            'workdir(app["build"])',
         ]
         if _exists(self.path, "php.ini"):
             steps.append('copy("php.ini", "{}/php.ini".format(assets["build"]))')
         else:
-            steps.append('copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets")')
+            steps.append(
+                'copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets")'
+            )
 
-        if self.has_composer():
-            steps.append("env(HOME=HOME, COMPOSER_FUND=\"0\")")
-            steps.append("run(\"composer install --optimize-autoloader --no-scripts --no-interaction\", inputs=[\"composer.json\", \"composer.lock\"], outputs=[\".\"], group=\"install\")")
+        if self.has_composer:
+            steps.append('env(HOME=HOME, COMPOSER_FUND="0")')
+            steps.append(
+                'run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'
+            )
 
-        steps.append("copy(\".\", \".\", ignore=[\".git\"])")
+        steps.append('copy(".", ".", ignore=[".git"])')
         return steps
 
     def prepare_steps(self) -> Optional[list[str]]:
@@ -92,9 +103,13 @@ class PhpProvider:
 
     def base_commands(self) -> Dict[str, str]:
         if _exists(self.path, "public/index.php"):
-            return {"start": '"php -S localhost:{} -t {}/public".format(PORT, app["serve"])'}
+            return {
+                "start": '"php -S localhost:{} -t {}/public".format(PORT, app["serve"])'
+            }
         elif _exists(self.path, "app/index.php"):
-            return {"start": '"php -S localhost:{} -t {}/app".format(PORT, app["serve"])'}
+            return {
+                "start": '"php -S localhost:{} -t {}/app".format(PORT, app["serve"])'
+            }
         elif _exists(self.path, "index.php"):
             return {"start": '"php -S localhost:{} -t {}".format(PORT, app["serve"])'}
         return {}
@@ -112,6 +127,6 @@ class PhpProvider:
         return {
             "PHP_INI_SCAN_DIR": '"{}".format(assets["serve"])',
         }
-    
+
     def services(self) -> list[ServiceSpec]:
         return []

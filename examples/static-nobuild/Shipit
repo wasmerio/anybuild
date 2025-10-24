@@ -3,7 +3,7 @@ staticwebserver = dep("static-web-server", staticwebserver_version)
 
 app = mount("app")
 
-PORT = getenv("PORT") or"8080"
+PORT = getenv("PORT") or "8080"
 
 serve(
   name="static-nobuild",

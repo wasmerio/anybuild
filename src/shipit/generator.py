@@ -64,15 +64,22 @@ def _emit_dependencies_declarations(
         declared.add(alias)
 
         version_var = None
+        architecture_var = None
         if dep.env_var:
             default = f' or "{dep.default_version}"' if dep.default_version else ""
             version_key = alias + "_version"
             lines.append(f'{version_key} = getenv("{dep.env_var}"){default}')
             version_var = version_key
+        if dep.architecture_var:
+            architecture_key = alias + "_architecture"
+            lines.append(f'{architecture_key} = getenv("{dep.architecture_var}")')
+            architecture_var = architecture_key
+        vars = [f'"{dep.name}"']
         if version_var:
-            lines.append(f'{alias} = dep("{dep.name}", {version_var})')
-        else:
-            lines.append(f'{alias} = dep("{dep.name}")')
+            vars.append(version_var)
+        if architecture_var:
+            vars.append(f"architecture={architecture_var}")
+        lines.append(f"{alias} = dep({', '.join(vars)})")
 
     return "\n".join(lines), serve_vars, build_vars
 
@@ -109,7 +116,9 @@ def generate_shipit(path: Path, custom_commands: CustomCommands) -> str:
 
     build_steps_block = ",\n".join([f"    {s}" for s in build_steps])
     deps_array = ", ".join(serve_dep_vars)
-    commands_lines = ",\n".join([f'    "{k}": {v}.replace("$PORT", PORT)' for k, v in plan.commands.items()])
+    commands_lines = ",\n".join(
+        [f'    "{k}": {v}.replace("$PORT", PORT)' for k, v in plan.commands.items()]
+    )
     env_lines = None
     if plan.env is not None:
         if len(plan.env) == 0:
@@ -137,24 +146,26 @@ def generate_shipit(path: Path, custom_commands: CustomCommands) -> str:
         out.append("")
 
     for m in plan.mounts:
-        out.append(f"{m.name} = mount(\"{m.name}\")")
+        out.append(f'{m.name} = mount("{m.name}")')
         out.append("")
 
     if plan.volumes:
         for v in plan.volumes:
-            out.append(f"{v.var_name or v.name} = volume(\"{v.name}\", {v.serve_path})")
+            out.append(f'{v.var_name or v.name} = volume("{v.name}", {v.serve_path})')
         out.append("")
 
     if plan.services:
         for s in plan.services:
-            out.append(f"{s.name} = service(\n  name=\"{s.name}\",\n  provider=\"{s.provider}\"\n)")
+            out.append(
+                f'{s.name} = service(\n  name="{s.name}",\n  provider="{s.provider}"\n)'
+            )
         out.append("")
 
-    out.append("PORT = getenv(\"PORT\") or\"8080\"")
+    out.append('PORT = getenv("PORT") or "8080"')
 
     if plan.declarations:
         out.append(plan.declarations)
-    
+
     out.append("")
     out.append("serve(")
     out.append(f'  name="{plan.serve_name}",')

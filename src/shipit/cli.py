@@ -88,11 +88,13 @@ class Serve:
 class Package:
     name: str
     version: Optional[str] = None
+    architecture: Optional[Literal["64-bit", "32-bit"]] = None
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
+        name = f"{self.name}({self.architecture})" if self.architecture else self.name
         if self.version is None:
-            return self.name
-        return f"{self.name}@{self.version}"
+            return name
+        return f"{name}@{self.version}"
 
 
 @dataclass
@@ -780,6 +782,25 @@ class WasmerBuilder:
             "dependencies": {
                 "latest": "php/php-32@=8.3.2102",
                 "8.3": "php/php-32@=8.3.2102",
+                "8.2": "php/php-32@=8.2.2801",
+                "8.1": "php/php-32@=8.1.3201",
+                "7.4": "php/php-32@=7.4.3301",
+            },
+            "architecture_dependencies": {
+                "64-bit": {
+                    "latest": "php/php-64@=8.3.2102",
+                    "8.3": "php/php-64@=8.3.2102",
+                    "8.2": "php/php-64@=8.2.2801",
+                    "8.1": "php/php-64@=8.1.3201",
+                    "7.4": "php/php-64@=7.4.3301",
+                },
+                "32-bit": {
+                    "latest": "php/php-32@=8.3.2102",
+                    "8.3": "php/php-32@=8.3.2102",
+                    "8.2": "php/php-32@=8.2.2801",
+                    "8.1": "php/php-32@=8.1.3201",
+                    "7.4": "php/php-32@=7.4.3301",
+                },
             },
             "scripts": {"php"},
             "aliases": {},
@@ -925,13 +946,20 @@ class WasmerBuilder:
         for dep in deps:
             if dep.name in self.mapper:
                 version = dep.version or "latest"
-                if version in self.mapper[dep.name]["dependencies"]:
+                mapped_dependencies = self.mapper[dep.name]["dependencies"]
+                if dep.architecture:
+                    architecture_dependencies = (
+                        self.mapper[dep.name]
+                        .get("architecture_dependencies", {})
+                        .get(dep.architecture, {})
+                    )
+                    if architecture_dependencies:
+                        mapped_dependencies = architecture_dependencies
+                if version in mapped_dependencies:
                     console.print(
                         f"* {dep.name}@{version} mapped to {self.mapper[dep.name]['dependencies'][version]}"
                     )
-                    package_name, version = self.mapper[dep.name]["dependencies"][
-                        version
-                    ].split("@")
+                    package_name, version = mapped_dependencies[version].split("@")
                     dependencies.add(package_name, version)
                     scripts = self.mapper[dep.name].get("scripts") or []
                     for script in scripts:
@@ -1204,8 +1232,13 @@ class Ctx:
     def getenv(self, name: str) -> Optional[str]:
         return self.builder.getenv(name)
 
-    def dep(self, name: str, version: Optional[str] = None) -> str:
-        package = Package(name, version)
+    def dep(
+        self,
+        name: str,
+        version: Optional[str] = None,
+        architecture: Optional[Literal["64-bit", "32-bit"]] = None,
+    ) -> str:
+        package = Package(name, version, architecture)
         return self.add_package(package)
 
     def service(
