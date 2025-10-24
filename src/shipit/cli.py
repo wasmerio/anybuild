@@ -16,6 +16,7 @@ from typing import (
     Optional,
     Protocol,
     Set,
+    Tuple,
     TypedDict,
     Union,
     Literal,
@@ -1184,6 +1185,7 @@ class Ctx:
         self.mounts: List[Mount] = []
         self.volumes: List[Volume] = []
         self.services: Dict[str, Service] = {}
+        self.getenv_variables: Set[str] = set()
 
     def add_package(self, package: Package) -> str:
         index = f"{package.name}@{package.version}" if package.version else package.name
@@ -1230,6 +1232,7 @@ class Ctx:
         return f"ref:step:{len(self.steps) - 1}"
 
     def getenv(self, name: str) -> Optional[str]:
+        self.getenv_variables.add(name)
         return self.builder.getenv(name)
 
     def dep(
@@ -1349,6 +1352,43 @@ class Ctx:
             "name": name,
             "serve": str(volume.serve_path),
         }
+
+
+def evaluate_shipit(path: Path, builder: Builder) -> Tuple[Ctx, Serve]:
+    shipit_file = path / "Shipit"
+    if not shipit_file.exists():
+        raise FileNotFoundError(
+            f"Shipit file not found at {shipit_file}. Run `shipit generate {path}` to create it."
+        )
+    source = shipit_file.read_text()
+    ctx = Ctx(builder)
+    glb = sl.Globals.standard()
+    mod = sl.Module()
+
+    mod.add_callable("service", ctx.service)
+    mod.add_callable("getenv", ctx.getenv)
+    mod.add_callable("dep", ctx.dep)
+    mod.add_callable("serve", ctx.serve)
+    mod.add_callable("run", ctx.run)
+    mod.add_callable("mount", ctx.mount)
+    mod.add_callable("volume", ctx.volume)
+    mod.add_callable("workdir", ctx.workdir)
+    mod.add_callable("copy", ctx.copy)
+    mod.add_callable("path", ctx.path)
+    mod.add_callable("env", ctx.env)
+    mod.add_callable("use", ctx.use)
+
+    dialect = sl.Dialect.extended()
+    dialect.enable_f_strings = True
+
+    ast = sl.parse("shipit", source, dialect=dialect)
+
+    sl.eval(mod, ast, glb)
+    if not ctx.serves:
+        raise ValueError(f"No serve definition found in {shipit_file}")
+    assert len(ctx.serves) <= 1, "Only one serve is allowed for now"
+    serve = next(iter(ctx.serves.values()))
+    return ctx, serve
 
 
 def print_help() -> None:
@@ -1645,6 +1685,68 @@ def serve(
             raise Exception("Wasmer deploy is only supported for Wasmer builders")
 
 
+@app.command(name="plan")
+def plan(
+    path: Path = typer.Argument(
+        Path("."),
+        help="Project path (defaults to current directory).",
+        show_default=False,
+    ),
+    wasmer: bool = typer.Option(
+        False,
+        help="Use Wasmer to evaluate the project.",
+    ),
+    wasmer_bin: Optional[Path] = typer.Option(
+        None,
+        help="The path to the Wasmer binary.",
+    ),
+    wasmer_registry: Optional[str] = typer.Option(
+        None,
+        help="Wasmer registry.",
+    ),
+    wasmer_token: Optional[str] = typer.Option(
+        None,
+        help="Wasmer token.",
+    ),
+    docker: bool = typer.Option(
+        False,
+        help="Use Docker to evaluate the project.",
+    ),
+    docker_client: Optional[str] = typer.Option(
+        None,
+        help="Use a specific Docker client (such as depot, podman, etc.)",
+    ),
+) -> None:
+    if not path.exists():
+        raise Exception(f"The path {path} does not exist")
+
+    builder: Builder
+    if docker or docker_client:
+        builder = DockerBuilder(path, docker_client)
+    else:
+        builder = LocalBuilder(path)
+    if wasmer:
+        builder = WasmerBuilder(
+            builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
+        )
+
+    ctx, serve = evaluate_shipit(path, builder)
+    metadata_commands = {
+        "start": serve.commands.get("start"),
+        "after_deploy": serve.commands.get("after_deploy"),
+    }
+    plan_output = {
+        "provider": serve.provider,
+        "metadata": {"commands": metadata_commands},
+        "config": sorted(ctx.getenv_variables),
+        "services": [
+            {"name": svc.name, "provider": svc.provider}
+            for svc in (serve.services or [])
+        ],
+    }
+    print(json.dumps(plan_output, indent=4))
+
+
 @app.command(name="build")
 def build(
     path: Path = typer.Argument(
@@ -1692,12 +1794,6 @@ def build(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
-    ab_file = path / "Shipit"
-    if not ab_file.exists():
-        raise FileNotFoundError(
-            f"Shipit file not found at {ab_file}. Run `shipit generate {path}` to create it."
-        )
-    source = open(ab_file).read()
     builder: Builder
     if docker or docker_client:
         builder = DockerBuilder(path, docker_client)
@@ -1708,30 +1804,7 @@ def build(
             builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
         )
 
-    ctx = Ctx(builder)
-    glb = sl.Globals.standard()
-    mod = sl.Module()
-
-    mod.add_callable("service", ctx.service)
-    mod.add_callable("getenv", ctx.getenv)
-    mod.add_callable("dep", ctx.dep)
-    mod.add_callable("serve", ctx.serve)
-    mod.add_callable("run", ctx.run)
-    mod.add_callable("mount", ctx.mount)
-    mod.add_callable("volume", ctx.volume)
-    mod.add_callable("workdir", ctx.workdir)
-    mod.add_callable("copy", ctx.copy)
-    mod.add_callable("path", ctx.path)
-    mod.add_callable("env", ctx.env)
-    mod.add_callable("use", ctx.use)
-
-    dialect = sl.Dialect.extended()
-    dialect.enable_f_strings = True
-
-    ast = sl.parse("shipit", source, dialect=dialect)
-
-    sl.eval(mod, ast, glb)
-    assert len(ctx.serves) <= 1, "Only one serve is allowed for now"
+    ctx, serve = evaluate_shipit(path, builder)
     env = {
         "PATH": "",
         "COLORTERM": os.environ.get("COLORTERM", ""),
@@ -1739,7 +1812,6 @@ def build(
         "LS_COLORS": os.environ.get("LS_COLORS", "0"),
         "CLICOLOR": os.environ.get("CLICOLOR", "0"),
     }
-    serve = next(iter(ctx.serves.values()))
 
     if skip_docker_if_safe_build and serve.build and len(serve.build) > 0:
         # If it doesn't have a run step, then it's safe to skip Docker and run all the
