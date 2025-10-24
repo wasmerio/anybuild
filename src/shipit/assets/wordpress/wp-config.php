@@ -21,10 +21,12 @@ define( 'WP_AUTO_UPDATE_CORE', false); // Disable automatic aupdates and checks
  * @package WordPress
  */
 
+
 function get_env_var(string $name, string $default = ''): string
 {
-    if (isset($_ENV[$name])) {
-	    return $_ENV[$name];
+    $value = getenv($name);
+    if ($value !== false) {
+        return $value;
     }
 
     if ($default === '') {
