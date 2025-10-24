@@ -92,16 +92,3 @@ class ProviderPlan:
 
 def _exists(path: Path, *candidates: str) -> bool:
     return any((path / c).exists() for c in candidates)
-
-
-def _has_dependency(pkg_json: Path, dep: str) -> bool:
-    try:
-        import json
-
-        data = json.loads(pkg_json.read_text())
-        for section in ("dependencies", "devDependencies", "peerDependencies"):
-            if dep in data.get(section, {}):
-                return True
-    except Exception:
-        return False
-    return False

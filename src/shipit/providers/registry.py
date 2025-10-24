@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from .base import Provider
-from .gatsby import GatsbyProvider
 from .hugo import HugoProvider
 from .laravel import LaravelProvider
 from .mkdocs import MkdocsProvider
@@ -16,7 +15,6 @@ def providers() -> list[type[Provider]]:
     # Order matters: more specific providers first
     return [
         LaravelProvider,
-        # GatsbyProvider,
         HugoProvider,
         MkdocsProvider,
         PythonProvider,
