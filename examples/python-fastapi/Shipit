@@ -25,7 +25,7 @@ serve(
   build=[
     use(python, uv),
     workdir(app["build"]),
-    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON="python{python_version}"),
+    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}"),
     run(f"uv sync --locked", inputs=["pyproject.toml", "uv.lock", "README.md"], group="install"),
     copy("pyproject.toml", "pyproject.toml"),
     run(f"uv pip compile pyproject.toml --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,

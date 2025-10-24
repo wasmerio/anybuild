@@ -310,7 +310,7 @@ class PythonProvider:
             # Join inputs
             inputs = ", ".join([f'"{input}"' for input in input_files])
             steps += [
-                'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON="python{python_version}")',
+                'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}")',
                 'copy(".", ".")' if self.install_requires_all_files else None,
                 f'run(f"uv sync{extra_args}", inputs=[{inputs}], group="install")',
                 'copy("pyproject.toml", "pyproject.toml")'
