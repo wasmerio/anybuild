@@ -25,7 +25,7 @@ serve(
     use(python, uv),
     workdir(temp["build"]),
     env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
-    run(f"uv init --no-workspace --no-managed-python --python python{python_version}", inputs=[], outputs=["uv.lock"], group="install"),
+    run(f"uv init --no-workspace", inputs=[], outputs=["uv.lock"], group="install"),
     run("uv add -r requirements.txt mkdocs", inputs=["requirements.txt"], group="install"),
     path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),

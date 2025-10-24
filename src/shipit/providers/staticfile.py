@@ -61,6 +61,9 @@ class StaticFileProvider:
     def provider_kind(self) -> str:
         return "staticfile"
 
+    def platform(self) -> Optional[str]:
+        return None
+
     def dependencies(self) -> list[DependencySpec]:
         return [
             DependencySpec(

@@ -34,7 +34,7 @@ from rich.rule import Rule
 from rich.syntax import Syntax
 
 from shipit.version import version as shipit_version
-from shipit.generator import generate_shipit
+from shipit.generator import generate_shipit, detect_provider
 from shipit.providers.base import CustomCommands
 from shipit.procfile import Procfile
 from dotenv import dotenv_values
@@ -1601,7 +1601,8 @@ def generate(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
 def _default(ctx: typer.Context) -> None:
-    print_help()
+    if ctx.invoked_subcommand is None:
+        print_help()
 
 
 @app.command(name="deploy")
@@ -1720,6 +1721,15 @@ def plan(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
+    custom_commands = CustomCommands()
+    procfile_path = path / "Procfile"
+    if procfile_path.exists():
+        try:
+            procfile = Procfile.loads(procfile_path.read_text())
+            custom_commands.start = procfile.get_start_command()
+        except Exception:
+            pass
+
     builder: Builder
     if docker or docker_client:
         builder = DockerBuilder(path, docker_client)
@@ -1731,13 +1741,39 @@ def plan(
         )
 
     ctx, serve = evaluate_shipit(path, builder)
-    metadata_commands = {
+    metadata_commands: Dict[str, Optional[str]] = {
         "start": serve.commands.get("start"),
         "after_deploy": serve.commands.get("after_deploy"),
     }
+
+    def _collect_group_commands(group: str) -> Optional[str]:
+        commands = [
+            step.command
+            for step in serve.build
+            if isinstance(step, RunStep) and step.group == group
+        ]
+        if not commands:
+            return None
+        return " && ".join(commands)
+
+    metadata_install = _collect_group_commands("install")
+    metadata_build = _collect_group_commands("build")
+    metadata_commands["install"] = metadata_install
+    metadata_commands["build"] = metadata_build
+    platform: Optional[str]
+    try:
+        provider_cls = detect_provider(path, custom_commands)
+        provider_instance = provider_cls(path, custom_commands)
+        provider_instance.initialize()
+        platform = provider_instance.platform()
+    except Exception:
+        platform = None
     plan_output = {
         "provider": serve.provider,
-        "metadata": {"commands": metadata_commands},
+        "metadata": {
+            "platform": platform,
+            "commands": metadata_commands,
+        },
         "config": sorted(ctx.getenv_variables),
         "services": [
             {"name": svc.name, "provider": svc.provider}

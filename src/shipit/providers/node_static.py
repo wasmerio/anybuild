@@ -122,6 +122,7 @@ class NodeStaticProvider(StaticFileProvider):
 
     def __init__(self, path: Path, custom_commands: CustomCommands):
         super().__init__(path, custom_commands)
+        self.static_generator: Optional[StaticGenerator] = None
         if (path / "package-lock.json").exists():
             self.package_manager = PackageManager.NPM
         elif (path / "pnpm-lock.yaml").exists():
@@ -232,6 +233,9 @@ class NodeStaticProvider(StaticFileProvider):
 
     def provider_kind(self) -> str:
         return "staticsite"
+
+    def platform(self) -> Optional[str]:
+        return self.static_generator.value if self.static_generator else None
 
     def dependencies(self) -> list[DependencySpec]:
         package_manager_dep = self.package_manager.as_dependency(self.path)

@@ -46,6 +46,9 @@ class WordPressProvider(PhpProvider):
     def provider_kind(self) -> str:
         return "php"
 
+    def platform(self) -> Optional[str]:
+        return "wordpress"
+
     def dependencies(self) -> list[DependencySpec]:
         return [
             *super().dependencies(),

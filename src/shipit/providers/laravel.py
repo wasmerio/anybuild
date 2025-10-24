@@ -39,6 +39,9 @@ class LaravelProvider:
     def provider_kind(self) -> str:
         return "php"
 
+    def platform(self) -> Optional[str]:
+        return "laravel"
+
     def dependencies(self) -> list[DependencySpec]:
         return [
             DependencySpec(

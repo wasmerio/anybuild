@@ -45,6 +45,9 @@ class GatsbyProvider:
     def provider_kind(self) -> str:
         return "staticsite"
 
+    def platform(self) -> Optional[str]:
+        return "gatsby"
+
     def declarations(self) -> Optional[str]:
         return None
 

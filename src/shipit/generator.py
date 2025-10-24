@@ -92,6 +92,7 @@ def generate_shipit(path: Path, custom_commands: CustomCommands) -> str:
     plan = ProviderPlan(
         serve_name=provider.serve_name(),
         provider=provider.provider_kind(),
+        platform=provider.platform(),
         mounts=provider.mounts(),
         volumes=provider.volumes(),
         declarations=provider.declarations(),

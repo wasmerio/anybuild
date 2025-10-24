@@ -229,6 +229,9 @@ class PythonProvider:
     def provider_kind(self) -> str:
         return "python"
 
+    def platform(self) -> Optional[str]:
+        return self.framework.value if self.framework else None
+
     def dependencies(self) -> list[DependencySpec]:
         deps = [
             DependencySpec(
@@ -307,9 +310,9 @@ class PythonProvider:
             # Join inputs
             inputs = ", ".join([f'"{input}"' for input in input_files])
             steps += [
-                'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"])',
+                'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON="python{python_version}")',
                 'copy(".", ".")' if self.install_requires_all_files else None,
-                f'run(f"uv sync --compile --python python{{python_version}} --no-managed-python{extra_args}", inputs=[{inputs}], group="install")',
+                f'run(f"uv sync{extra_args}", inputs=[{inputs}], group="install")',
                 'copy("pyproject.toml", "pyproject.toml")'
                 if not self.install_requires_all_files
                 else None,
@@ -317,14 +320,14 @@ class PythonProvider:
             ]
             if not self.only_build:
                 steps += [
-                    'run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None',
+                    'run(f"uv pip compile pyproject.toml --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None',
                     f'run(f"uvx pip install -r cross-requirements.txt {extra_deps} --target {{python_cross_packages_path}} --platform {{cross_platform}} --only-binary=:all: --python-version={{python_version}} --compile") if cross_platform else None',
                     'run("rm cross-requirements.txt") if cross_platform else None',
                 ]
         elif has_requirements or extra_deps:
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"])',
-                'run(f"uv init --no-workspace --no-managed-python --python python{python_version}", inputs=[], outputs=["uv.lock"], group="install")',
+                'run(f"uv init --no-workspace", inputs=[], outputs=["uv.lock"], group="install")',
                 'copy(".", ".")' if self.install_requires_all_files else None,
             ]
             if has_requirements:
@@ -350,6 +353,10 @@ class PythonProvider:
             steps += [
                 'run("mkdir -p {}/bin".format(venv["build"])) if cross_platform else None',
                 'run("cp {}/bin/mcp {}/bin/mcp".format(local_venv["build"], venv["build"])) if cross_platform else None',
+            ]
+        if self.framework == PythonFramework.Django:
+            steps += [
+                'run("python manage.py collectstatic --noinput", group="build")',
             ]
         return list(filter(None, steps))
 

@@ -30,15 +30,16 @@ serve(
   build=[
     use(python, uv),
     workdir(app["build"]),
-    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
-    run(f"uv sync --compile --python python{python_version} --no-managed-python --locked", inputs=["pyproject.toml", "uv.lock", "README.md"], group="install"),
+    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON="python{python_version}"),
+    run(f"uv sync --locked", inputs=["pyproject.toml", "uv.lock", "README.md"], group="install"),
     copy("pyproject.toml", "pyproject.toml"),
     run("uv add uvicorn", group="install"),
-    run(f"uv pip compile pyproject.toml --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,
+    run(f"uv pip compile pyproject.toml --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,
     run(f"uvx pip install -r cross-requirements.txt uvicorn --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
     run("rm cross-requirements.txt") if cross_platform else None,
     path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
-    copy(".", ".", ignore=[".venv", ".git", "__pycache__"])
+    copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
+    run("python manage.py collectstatic --noinput", group="build")
   ],
   deps=[python],
   prepare=[
