@@ -20,7 +20,9 @@ class PhpProvider:
     def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
         self.custom_commands = custom_commands
-        self.has_composer = _exists(self.path, "composer.json", "composer.lock")
+        self.has_composer = _exists(self.path, "composer.json", "composer.lock") or (
+            custom_commands.install and custom_commands.install.startswith("composer ")
+        )
 
     @classmethod
     def name(cls) -> str:
