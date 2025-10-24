@@ -216,7 +216,7 @@ class PythonProvider:
                 return DetectResult(cls.name(), 70)
             return DetectResult(cls.name(), 50)
         if custom_commands.start:
-            if custom_commands.start.startswith("python ") or custom_commands.start.startswith("uv ") or custom_commands.start.startswith("uvicorn "):
+            if custom_commands.start.startswith("python ") or custom_commands.start.startswith("uv ") or custom_commands.start.startswith("uvicorn ") or custom_commands.start.startswith("gunicorn "):
                 return DetectResult(cls.name(), 80)
         return None
 

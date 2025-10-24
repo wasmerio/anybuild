@@ -1491,6 +1491,10 @@ def auto(
         None,
         help="The environment to use (defaults to `.env`, it will use .env.<env_name> if provided)",
     ),
+    use_provider: Optional[str] = typer.Option(
+        None,
+        help="Use a specific provider to build the project.",
+    ),
 ):
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -1503,6 +1507,7 @@ def auto(
             install_command=install_command,
             build_command=build_command,
             start_command=start_command,
+            use_provider=use_provider,
         )
 
     build(
@@ -1561,6 +1566,10 @@ def generate(
         None,
         help="The start command to use (overwrites the default)",
     ),
+    use_provider: Optional[str] = typer.Option(
+        None,
+        help="Use a specific provider to build the project.",
+    ),
 ):
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -1591,7 +1600,7 @@ def generate(
         custom_commands.install = install_command
     if build_command:
         custom_commands.build = build_command
-    content = generate_shipit(path, custom_commands)
+    content = generate_shipit(path, custom_commands, use_provider=use_provider)
     out.write_text(content)
     console.print(f"[bold]Generated Shipit[/bold] at {out.absolute()}")
 

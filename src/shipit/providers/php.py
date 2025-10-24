@@ -42,6 +42,8 @@ class PhpProvider:
             return DetectResult(cls.name(), 10)
         if custom_commands.start and custom_commands.start.startswith("php "):
             return DetectResult(cls.name(), 70)
+        if custom_commands.install and custom_commands.install.startswith("composer "):
+            return DetectResult(cls.name(), 30)
         return None
 
     def initialize(self) -> None:
@@ -117,7 +119,9 @@ class PhpProvider:
             }
         elif _exists(self.path, "index.php"):
             return {"start": '"php -S localhost:{} -t {}".format(PORT, app["serve"])'}
-        return {}
+        return {
+            "start": '"php -S localhost:{} -t {}".format(PORT, app["serve"])',
+        }
 
     def mounts(self) -> list[MountSpec]:
         return [
