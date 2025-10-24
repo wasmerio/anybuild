@@ -81,7 +81,7 @@ class WordPressProvider(PhpProvider):
     def commands(self) -> Dict[str, str]:
         commands = super().commands()
         return {
-            "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"])',
+            # "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"])',
             "after_deploy": '"bash {}/setup-wp.sh".format(assets["serve"])',
             **commands,
         }

@@ -4,7 +4,9 @@ IFS=$'\n\t'
 export COLUMNS=80  # Prevent WP-CLI from asking for TTY size
 export PAGER="cat"
 
-alias wp="php /opt/assets/wp-cli.phar --allow-root --path=/app"
+wp() {
+  php /opt/assets/wp-cli.phar --allow-root --path=/app "$@"
+}
 
 echo "🚀 Starting WordPress setup..."
 
