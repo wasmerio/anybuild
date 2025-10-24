@@ -226,9 +226,6 @@ class PythonProvider:
     def serve_name(self) -> str:
         return self.path.name
 
-    def provider_kind(self) -> str:
-        return "python"
-
     def platform(self) -> Optional[str]:
         return self.framework.value if self.framework else None
 
@@ -327,8 +324,8 @@ class PythonProvider:
         elif has_requirements or extra_deps:
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"])',
-                'run(f"uv init --no-workspace", inputs=[], outputs=["uv.lock"], group="install")',
-                'copy(".", ".")' if self.install_requires_all_files else None,
+                'run(f"uv init", inputs=[], outputs=["uv.lock"], group="install")',
+                'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])' if self.install_requires_all_files else None,
             ]
             if has_requirements:
                 steps += [
@@ -347,7 +344,7 @@ class PythonProvider:
 
         steps += [
             'path((local_venv["build"] if cross_platform else venv["build"]) + "/bin")',
-            'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])',
+            'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])' if not self.install_requires_all_files else None,
         ]
         if self.framework == PythonFramework.MCP:
             steps += [

@@ -58,9 +58,6 @@ class StaticFileProvider:
     def serve_name(self) -> str:
         return self.path.name
 
-    def provider_kind(self) -> str:
-        return "staticfile"
-
     def platform(self) -> Optional[str]:
         return None
 

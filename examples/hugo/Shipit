@@ -11,7 +11,7 @@ PORT = getenv("PORT") or "8080"
 
 serve(
   name="hugo",
-  provider="staticsite",
+  provider="hugo",
   cwd=app["serve"],
   build=[
     use(hugo),

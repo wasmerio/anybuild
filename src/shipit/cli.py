@@ -1354,12 +1354,7 @@ class Ctx:
         }
 
 
-def evaluate_shipit(path: Path, builder: Builder) -> Tuple[Ctx, Serve]:
-    shipit_file = path / "Shipit"
-    if not shipit_file.exists():
-        raise FileNotFoundError(
-            f"Shipit file not found at {shipit_file}. Run `shipit generate {path}` to create it."
-        )
+def evaluate_shipit(shipit_file: Path, builder: Builder) -> Tuple[Ctx, Serve]:
     source = shipit_file.read_text()
     ctx = Ctx(builder)
     glb = sl.Globals.standard()
@@ -1447,9 +1442,9 @@ def auto(
         None,
         help="Regenerate the Shipit file.",
     ),
-    regenerate_path: Optional[Path] = typer.Option(
+    shipit_path: Optional[Path] = typer.Option(
         None,
-        help="Regenerate the Shipit file onto the provided path.",
+        help="The path to the Shipit file (defaults to Shipit in the provided path).",
     ),
     wasmer_deploy: Optional[bool] = typer.Option(
         False,
@@ -1499,10 +1494,15 @@ def auto(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
-    if not (path / "Shipit").exists() or regenerate or regenerate_path is not None:
+    if not regenerate:
+        if shipit_path and not shipit_path.exists():
+            regenerate = True
+        elif not (path / "Shipit").exists():
+            regenerate = True
+    if regenerate:
         generate(
             path,
-            out=regenerate_path,
+            out=shipit_path,
             use_procfile=use_procfile,
             install_command=install_command,
             build_command=build_command,
@@ -1512,6 +1512,7 @@ def auto(
 
     build(
         path,
+        shipit_path=shipit_path,
         wasmer=(wasmer or wasmer_deploy),
         docker=docker,
         docker_client=docker_client,
@@ -1548,6 +1549,9 @@ def generate(
     ),
     out: Optional[Path] = typer.Option(
         None,
+        "-o",
+        "--out",
+        "--output",
         help="Output path (defaults to the Shipit file in the provided path).",
     ),
     use_procfile: bool = typer.Option(
@@ -1702,6 +1706,17 @@ def plan(
         help="Project path (defaults to current directory).",
         show_default=False,
     ),
+    out: Optional[Path] = typer.Option(
+        None,
+        "-o",
+        "--out",
+        "--output",
+        help="Output path of the plan (defaults to stdout).",
+    ),
+    shipit_path: Optional[Path] = typer.Option(
+        None,
+        help="The path to the Shipit file (defaults to Shipit in the provided path).",
+    ),
     wasmer: bool = typer.Option(
         False,
         help="Use Wasmer to evaluate the project.",
@@ -1726,9 +1741,40 @@ def plan(
         None,
         help="Use a specific Docker client (such as depot, podman, etc.)",
     ),
+    use_procfile: bool = typer.Option(
+        True,
+        help="Use the Procfile to generate the default custom commands (install, build, start, after_deploy).",
+    ),
+    install_command: Optional[str] = typer.Option(
+        None,
+        help="The install command to use (overwrites the default)",
+    ),
+    build_command: Optional[str] = typer.Option(
+        None,
+        help="The build command to use (overwrites the default)",
+    ),
+    start_command: Optional[str] = typer.Option(
+        None,
+        help="The start command to use (overwrites the default)",
+    ),
+    use_provider: Optional[str] = typer.Option(
+        None,
+        help="Use a specific provider to build the project.",
+    ),
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
+
+    if not (path / "Shipit").exists():
+        generate(
+            path,
+            out=None,
+            use_procfile=use_procfile,
+            install_command=install_command,
+            build_command=build_command,
+            start_command=start_command,
+            use_provider=use_provider,
+        )
 
     custom_commands = CustomCommands()
     procfile_path = path / "Procfile"
@@ -1738,6 +1784,8 @@ def plan(
             custom_commands.start = procfile.get_start_command()
         except Exception:
             pass
+
+    shipit_file = get_shipit_path(path, shipit_path)
 
     builder: Builder
     if docker or docker_client:
@@ -1749,7 +1797,7 @@ def plan(
             builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
         )
 
-    ctx, serve = evaluate_shipit(path, builder)
+    ctx, serve = evaluate_shipit(shipit_file, builder)
     metadata_commands: Dict[str, Optional[str]] = {
         "start": serve.commands.get("start"),
         "after_deploy": serve.commands.get("after_deploy"),
@@ -1789,7 +1837,14 @@ def plan(
             for svc in (serve.services or [])
         ],
     }
-    print(json.dumps(plan_output, indent=4))
+    json_output = json.dumps(plan_output, indent=4)
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json_output)
+        console.print(f"[bold]Plan saved to {out.absolute()}[/bold]")
+    else:
+        sys.stdout.write(json_output+ "\n")
+        sys.stdout.flush()
 
 
 @app.command(name="build")
@@ -1798,6 +1853,10 @@ def build(
         Path("."),
         help="Project path (defaults to current directory).",
         show_default=False,
+    ),
+    shipit_path: Optional[Path] = typer.Option(
+        None,
+        help="The path to the Shipit file (defaults to Shipit in the provided path).",
     ),
     wasmer: bool = typer.Option(
         False,
@@ -1839,6 +1898,8 @@ def build(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
+    shipit_file = get_shipit_path(path, shipit_path)
+
     builder: Builder
     if docker or docker_client:
         builder = DockerBuilder(path, docker_client)
@@ -1849,7 +1910,7 @@ def build(
             builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
         )
 
-    ctx, serve = evaluate_shipit(path, builder)
+    ctx, serve = evaluate_shipit(shipit_file, builder)
     env = {
         "PATH": "",
         "COLORTERM": os.environ.get("COLORTERM", ""),
@@ -1868,6 +1929,7 @@ def build(
             )
             return build(
                 path,
+                shipit_path=shipit_path,
                 wasmer=wasmer,
                 skip_prepare=skip_prepare,
                 wasmer_bin=wasmer_bin,
@@ -1898,6 +1960,15 @@ def build(
         builder.prepare(env, serve.prepare)
 
 
+def get_shipit_path(path: Path, shipit_path: Optional[Path] = None) -> Path:
+    if shipit_path is None:
+        shipit_path = path / "Shipit"
+        if not shipit_path.exists():
+            raise Exception(f"Shipit file not found at {shipit_path}. Run `shipit generate {path}` to create it.")
+    elif not shipit_path.exists():
+        raise Exception(f"Shipit file not found at {shipit_path}. Run `shipit generate {path} -o {shipit_path}` to create it.")
+    return shipit_path
+
 def main() -> None:
     args = sys.argv[1:]
     # If no subcommand or first token looks like option/path → default to "build"
@@ -1909,7 +1980,8 @@ def main() -> None:
         app()
     except Exception as e:
         console.print(f"[bold red]{type(e).__name__}[/bold red]: {e}")
-        # raise e
+        if os.environ.get("SHIPIT_DEBUG", "false").lower() in ["1", "true", "yes", "y"]:
+            raise e
 
 
 if __name__ == "__main__":

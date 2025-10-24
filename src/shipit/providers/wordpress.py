@@ -43,11 +43,8 @@ class WordPressProvider(PhpProvider):
     def serve_name(self) -> str:
         return self.path.name
 
-    def provider_kind(self) -> str:
-        return "php"
-
     def platform(self) -> Optional[str]:
-        return "wordpress"
+        return None
 
     def dependencies(self) -> list[DependencySpec]:
         return [

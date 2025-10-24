@@ -12,7 +12,7 @@ PORT = getenv("PORT") or "8080"
 
 serve(
   name="nextjs",
-  provider="staticsite",
+  provider="node-static",
   cwd=app["serve"],
   build=[
     use(node, npm),

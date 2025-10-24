@@ -40,11 +40,8 @@ class MkdocsProvider(StaticFileProvider):
     def serve_name(self) -> str:
         return self.path.name
 
-    def provider_kind(self) -> str:
-        return "mkdocs-site"
-
     def platform(self) -> Optional[str]:
-        return "mkdocs"
+        return None
 
     def dependencies(self) -> list[DependencySpec]:
         return [

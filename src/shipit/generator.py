@@ -95,7 +95,7 @@ def generate_shipit(path: Path, custom_commands: CustomCommands, use_provider: O
     # Collect parts
     plan = ProviderPlan(
         serve_name=provider.serve_name(),
-        provider=provider.provider_kind(),
+        provider=provider.name(),
         platform=provider.platform(),
         mounts=provider.mounts(),
         volumes=provider.volumes(),

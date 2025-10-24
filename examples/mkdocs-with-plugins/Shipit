@@ -19,13 +19,13 @@ venv = local_venv
 
 serve(
   name="mkdocs-with-plugins",
-  provider="mkdocs-site",
+  provider="mkdocs",
   cwd=app["serve"],
   build=[
     use(python, uv),
     workdir(temp["build"]),
     env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
-    run(f"uv init --no-workspace", inputs=[], outputs=["uv.lock"], group="install"),
+    run(f"uv init", inputs=[], outputs=["uv.lock"], group="install"),
     run("uv add -r requirements.txt mkdocs", inputs=["requirements.txt"], group="install"),
     path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),

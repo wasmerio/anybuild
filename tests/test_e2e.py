@@ -165,7 +165,7 @@ class E2ECase(NamedTuple):
     ],
     ids=lambda c: str(c),
 )
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
+@pytest.mark.flaky(reruns=2, reruns_delay=2)
 @pytest.mark.parametrize(
     "build_mode",
     [

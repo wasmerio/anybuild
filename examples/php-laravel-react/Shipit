@@ -12,7 +12,7 @@ HOME = getenv("HOME")
 
 serve(
   name="php-laravel-react",
-  provider="php",
+  provider="laravel",
   cwd=app["serve"],
   build=[
     use(php, composer, pie, pnpm),
