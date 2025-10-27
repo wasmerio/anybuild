@@ -4,6 +4,13 @@ IFS=$'\n\t'
 export COLUMNS=80  # Prevent WP-CLI from asking for TTY size
 export PAGER="cat"
 
+WP_ADMIN_EMAIL=${WP_ADMIN_EMAIL:-"admin@example.com"}
+WP_ADMIN_USERNAME=${WP_ADMIN_USERNAME:-"admin"}
+WP_ADMIN_PASSWORD=${WP_ADMIN_PASSWORD:-"admin"}
+WP_LOCALE=${WP_LOCALE:-"en_US"}
+WP_SITEURL=${WP_SITEURL:-"http://localhost"}
+WP_SITE_TITLE=${WP_SITE_TITLE:-"WordPress"}
+
 wp() {
   php /opt/assets/wp-cli.phar --allow-root --path=/app "$@"
 }
