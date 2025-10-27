@@ -1,4 +1,5 @@
-import logging
+import tempfile
+import hashlib
 import requests
 import os
 import shlex
@@ -1138,6 +1139,28 @@ class WasmerBuilder:
             *(extra_args or []), _out=write_stdout, _err=write_stderr, _env=os.environ
         )
 
+    def deploy_config(self, config_path: Path) -> None:
+        package_webc_path = self.wasmer_dir_path / "package.webc"
+        app_yaml_path = self.wasmer_dir_path / "app.yaml"
+        package_webc_path.parent.mkdir(parents=True, exist_ok=True)
+        self.run_command(
+            self.bin,
+            ["package", "build", self.wasmer_dir_path, "--out", package_webc_path],
+        )
+        config_path.write_text(
+            json.dumps(
+                {
+                    "app_yaml_path": str(app_yaml_path.absolute()),
+                    "package_webc_path": str(package_webc_path.absolute()),
+                    "package_webc_size": package_webc_path.stat().st_size,
+                    "package_webc_sha256": hashlib.sha256(
+                        package_webc_path.read_bytes()
+                    ).hexdigest(),
+                }
+            )
+        )
+        console.print(f"\n[bold]Saved deploy config to {config_path}[/bold]")
+
     def deploy(
         self, app_owner: Optional[str] = None, app_name: Optional[str] = None
     ) -> str:
@@ -1446,9 +1469,17 @@ def auto(
         None,
         help="The path to the Shipit file (defaults to Shipit in the provided path).",
     ),
+    temp_shipit: bool = typer.Option(
+        False,
+        help="Use a temporary Shipit file in the system temporary directory.",
+    ),
     wasmer_deploy: Optional[bool] = typer.Option(
         False,
         help="Deploy the project to Wasmer.",
+    ),
+    wasmer_deploy_config: Optional[Path] = typer.Option(
+        None,
+        help="Save the output of the Wasmer build to a json file",
     ),
     wasmer_token: Optional[str] = typer.Option(
         None,
@@ -1494,11 +1525,20 @@ def auto(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
+    if temp_shipit:
+        if shipit_path:
+            raise Exception("Cannot use both --temp-shipit and --shipit-path")
+        temp_shipit = tempfile.NamedTemporaryFile(
+            delete=False, delete_on_close=False, prefix="Shipit"
+        )
+        shipit_path = Path(temp_shipit.name)
+
     if not regenerate:
         if shipit_path and not shipit_path.exists():
             regenerate = True
         elif not (path / "Shipit").exists():
             regenerate = True
+
     if regenerate:
         generate(
             path,
@@ -1523,7 +1563,7 @@ def auto(
         skip_prepare=skip_prepare,
         env_name=env_name,
     )
-    if start or wasmer_deploy:
+    if start or wasmer_deploy or wasmer_deploy_config:
         serve(
             path,
             wasmer=wasmer,
@@ -1536,6 +1576,7 @@ def auto(
             wasmer_deploy=wasmer_deploy,
             wasmer_app_owner=wasmer_app_owner,
             wasmer_app_name=wasmer_app_name,
+            wasmer_deploy_config=wasmer_deploy_config,
         )
     # deploy(path)
 
@@ -1552,6 +1593,7 @@ def generate(
         "-o",
         "--out",
         "--output",
+        "--shipit-path",
         help="Output path (defaults to the Shipit file in the provided path).",
     ),
     use_procfile: bool = typer.Option(
@@ -1676,6 +1718,10 @@ def serve(
         None,
         help="Name of the Wasmer app.",
     ),
+    wasmer_deploy_config: Optional[Path] = typer.Option(
+        None,
+        help="Save the output of the Wasmer build to a json file",
+    ),
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -1685,18 +1731,17 @@ def serve(
         builder = DockerBuilder(path, docker_client)
     else:
         builder = LocalBuilder(path)
-    if wasmer or wasmer_deploy:
+    if wasmer or wasmer_deploy or wasmer_deploy_config:
         builder = WasmerBuilder(
             builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
         )
-    if start:
-        builder.run_serve_command("start")
 
-    if wasmer_deploy:
-        if isinstance(builder, WasmerBuilder):
-            builder.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
-        else:
-            raise Exception("Wasmer deploy is only supported for Wasmer builders")
+    if wasmer_deploy_config:
+        builder.deploy_config(wasmer_deploy_config)
+    elif wasmer_deploy:
+        builder.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
+    elif start:
+        builder.run_serve_command("start")
 
 
 @app.command(name="plan")
@@ -1712,6 +1757,14 @@ def plan(
         "--out",
         "--output",
         help="Output path of the plan (defaults to stdout).",
+    ),
+    temp_shipit: bool = typer.Option(
+        False,
+        help="Use a temporary Shipit file in the system temporary directory.",
+    ),
+    regenerate: bool = typer.Option(
+        False,
+        help="Regenerate the Shipit file.",
     ),
     shipit_path: Optional[Path] = typer.Option(
         None,
@@ -1765,10 +1818,24 @@ def plan(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
-    if not (path / "Shipit").exists():
+    if temp_shipit:
+        if shipit_path:
+            raise Exception("Cannot use both --temp-shipit and --shipit-path")
+        temp_shipit = tempfile.NamedTemporaryFile(
+            delete=False, delete_on_close=False, prefix="Shipit"
+        )
+        shipit_path = Path(temp_shipit.name)
+
+    if not regenerate:
+        if shipit_path and not shipit_path.exists():
+            regenerate = True
+        elif not (path / "Shipit").exists():
+            regenerate = True
+
+    if regenerate:
         generate(
             path,
-            out=None,
+            out=shipit_path,
             use_procfile=use_procfile,
             install_command=install_command,
             build_command=build_command,
@@ -1843,7 +1910,7 @@ def plan(
         out.write_text(json_output)
         console.print(f"[bold]Plan saved to {out.absolute()}[/bold]")
     else:
-        sys.stdout.write(json_output+ "\n")
+        sys.stdout.write(json_output + "\n")
         sys.stdout.flush()
 
 
@@ -1964,10 +2031,15 @@ def get_shipit_path(path: Path, shipit_path: Optional[Path] = None) -> Path:
     if shipit_path is None:
         shipit_path = path / "Shipit"
         if not shipit_path.exists():
-            raise Exception(f"Shipit file not found at {shipit_path}. Run `shipit generate {path}` to create it.")
+            raise Exception(
+                f"Shipit file not found at {shipit_path}. Run `shipit generate {path}` to create it."
+            )
     elif not shipit_path.exists():
-        raise Exception(f"Shipit file not found at {shipit_path}. Run `shipit generate {path} -o {shipit_path}` to create it.")
+        raise Exception(
+            f"Shipit file not found at {shipit_path}. Run `shipit generate {path} -o {shipit_path}` to create it."
+        )
     return shipit_path
+
 
 def main() -> None:
     args = sys.argv[1:]
