@@ -218,6 +218,8 @@ class PythonProvider:
         if custom_commands.start:
             if custom_commands.start.startswith("python ") or custom_commands.start.startswith("uv ") or custom_commands.start.startswith("uvicorn ") or custom_commands.start.startswith("gunicorn "):
                 return DetectResult(cls.name(), 80)
+        if cls.detect_main_file(path):
+            return DetectResult(cls.name(), 10)
         return None
 
     def initialize(self) -> None:
@@ -367,24 +369,28 @@ class PythonProvider:
             'run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None',
         ]
 
-    @cached_property
-    def main_file(self) -> Optional[str]:
+    @classmethod
+    def detect_main_file(cls, root_path: Path) -> Optional[str]:
         paths_to_try = ["main.py", "app.py", "streamlit_app.py", "Home.py", "*_app.py"]
         for path in paths_to_try:
             if "*" in path:
                 continue  # This is for the glob finder
-            if _exists(self.path, path):
+            if _exists(root_path, path):
                 return path
-            if _exists(self.path, f"src/{path}"):
+            if _exists(root_path, f"src/{path}"):
                 return f"src/{path}"
         for path in paths_to_try:
             try:
-                found_path = next(self.path.glob(f"**/{path}"))
+                found_path = next(root_path.glob(f"**/{path}"))
             except StopIteration:
                 found_path = None
             if found_path:
-                return str(found_path.relative_to(self.path))
+                return str(found_path.relative_to(root_path))
         return None
+
+    @cached_property
+    def main_file(self) -> Optional[str]:
+        return self.detect_main_file(self.path)
 
     def commands(self) -> Dict[str, str]:
         commands = self.base_commands()
