@@ -835,7 +835,7 @@ class WasmerBuilder:
         src_dir: Path,
         registry: Optional[str] = None,
         token: Optional[str] = None,
-        bin: Optional[Path] = None,
+        bin: Optional[str] = None,
     ) -> None:
         self.src_dir = src_dir
         self.inner_builder = inner_builder
@@ -843,7 +843,7 @@ class WasmerBuilder:
         self.wasmer_dir_path = self.src_dir / ".shipit" / "wasmer"
         self.wasmer_registry = registry
         self.wasmer_token = token
-        self.bin = bin.absolute() if bin else "wasmer"
+        self.bin = bin or "wasmer"
         self.default_env = {
             "SHIPIT_PYTHON_EXTRA_INDEX_URL": "https://pythonindex.wasix.org/simple",
             "SHIPIT_PYTHON_CROSS_PLATFORM": "wasix_wasm32",
@@ -1437,7 +1437,7 @@ def auto(
         False,
         help="Use Wasmer to build and serve the project.",
     ),
-    wasmer_bin: Optional[Path] = typer.Option(
+    wasmer_bin: Optional[str] = typer.Option(
         None,
         help="The path to the Wasmer binary.",
     ),
@@ -1682,7 +1682,7 @@ def serve(
         False,
         help="Use Wasmer to build and serve the project.",
     ),
-    wasmer_bin: Optional[Path] = typer.Option(
+    wasmer_bin: Optional[str] = typer.Option(
         None,
         help="The path to the Wasmer binary.",
     ),
