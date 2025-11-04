@@ -756,14 +756,13 @@ class WasmerBuilder:
     mapper: Dict[str, MapperItem] = {
         "python": {
             "dependencies": {
-                "latest": "python/python@=3.13.1",
-                "3.13": "python/python@=3.13.1",
+                "latest": "python/python@=3.13.2",
+                "3.13": "python/python@=3.13.2",
             },
             "scripts": {"python"},
             "aliases": {},
             "env": {
                 "PYTHONEXECUTABLE": "/bin/python",
-                "PYTHONHOME": "/cpython",
             },
         },
         "pandoc": {
