@@ -387,7 +387,7 @@ RUN apt-get update \\
         dpkg-dev pkg-config re2c locate \\
         libmariadb-dev libmariadb-dev-compat libpq-dev \\
         libvips-dev default-libmysqlclient-dev libmagickwand-dev \\
-        libicu-dev libxml2-dev libxslt-dev \\
+        libicu-dev libxml2-dev libxslt-dev libyaml-dev \\
         sudo curl ca-certificates \\
     && rm -rf /var/lib/apt/lists/*
 
