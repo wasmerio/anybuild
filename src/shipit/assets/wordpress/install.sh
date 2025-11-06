@@ -94,7 +94,7 @@ fi
 
 if [ -n "${WP_LOCALE:-}" ]; then
   echo "Setting locale: $WP_LOCALE"
-  wp language install "$WP_LOCALE"
+  wp language core install "$WP_LOCALE"
   wp language theme install --all "$WP_LOCALE"
   wp language plugin install --all "$WP_LOCALE"
   wp site switch-language "$WP_LOCALE"
