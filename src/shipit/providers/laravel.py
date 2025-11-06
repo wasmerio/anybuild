@@ -33,8 +33,8 @@ class LaravelProvider:
     def initialize(self) -> None:
         pass
 
-    def serve_name(self) -> str:
-        return self.path.name
+    def serve_name(self) -> Optional[str]:
+        return None
 
     def platform(self) -> Optional[str]:
         return "laravel"

@@ -9,6 +9,8 @@ temp = mount("temp")
 app = mount("app")
 
 PORT = getenv("PORT") or "8080"
+shipit_static_dir = getenv("SHIPIT_STATIC_DIR") or "out"
+
 
 serve(
   name="nextjs",
@@ -17,10 +19,11 @@ serve(
   build=[
     use(node, npm),
     workdir(temp["build"]),
-    run("npm ci", inputs=["package.json", "package-lock.json"], group="install"),
-    copy(".", ".", ignore=["node_modules", ".git"]),
-    run("npm run build", outputs=["out"], group="build"),
-    run("cp -R out/* {}/".format(app["build"]))
+    copy("package-lock.json"),
+    run("npm ci", inputs=["package.json"], group="install"),
+    copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
+    run("npm run build", outputs=[shipit_static_dir], group="build"),
+    run("cp -R {}/* {}/".format(shipit_static_dir, app["build"]))
   ],
   deps=[staticwebserver],
   commands = {

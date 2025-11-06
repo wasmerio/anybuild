@@ -24,8 +24,8 @@ class HugoProvider(StaticFileProvider):
             return DetectResult(cls.name(), 40)
         return None
 
-    def serve_name(self) -> str:
-        return self.path.name
+    def serve_name(self) -> Optional[str]:
+        return None
 
     def platform(self) -> Optional[str]:
         return "hugo"

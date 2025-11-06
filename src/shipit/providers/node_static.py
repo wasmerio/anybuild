@@ -78,8 +78,8 @@ class PackageManager(Enum):
     def install_command(self, has_lockfile: bool = False) -> str:
         return {
             PackageManager.NPM: f"npm {'ci' if has_lockfile else 'install'}",
-            PackageManager.PNPM: f"pnpm install{' --frozen-lockfile' if has_lockfile else ''}",
-            PackageManager.YARN: f"yarn install{' --frozen-lockfile' if has_lockfile else ''}",
+            PackageManager.PNPM: "pnpm install",
+            PackageManager.YARN: "yarn install",
             PackageManager.BUN: f"bun install{' --no-save' if has_lockfile else ''}",
         }[self]
 
@@ -105,6 +105,7 @@ class StaticGenerator(Enum):
     VITE = "vite"
     NEXT = "next"
     GATSBY = "gatsby"
+    DOCUSAURUS_OLD = "docusaurus-old"
     DOCUSAURUS = "docusaurus"
     SVELTE = "svelte"
     REMIX = "remix"
@@ -119,6 +120,7 @@ class NodeStaticProvider(StaticFileProvider):
     package_json: Optional[Dict[str, Any]]
     extra_dependencies: Set[str]
     static_generator: Optional[StaticGenerator] = None
+    build_command: Optional[str] = None
 
     def __init__(self, path: Path, custom_commands: CustomCommands):
         super().__init__(path, custom_commands)
@@ -139,6 +141,8 @@ class NodeStaticProvider(StaticFileProvider):
             self.static_generator = StaticGenerator.GATSBY
         elif self.has_dependency(self.package_json, "astro"):
             self.static_generator = StaticGenerator.ASTRO
+        elif self.has_dependency(self.package_json, "docusaurus"):
+            self.static_generator = StaticGenerator.DOCUSAURUS_OLD
         elif self.has_dependency(self.package_json, "@docusaurus/core"):
             self.static_generator = StaticGenerator.DOCUSAURUS
         elif self.has_dependency(self.package_json, "svelte"):
@@ -159,6 +163,8 @@ class NodeStaticProvider(StaticFileProvider):
             self.static_generator = StaticGenerator.NUXT_OLD
         elif self.has_dependency(self.package_json, "nuxt"):
             self.static_generator = StaticGenerator.NUXT_V3
+
+        self.build_command = self.get_build_command(self.package_json, self.package_manager, self.static_generator)
 
         # if self.has_dependency(self.package_json, "sharp"):
         #     self.extra_dependencies.add("libvips")
@@ -217,6 +223,7 @@ class NodeStaticProvider(StaticFileProvider):
             "nuxt",
             "gatsby",
             "svelte",
+            "docusaurus",
             "@docusaurus/core",
             "@remix-run/dev",
         ]
@@ -227,8 +234,8 @@ class NodeStaticProvider(StaticFileProvider):
     def initialize(self) -> None:
         pass
 
-    def serve_name(self) -> str:
-        return self.path.name
+    def serve_name(self) -> Optional[str]:
+        return None
 
     def platform(self) -> Optional[str]:
         return self.static_generator.value if self.static_generator else None
@@ -248,7 +255,10 @@ class NodeStaticProvider(StaticFileProvider):
         ]
 
     def declarations(self) -> Optional[str]:
-        return None
+        output_dir = self.get_output_dir()
+        return (
+            f'shipit_static_dir = getenv("SHIPIT_STATIC_DIR") or "{output_dir}"\n'
+        )
 
     def get_output_dir(self) -> str:
         if self.static_generator == StaticGenerator.NEXT:
@@ -267,60 +277,67 @@ class NodeStaticProvider(StaticFileProvider):
             return "build/client"
         elif self.static_generator in [
             StaticGenerator.DOCUSAURUS,
+            StaticGenerator.DOCUSAURUS_OLD,
             StaticGenerator.SVELTE,
         ]:
             return "build"
         else:
             return "dist"
 
-    def get_build_command(self) -> bool:
-        if not self.package_json:
-            return False
-        build_command = self.package_json.get("scripts", {}).get("build")
-        if build_command:
-            return self.package_manager.run_command("build")
-        if self.static_generator == StaticGenerator.GATSBY:
-            return self.package_manager.run_execute_command("gatsby build")
-        if self.static_generator == StaticGenerator.ASTRO:
-            return self.package_manager.run_execute_command("astro build")
-        elif self.static_generator == StaticGenerator.REMIX_OLD:
-            return self.package_manager.run_execute_command("remix-ssg build")
-        elif self.static_generator == StaticGenerator.REMIX_V2:
-            return self.package_manager.run_execute_command("vite build")
-        elif self.static_generator == StaticGenerator.DOCUSAURUS:
-            return self.package_manager.run_execute_command("docusaurus build")
-        elif self.static_generator == StaticGenerator.SVELTE:
-            return self.package_manager.run_execute_command("svelte-kit build")
-        elif self.static_generator == StaticGenerator.VITE:
-            return self.package_manager.run_execute_command("vite build")
-        elif self.static_generator == StaticGenerator.NEXT:
-            return self.package_manager.run_execute_command("next export")
-        elif self.static_generator == StaticGenerator.NUXT_V3:
-            return self.package_manager.run_execute_command("nuxi generate")
-        elif self.static_generator == StaticGenerator.NUXT_OLD:
-            return self.package_manager.run_execute_command("nuxt generate")
-        return False
+    @classmethod
+    def get_build_command(cls, package_json: Optional[Dict[str, Any]], package_manager: PackageManager, static_generator: StaticGenerator) -> Optional[str]:
+        if package_json:
+            build_command = package_json.get("scripts", {}).get("build")
+            if build_command:
+                return package_manager.run_command("build")
+        if static_generator == StaticGenerator.GATSBY:
+            return package_manager.run_execute_command("gatsby build")
+        elif static_generator == StaticGenerator.ASTRO:
+            return package_manager.run_execute_command("astro build")
+        elif static_generator == StaticGenerator.REMIX_OLD:
+            return package_manager.run_execute_command("remix-ssg build")
+        elif static_generator == StaticGenerator.REMIX_V2:
+            return package_manager.run_execute_command("vite build")
+        elif static_generator == StaticGenerator.DOCUSAURUS:
+            return package_manager.run_execute_command("docusaurus build")
+        elif static_generator == StaticGenerator.DOCUSAURUS_OLD:
+            return package_manager.run_execute_command("docusaurus build")
+        elif static_generator == StaticGenerator.SVELTE:
+            return package_manager.run_execute_command("svelte-kit build")
+        elif static_generator == StaticGenerator.VITE:
+            return package_manager.run_execute_command("vite build")
+        elif static_generator == StaticGenerator.NEXT:
+            return package_manager.run_execute_command("next export")
+        elif static_generator == StaticGenerator.NUXT_V3:
+            return package_manager.run_execute_command("nuxi generate")
+        elif static_generator == StaticGenerator.NUXT_OLD:
+            return package_manager.run_execute_command("nuxt generate")
+        return None
 
     def build_steps(self) -> list[str]:
-        output_dir = self.get_output_dir()
-        get_build_command = self.get_build_command()
         lockfile = self.package_manager.lockfile()
         has_lockfile = (self.path / lockfile).exists()
         install_command = self.package_manager.install_command(
             has_lockfile=has_lockfile
         )
         input_files = ["package.json"]
-        if has_lockfile:
-            input_files.append(lockfile)
+        # if has_lockfile:
+        #     input_files.append(lockfile)
         inputs_install_files = ", ".join([f'"{file}"' for file in input_files])
 
+        ignored_files = ["node_modules", ".git"]
+        if has_lockfile:
+            ignored_files.append(lockfile)
+        all_ignored_files = ", ".join([f'"{file}"' for file in ignored_files])
+    
         return [
             'workdir(temp["build"])',
+            f'copy("{lockfile}")' if has_lockfile else None,
             # 'run("npx corepack enable", inputs=["package.json"], group="install")',
             f'run("{install_command}", inputs=[{inputs_install_files}], group="install")',
-            'copy(".", ".", ignore=["node_modules", ".git"])',
-            f'run("{get_build_command}", outputs=["{output_dir}"], group="build")',
-            f'run("cp -R {output_dir}/* {{}}/".format(app["build"]))',
+            f'copy(".", ignore=[{all_ignored_files}])',
+            f'run("{self.build_command}", outputs=[shipit_static_dir], group="build")',
+            f'run("cp -R {{}}/* {{}}/".format(shipit_static_dir, app["build"]))',
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:

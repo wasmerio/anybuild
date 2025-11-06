@@ -1337,10 +1337,12 @@ class Ctx:
     def copy(
         self,
         source: str,
-        target: str,
+        target: Optional[str] = None,
         ignore: Optional[List[str]] = None,
         base: Optional[Literal["source", "assets"]] = None,
     ) -> Optional[str]:
+        if target is None:
+            target = source
         step = CopyStep(source, target, ignore, base or "source")
         return self.add_step(step)
 
