@@ -12,7 +12,6 @@ from .base import (
     DetectResult,
     DependencySpec,
     Provider,
-    _exists,
     MountSpec,
     ServiceSpec,
     VolumeSpec,
@@ -119,10 +118,10 @@ class NodeStaticProvider(StaticFileProvider):
     package_manager: PackageManager
     package_json: Optional[Dict[str, Any]]
     extra_dependencies: Set[str]
+    static_generator: Optional[StaticGenerator] = None
 
     def __init__(self, path: Path, custom_commands: CustomCommands):
         super().__init__(path, custom_commands)
-        self.static_generator: Optional[StaticGenerator] = None
         if (path / "package-lock.json").exists():
             self.package_manager = PackageManager.NPM
         elif (path / "pnpm-lock.yaml").exists():
