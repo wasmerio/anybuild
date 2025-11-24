@@ -454,8 +454,8 @@ class PythonProvider:
             else:
                 start_cmd = f'"python {{}}/bin/mcp run {main_file} --transport=streamable-http".format(venv["serve"])'
         else:
-            if main_file:
-                start_cmd = f'"python {main_file}"'
+            if self.metadata.main_file:
+                start_cmd = f'"python {self.metadata.main_file}"'
             else:
                 raise Exception("Don't know how to start this Python project")
 
