@@ -753,6 +753,20 @@ class WasmerBuilder:
         else:
             return Path("/opt") / name
 
+    rewrite_binaries: Dict[str, str] = {
+        "python": "python",
+        "python3": "python",
+        "python3.13": "python",
+        "daphne": "python -m daphne",
+        "gunicorn": "python -m gunicorn",
+        "uvicorn": "python -m uvicorn",
+        "hypercorn": "python -m hypercorn",
+        "fastapi": "python -m fastapi",
+        "streamlit": "python -m streamlit",
+        "flask": "python -m flask",
+        "mcp": "python -m mcp",
+    }
+
     mapper: Dict[str, MapperItem] = {
         "python": {
             "dependencies": {
@@ -1001,6 +1015,12 @@ class WasmerBuilder:
                 commands.append(command)
                 parts = shlex.split(command_line)
                 program = parts[0]
+                if program in self.rewrite_binaries:
+                    rewritten_program = shlex.split(self.rewrite_binaries[program])
+                    program = rewritten_program[0]
+                    parts[:1] = rewritten_program
+                else:
+                    raise Exception(f"Binary {program} not runable in Wasmer yet")
                 command.add("name", command_name)
                 program_binary = binaries[program]
                 command.add("module", program_binary["script"])
@@ -1887,17 +1907,18 @@ def plan(
     metadata_commands["install"] = metadata_install
     metadata_commands["build"] = metadata_build
     platform: Optional[str]
-    try:
-        provider_cls = detect_provider(path, custom_commands)
-        provider_instance = provider_cls(path, custom_commands)
-        provider_instance.initialize()
-        platform = provider_instance.platform()
-    except Exception:
-        platform = None
+    provider_cls = detect_provider(path, custom_commands)
+    provider_metadata = provider_cls.load_metadata(path, custom_commands)
+    # if metadata:
+    #     provider_metadata = provider_metadata.model_copy(deep=True, update=metadata)
+    provider_instance = provider_cls(path, provider_metadata)
+    provider_instance.initialize()
+    platform = provider_instance.platform()
     plan_output = {
         "provider": serve.provider,
         "metadata": {
             "platform": platform,
+            "metadata": json.loads(provider_metadata.model_dump_json(exclude_defaults=True)),
             "commands": metadata_commands,
         },
         "config": sorted(ctx.getenv_variables),

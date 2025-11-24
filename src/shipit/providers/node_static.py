@@ -17,7 +17,7 @@ from .base import (
     VolumeSpec,
     CustomCommands,
 )
-from .staticfile import StaticFileProvider
+from .staticfile import StaticFileProvider, StaticFileMetadata
 
 
 class PackageManager(Enum):
@@ -115,59 +115,70 @@ class StaticGenerator(Enum):
     REMIX_V2 = "remix-v2"
 
 
-class NodeStaticProvider(StaticFileProvider):
+class NodeStaticMetadata(StaticFileMetadata):
     package_manager: PackageManager
-    package_json: Optional[Dict[str, Any]]
     extra_dependencies: Set[str]
     static_generator: Optional[StaticGenerator] = None
     build_command: Optional[str] = None
 
-    def __init__(self, path: Path, custom_commands: CustomCommands):
-        super().__init__(path, custom_commands)
-        if (path / "package-lock.json").exists():
-            self.package_manager = PackageManager.NPM
-        elif (path / "pnpm-lock.yaml").exists():
-            self.package_manager = PackageManager.PNPM
-        elif (path / "yarn.lock").exists():
-            self.package_manager = PackageManager.YARN
-        elif (path / "bun.lockb").exists():
-            self.package_manager = PackageManager.BUN
-        else:
-            self.package_manager = PackageManager.PNPM
+class NodeStaticProvider(StaticFileProvider):
+    package_manager: PackageManager
+    extra_dependencies: Set[str]
+    static_generator: Optional[StaticGenerator] = None
+    build_command: Optional[str] = None
 
-        self.package_json = self.parse_package_json(path)
+    def __init__(self, path: Path, metadata: NodeStaticMetadata):
+        super().__init__(path, metadata)
 
-        if self.has_dependency(self.package_json, "gatsby"):
-            self.static_generator = StaticGenerator.GATSBY
-        elif self.has_dependency(self.package_json, "astro"):
-            self.static_generator = StaticGenerator.ASTRO
-        elif self.has_dependency(self.package_json, "docusaurus"):
-            self.static_generator = StaticGenerator.DOCUSAURUS_OLD
-        elif self.has_dependency(self.package_json, "@docusaurus/core"):
-            self.static_generator = StaticGenerator.DOCUSAURUS
-        elif self.has_dependency(self.package_json, "svelte"):
-            self.static_generator = StaticGenerator.SVELTE
-        elif self.has_dependency(
-            self.package_json, "@remix-run/dev", "1"
-        ) or self.has_dependency(self.package_json, "@remix-run/dev", "0"):
-            self.static_generator = StaticGenerator.REMIX_OLD
-        elif self.has_dependency(self.package_json, "@remix-run/dev"):
-            self.static_generator = StaticGenerator.REMIX_V2
-        elif self.has_dependency(self.package_json, "vite"):
-            self.static_generator = StaticGenerator.VITE
-        elif self.has_dependency(self.package_json, "next"):
-            self.static_generator = StaticGenerator.NEXT
-        elif self.has_dependency(self.package_json, "nuxt", "2") or self.has_dependency(
-            self.package_json, "nuxt", "1"
-        ):
-            self.static_generator = StaticGenerator.NUXT_OLD
-        elif self.has_dependency(self.package_json, "nuxt"):
-            self.static_generator = StaticGenerator.NUXT_V3
+    @classmethod
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> NodeStaticMetadata:
+        metadata = NodeStaticMetadata()
+        if not metadata.package_manager:
+            if (path / "package-lock.json").exists():
+                metadata.package_manager = PackageManager.NPM
+            elif (path / "pnpm-lock.yaml").exists():
+                metadata.package_manager = PackageManager.PNPM
+            elif (path / "yarn.lock").exists():
+                metadata.package_manager = PackageManager.YARN
+            elif (path / "bun.lockb").exists():
+                metadata.package_manager = PackageManager.BUN
+            else:
+                metadata.package_manager = PackageManager.PNPM
 
-        self.build_command = self.get_build_command(self.package_json, self.package_manager, self.static_generator)
+        package_json = cls.parse_package_json(path)
 
-        # if self.has_dependency(self.package_json, "sharp"):
-        #     self.extra_dependencies.add("libvips")
+        if not metadata.static_generator:
+            if cls.has_dependency(package_json, "gatsby"):
+                metadata.static_generator = StaticGenerator.GATSBY
+            elif cls.has_dependency(package_json, "astro"):
+                metadata.static_generator = StaticGenerator.ASTRO
+            elif cls.has_dependency(package_json, "docusaurus"):
+                metadata.static_generator = StaticGenerator.DOCUSAURUS_OLD
+            elif cls.has_dependency(package_json, "@docusaurus/core"):
+                metadata.static_generator = StaticGenerator.DOCUSAURUS
+            elif cls.has_dependency(package_json, "svelte"):
+                metadata.static_generator = StaticGenerator.SVELTE
+            elif cls.has_dependency(
+                package_json, "@remix-run/dev", "1"
+            ) or cls.has_dependency(package_json, "@remix-run/dev", "0"):
+                metadata.static_generator = StaticGenerator.REMIX_OLD
+            elif cls.has_dependency(package_json, "@remix-run/dev"):
+                metadata.static_generator = StaticGenerator.REMIX_V2
+            elif cls.has_dependency(package_json, "vite"):
+                metadata.static_generator = StaticGenerator.VITE
+            elif cls.has_dependency(package_json, "next"):
+                metadata.static_generator = StaticGenerator.NEXT
+            elif cls.has_dependency(package_json, "nuxt", "2") or cls.has_dependency(
+                package_json, "nuxt", "1"
+            ):
+                metadata.static_generator = StaticGenerator.NUXT_OLD
+            elif cls.has_dependency(package_json, "nuxt"):
+                metadata.static_generator = StaticGenerator.NUXT_V3
+
+        if not metadata.build_command:
+            metadata.build_command = cls.get_build_command(package_json, metadata.package_manager, metadata.static_generator)
+
+        return metadata
 
     @classmethod
     def parse_package_json(cls, path: Path) -> Optional[Dict[str, Any]]:
@@ -238,7 +249,7 @@ class NodeStaticProvider(StaticFileProvider):
         return None
 
     def platform(self) -> Optional[str]:
-        return self.static_generator.value if self.static_generator else None
+        return self.metadata.static_generator.value if self.metadata.static_generator else None
 
     def dependencies(self) -> list[DependencySpec]:
         package_manager_dep = self.package_manager.as_dependency(self.path)
@@ -261,9 +272,9 @@ class NodeStaticProvider(StaticFileProvider):
         )
 
     def get_output_dir(self) -> str:
-        if self.static_generator == StaticGenerator.NEXT:
+        if self.metadata.static_generator == StaticGenerator.NEXT:
             return "out"
-        elif self.static_generator in [
+        elif self.metadata.static_generator in [
             StaticGenerator.ASTRO,
             StaticGenerator.VITE,
             StaticGenerator.NUXT_OLD,
@@ -271,11 +282,11 @@ class NodeStaticProvider(StaticFileProvider):
             StaticGenerator.REMIX_V2,
         ]:
             return "dist"
-        elif self.static_generator == StaticGenerator.GATSBY:
+        elif self.metadata.static_generator == StaticGenerator.GATSBY:
             return "public"
-        elif self.static_generator == StaticGenerator.REMIX_OLD:
+        elif self.metadata.static_generator == StaticGenerator.REMIX_OLD:
             return "build/client"
-        elif self.static_generator in [
+        elif self.metadata.static_generator in [
             StaticGenerator.DOCUSAURUS,
             StaticGenerator.DOCUSAURUS_OLD,
             StaticGenerator.SVELTE,

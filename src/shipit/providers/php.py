@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Dict, Optional
+from pydantic import BaseModel, ConfigDict
 
 from .base import (
     DetectResult,
@@ -15,13 +16,22 @@ from .base import (
     CustomCommands,
 )
 
+class PhpMetadata(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    has_composer: bool = False
 
 class PhpProvider:
-    def __init__(self, path: Path, custom_commands: CustomCommands):
+    def __init__(self, path: Path, metadata: PhpMetadata):
         self.path = path
-        self.custom_commands = custom_commands
-        self.has_composer = _exists(self.path, "composer.json", "composer.lock") or (
+        self.metadata = metadata
+
+    @classmethod
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> PhpMetadata:
+        has_composer = _exists(path, "composer.json", "composer.lock") or (
             custom_commands.install and custom_commands.install.startswith("composer ")
+        )
+        return PhpMetadata(
+            has_composer=has_composer
         )
 
     @classmethod
@@ -66,13 +76,13 @@ class PhpProvider:
                 use_in_serve=True,
             ),
         ]
-        if self.has_composer:
+        if self.metadata.has_composer:
             deps.append(DependencySpec("composer", use_in_build=True))
             deps.append(DependencySpec("bash", use_in_serve=True))
         return deps
 
     def declarations(self) -> Optional[str]:
-        if self.has_composer:
+        if self.metadata.has_composer:
             return 'HOME = getenv("HOME")\n'
         return None
 
@@ -87,7 +97,7 @@ class PhpProvider:
                 'copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets")'
             )
 
-        if self.has_composer:
+        if self.metadata.has_composer:
             steps.append('env(HOME=HOME, COMPOSER_FUND="0")')
             steps.append(
                 'run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'
@@ -100,10 +110,7 @@ class PhpProvider:
         return None
 
     def commands(self) -> Dict[str, str]:
-        commands = self.base_commands()
-        if self.custom_commands.start:
-            commands["start"] = json.dumps(self.custom_commands.start)
-        return commands
+        return self.base_commands()
 
     def base_commands(self) -> Dict[str, str]:
         if _exists(self.path, "public/index.php"):

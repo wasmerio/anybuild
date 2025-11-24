@@ -13,14 +13,15 @@ from .base import (
     VolumeSpec,
     CustomCommands,
 )
-from .staticfile import StaticFileProvider
+from .staticfile import StaticFileProvider, StaticFileMetadata
 from .python import PythonProvider
 
 
 class MkdocsProvider(StaticFileProvider):
-    def __init__(self, path: Path, custom_commands: CustomCommands):
+    def __init__(self, path: Path, metadata: StaticFileMetadata):
         self.path = path
-        self.python_provider = PythonProvider(path, custom_commands, only_build=True, extra_dependencies={"mkdocs"})
+        self.metadata = metadata
+        self.python_provider = PythonProvider(path, only_build=True, extra_dependencies={"mkdocs"})
 
     @classmethod
     def name(cls) -> str:

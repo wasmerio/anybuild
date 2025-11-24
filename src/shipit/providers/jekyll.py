@@ -17,7 +17,7 @@ from .staticfile import StaticFileProvider
 
 
 class JekyllProvider(StaticFileProvider):
-    def __init__(self, path: Path, custom_commands: CustomCommands):
+    def __init__(self, path: Path):
         self.path = path
 
     @classmethod
