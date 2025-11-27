@@ -1,19 +1,19 @@
+import asyncio
+import contextlib
 import os
 import random
-import socket
-import signal
-import asyncio
-import subprocess
 import re
-from pathlib import Path
-from typing import List, NamedTuple
-from dataclasses import dataclass
-
-import pytest
 import shutil
-import contextlib
-import aiohttp
+import signal
+import socket
+import subprocess
+from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+from typing import List, NamedTuple, Optional
+
+import aiohttp
+import pytest
 
 
 class BuildMode(Enum):
@@ -34,6 +34,7 @@ class E2ECase(NamedTuple):
     serve_pattern: str
     http: List[HTTPRequest]
     use_random_port: bool = True
+    fixed_port: Optional[int] = None
 
     def __str__(self):
         return self.path
@@ -42,137 +43,207 @@ class E2ECase(NamedTuple):
         return self.path
 
 
+EXAMPLES_ROOT = Path(__file__).resolve().parents[1] / "examples"
+VALID_EXAMPLES = sorted(
+    entry.name
+    for entry in EXAMPLES_ROOT.iterdir()
+    if entry.is_dir() and not entry.name.startswith(("fail", "skip"))
+)
+
+STATIC_SERVE_PATTERN = r"server is listening on"
+PHP_SERVE_PATTERN = (
+    r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+)
+UVICORN_SERVE_PATTERN = r"Uvicorn running on .*"
+STREAMLIT_SERVE_PATTERN = r".*You can now view your Streamlit app in your browser.*"
+REACTPHP_SERVE_PATTERN = r"Server running at http://127\.0\.0\.1:8080"
+PYTHON_HTTP_SERVE_PATTERN = r"Starting server on http://.*"
+
+
+def example_case(
+    name: str,
+    serve_pattern: str,
+    http: Optional[List[HTTPRequest]] = None,
+    *,
+    use_random_port: bool = True,
+    fixed_port: Optional[int] = None,
+) -> E2ECase:
+    return E2ECase(
+        path=f"examples/{name}",
+        serve_pattern=serve_pattern,
+        http=http or [],
+        use_random_port=use_random_port,
+        fixed_port=fixed_port,
+    )
+
+
+EXAMPLE_CASES = {
+    "go-hugo-staticsite": example_case(
+        "go-hugo-staticsite",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"My New Hugo Site demo")],
+    ),
+    "jekyll": example_case(
+        "jekyll",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Your awesome title")],
+    ),
+    "js-astro-staticsite": example_case(
+        "js-astro-staticsite",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Welcome to Wasmer\+Astro")],
+    ),
+    "js-docusaurus-staticsite": example_case(
+        "js-docusaurus-staticsite",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Dinosaurs are cool")],
+    ),
+    "js-docusaurus2-staticsite": example_case(
+        "js-docusaurus2-staticsite",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Dinosaurs are cool")],
+    ),
+    "js-docusaurusold-staticsite": example_case(
+        "js-docusaurusold-staticsite",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"A website for testing")],
+    ),
+    "js-gatsby-staticsite": example_case(
+        "js-gatsby-staticsite",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Gatsby")],
+    ),
+    "js-next-staticsite": example_case(
+        "js-next-staticsite",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Get started by editing")],
+    ),
+    "js-svelte": example_case(
+        "js-svelte",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"SvelteKit app")],
+    ),
+    "php-basic": example_case(
+        "php-basic",
+        PHP_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"PHP code tester")],
+    ),
+    "php-laravel": example_case(
+        "php-laravel",
+        PHP_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Laravel")],
+    ),
+    "php-reactphp": example_case(
+        "php-reactphp",
+        REACTPHP_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Hello World!")],
+        use_random_port=False,
+        fixed_port=8080,
+    ),
+    "php-symfony": example_case(
+        "php-symfony",
+        PHP_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Symfony")],
+    ),
+    "python-django": example_case(
+        "python-django",
+        UVICORN_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"The install worked successfully")],
+    ),
+    "python-fastapi": example_case(
+        "python-fastapi",
+        UVICORN_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Hello World")],
+    ),
+    "python-fastapi-pandoc-converter": example_case(
+        "python-fastapi-pandoc-converter",
+        UVICORN_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Pandoc Converter")],
+    ),
+    "python-fastapi-pystone": example_case(
+        "python-fastapi-pystone",
+        UVICORN_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"\"version\"\\s*:\\s*\"1\.1\"")],
+    ),
+    "python-ffmpeg": example_case(
+        "python-ffmpeg",
+        UVICORN_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Take screenshot at 1s")],
+    ),
+    "python-flask": example_case(
+        "python-flask",
+        UVICORN_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Flask in Wasmer Edge")],
+    ),
+    "python-http": example_case(
+        "python-http",
+        PYTHON_HTTP_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Python app is running with Wasmer!")],
+    ),
+    "python-langchain-starter": example_case(
+        "python-langchain-starter",
+        STREAMLIT_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Streamlit")],
+    ),
+    "python-mcp": example_case(
+        "python-mcp",
+        UVICORN_SERVE_PATTERN,
+        [],
+        use_random_port=False,
+        fixed_port=8000,
+    ),
+    "python-mcp-chatgpt": example_case(
+        "python-mcp-chatgpt",
+        UVICORN_SERVE_PATTERN,
+        [],
+        use_random_port=False,
+        fixed_port=8000,
+    ),
+    "python-mkdocs": example_case(
+        "python-mkdocs",
+        STATIC_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Welcome to MkDocs")],
+    ),
+    "python-pillow": example_case(
+        "python-pillow",
+        UVICORN_SERVE_PATTERN,
+        [HTTPRequest(path="/", body_match=r"Image Crop\s*&\s*Rotate")],
+    ),
+    "staticsite": example_case(
+        "staticsite",
+        STATIC_SERVE_PATTERN,
+        [],
+    ),
+}
+
+_missing = sorted(set(VALID_EXAMPLES) - EXAMPLE_CASES.keys())
+_extra = sorted(set(EXAMPLE_CASES.keys()) - set(VALID_EXAMPLES))
+if _missing or _extra:
+    problems = []
+    if _missing:
+        problems.append(f"missing cases for: {', '.join(_missing)}")
+    if _extra:
+        problems.append(f"unknown example cases: {', '.join(_extra)}")
+    raise ValueError(
+        "E2E test matrix is out of sync with examples directory: " + "; ".join(problems)
+    )
+
+
 @pytest.mark.e2e
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "case",
-    [
-        # Simple PHP site that calls phpinfo()
-        E2ECase(
-            path="examples/php-nobuild",
-            serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
-            ),
-            http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
-        ),
-        # Simple PHP site that calls phpinfo() with no port
-        E2ECase(
-            path="examples/php-nobuild",
-            serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
-            ),
-            http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
-            use_random_port=False,
-        ),
-        # PHP API example with JSON at / and greeting endpoint
-        E2ECase(
-            path="examples/php-api",
-            serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
-            ),
-            http=[
-                HTTPRequest(path="/", body_match=r"\"version\"\s*:\s*\"8\.3\.[0-9]+\""),
-                HTTPRequest(path="/api/greet/Alice", body_match=r"Hello, Alice!"),
-            ],
-        ),
-        # WordPress skeleton that echoes a simple string
-        E2ECase(
-            path="examples/php-wordpress",
-            serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
-            ),
-            http=[HTTPRequest(path="/", body_match=r"WordPress")],
-        ),
-        # Static site copied as-is (no build step beyond copy)
-        E2ECase(
-            path="examples/static-nobuild",
-            # static-web-server banner varies; rely on HTTP check with generous pattern
-            serve_pattern=r"server is listening on",
-            http=[HTTPRequest(path="/", body_match=r"Test")],
-        ),
-        # Staticfile provider serving content under site/
-        E2ECase(
-            path="examples/staticfile",
-            serve_pattern=r"server is listening on",
-            http=[HTTPRequest(path="/", body_match=r"Hello from static site!")],
-        ),
-        # Hugo static site (built via Hugo, served with static-web-server)
-        E2ECase(
-            path="examples/hugo",
-            serve_pattern=r"server is listening on",
-            http=[HTTPRequest(path="/", body_match=r"My New Hugo Site")],
-        ),
-        # MkDocs site (built with mkdocs, served with static-web-server)
-        E2ECase(
-            path="examples/mkdocs",
-            serve_pattern=r"server is listening on",
-            http=[HTTPRequest(path="/", body_match=r"Welcome to MkDocs")],
-        ),
-        # MkDocs with plugins
-        E2ECase(
-            path="examples/mkdocs-with-plugins",
-            serve_pattern=r"server is listening on",
-            http=[HTTPRequest(path="/", body_match=r"Welcome to MkDocs with Plugins")],
-        ),
-        # Python FastAPI app on Uvicorn
-        E2ECase(
-            path="examples/python-fastapi",
-            serve_pattern=r"Uvicorn running on .*",
-            http=[HTTPRequest(path="/", body_match=r"Hello World from fastapi!")],
-        ),
-        # Python Flask app served via Uvicorn WSGI
-        E2ECase(
-            path="examples/python-flask",
-            serve_pattern=r"Uvicorn running on .*",
-            http=[HTTPRequest(path="/", body_match=r"Welcome to Flask")],
-        ),
-        # Python Django via Uvicorn WSGI (check admin login)
-        E2ECase(
-            path="examples/python-django",
-            serve_pattern=r"Uvicorn running on .*",
-            http=[HTTPRequest(path="/", body_match=r"Django")],
-        ),
-        # Python ffmpeg demo (FastAPI), homepage is static HTML form
-        E2ECase(
-            path="examples/python-ffmpeg",
-            serve_pattern=r"Uvicorn running on .*",
-            http=[HTTPRequest(path="/", body_match=r"Take screenshot at 1s")],
-        ),
-        # Python Pillow demo (FastAPI), homepage has form title
-        E2ECase(
-            path="examples/python-pillow",
-            serve_pattern=r"Uvicorn running on .*",
-            http=[HTTPRequest(path="/", body_match=r"Image Crop\s*&\s*Rotate")],
-        ),
-        # Python Pandoc demo: app may require pandoc binary; only assert serve started
-        E2ECase(
-            path="examples/python-pandoc",
-            serve_pattern=r"Uvicorn running on .*",
-            http=[],
-        ),
-        # Python Procfile demo using python -m http.server
-        E2ECase(
-            path="examples/python-procfile",
-            serve_pattern=r"Serving HTTP on .*",
-            http=[HTTPRequest(path="/", body_match=r"Test")],
-        ),
-        # Python Streamlit app
-        E2ECase(
-            path="examples/python-streamlit",
-            serve_pattern=r".*You can now view your Streamlit app in your browser.*",
-            http=[HTTPRequest(path="/", body_match=r"Streamlit")],
-        ),
-    ],
+    [EXAMPLE_CASES[name] for name in VALID_EXAMPLES],
     ids=lambda c: str(c),
 )
-@pytest.mark.flaky(reruns=2, reruns_delay=2)
+@pytest.mark.flaky(reruns=0, reruns_delay=2)
 @pytest.mark.parametrize(
     "build_mode",
     [
         BuildMode.Local,
         BuildMode.Wasmer,
         BuildMode.WasmerAndDocker,
-    ]
+    ],
 )
 async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     # Skip if `uv` is not available in PATH
@@ -180,6 +251,11 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
         pytest.skip("`uv` is not available in PATH")
 
     repo_root = Path(__file__).resolve().parents[1]
+    example_dir = repo_root / case.path
+    if not example_dir.exists():
+        pytest.skip(
+            f"Example '{case.path}' is missing. Run `git submodule update --init --recursive` to fetch the examples."
+        )
 
     cmd = [
         "uv",
@@ -206,16 +282,14 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
 
     # Start process in a new session/process group to simplify termination.
     start_new_session = os.name != "nt"
-    creationflags = (
-        subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-    )
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
 
     env = os.environ.copy()
     if case.use_random_port:
         port = get_free_port()
-        env["PORT"] = str(port)
     else:
-        port = 8080 # This is the default port if not specified
+        port = case.fixed_port or 8080
+    env["PORT"] = str(port)
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -234,7 +308,7 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     async def reader(label: str, stream: asyncio.StreamReader) -> None:
         async for line in stream:
             line = line.decode("utf-8", errors="replace")
-            print(f"[{label}] {line}", end='')
+            print(f"[{label}] {line}", end="")
             output_lines.append(f"[{label}] {line}")
             if (not found_build.is_set()) and (build_phrase in line):
                 found_build.set()
