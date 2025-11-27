@@ -22,6 +22,8 @@ class StaticFileProvider:
     path: Path
     custom_commands: CustomCommands
 
+    subdir: str | None = None
+
     def __init__(self, path: Path, custom_commands: CustomCommands):
         self.path = path
         self.custom_commands = custom_commands
@@ -31,6 +33,18 @@ class StaticFileProvider:
             except yaml.YAMLError as e:
                 print(f"Error loading Staticfile: {e}")
                 pass
+        self.subdir = self._determine_subdir()
+
+    def _determine_subdir(self) -> str | None:
+        if self.config and "root" in self.config:
+            return self.config["root"]
+        elif (self.path / "index.html").exists():
+            return None
+        elif (self.path / "public" / "index.html").exists():
+            return "public"
+        else:
+            return None
+
 
     @classmethod
     def name(cls) -> str:
@@ -42,14 +56,18 @@ class StaticFileProvider:
     ) -> Optional[DetectResult]:
         if _exists(path, "Staticfile"):
             return DetectResult(cls.name(), 50)
-        if _exists(path, "index.html") and not _exists(
-            path, "package.json", "pyproject.toml", "composer.json"
-        ):
+
+        is_package = _exists(path, "package.json", "pyproject.toml", "composer.json")
+
+        if _exists(path / "public", "index.html") and not is_package:
+            return DetectResult(cls.name(), 15)
+        if _exists(path, "index.html") and not is_package:
             return DetectResult(cls.name(), 10)
         if custom_commands.start and custom_commands.start.startswith(
             "static-web-server "
         ):
             return DetectResult(cls.name(), 70)
+
         return None
 
     def initialize(self) -> None:
@@ -75,7 +93,7 @@ class StaticFileProvider:
         return [
             'workdir(app["build"])',
             'copy({}, ".", ignore=[".git"])'.format(
-                json.dumps(self.config and self.config.get("root") or ".")
+                json.dumps(self.subdir or '.')
             ),
         ]
 
@@ -86,8 +104,11 @@ class StaticFileProvider:
         return None
 
     def commands(self) -> Dict[str, str]:
+        root =  'app["serve"]'
+        if self.subdir:
+            root += f' + "/{self.subdir}"'
         return {
-            "start": '"static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT)'
+            "start": '"static-web-server --root={} --log-level=info --port={}".format(' + root + ', PORT)',
         }
 
     def mounts(self) -> list[MountSpec]:
