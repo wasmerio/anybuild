@@ -43,6 +43,8 @@ class StaticFileProvider:
 
             if config:
                 return StaticFileMetadata.model_validate(config)
+        if _exists(path, "public/index.html") or _exists(path, "public/index.htm"):
+            return StaticFileMetadata(root="public")
         return StaticFileMetadata()
 
     @classmethod
@@ -53,11 +55,14 @@ class StaticFileProvider:
     def detect(
         cls, path: Path, custom_commands: CustomCommands
     ) -> Optional[DetectResult]:
+        is_python_php_js_project = _exists(
+            path, "package.json", "pyproject.toml", "composer.json"
+        )
         if _exists(path, "Staticfile"):
             return DetectResult(cls.name(), 50)
-        if _exists(path, "index.html") and not _exists(
-            path, "package.json", "pyproject.toml", "composer.json"
-        ):
+        if not is_python_php_js_project:
+            if _exists(path, "index.html", "index.htm", "public/index.htm", "public/index.html"):
+                return DetectResult(cls.name(), 10)
             return DetectResult(cls.name(), 10)
         if custom_commands.start and custom_commands.start.startswith(
             "static-web-server "
