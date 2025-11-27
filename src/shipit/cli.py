@@ -201,9 +201,13 @@ class DockerBuilder:
         self.src_dir = src_dir
         self.docker_file_contents = ""
         self.docker_path = self.src_dir / ".shipit" / "docker"
+        # We try to create the docker path so we can write files there
+        self.docker_path.mkdir(parents=True, exist_ok=True)
         self.docker_out_path = self.docker_path / "out"
         self.depot_metadata = self.docker_path / "depot-build.json"
         self.docker_file_path = self.docker_path / "Dockerfile"
+        # When we build the docker image, we save the name of the image in this file
+        # So we can reference it later for `docker run ... <name>`
         self.docker_name_path = self.docker_path / "name"
         self.docker_ignore_path = self.docker_path / "Dockerfile.dockerignore"
         self.shipit_docker_path = Path("/shipit")
@@ -489,19 +493,21 @@ Shipit
         raise NotImplementedError
 
     def build_serve(self, serve: Serve) -> None:
-        serve_command_path = self.mkdir(Path("serve") / "bin")
-        console.print(f"[bold]Serve Commands:[/bold]")
-        for dep in serve.deps:
-            self.add_dependency(dep)
+        # DockerBuild doesn't support serving commands yet
+        pass
+        # serve_command_path = self.mkdir(Path("serve") / "bin")
+        # console.print(f"[bold]Serve Commands:[/bold]")
+        # for dep in serve.deps:
+        #     self.add_dependency(dep)
 
-        for command in serve.commands:
-            console.print(f"* {command}")
-            command_path = serve_command_path / command
-            self.create_file(
-                command_path,
-                f"#!/bin/bash\ncd {serve.cwd}\n{serve.commands[command]}",
-                mode=0o755,
-            )
+        # for command in serve.commands:
+        #     console.print(f"* {command}")
+        #     command_path = serve_command_path / command
+        #     self.create_file(
+        #         command_path,
+        #         f"#!/bin/bash\ncd {serve.cwd}\n{serve.commands[command]}",
+        #         mode=0o755,
+        #     )
 
     def run_serve_command(self, command: str) -> None:
         path = self.shipit_docker_path / "serve" / "bin" / command
@@ -1018,7 +1024,7 @@ class WasmerBuilder:
                     rewritten_program = shlex.split(self.rewrite_binaries[program])
                     program = rewritten_program[0]
                     parts[:1] = rewritten_program
-                else:
+                elif program not in binaries:
                     raise Exception(f"Binary {program} not runable in Wasmer yet")
                 command.add("name", command_name)
                 program_binary = binaries[program]
@@ -2044,6 +2050,8 @@ def build(
     if serve.prepare:
         builder.build_prepare(serve)
     builder.build_serve(serve)
+    # Finalizing the build
+    print("Finalizing build", type(builder))
     builder.finalize_build(serve)
     if serve.prepare and not skip_prepare:
         builder.prepare(env, serve.prepare)
