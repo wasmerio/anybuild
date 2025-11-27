@@ -1,5 +1,0 @@
-fastapi
-Pillow
-uvicorn
-requests
-python-multipart

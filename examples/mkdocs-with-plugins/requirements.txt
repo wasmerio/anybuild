@@ -1,2 +1,0 @@
-mkdocs==1.6.1
-mkdocs-awesome-pages-plugin==2.9.3

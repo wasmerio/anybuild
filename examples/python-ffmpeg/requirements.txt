@@ -1,4 +1,0 @@
-ffmpeg-python
-python-multipart
-fastapi>=0.116.1
-requests
