@@ -25,7 +25,8 @@ class LaravelProvider:
         self.path = path
         self.metadata = metadata
 
-    def load_metadata(self, path: Path, custom_commands: CustomCommands) -> LaravelMetadata:
+    @classmethod
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> LaravelMetadata:
         return LaravelMetadata()
 
     @classmethod

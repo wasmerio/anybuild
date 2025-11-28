@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Optional, Any, Set
 from enum import Enum
 from semantic_version import Version, NpmSpec
+from pydantic import Field
 
 
 from .base import (
@@ -116,17 +117,12 @@ class StaticGenerator(Enum):
 
 
 class NodeStaticMetadata(StaticFileMetadata):
-    package_manager: PackageManager
-    extra_dependencies: Set[str]
+    package_manager: Optional[PackageManager] = None
+    extra_dependencies: Set[str] = Field(default_factory=set)
     static_generator: Optional[StaticGenerator] = None
     build_command: Optional[str] = None
 
 class NodeStaticProvider(StaticFileProvider):
-    package_manager: PackageManager
-    extra_dependencies: Set[str]
-    static_generator: Optional[StaticGenerator] = None
-    build_command: Optional[str] = None
-
     def __init__(self, path: Path, metadata: NodeStaticMetadata):
         super().__init__(path, metadata)
 
@@ -252,7 +248,7 @@ class NodeStaticProvider(StaticFileProvider):
         return self.metadata.static_generator.value if self.metadata.static_generator else None
 
     def dependencies(self) -> list[DependencySpec]:
-        package_manager_dep = self.package_manager.as_dependency(self.path)
+        package_manager_dep = self.metadata.package_manager.as_dependency(self.path)
         package_manager_dep.use_in_build = True
         return [
             DependencySpec(
@@ -326,9 +322,9 @@ class NodeStaticProvider(StaticFileProvider):
         return None
 
     def build_steps(self) -> list[str]:
-        lockfile = self.package_manager.lockfile()
+        lockfile = self.metadata.package_manager.lockfile()
         has_lockfile = (self.path / lockfile).exists()
-        install_command = self.package_manager.install_command(
+        install_command = self.metadata.package_manager.install_command(
             has_lockfile=has_lockfile
         )
         input_files = ["package.json"]
@@ -347,7 +343,7 @@ class NodeStaticProvider(StaticFileProvider):
             # 'run("npx corepack enable", inputs=["package.json"], group="install")',
             f'run("{install_command}", inputs=[{inputs_install_files}], group="install")',
             f'copy(".", ignore=[{all_ignored_files}])',
-            f'run("{self.build_command}", outputs=[shipit_static_dir], group="build")',
+            f'run("{self.metadata.build_command}", outputs=[shipit_static_dir], group="build")',
             f'run("cp -R {{}}/* {{}}/".format(shipit_static_dir, app["build"]))',
         ]
 

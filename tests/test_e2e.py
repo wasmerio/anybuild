@@ -10,6 +10,7 @@ from typing import List, NamedTuple
 from dataclasses import dataclass
 
 import pytest
+import shlex
 import shutil
 import contextlib
 import aiohttp
@@ -49,6 +50,12 @@ class E2ECase(NamedTuple):
     [
         # Simple PHP site that calls phpinfo()
         E2ECase(
+            path="examples/cdn",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"My CDN")],
+        ),
+        # Simple PHP site that calls phpinfo()
+        E2ECase(
             path="examples/php-nobuild",
             serve_pattern=(
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
@@ -62,7 +69,6 @@ class E2ECase(NamedTuple):
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
             ),
             http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
-            use_random_port=False,
         ),
         # PHP API example with JSON at / and greeting endpoint
         E2ECase(
@@ -194,8 +200,10 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     ]
     if build_mode == BuildMode.Wasmer:
         cmd.append("--wasmer")
+        cmd.append("--wasmer-registry=wasmer.io")
     elif build_mode == BuildMode.WasmerAndDocker:
         cmd.append("--wasmer")
+        cmd.append("--wasmer-registry=wasmer.io")
         cmd.append("--docker")
     elif build_mode == BuildMode.Local:
         # The default
@@ -311,6 +319,7 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
         code = proc.returncode
         pytest.fail(
             "End-to-end run did not reach expected state.\n"
+            f"command={shlex.join(cmd)}\n"
             f"returncode={code}\n"
             f"Saw build={found_build.is_set()} serve={found_serve.is_set()}\n\n"
             f"--- Captured output start ---\n{full_output}\n--- Captured output end ---"

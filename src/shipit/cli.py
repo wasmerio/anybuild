@@ -1673,7 +1673,22 @@ def generate(
         custom_commands.install = install_command
     if build_command:
         custom_commands.build = build_command
-    content = generate_shipit(path, custom_commands, use_provider=use_provider)
+    content, metadata = generate_shipit(path, custom_commands, use_provider=use_provider)
+    metadata_json = metadata.model_dump_json(indent=2, exclude_defaults=True)
+    if metadata_json and metadata_json != "{}":
+        manifest_panel = Panel(
+            Syntax(
+                metadata_json,
+                "json",
+                theme="monokai",
+                background_color="default",
+                line_numbers=True,
+            ),
+            box=box.SQUARE,
+            border_style="bright_black",
+            expand=False,
+        )
+        console.print(manifest_panel, markup=False, highlight=True)
     out.write_text(content)
     console.print(f"[bold]Generated Shipit[/bold] at {out.absolute()}")
 
@@ -2051,7 +2066,6 @@ def build(
         builder.build_prepare(serve)
     builder.build_serve(serve)
     # Finalizing the build
-    print("Finalizing build", type(builder))
     builder.finalize_build(serve)
     if serve.prepare and not skip_prepare:
         builder.prepare(env, serve.prepare)

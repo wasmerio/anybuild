@@ -29,7 +29,7 @@ class PhpProvider:
     def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> PhpMetadata:
         has_composer = _exists(path, "composer.json", "composer.lock") or (
             custom_commands.install and custom_commands.install.startswith("composer ")
-        )
+        ) or False
         return PhpMetadata(
             has_composer=has_composer
         )

@@ -54,6 +54,7 @@ class PythonMetadata(BaseModel):
     install_requires_all_files: bool = False
     main_file: Optional[str] = None
     default_python_version: Optional[str] = None
+    start_command: Optional[str] = None
 
 
 class PythonProvider:
@@ -165,6 +166,9 @@ class PythonProvider:
                 metadata.server = PythonServer.Uvicorn
             elif metadata.framework == PythonFramework.FastHTML:
                 metadata.server = PythonServer.Uvicorn
+            
+            if metadata.server == PythonServer.Uvicorn:
+                metadata.extra_dependencies.add("uvicorn")
 
         if not metadata.asgi_application and not metadata.wsgi_application:
             if metadata.framework == PythonFramework.Django:
@@ -196,6 +200,9 @@ class PythonProvider:
                 metadata.asgi_application = python_path
             elif metadata.framework == PythonFramework.FastHTML:
                 metadata.asgi_application = python_path
+
+        if not metadata.start_command:
+            metadata.start_command = custom_commands.start
 
         is_uvicorn_start = custom_commands.start and custom_commands.start.startswith("uvicorn ")
         framework_should_use_uvicorn = metadata.framework in [PythonFramework.Django, PythonFramework.FastAPI, PythonFramework.Flask]
@@ -411,7 +418,7 @@ class PythonProvider:
                 return f"src/{path}"
         for path in paths_to_try:
             try:
-                found_path = next(root_path.glob(f"**/{path}"))
+                found_path = next(root_path.glob(f"*/{path}"))
             except StopIteration:
                 found_path = None
             if found_path:
@@ -447,6 +454,7 @@ class PythonProvider:
             main_file = self.metadata.main_file
             start_cmd = f'f"streamlit run {main_file} --server.port {{PORT}} --server.address 0.0.0.0 --server.headless true"'
         elif self.metadata.framework == PythonFramework.MCP:
+            main_file = self.metadata.main_file
             assert main_file, "No main file found for MCP"
             contents = (self.path / main_file).read_text()
             if 'if __name__ == "__main__"' in contents or "mcp.run" in contents:
@@ -457,7 +465,10 @@ class PythonProvider:
             if self.metadata.main_file:
                 start_cmd = f'"python {self.metadata.main_file}"'
             else:
-                raise Exception("Don't know how to start this Python project")
+                if self.metadata.start_command:
+                    start_cmd = f'"{self.metadata.start_command}"'
+                else:
+                    raise Exception("Shipit could not detect a start command, please provide a start command manually")
 
         if self.metadata.framework == PythonFramework.Django:
             if not start_cmd:
@@ -514,7 +525,9 @@ def format_app_import(asgi_application: str) -> str:
     return re.sub(r"\.([^.]+)$", r":\1", asgi_application)
 
 
-def file_to_python_path(path: str) -> str:
+def file_to_python_path(path: Optional[str]) -> Optional[str]:
+    if not path:
+        return None
     file = path.rstrip(".py").replace("/", ".").replace("\\", ".")
     return f"{file}:app"
 

@@ -13,12 +13,13 @@ from .base import (
     VolumeSpec,
     CustomCommands,
 )
-from .staticfile import StaticFileProvider
+from .staticfile import StaticFileProvider, StaticFileMetadata
 
 
 class JekyllProvider(StaticFileProvider):
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, metadata: StaticFileMetadata):
         self.path = path
+        self.metadata = metadata
 
     @classmethod
     def name(cls) -> str:

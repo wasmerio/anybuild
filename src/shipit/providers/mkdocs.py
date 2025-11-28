@@ -21,7 +21,8 @@ class MkdocsProvider(StaticFileProvider):
     def __init__(self, path: Path, metadata: StaticFileMetadata):
         self.path = path
         self.metadata = metadata
-        self.python_provider = PythonProvider(path, only_build=True, extra_dependencies={"mkdocs"})
+        python_provider_metadata = PythonProvider.load_metadata(path, CustomCommands())
+        self.python_provider = PythonProvider(path, python_provider_metadata, only_build=True, extra_dependencies={"mkdocs"})
 
     @classmethod
     def name(cls) -> str:

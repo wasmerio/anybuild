@@ -218,4 +218,4 @@ def generate_shipit(path: Path, custom_commands: CustomCommands, use_provider: O
         out.append("  ],")
     out.append(")")
     out.append("")
-    return "\n".join(out)
+    return "\n".join(out), provider_metadata
