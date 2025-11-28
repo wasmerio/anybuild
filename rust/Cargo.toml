@@ -1,0 +1,26 @@
+[package]
+name = "shipit"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+camino = { version = "1", features = ["serde1"] }
+clap = { version = "4.5", features = ["derive"] }
+dirs = "5"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+starlark = "0.13"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+which = "6"
+walkdir = "2.5"
+dotenvy = "0.15"
+wasmer-config = "0.601.0"
+shell-words = "1.1"
+semver = "1"
+indexmap = "2"
+toml = "0.8"

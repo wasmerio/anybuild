@@ -1,0 +1,418 @@
+URL: https://docs.rs/starlark/latest/starlark/
+Crate starlark Copy item path
+
+Source
+
+Expand description
+
+A Starlark interpreter in Rust. Starlark is a deterministic version of Python, with a specification, used by (amongst others) the Buck and Bazel build systems.
+
+To evaluate a simple file:
+
+    use starlark::environment::Globals;
+    use starlark::environment::Module;
+    use starlark::eval::Evaluator;
+    use starlark::syntax::AstModule;
+    use starlark::syntax::Dialect;
+    use starlark::values::Value;
+
+    let content = r#"
+    def hello():
+       return "hello"
+    hello() + " world!"
+    "#;
+
+    // We first parse the content, giving a filename and the Starlark
+    // `Dialect` we'd like to use (we pick standard).
+    let ast: AstModule =
+        AstModule::parse("hello_world.star", content.to_owned(), &Dialect::Standard)?;
+
+    // We create a `Globals`, defining the standard library functions available.
+    // The `standard` function uses those defined in the Starlark specification.
+    let globals: Globals = Globals::standard();
+
+    // We create a `Module`, which stores the global variables for our calculation.
+    let module: Module = Module::new();
+
+    // We create an evaluator, which controls how evaluation occurs.
+    let mut eval: Evaluator = Evaluator::new(&module);
+
+    // And finally we evaluate the code using the evaluator.
+    let res: Value = eval.eval_module(ast, &globals)?;
+    assert_eq!(res.unpack_str(), Some("hello world!"));
+
+From this example there are lots of ways to extend it, which we do so below.
+
+§Call Rust functions from Starlark
+
+We want to define a function in Rust (that computes quadratics), and then call it from Starlark. We define the function using the #[starlark_module] attribute, and add it to a Globals object.
+
+    #[macro_use]
+    extern crate starlark;
+    use starlark::environment::{GlobalsBuilder, Module};
+    use starlark::eval::Evaluator;
+    use starlark::syntax::{AstModule, Dialect};
+    use starlark::values::Value;
+
+    // This defines the function that is visible to Starlark
+    #[starlark_module]
+    fn starlark_quadratic(builder: &mut GlobalsBuilder) {
+        fn quadratic(a: i32, b: i32, c: i32, x: i32) -> anyhow::Result<i32> {
+            Ok(a * x * x + b * x + c)
+        }
+    }
+
+    // We build our globals to make the function available in Starlark
+    let globals = GlobalsBuilder::new().with(starlark_quadratic).build();
+    let module = Module::new();
+    let mut eval = Evaluator::new(&module);
+
+    // Let's test calling the function from Starlark code
+    let starlark_code = r#"
+    quadratic(4, 2, 1, x = 8)
+    "#;
+
+    let ast = AstModule::parse("quadratic.star", starlark_code.to_owned(), &Dialect::Standard)?;
+    let res = eval.eval_module(ast, &globals)?;
+    assert_eq!(res.unpack_i32(), Some(273)); // Verify that we got an `int` return value of 4 * 8^2 + 2 * 8 + 1 = 273
+
+§Collect Starlark values
+
+If we want to use Starlark as an enhanced JSON, we can define an emit function to “write out” a JSON value, and use the Evaluator.extra field to store it.
+
+    #[macro_use]
+    extern crate starlark;
+    use std::cell::RefCell;
+
+    use starlark::any::ProvidesStaticType;
+    use starlark::environment::GlobalsBuilder;
+    use starlark::environment::Module;
+    use starlark::eval::Evaluator;
+    use starlark::syntax::AstModule;
+    use starlark::syntax::Dialect;
+    use starlark::values::none::NoneType;
+    use starlark::values::Value;
+    use starlark::values::ValueLike;
+
+    let content = r#"
+    emit(1)
+    emit(["test"])
+    emit({"x": "y"})
+    "#;
+
+    // Define a store in which to accumulate JSON strings
+    #[derive(Debug, ProvidesStaticType, Default)]
+    struct Store(RefCell<Vec<String>>);
+
+    impl Store {
+        fn add(&self, x: String) {
+            self.0.borrow_mut().push(x)
+        }
+    }
+
+    #[starlark_module]
+    fn starlark_emit(builder: &mut GlobalsBuilder) {
+        fn emit(x: Value, eval: &mut Evaluator) -> anyhow::Result<NoneType> {
+            // We modify extra (which we know is a Store) and add the JSON of the
+            // value the user gave.
+            eval.extra
+                .unwrap()
+                .downcast_ref::<Store>()
+                .unwrap()
+                .add(x.to_json()?);
+            Ok(NoneType)
+        }
+    }
+
+    let ast = AstModule::parse("json.star", content.to_owned(), &Dialect::Standard)?;
+    // We build our globals adding some functions we wrote
+    let globals = GlobalsBuilder::new().with(starlark_emit).build();
+    let module = Module::new();
+    let store = Store::default();
+    {
+        let mut eval = Evaluator::new(&module);
+        // We add a reference to our store
+        eval.extra = Some(&store);
+        eval.eval_module(ast, &globals)?;
+    }
+    assert_eq!(&*store.0.borrow(), &["1", "[\"test\"]", "{\"x\":\"y\"}"]);
+
+§Enable Starlark extensions (e.g. types)
+
+Our Starlark supports a number of extensions, including type annotations, which are controlled by the Dialect type.
+
+    use starlark::environment::Globals;
+    use starlark::environment::Module;
+    use starlark::eval::Evaluator;
+    use starlark::syntax::AstModule;
+    use starlark::syntax::Dialect;
+    use starlark::syntax::DialectTypes;
+
+    let content = r#"
+    def takes_int(x: int):
+        pass
+    takes_int("test")
+    "#;
+
+    // Make the dialect enable types
+    let dialect = Dialect {
+        enable_types: DialectTypes::Enable,
+        ..Dialect::Standard
+    };
+    // We could equally have done `dialect = Dialect::Extended`.
+    let ast = AstModule::parse("json.star", content.to_owned(), &dialect)?;
+    let globals = Globals::standard();
+    let module = Module::new();
+    let mut eval = Evaluator::new(&module);
+    let res = eval.eval_module(ast, &globals);
+    // We expect this to fail, since it is a type violation
+    assert!(
+        res.unwrap_err()
+            .to_string()
+            .contains("Value `test` of type `string` does not match the type annotation `int`")
+    );
+
+§Enable the load statement
+
+You can have Starlark load files imported by the user. That requires that the loaded modules are first frozen with Module.freeze. There is no requirement that the files are on disk, but that would be a common pattern.
+
+    use starlark::environment::FrozenModule;
+    use starlark::environment::Globals;
+    use starlark::environment::Module;
+    use starlark::eval::Evaluator;
+    use starlark::eval::ReturnFileLoader;
+    use starlark::syntax::AstModule;
+    use starlark::syntax::Dialect;
+
+    // Get the file contents (for the demo), in reality use `AstModule::parse_file`.
+    fn get_source(file: &str) -> &str {
+        match file {
+            "a.star" => "a = 7",
+            "b.star" => "b = 6",
+            _ => {
+                r#"
+    load('a.star', 'a')
+    load('b.star', 'b')
+    ab = a * b
+    "#
+            }
+        }
+    }
+
+    fn get_module(file: &str) -> starlark::Result<FrozenModule> {
+        let ast = AstModule::parse(file, get_source(file).to_owned(), &Dialect::Standard)?;
+
+        // We can get the loaded modules from `ast.loads`.
+        // And ultimately produce a `loader` capable of giving those modules to Starlark.
+        let mut loads = Vec::new();
+        for load in ast.loads() {
+            loads.push((load.module_id.to_owned(), get_module(load.module_id)?));
+        }
+        let modules = loads.iter().map(|(a, b)| (a.as_str(), b)).collect();
+        let mut loader = ReturnFileLoader { modules: &modules };
+
+        let globals = Globals::standard();
+        let module = Module::new();
+        {
+            let mut eval = Evaluator::new(&module);
+            eval.set_loader(&mut loader);
+            eval.eval_module(ast, &globals)?;
+        }
+        // After creating a module we freeze it, preventing further mutation.
+        // It can now be used as the input for other Starlark modules.
+        Ok(module.freeze()?)
+    }
+
+    let ab = get_module("ab.star")?;
+    assert_eq!(ab.get("ab").unwrap().unpack_i32(), Some(42));
+
+§Call a Starlark function from Rust
+
+You can extract functions from Starlark, and call them from Rust, using eval_function.
+
+    use starlark::environment::Globals;
+    use starlark::environment::Module;
+    use starlark::eval::Evaluator;
+    use starlark::syntax::AstModule;
+    use starlark::syntax::Dialect;
+    use starlark::values::Value;
+
+    let content = r#"
+    def quadratic(a, b, c, x):
+        return a*x*x + b*x + c
+    quadratic
+    "#;
+
+    let ast = AstModule::parse("quadratic.star", content.to_owned(), &Dialect::Standard)?;
+    let globals = Globals::standard();
+    let module = Module::new();
+    let mut eval = Evaluator::new(&module);
+    let quad = eval.eval_module(ast, &globals)?;
+    let heap = module.heap();
+    let res = eval.eval_function(
+        quad,
+        &[heap.alloc(4), heap.alloc(2), heap.alloc(1)],
+        &[("x", heap.alloc(8))],
+    )?;
+    assert_eq!(res.unpack_i32(), Some(273));
+
+§Defining Rust objects that are used from Starlark
+
+Finally, we can define our own types in Rust which live in the Starlark heap. Such types are relatively complex, see the details at StarlarkValue.
+
+    use std::fmt::Display;
+    use std::fmt::Write;
+    use std::fmt::{self};
+
+    use allocative::Allocative;
+    use starlark::environment::Globals;
+    use starlark::environment::Module;
+    use starlark::eval::Evaluator;
+    use starlark::starlark_simple_value;
+    use starlark::syntax::AstModule;
+    use starlark::syntax::Dialect;
+    use starlark::values::Heap;
+    use starlark::values::NoSerialize;
+    use starlark::values::ProvidesStaticType;
+    use starlark::values::StarlarkValue;
+    use starlark::values::Value;
+    use starlark::values::ValueError;
+    use starlark::values::ValueLike;
+    use starlark_derive::starlark_value;
+
+    // Define complex numbers
+    #[derive(Debug, PartialEq, Eq, ProvidesStaticType, NoSerialize, Allocative)]
+    struct Complex {
+        real: i32,
+        imaginary: i32,
+    }
+    starlark_simple_value!(Complex);
+
+    impl Display for Complex {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{} + {}i", self.real, self.imaginary)
+        }
+    }
+
+    #[starlark_value(type = "complex")]
+    impl<'v> StarlarkValue<'v> for Complex {
+        // How we add them
+        fn add(&self, rhs: Value<'v>, heap: &'v Heap) -> Option<starlark::Result<Value<'v>>> {
+            if let Some(rhs) = rhs.downcast_ref::<Self>() {
+                Some(Ok(heap.alloc(Complex {
+                    real: self.real + rhs.real,
+                    imaginary: self.imaginary + rhs.imaginary,
+                })))
+            } else {
+                None
+            }
+        }
+    }
+
+    let content = "str(a + b)";
+
+    let ast = AstModule::parse("complex.star", content.to_owned(), &Dialect::Standard)?;
+    let globals = Globals::standard();
+    let module = Module::new();
+    // We inject some complex numbers into the module before we start.
+    let a = module.heap().alloc(Complex {
+        real: 1,
+        imaginary: 8,
+    });
+    module.set("a", a);
+    let b = module.heap().alloc(Complex {
+        real: 4,
+        imaginary: 2,
+    });
+    module.set("b", b);
+    let mut eval = Evaluator::new(&module);
+    let res = eval.eval_module(ast, &globals)?;
+    assert_eq!(res.unpack_str(), Some("5 + 10i"));
+
+Modules§
+
+analysis
+    Linter.
+
+any
+    Methods that build upon the Any trait.
+
+assert
+    Utilities to test Starlark code execution, using the Assert type and top-level functions.
+
+codemap
+    A data structure for tracking source positions in language implementations The CodeMap tracks all source files and maps positions within them to linear indexes as if all source files were concatenated. This allows a source position to be represented by a small 32-bit Pos indexing into the CodeMap, under the assumption that the total amount of parsed source code will not exceed 4GiB. The CodeMap can look up the source file, line, and column of a Pos or Span, as well as provide source code snippets for error reporting.
+
+coerce
+    A trait to represent zero-cost conversions.
+
+collections
+    Defines SmallMap and SmallSet - collections with deterministic iteration and small memory footprint.
+
+debug
+    Provides debug-related functionality and utilities.
+
+docs
+    Types supporting documentation for code written in or for Starlark.
+
+environment
+    Types representing Starlark modules (Module and FrozenModule) and global variables (Globals).
+
+errors
+    Error types used by Starlark.
+
+eval
+    Evaluate some code, typically done by creating an Evaluator, then calling eval_module.
+
+syntax
+    Public API for parser.
+
+typing
+    Types required to support the typecheck function.
+
+util
+    Utilities.
+
+values
+    Defines a runtime Starlark value (Value) and traits for defining custom values (StarlarkValue).
+
+Macros§
+
+const_frozen_string
+    Create a FrozenStringValue.
+
+starlark_complex_value
+    Reduce boilerplate when making types instances of ComplexValue
+
+starlark_complex_values
+    Reduce boilerplate when making types instances of ComplexValue
+
+starlark_simple_value
+    A macro reducing boilerplace defining Starlark values which are simple - they aren’t mutable and can’t contain references to other Starlark values.
+
+Structs§
+
+Error
+    An error produced by starlark.
+
+Enums§
+
+ErrorKind
+    The different kinds of errors that can be produced by starlark
+
+Traits§
+
+PrintHandler
+
+Invoked from print or pprint to print a value.
+
+StarlarkResultExt
+
+Type Aliases§
+
+Result
+
+Attribute Macros§
+
+starlark_module
+    Write Starlark modules concisely in Rust syntax.
