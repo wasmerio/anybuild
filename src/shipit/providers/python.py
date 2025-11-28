@@ -65,16 +65,13 @@ class PythonProvider:
         path: Path,
         metadata: PythonMetadata,
         only_build: bool = False,
-        extra_dependencies: Optional[Set[str]] = None,
     ):
         self.path = path
         self.metadata = metadata
         self.only_build = only_build
-        if extra_dependencies:
-            self.metadata.extra_dependencies.update(extra_dependencies)
 
     @classmethod
-    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> PythonMetadata:
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands, must_have_deps: Optional[Set[str]] = None) -> PythonMetadata:
 
         metadata = PythonMetadata()
 
@@ -97,12 +94,14 @@ class PythonProvider:
             "psycopg2-binary",
         }
         mysql_deps = {"mysqlclient", "pymysql", "mysql-connector-python", "aiomysql", "asyncmy"}
+        must_have_deps = must_have_deps or set()
         found_deps = cls.check_deps(
             path,
             "file://",  # This is not really a dependency, but as a way to check if the install script requires all files
             "streamlit",
             "django",
             "mcp",
+            "mcp[cli]",
             "fastapi",
             "flask",
             "python-fasthtml",
@@ -115,6 +114,7 @@ class PythonProvider:
             # "gunicorn",
             *mysql_deps,
             *pg_deps,
+            *must_have_deps,
         )
 
         if "file://" in found_deps:
@@ -168,7 +168,7 @@ class PythonProvider:
                 metadata.server = PythonServer.Uvicorn
             
             if metadata.server == PythonServer.Uvicorn:
-                metadata.extra_dependencies.add("uvicorn")
+                must_have_deps.add("uvicorn")
 
         if not metadata.asgi_application and not metadata.wsgi_application:
             if metadata.framework == PythonFramework.Django:
@@ -207,10 +207,14 @@ class PythonProvider:
         is_uvicorn_start = custom_commands.start and custom_commands.start.startswith("uvicorn ")
         framework_should_use_uvicorn = metadata.framework in [PythonFramework.Django, PythonFramework.FastAPI, PythonFramework.Flask]
         if is_uvicorn_start or (framework_should_use_uvicorn and not metadata.server):
-            metadata.extra_dependencies.add("uvicorn")
+            must_have_deps.add("uvicorn")
             metadata.server = PythonServer.Uvicorn
         if metadata.framework == PythonFramework.MCP:
-            metadata.extra_dependencies.add("mcp[cli]")
+            must_have_deps.add("mcp[cli]")
+
+        for dep in must_have_deps:
+            if dep not in found_deps:
+                metadata.extra_dependencies.add(dep)
 
         if not metadata.database:
             # Database
