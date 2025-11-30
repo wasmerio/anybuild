@@ -1,6 +1,6 @@
 php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
 php_architecture = getenv("SHIPIT_PHP_ARCHITECTURE")
-php = dep("php", php_version, architecture=php_architecture)
+php = dep("php", php_version, architecture = php_architecture)
 
 app = mount("app")
 
@@ -9,24 +9,24 @@ assets = mount("assets")
 PORT = getenv("PORT") or "8080"
 
 serve(
-  name="php-nobuild",
-  provider="php",
-  cwd=app["serve"],
-  build=[
-    use(php),
-    workdir(app["build"]),
-    copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets"),
-    copy(".", ".", ignore=[".git"])
-  ],
-  deps=[php],
-  env = {
-    "PHP_INI_SCAN_DIR": "{}".format(assets["serve"])
-  },
-  commands = {
-    "start": "php -S localhost:{} -t {}".format(PORT, app["serve"]).replace("$PORT", PORT)
-  },
-  mounts=[
-    app,
-    assets
-  ],
+    name = "php-nobuild",
+    provider = "php",
+    cwd = app["serve"],
+    build = [
+        use(php),
+        workdir(app["build"]),
+        copy("php/php.ini", "{}/php.ini".format(assets["build"]), base = "assets"),
+        copy(".", ".", ignore = [".git"]),
+    ],
+    deps = [php],
+    env = {
+        "PHP_INI_SCAN_DIR": "{}".format(assets["serve"]),
+    },
+    commands = {
+        "start": "php -S localhost:{} -t {}".format(PORT, app["serve"]).replace("$PORT", PORT),
+    },
+    mounts = [
+        app,
+        assets,
+    ],
 )

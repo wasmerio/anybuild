@@ -10,20 +10,20 @@ app = mount("app")
 PORT = getenv("PORT") or "8080"
 
 serve(
-  name="hugo",
-  provider="hugo",
-  cwd=app["serve"],
-  build=[
-    use(hugo),
-    workdir(temp["build"]),
-    copy(".", ".", ignore=[".git"]),
-    run("hugo build --destination={}".format(app["build"]), group="build")
-  ],
-  deps=[staticwebserver],
-  commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT)
-  },
-  mounts=[
-    app
-  ],
+    name = "hugo",
+    provider = "hugo",
+    cwd = app["serve"],
+    build = [
+        use(hugo),
+        workdir(temp["build"]),
+        copy(".", ".", ignore = [".git"]),
+        run("hugo build --destination={}".format(app["build"]), group = "build"),
+    ],
+    deps = [staticwebserver],
+    commands = {
+        "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT),
+    },
+    mounts = [
+        app,
+    ],
 )

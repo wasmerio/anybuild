@@ -6,18 +6,18 @@ app = mount("app")
 PORT = getenv("PORT") or "8080"
 
 serve(
-  name="staticfile",
-  provider="staticfile",
-  cwd=app["serve"],
-  build=[
-    workdir(app["build"]),
-    copy("site", ".", ignore=[".git"])
-  ],
-  deps=[staticwebserver],
-  commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT)
-  },
-  mounts=[
-    app
-  ],
+    name = "staticfile",
+    provider = "staticfile",
+    cwd = app["serve"],
+    build = [
+        workdir(app["build"]),
+        copy("site", ".", ignore = [".git"]),
+    ],
+    deps = [staticwebserver],
+    commands = {
+        "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT),
+    },
+    mounts = [
+        app,
+    ],
 )

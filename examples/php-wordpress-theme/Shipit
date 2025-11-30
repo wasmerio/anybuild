@@ -3,17 +3,17 @@ staticwebserver = dep("static-web-server", staticwebserver_version)
 
 app = mount("app")
 serve(
-  name="php-wordpress-theme",
-  provider="staticfile",
-  build=[
-    workdir(app["build"]),
-    copy(".", ".", ignore=[".git"])
-  ],
-  deps=[staticwebserver],
-  commands = {
-    "start": "static-web-server --root={} --log-level=info".format(app["serve"])
-  },
-  mounts=[
-    app
-  ],
+    name = "php-wordpress-theme",
+    provider = "staticfile",
+    build = [
+        workdir(app["build"]),
+        copy(".", ".", ignore = [".git"]),
+    ],
+    deps = [staticwebserver],
+    commands = {
+        "start": "static-web-server --root={} --log-level=info".format(app["serve"]),
+    },
+    mounts = [
+        app,
+    ],
 )
