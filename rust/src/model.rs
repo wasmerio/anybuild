@@ -97,7 +97,7 @@ pub enum Step {
     Workdir(WorkdirStep),
 }
 
-pub type PrepareStep = RunStep;
+pub type PrepareStep = Step;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Build {
@@ -213,7 +213,7 @@ impl MountSpec {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VolumeSpec {
     pub name: String,
-    pub serve_path: Utf8PathBuf,
+    pub serve_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub var_name: Option<String>,
 }
@@ -228,6 +228,8 @@ pub struct ServiceSpec {
 pub struct ProviderPlan {
     pub serve_name: String,
     pub provider: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mounts: Vec<MountSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

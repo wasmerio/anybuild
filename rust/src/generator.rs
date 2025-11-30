@@ -1,6 +1,6 @@
 //! Shipit file generation using a minimal Starlark AST.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::Result;
 use crate::model::{ProviderPlan, ServiceProvider};
@@ -83,7 +83,7 @@ impl ShipitGenerator {
                 "volume",
                 vec![
                     Arg::Pos(Expr::StringLit(volume.name.clone())),
-                    Arg::Pos(Expr::StringLit(volume.serve_path.to_string())),
+                    Arg::Pos(Expr::Raw(volume.serve_path.clone())),
                 ],
             );
             stmts.push(Stmt::assignment(name, call));
@@ -124,7 +124,9 @@ impl ShipitGenerator {
         ));
 
         if let Some(extra) = &plan.declarations {
-            stmts.push(Stmt::Raw(extra.trim().to_string()));
+            if !extra.is_empty() {
+                stmts.push(Stmt::Raw(extra.clone()));
+            }
         }
 
         // Build steps (attempt to convert provider plan strings into typed AST; fall back to raw).
@@ -147,12 +149,43 @@ impl ShipitGenerator {
             ));
         }
 
-        let serve_deps: Vec<String> = plan
-            .dependencies
-            .iter()
-            .filter(|d| d.use_in_serve)
-            .map(|d| d.alias.clone().unwrap_or_else(|| sanitize_alias(&d.name)))
-            .collect();
+        let mut build_dep_vars: Vec<String> = Vec::new();
+        let mut build_seen: HashSet<String> = HashSet::new();
+        for dep in &plan.dependencies {
+            if !dep.use_in_build {
+                continue;
+            }
+            let alias = dep
+                .alias
+                .clone()
+                .unwrap_or_else(|| sanitize_alias(&dep.name));
+            if build_seen.insert(alias.clone()) {
+                build_dep_vars.push(alias);
+            }
+        }
+        let has_use_step = plan.build_steps.iter().any(|s| s.contains("use("));
+        if !build_dep_vars.is_empty() && !has_use_step {
+            let args = build_dep_vars
+                .iter()
+                .map(|d| Arg::Pos(Expr::Ident(d.clone())))
+                .collect();
+            build_steps.insert(0, Expr::call("use", args));
+        }
+
+        let mut serve_deps: Vec<String> = Vec::new();
+        let mut serve_seen: HashSet<String> = HashSet::new();
+        for dep in &plan.dependencies {
+            if !dep.use_in_serve {
+                continue;
+            }
+            let alias = dep
+                .alias
+                .clone()
+                .unwrap_or_else(|| sanitize_alias(&dep.name));
+            if serve_seen.insert(alias.clone()) {
+                serve_deps.push(alias);
+            }
+        }
 
         let prepare_steps = plan.prepare.as_ref().map(|steps| {
             steps
@@ -163,7 +196,7 @@ impl ShipitGenerator {
 
         let env_map = plan.env.as_ref().map(|env| {
             env.iter()
-                .map(|(k, v)| (Expr::StringLit(k.clone()), Expr::StringLit(v.clone())))
+                .map(|(k, v)| (Expr::StringLit(k.clone()), Expr::Raw(v.clone())))
                 .collect::<Vec<_>>()
         });
 
@@ -179,6 +212,10 @@ impl ShipitGenerator {
             .filter(|m| m.attach_to_serve)
             .map(|m| m.name.clone())
             .collect();
+        let cwd_expr = mount_names
+            .iter()
+            .find(|m| m.as_str() == "app")
+            .map(|_| Expr::Raw("app[\"serve\"]".to_string()));
 
         let volume_names: Vec<String> = plan
             .volumes
@@ -198,10 +235,11 @@ impl ShipitGenerator {
             "provider".to_string(),
             Expr::StringLit(plan.provider.clone()),
         ));
-        serve_args.push(Arg::Named(
-            "cwd".to_string(),
-            Expr::StringLit("app".to_string()),
-        ));
+        if let Some(cwd_expr) = cwd_expr {
+            serve_args.push(Arg::Named("cwd".to_string(), cwd_expr));
+        } else if let Some(cwd) = &plan.cwd {
+            serve_args.push(Arg::Named("cwd".to_string(), Expr::Raw(cwd.clone())));
+        }
         serve_args.push(Arg::Named("build".to_string(), Expr::List(build_steps)));
         serve_args.push(Arg::Named(
             "deps".to_string(),
@@ -263,20 +301,14 @@ fn detect_root(plan: &ProviderPlan) -> String {
 }
 
 fn serve_commands(plan: &ProviderPlan) -> BTreeMap<String, Expr> {
-    if plan.provider == "staticfile" {
-        let mut map = BTreeMap::new();
-        map.insert(
-            "start".to_string(),
-            Expr::Raw(
-                "\"static-web-server --root={} --log-level=info --port={}\".format(app[\"serve\"], PORT)"
-                    .to_string(),
-            ),
-        );
-        return map;
-    }
     plan.commands
         .iter()
-        .map(|(k, v)| (k.clone(), Expr::StringLit(v.clone())))
+        .map(|(k, v)| {
+            (
+                k.clone(),
+                Expr::Raw(format!(r#"{}.replace("$PORT", PORT)"#, v)),
+            )
+        })
         .collect()
 }
 

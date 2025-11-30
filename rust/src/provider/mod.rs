@@ -39,5 +39,36 @@ pub trait ProviderDescriptor: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
+/// Apply custom command overrides to a commands map.
+pub fn apply_custom_commands(
+    custom: &CustomCommands,
+    mut commands: std::collections::BTreeMap<String, String>,
+) -> Result<std::collections::BTreeMap<String, String>> {
+    if let Some(install) = &custom.install {
+        commands.insert("install".to_string(), serde_json::to_string(install)?);
+    }
+    if let Some(build) = &custom.build {
+        commands.insert("build".to_string(), serde_json::to_string(build)?);
+    }
+    if let Some(start) = &custom.start {
+        commands.insert("start".to_string(), serde_json::to_string(start)?);
+    }
+    if let Some(after_deploy) = &custom.after_deploy {
+        commands.insert(
+            "after_deploy".to_string(),
+            serde_json::to_string(after_deploy)?,
+        );
+    }
+    Ok(commands)
+}
+
+pub mod hugo;
+pub mod jekyll;
+pub mod laravel;
+pub mod mkdocs;
+pub mod node_static;
+pub mod php;
+pub mod python;
 pub mod registry;
 pub mod staticfile;
+pub mod wordpress;

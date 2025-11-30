@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::Result;
 use crate::model::{CustomCommands, DependencySpec, DetectResult, MountSpec, ProviderPlan};
-use crate::provider::{Provider, ProviderDescriptor};
+use crate::provider::{Provider, ProviderDescriptor, apply_custom_commands};
 
 #[derive(Debug, Default, Deserialize)]
 struct StaticConfig {
@@ -63,6 +63,7 @@ impl Provider for StaticFileProvider {
                 .file_name()
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "app".to_string()),
+            cwd: None,
             provider: self.name().to_string(),
             mounts: vec![MountSpec {
                 name: "app".to_string(),
@@ -91,7 +92,7 @@ impl Provider for StaticFileProvider {
                         "\"static-web-server --root={{}} --log-level=info --port={{}}\".format(app[\"serve\"], PORT)"
                     ),
                 );
-                map
+                apply_custom_commands(&self.custom_commands, map)?
             },
             env: None,
             platform: None,

@@ -5,6 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 
 use crate::Result;
+use crate::assets;
 use crate::builder::Builder;
 use crate::model::{CopyBase, Mount, PrepareStep, Serve, Step};
 
@@ -43,6 +44,13 @@ impl Builder for LocalBuilder {
     ) -> Result<()> {
         std::fs::create_dir_all(&self.build_dir)?;
         let mut cwd = self.build_dir.clone();
+        let mut env_overlay: BTreeMap<String, String> = _env.clone();
+        // Seed PATH with host PATH so path/prepend mutations work.
+        if !env_overlay.contains_key("PATH") {
+            if let Ok(path) = std::env::var("PATH") {
+                env_overlay.insert("PATH".to_string(), path);
+            }
+        }
         for step in steps {
             match step {
                 Step::Workdir(w) => {
@@ -54,25 +62,71 @@ impl Builder for LocalBuilder {
                     std::fs::create_dir_all(&cwd)?;
                 }
                 Step::Copy(c) => {
-                    let base = match c.base {
-                        CopyBase::Source => self.src_dir.join(&c.source),
-                        CopyBase::Assets => self.src_dir.join("src/shipit/assets").join(&c.source),
-                    };
                     let target = cwd.join(&c.target);
-                    copy_path(&base, &target, &c.ignore)?;
+                    if matches!(c.base, CopyBase::Assets) {
+                        if let Some(data) = assets::get_asset(&c.source) {
+                            std::fs::write(&target, data)?;
+                        } else {
+                            return Err(anyhow::anyhow!("Asset {} not found", c.source));
+                        }
+                    } else {
+                        let base = self.src_dir.join(&c.source);
+                        copy_path(&base, &target, &c.ignore)?;
+                    }
                 }
-                _ => {}
+                Step::Env(e) => {
+                    for (k, v) in &e.variables {
+                        env_overlay.insert(k.clone(), v.clone());
+                    }
+                }
+                Step::Path(p) => {
+                    let current = env_overlay
+                        .get("PATH")
+                        .cloned()
+                        .or_else(|| std::env::var("PATH").ok())
+                        .unwrap_or_default();
+                    let mut new_path = p.path.clone();
+                    if !current.is_empty() {
+                        new_path.push(':');
+                        new_path.push_str(&current);
+                    }
+                    env_overlay.insert("PATH".to_string(), new_path);
+                }
+                Step::Use(_) => {
+                    // Local builder assumes dependencies already available on host.
+                }
+                Step::Run(r) => {
+                    run_shell(&cwd, &env_overlay, &r.command)?;
+                }
             }
         }
         Ok(())
     }
 
     fn build_prepare(&mut self, _serve: &Serve) -> Result<()> {
-        todo!("LocalBuilder.build_prepare not yet implemented")
+        Ok(())
     }
 
     fn prepare(&mut self, _env: &BTreeMap<String, String>, _prepare: &[PrepareStep]) -> Result<()> {
-        todo!("LocalBuilder.prepare not yet implemented")
+        let mut cwd = self.build_dir.clone();
+        let mut env_overlay: BTreeMap<String, String> = _env.clone();
+        if !env_overlay.contains_key("PATH") {
+            if let Ok(path) = std::env::var("PATH") {
+                env_overlay.insert("PATH".to_string(), path);
+            }
+        }
+        for step in _prepare {
+            match step {
+                crate::model::Step::Run(run) => {
+                    run_shell(&cwd, &env_overlay, &run.command)?;
+                }
+                crate::model::Step::Workdir(workdir) => {
+                    cwd = cwd.join(&workdir.path);
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     fn build_serve(&mut self, _serve: &Serve) -> Result<()> {
@@ -134,7 +188,21 @@ impl Builder for LocalBuilder {
     }
 
     fn run_command(&mut self, _command: &str, _extra_args: Option<&[String]>) -> Result<()> {
-        todo!("LocalBuilder.run_command not yet implemented")
+        let mut cmd = Command::new(_command);
+        if let Some(args) = _extra_args {
+            cmd.args(args);
+        }
+        cmd.current_dir(&self.src_dir);
+        cmd.envs(std::env::vars());
+        let status = cmd.status()?;
+        if !status.success() {
+            return Err(anyhow::anyhow!(
+                "Command {} failed with {}",
+                _command,
+                status
+            ));
+        }
+        Ok(())
     }
 
     fn get_build_mount_path(&self, name: &str) -> Utf8PathBuf {
@@ -149,6 +217,10 @@ impl Builder for LocalBuilder {
             "app" => self.serve_dir.join("app"),
             other => self.serve_dir.join(other),
         }
+    }
+
+    fn as_any(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
@@ -187,6 +259,28 @@ fn copy_path(source: &Utf8PathBuf, target: &Utf8PathBuf, ignore: &[String]) -> R
             }
             std::fs::copy(entry.path(), dest)?;
         }
+    }
+    Ok(())
+}
+
+fn run_shell(
+    cwd: &Utf8PathBuf,
+    env_overlay: &BTreeMap<String, String>,
+    command: &str,
+) -> Result<()> {
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c").arg(command);
+    cmd.current_dir(cwd);
+    // Base environment first, then overlay.
+    cmd.envs(std::env::vars());
+    cmd.envs(env_overlay.iter().map(|(k, v)| (k, v)));
+    let status = cmd.status()?;
+    if !status.success() {
+        return Err(anyhow::anyhow!(
+            "Command `{}` failed with {}",
+            command,
+            status
+        ));
     }
     Ok(())
 }

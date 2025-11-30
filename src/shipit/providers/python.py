@@ -394,8 +394,14 @@ class PythonProvider:
 
     def commands(self) -> Dict[str, str]:
         commands = self.base_commands()
+        if self.custom_commands.install:
+            commands["install"] = json.dumps(self.custom_commands.install)
+        if self.custom_commands.build:
+            commands["build"] = json.dumps(self.custom_commands.build)
         if self.custom_commands.start:
             commands["start"] = json.dumps(self.custom_commands.start)
+        if self.custom_commands.after_deploy:
+            commands["after_deploy"] = json.dumps(self.custom_commands.after_deploy)
         return commands
 
     def base_commands(self) -> Dict[str, str]:

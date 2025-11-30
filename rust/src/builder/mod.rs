@@ -1,6 +1,7 @@
 //! Builders translate Shipit plans into runnable artifacts (local, Docker,
 //! Wasmer).
 
+use std::any::Any;
 use std::collections::BTreeMap;
 
 use camino::Utf8PathBuf;
@@ -48,6 +49,9 @@ pub trait Builder: Send {
 
     /// Map a mount name to serve-path location for this backend.
     fn get_serve_mount_path(&self, name: &str) -> Utf8PathBuf;
+
+    /// Downcast support for backend-specific operations (e.g., Wasmer deploy).
+    fn as_any(&mut self) -> &mut dyn Any;
 }
 
 /// Convenience type for build/serve environment maps.

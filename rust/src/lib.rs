@@ -11,6 +11,7 @@ pub mod detect;
 pub mod env;
 pub mod generator;
 pub mod model;
+pub mod procfile;
 pub mod provider;
 pub mod starlark_ast;
 pub mod starlark_runtime;

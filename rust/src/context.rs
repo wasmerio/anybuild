@@ -237,10 +237,7 @@ impl<'a> Ctx<'a> {
     fn resolve_prepare_steps(&self, refs: &[RefId]) -> Vec<PrepareStep> {
         self.resolve_steps(refs)
             .into_iter()
-            .filter_map(|s| match s {
-                Step::Run(run) => Some(run),
-                _ => None,
-            })
+            .filter(|s| matches!(s, Step::Run(_) | Step::Workdir(_)))
             .collect()
     }
 
