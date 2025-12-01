@@ -1,5 +1,9 @@
 staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
-staticwebserver = dep("static-web-server", staticwebserver_version)
+
+staticwebserver = dep(
+    "static-web-server",
+    staticwebserver_version,
+)
 
 app = mount("app")
 
@@ -11,13 +15,15 @@ serve(
     cwd = app["serve"],
     build = [
         workdir(app["build"]),
-        copy(".", ".", ignore = [".git"]),
+        copy(
+            ".",
+            target = ".",
+            ignore = [".git"],
+        ),
     ],
     deps = [staticwebserver],
     commands = {
         "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT),
     },
-    mounts = [
-        app,
-    ],
+    mounts = [app],
 )

@@ -148,8 +148,11 @@ pub struct AutoArgs {
     pub env_name: Option<String>,
 }
 
-#[derive(Parser, Debug, Default)]
+#[derive(Parser, Debug)]
 pub struct GenerateArgs {
+    /// Project path (defaults to current directory).
+    #[arg(value_name = "PATH", default_value = ".")]
+    pub path: Utf8PathBuf,
     #[command(flatten)]
     pub provider: ProviderArgs,
     #[command(flatten)]
@@ -157,6 +160,17 @@ pub struct GenerateArgs {
     /// Path to write Shipit file.
     #[arg(long)]
     pub shipit_path: Option<Utf8PathBuf>,
+}
+
+impl Default for GenerateArgs {
+    fn default() -> Self {
+        Self {
+            path: Utf8PathBuf::from("."),
+            provider: Default::default(),
+            overrides: Default::default(),
+            shipit_path: None,
+        }
+    }
 }
 
 #[derive(Parser, Debug, Default)]
@@ -272,7 +286,7 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command.unwrap_or(Command::Auto(cli.auto_args.clone())) {
         Command::Auto(args) => run_auto(cli.path, args),
-        Command::Generate(args) => run_generate(cli.path, args),
+        Command::Generate(args) => run_generate(args),
         Command::Plan(args) => run_plan(cli.path, args),
         Command::Build(args) => run_build(cli.path, args),
         Command::Serve(args) => run_serve(cli.path, args),
@@ -288,89 +302,90 @@ fn temporary_shipit_path() -> Result<Utf8PathBuf> {
 }
 
 // Placeholder handlers to be implemented as control flows are ported.
-fn run_auto(_path: Utf8PathBuf, _args: AutoArgs) -> Result<()> {
-    let shipit_path = if _args.temp_shipit {
-        if _args.shipit_path.is_some() {
+fn run_auto(_path: Utf8PathBuf, args: AutoArgs) -> Result<()> {
+    let shipit_path = if args.temp_shipit {
+        if args.shipit_path.is_some() {
             anyhow::bail!("Cannot use both --temp-shipit and --shipit-path");
         }
         temporary_shipit_path()?
     } else {
-        _args
-            .shipit_path
-            .clone()
-            .unwrap_or_else(|| _path.join("Shipit"))
+        args.shipit_path.clone().unwrap_or_else(|| {
+            if _path.is_file() {
+                _path.clone()
+            } else {
+                _path.join("Shipit")
+            }
+        })
     };
 
-    let mut regenerate = _args.regenerate;
+    let mut regenerate = args.regenerate;
     if !regenerate && !shipit_path.exists() {
         regenerate = true;
     }
     if regenerate {
-        run_generate(
-            _path.clone(),
-            GenerateArgs {
-                shipit_path: Some(shipit_path.clone()),
-                provider: _args.provider.clone(),
-                overrides: _args.overrides.clone(),
-                ..GenerateArgs::default()
-            },
-        )?;
+        run_generate(GenerateArgs {
+            path: _path.clone(),
+            shipit_path: Some(shipit_path.clone()),
+            provider: args.provider.clone(),
+            overrides: args.overrides.clone(),
+            ..Default::default()
+        })?;
     }
 
-    let env = load_env(&_path, _args.env_name.as_deref())?;
-    let mut wasmer = _args.wasmer.clone();
-    if _args.wasmer_deploy.wasmer_deploy || _args.wasmer_deploy.wasmer_deploy_config.is_some() {
+    let env = load_env(&_path, args.env_name.as_deref())?;
+    let mut wasmer = args.wasmer.clone();
+    if args.wasmer_deploy.wasmer_deploy || args.wasmer_deploy.wasmer_deploy_config.is_some() {
         wasmer.wasmer = true;
     }
-    let action = if _args.wasmer_deploy.wasmer_deploy
-        || _args.wasmer_deploy.wasmer_deploy_config.is_some()
-    {
-        FinalAction::WasmerDeploy {
-            deploy: _args.wasmer_deploy.wasmer_deploy,
-            config: _args.wasmer_deploy.wasmer_deploy_config.clone(),
-            app_owner: _args.wasmer_deploy.wasmer_app_owner.clone(),
-            app_name: _args.wasmer_deploy.wasmer_app_name.clone(),
-        }
-    } else if _args.start {
-        FinalAction::RunStart
-    } else {
-        FinalAction::None
-    };
+    let action =
+        if args.wasmer_deploy.wasmer_deploy || args.wasmer_deploy.wasmer_deploy_config.is_some() {
+            FinalAction::WasmerDeploy {
+                deploy: args.wasmer_deploy.wasmer_deploy,
+                config: args.wasmer_deploy.wasmer_deploy_config.clone(),
+                app_owner: args.wasmer_deploy.wasmer_app_owner.clone(),
+                app_name: args.wasmer_deploy.wasmer_app_name.clone(),
+            }
+        } else if args.start {
+            FinalAction::RunStart
+        } else {
+            FinalAction::None
+        };
     build_with_provider(
         _path,
         shipit_path,
         env,
         &wasmer,
-        &_args.docker,
-        _args.skip_prepare,
+        &args.docker,
+        args.skip_prepare,
         action,
     )
 }
 
-fn run_generate(_path: Utf8PathBuf, _args: GenerateArgs) -> Result<()> {
-    let shipit_path = _args
+fn run_generate(args: GenerateArgs) -> Result<()> {
+    let shipit_path = args
         .shipit_path
         .clone()
-        .unwrap_or_else(|| _path.join("Shipit"));
-    let custom = resolve_custom_commands(&_path, &_args.provider, &_args.overrides);
+        .unwrap_or_else(|| args.path.join("Shipit"));
+    let custom = resolve_custom_commands(&args.path, &args.provider, &args.overrides);
 
     // Honor explicit provider name if present.
-    let provider = if let Some(name) = &_args.provider.use_provider {
+    let provider = if let Some(name) = &args.provider.use_provider {
         let providers = registry::providers();
         let provider = providers
             .into_iter()
             .find(|p| p.name().eq_ignore_ascii_case(name))
             .ok_or_else(|| anyhow::anyhow!("Provider {} not found", name))?;
-        provider.create(_path.as_std_path(), &custom)?
+        provider.create(args.path.as_std_path(), &custom)?
     } else {
-        detect_registered_provider(_path.as_std_path(), &custom)?
+        detect_registered_provider(args.path.as_std_path(), &custom)?
             .ok_or_else(|| anyhow::anyhow!("No provider detected"))?
             .0
     };
 
     let plan = provider.plan()?;
     let generator = ShipitGenerator::new(GeneratorOptions {
-        project_name: _path
+        project_name: args
+            .path
             .file_name()
             .map(|s| s.to_string())
             .unwrap_or_else(|| "app".to_string()),
@@ -395,10 +410,13 @@ fn run_plan(_path: Utf8PathBuf, _args: PlanArgs) -> Result<()> {
         }
         temporary_shipit_path()?
     } else {
-        _args
-            .shipit_path
-            .clone()
-            .unwrap_or_else(|| _path.join("Shipit"))
+        _args.shipit_path.clone().unwrap_or_else(|| {
+            if _path.is_file() {
+                _path.clone()
+            } else {
+                _path.join("Shipit")
+            }
+        })
     };
     let mut regenerate = _args.regenerate;
     if !regenerate && !shipit_path.exists() {
@@ -407,15 +425,13 @@ fn run_plan(_path: Utf8PathBuf, _args: PlanArgs) -> Result<()> {
     if regenerate {
         let overrides = _args.overrides.clone();
         let provider = _args.provider.clone();
-        run_generate(
-            _path.clone(),
-            GenerateArgs {
-                shipit_path: Some(shipit_path.clone()),
-                provider,
-                overrides,
-                ..Default::default()
-            },
-        )?;
+        run_generate(GenerateArgs {
+            path: _path.clone(),
+            shipit_path: Some(shipit_path.clone()),
+            provider,
+            overrides,
+            ..Default::default()
+        })?;
     }
 
     let mut builder: Box<dyn Builder> =
@@ -508,25 +524,26 @@ fn run_plan(_path: Utf8PathBuf, _args: PlanArgs) -> Result<()> {
 
 fn run_build(_path: Utf8PathBuf, _args: BuildArgs) -> Result<()> {
     let env = load_env(&_path, _args.env_name.as_deref())?;
-    let shipit_path = _args
-        .shipit_path
-        .clone()
-        .unwrap_or_else(|| _path.join("Shipit"));
+    let shipit_path = _args.shipit_path.clone().unwrap_or_else(|| {
+        if _path.is_file() {
+            _path.clone()
+        } else {
+            _path.join("Shipit")
+        }
+    });
 
     let mut regenerate = _args.regenerate;
     if !shipit_path.exists() {
         regenerate = true;
     }
     if regenerate {
-        run_generate(
-            _path.clone(),
-            GenerateArgs {
-                shipit_path: Some(shipit_path.clone()),
-                provider: _args.provider.clone(),
-                overrides: _args.overrides.clone(),
-                ..Default::default()
-            },
-        )?;
+        run_generate(GenerateArgs {
+            path: _path.clone(),
+            shipit_path: Some(shipit_path.clone()),
+            provider: _args.provider.clone(),
+            overrides: _args.overrides.clone(),
+            ..Default::default()
+        })?;
     }
 
     build_with_provider(
@@ -542,24 +559,25 @@ fn run_build(_path: Utf8PathBuf, _args: BuildArgs) -> Result<()> {
 
 fn run_serve(_path: Utf8PathBuf, _args: ServeArgs) -> Result<()> {
     let env = load_env(&_path, _args.env_name.as_deref())?;
-    let shipit_path = _args
-        .shipit_path
-        .clone()
-        .unwrap_or_else(|| _path.join("Shipit"));
+    let shipit_path = _args.shipit_path.clone().unwrap_or_else(|| {
+        if _path.is_file() {
+            _path.clone()
+        } else {
+            _path.join("Shipit")
+        }
+    });
     let mut regenerate = _args.regenerate;
     if !shipit_path.exists() {
         regenerate = true;
     }
     if regenerate {
-        run_generate(
-            _path.clone(),
-            GenerateArgs {
-                shipit_path: Some(shipit_path.clone()),
-                provider: _args.provider.clone(),
-                overrides: _args.overrides.clone(),
-                ..Default::default()
-            },
-        )?;
+        run_generate(GenerateArgs {
+            path: _path.clone(),
+            shipit_path: Some(shipit_path.clone()),
+            provider: _args.provider.clone(),
+            overrides: _args.overrides.clone(),
+            ..Default::default()
+        })?;
     }
     let mut wasmer = _args.wasmer.clone();
     if _args.wasmer_deploy.wasmer_deploy || _args.wasmer_deploy.wasmer_deploy_config.is_some() {
@@ -591,24 +609,25 @@ fn run_serve(_path: Utf8PathBuf, _args: ServeArgs) -> Result<()> {
 }
 
 fn run_deploy(_path: Utf8PathBuf, _args: DeployArgs) -> Result<()> {
-    let shipit_path = _args
-        .shipit_path
-        .clone()
-        .unwrap_or_else(|| _path.join("Shipit"));
+    let shipit_path = _args.shipit_path.clone().unwrap_or_else(|| {
+        if _path.is_file() {
+            _path.clone()
+        } else {
+            _path.join("Shipit")
+        }
+    });
     let mut regenerate = _args.regenerate;
     if !shipit_path.exists() {
         regenerate = true;
     }
     if regenerate {
-        run_generate(
-            _path.clone(),
-            GenerateArgs {
-                shipit_path: Some(shipit_path.clone()),
-                provider: _args.provider.clone(),
-                overrides: _args.overrides.clone(),
-                ..Default::default()
-            },
-        )?;
+        run_generate(GenerateArgs {
+            path: _path.clone(),
+            shipit_path: Some(shipit_path.clone()),
+            provider: _args.provider.clone(),
+            overrides: _args.overrides.clone(),
+            ..Default::default()
+        })?;
     }
 
     let env = load_env(&_path, _args.env_name.as_deref())?;

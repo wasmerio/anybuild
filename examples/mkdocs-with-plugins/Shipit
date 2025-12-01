@@ -1,42 +1,79 @@
 python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"
-python = dep("python", python_version)
-uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
-uv = dep("uv", uv_version)
+
+python = dep(
+    "python",
+    python_version,
+)
+
 staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
-staticwebserver = dep("static-web-server", staticwebserver_version)
+
+staticwebserver = dep(
+    "static-web-server",
+    staticwebserver_version,
+)
+
+mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"
+
+mkdocs = dep(
+    "mkdocs",
+    mkdocs_version,
+)
+
+mkdocsawesomepagesplugin_version = getenv("SHIPIT_MKDOCS_AWESOME_PAGES_PLUGIN_VERSION") or "2.9.3"
+
+mkdocsawesomepagesplugin = dep(
+    "mkdocs-awesome-pages-plugin",
+    mkdocsawesomepagesplugin_version,
+)
 
 app = mount("app")
 
 temp = mount("temp")
 
-local_venv = mount("local_venv")
-
 PORT = getenv("PORT") or "8080"
-mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"
+
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 venv = local_venv
+mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"
 
 
 serve(
-  name="mkdocs-with-plugins",
-  provider="mkdocs",
-  cwd=app["serve"],
-  build=[
-    use(python, uv),
-    workdir(temp["build"]),
-    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
-    run(f"uv init", inputs=[], outputs=["uv.lock"], group="install"),
-    run("uv add -r requirements.txt mkdocs", inputs=["requirements.txt"], group="install"),
-    path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
-    copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    run("uv run mkdocs build --site-dir={}".format(app["build"]), outputs=["."], group="build")
-  ],
-  deps=[python, staticwebserver],
-  env = {},
-  commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT)
-  },
-  mounts=[
-    app
-  ],
+    name = "mkdocs-with-plugins",
+    provider = "mkdocs",
+    cwd = app["serve"],
+    build = [
+        use(
+            python,
+            mkdocs,
+            mkdocsawesomepagesplugin,
+        ),
+        workdir(temp["build"]),
+        env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
+        run("uv init", inputs=[], outputs=["uv.lock"], group="install"),
+        run("uv add -r requirements.txt mkdocs", inputs=["requirements.txt"], group="install"),
+        path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
+        copy(
+            ".",
+            target = ".",
+            ignore = [
+                ".venv",
+                ".git",
+                "__pycache__",
+            ],
+        ),
+        copy(
+            ".",
+            target = ".",
+            ignore = [".git"],
+        ),
+        run("uv run mkdocs build --site-dir={}".format(app["build"]), outputs=["."], group="build"),
+    ],
+    deps = [
+        python,
+        staticwebserver,
+    ],
+    commands = {
+        "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT),
+    },
+    mounts = [app],
 )

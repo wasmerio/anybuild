@@ -54,6 +54,24 @@ pub struct PythonProvider {
 }
 
 impl PythonProvider {
+    /// Construct a PythonProvider while configuring a couple of commonly toggled
+    /// options (`only_build` and `extra_dependencies`). Providers which compose
+    /// PythonProvider (e.g. Mkdocs) can use this helper to request a build-only
+    /// Python plan and to inject extra dependencies (like `mkdocs`) that should
+    /// be installed during the Python install steps.
+    pub fn with_options(
+        path: &Path,
+        custom_commands: &CustomCommands,
+        only_build: bool,
+        extra_dependencies: Option<HashSet<String>>,
+    ) -> Result<Self> {
+        let mut provider = PythonProvider::new(path, custom_commands)?;
+        provider.only_build = only_build;
+        if let Some(extra) = extra_dependencies {
+            provider.extra_dependencies = extra;
+        }
+        Ok(provider)
+    }
     pub fn new(path: &Path, custom_commands: &CustomCommands) -> Result<Self> {
         let path_buf = Utf8PathBuf::from_path_buf(path.to_path_buf())
             .map_err(|_| anyhow::anyhow!("Invalid UTF-8 path"))?;
@@ -293,7 +311,7 @@ impl PythonProvider {
         })
     }
 
-    fn declarations(&self) -> Option<String> {
+    pub fn declarations(&self) -> Option<String> {
         if self.only_build {
             return Some(
                 "cross_platform = getenv(\"SHIPIT_PYTHON_CROSS_PLATFORM\")\nvenv = local_venv\n"
@@ -357,7 +375,7 @@ impl PythonProvider {
         deps
     }
 
-    fn build_steps(&self) -> Vec<String> {
+    pub fn build_steps(&self) -> Vec<String> {
         let mut steps = if self.only_build {
             vec!["workdir(temp[\"build\"])".to_string()]
         } else {

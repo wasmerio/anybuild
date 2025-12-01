@@ -67,10 +67,25 @@ impl ShipitGenerator {
         }
 
         // Mounts
+        let mut emitted_mounts = std::collections::HashSet::new();
         for mount in &plan.mounts {
             let mount_call =
                 Expr::call("mount", vec![Arg::Pos(Expr::StringLit(mount.name.clone()))]);
+            stm.push_optional(Stmt::assignment(&mount.name, mount_call.clone()));
             stmts.push(Stmt::assignment(&mount.name, mount_call));
+            emitted_mounts.insert(mount.name.clone());
+        }
+        // If the provider declarations reference `local_venv` but the plan did
+        // not include a corresponding mount (some providers only attach local_venv
+        // to build), emit a `local_venv` mount so the generated Shipit doesn't
+        // reference an undefined variable.
+        if let Some(decls) = &plan.declarations {
+            if decls.contains("local_venv") && !emitted_mounts.contains("local_venv") {
+                let mount_call =
+                    Expr::call("mount", vec![Arg::Pos(Expr::StringLit("local_venv".to_string()))]);
+                stmts.push(Stmt::assignment("local_venv", mount_call));
+                emitted_mounts.insert("local_venv".to_string());
+            }
         }
 
         // Volumes

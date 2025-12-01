@@ -1,7 +1,16 @@
 python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"
-python = dep("python", python_version)
+
+python = dep(
+    "python",
+    python_version,
+)
+
 uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
-uv = dep("uv", uv_version)
+
+uv = dep(
+    "uv",
+    uv_version,
+)
 
 app = mount("app")
 
@@ -10,6 +19,7 @@ venv = mount("venv")
 local_venv = mount("local_venv")
 
 PORT = getenv("PORT") or "8080"
+
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
@@ -19,31 +29,42 @@ app_serve_path = app["serve"]
 
 
 serve(
-  name="python-procfile",
-  provider="python",
-  cwd=app["serve"],
-  build=[
-    use(python, uv),
-    workdir(app["build"]),
-    path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
-    copy(".", ".", ignore=[".venv", ".git", "__pycache__"])
-  ],
-  deps=[python],
-  prepare=[
-    run("echo \"Precompiling Python code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None,
-    run("echo \"Precompiling package code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None
-  ],
-  env = {
-    "PYTHONPATH": f"{app_serve_path}:{python_serve_site_packages_path}",
-    "HOME": app["serve"]
-  },
-  commands = {
-    "start": "python -m http.server $PORT -d public".replace("$PORT", PORT)
-  },
-  mounts=[
-    app,
-    venv
-  ],
+    name = "python-procfile",
+    provider = "python",
+    cwd = app["serve"],
+    build = [
+        use(
+            python,
+            uv,
+        ),
+        workdir(app["build"]),
+        path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
+        copy(
+            ".",
+            target = ".",
+            ignore = [
+                ".venv",
+                ".git",
+                "__pycache__",
+            ],
+        ),
+    ],
+    deps = [python],
+    prepare = [
+        run("echo \"Precompiling Python code...\"") if precompile_python else None,
+        run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None,
+        run("echo \"Precompiling package code...\"") if precompile_python else None,
+        run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None,
+    ],
+    env = {
+        "HOME": app["serve"],
+        "PYTHONPATH": f"{app_serve_path}:{python_serve_site_packages_path}",
+    },
+    commands = {
+        "start": "python -m http.server $PORT -d public".replace("$PORT", PORT),
+    },
+    mounts = [
+        app,
+        venv,
+    ],
 )

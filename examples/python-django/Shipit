@@ -1,7 +1,16 @@
 python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"
-python = dep("python", python_version)
+
+python = dep(
+    "python",
+    python_version,
+)
+
 uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
-uv = dep("uv", uv_version)
+
+uv = dep(
+    "uv",
+    uv_version,
+)
 
 app = mount("app")
 
@@ -10,11 +19,12 @@ venv = mount("venv")
 local_venv = mount("local_venv")
 
 database = service(
-  name="database",
-  provider="mysql"
+    name = "database",
+    provider = "mysql",
 )
 
 PORT = getenv("PORT") or "8080"
+
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
@@ -24,43 +34,55 @@ app_serve_path = app["serve"]
 
 
 serve(
-  name="python-django",
-  provider="python",
-  cwd=app["serve"],
-  build=[
-    use(python, uv),
-    workdir(app["build"]),
-    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}"),
-    run(f"uv sync --locked", inputs=["pyproject.toml", "uv.lock", "README.md"], group="install"),
-    copy("pyproject.toml", "pyproject.toml"),
-    run("uv add uvicorn", group="install"),
-    run(f"uv pip compile pyproject.toml --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,
-    run(f"uvx pip install -r cross-requirements.txt uvicorn --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
-    run("rm cross-requirements.txt") if cross_platform else None,
-    path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
-    copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    run("python manage.py collectstatic --noinput", group="build")
-  ],
-  deps=[python],
-  prepare=[
-    run("echo \"Precompiling Python code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None,
-    run("echo \"Precompiling package code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None
-  ],
-  env = {
-    "PYTHONPATH": f"{app_serve_path}:{python_serve_site_packages_path}",
-    "HOME": app["serve"]
-  },
-  commands = {
-    "start": f"python -m uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port {PORT}".replace("$PORT", PORT),
-    "after_deploy": "python manage.py migrate".replace("$PORT", PORT)
-  },
-  services=[
-    database,
-  ],
-  mounts=[
-    app,
-    venv
-  ],
+    name = "python-django",
+    provider = "python",
+    cwd = app["serve"],
+    build = [
+        use(
+            python,
+            uv,
+        ),
+        workdir(app["build"]),
+        env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}"),
+        run(f"uv sync --locked", inputs=["pyproject.toml", "uv.lock", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/img/README.txt", ".shipit/local/build/app/README.md", ".shipit/local/build/app/staticfiles/admin/img/README.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/img/README.txt", ".shipit/docker/out/app/README.md", ".shipit/docker/out/app/staticfiles/admin/img/README.txt", "README.md", ".shipit/local/build/app/README.md", ".shipit/docker/out/app/README.md", "README.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/img/README.txt", ".shipit/local/build/app/staticfiles/admin/img/README.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/img/README.txt", ".shipit/docker/out/app/staticfiles/admin/img/README.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/gunicorn-23.0.0.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/packaging-24.2.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/packaging-24.2.dist-info/LICENSE.APACHE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/packaging-24.2.dist-info/LICENSE.BSD", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/css/vendor/select2/LICENSE-SELECT2.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/xregexp/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/select2/LICENSE.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/jquery/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/img/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/gis/gdal/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/gis/geos/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/psycopg-3.2.9.dist-info/licenses/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/h11-0.16.0.dist-info/licenses/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/Django-5.1.6.dist-info/LICENSE.python", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/Django-5.1.6.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/sqlparse-0.5.3.dist-info/licenses/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/asgiref-3.8.1.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/whitenoise-6.9.0.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/mysqlclient-2.2.7.dist-info/licenses/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/click-8.3.1.dist-info/licenses/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/uvicorn-0.38.0.dist-info/licenses/LICENSE.md", ".shipit/local/build/app/staticfiles/admin/css/vendor/select2/LICENSE-SELECT2.md", ".shipit/local/build/app/staticfiles/admin/js/vendor/xregexp/LICENSE.txt", ".shipit/local/build/app/staticfiles/admin/js/vendor/select2/LICENSE.md", ".shipit/local/build/app/staticfiles/admin/js/vendor/jquery/LICENSE.txt", ".shipit/local/build/app/staticfiles/admin/img/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/gunicorn-23.0.0.dist-info/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/css/vendor/select2/LICENSE-SELECT2.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/xregexp/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/select2/LICENSE.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/jquery/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/img/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/gis/gdal/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/gis/geos/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/psycopg-3.2.9.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/h11-0.16.0.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/sqlparse-0.5.3.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/asgiref-3.11.0.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/whitenoise-6.11.0.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django-5.2.8.dist-info/licenses/LICENSE.python", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django-5.2.8.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/packaging-25.0.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/packaging-25.0.dist-info/licenses/LICENSE.APACHE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/packaging-25.0.dist-info/licenses/LICENSE.BSD", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/mysqlclient-2.2.7.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/click-8.3.1.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/uvicorn-0.38.0.dist-info/licenses/LICENSE.md", ".shipit/docker/out/app/staticfiles/admin/css/vendor/select2/LICENSE-SELECT2.md", ".shipit/docker/out/app/staticfiles/admin/js/vendor/xregexp/LICENSE.txt", ".shipit/docker/out/app/staticfiles/admin/js/vendor/select2/LICENSE.md", ".shipit/docker/out/app/staticfiles/admin/js/vendor/jquery/LICENSE.txt", ".shipit/docker/out/app/staticfiles/admin/img/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/select2/LICENSE.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/uvicorn-0.38.0.dist-info/licenses/LICENSE.md", ".shipit/local/build/app/staticfiles/admin/js/vendor/select2/LICENSE.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/select2/LICENSE.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/uvicorn-0.38.0.dist-info/licenses/LICENSE.md", ".shipit/docker/out/app/staticfiles/admin/js/vendor/select2/LICENSE.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/xregexp/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/jquery/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/psycopg-3.2.9.dist-info/licenses/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/h11-0.16.0.dist-info/licenses/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/click-8.3.1.dist-info/licenses/LICENSE.txt", ".shipit/local/build/app/staticfiles/admin/js/vendor/xregexp/LICENSE.txt", ".shipit/local/build/app/staticfiles/admin/js/vendor/jquery/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/xregexp/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/django/contrib/admin/static/admin/js/vendor/jquery/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/psycopg-3.2.9.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/h11-0.16.0.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/click-8.3.1.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/app/staticfiles/admin/js/vendor/xregexp/LICENSE.txt", ".shipit/docker/out/app/staticfiles/admin/js/vendor/jquery/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/Django-5.1.6.dist-info/AUTHORS", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/sqlparse-0.5.3.dist-info/licenses/AUTHORS", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/sqlparse-0.5.3.dist-info/licenses/AUTHORS"], group="install"),
+        copy(
+            "pyproject.toml",
+            target = "pyproject.toml",
+        ),
+        run("uv add uvicorn", group="install"),
+        run(f"uv pip compile pyproject.toml --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,
+        run(f"uvx pip install -r cross-requirements.txt uvicorn --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
+        run("rm cross-requirements.txt") if cross_platform else None,
+        path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
+        copy(
+            ".",
+            target = ".",
+            ignore = [
+                ".venv",
+                ".git",
+                "__pycache__",
+            ],
+        ),
+        run("python manage.py collectstatic --noinput", group="build"),
+    ],
+    deps = [python],
+    prepare = [
+        run("echo \"Precompiling Python code...\"") if precompile_python else None,
+        run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None,
+        run("echo \"Precompiling package code...\"") if precompile_python else None,
+        run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None,
+    ],
+    env = {
+        "HOME": app["serve"],
+        "PYTHONPATH": f"{app_serve_path}:{python_serve_site_packages_path}",
+    },
+    commands = {
+        "after_deploy": "python manage.py migrate".replace("$PORT", PORT),
+        "start": f"python -m uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port {PORT}".replace("$PORT", PORT),
+    },
+    mounts = [
+        app,
+        venv,
+    ],
+    services = [database],
 )

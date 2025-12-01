@@ -1,6 +1,12 @@
 php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
+
 php_architecture = getenv("SHIPIT_PHP_ARCHITECTURE")
-php = dep("php", php_version, architecture = php_architecture)
+
+php = dep(
+    "php",
+    php_version,
+    architecture = php_architecture,
+)
 
 app = mount("app")
 
@@ -15,8 +21,15 @@ serve(
     build = [
         use(php),
         workdir(app["build"]),
-        copy("php/php.ini", "{}/php.ini".format(assets["build"]), base = "assets"),
-        copy(".", ".", ignore = [".git"]),
+        copy(
+            "php/php.ini",
+            target = "\"{}/php.ini\".format(assets[\"build\"])",
+        ),
+        copy(
+            ".",
+            target = ".",
+            ignore = [".git"],
+        ),
     ],
     deps = [php],
     env = {

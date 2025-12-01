@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use shipit::detect::detect_provider;
 use shipit::generator::{GeneratorOptions, ShipitGenerator};
 use shipit::model::{CustomCommands, ProviderPlan};
@@ -5,7 +6,6 @@ use shipit::procfile::Procfile;
 use shipit::provider::registry;
 use std::fs;
 use std::path::Path;
-use anyhow::Context as _;
 
 use pretty_assertions::assert_eq;
 

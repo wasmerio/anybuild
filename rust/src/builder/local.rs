@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use anyhow::Context;
 use camino::Utf8PathBuf;
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
@@ -62,16 +63,37 @@ impl Builder for LocalBuilder {
                     std::fs::create_dir_all(&cwd)?;
                 }
                 Step::Copy(c) => {
-                    let target = cwd.join(&c.target);
+                    // Resolve the target path. If the provided target is absolute, use it as-is.
+                    // Otherwise, resolve relative targets against the current working dir.
+                    let target = if Utf8PathBuf::from(&c.target).is_absolute() {
+                        Utf8PathBuf::from(&c.target)
+                    } else {
+                        cwd.join(&c.target)
+                    };
+
                     if matches!(c.base, CopyBase::Assets) {
                         if let Some(data) = assets::get_asset(&c.source) {
+                            if let Some(parent) = target.parent() {
+                                std::fs::create_dir_all(parent)?;
+                            }
                             std::fs::write(&target, data)?;
                         } else {
                             return Err(anyhow::anyhow!("Asset {} not found", c.source));
                         }
                     } else {
-                        let base = self.src_dir.join(&c.source);
-                        copy_path(&base, &target, &c.ignore)?;
+                        // For source-based copies, normalize the source resolution:
+                        // - A source of "." refers to the project source directory (`self.src_dir`).
+                        // - An absolute source is used as provided.
+                        // - A relative source is resolved against the project source directory.
+                        let source = if c.source == "." {
+                            self.src_dir.clone()
+                        } else if Utf8PathBuf::from(&c.source).is_absolute() {
+                            Utf8PathBuf::from(&c.source)
+                        } else {
+                            self.src_dir.join(&c.source)
+                        };
+
+                        copy_path(&source, &target, &c.ignore)?;
                     }
                 }
                 Step::Env(e) => {
@@ -96,6 +118,26 @@ impl Builder for LocalBuilder {
                     // Local builder assumes dependencies already available on host.
                 }
                 Step::Run(r) => {
+                    // If the run step declares inputs, copy them from the project
+                    // source into the current working dir so the command can
+                    // access them in `cwd`.
+                    if !r.inputs.is_empty() {
+                        for input in &r.inputs {
+                            let src = self.src_dir.join(input);
+                            let dest = cwd.join(input);
+                            if src.exists() {
+                                if let Some(parent) = dest.parent() {
+                                    std::fs::create_dir_all(parent)?;
+                                }
+                                if src.is_dir() {
+                                    // Reuse copy_path to copy directories (preserves layout).
+                                    copy_path(&src, &dest, &[])?;
+                                } else {
+                                    std::fs::copy(src.as_std_path(), dest.as_std_path())?;
+                                }
+                            }
+                        }
+                    }
                     run_shell(&cwd, &env_overlay, &r.command)?;
                 }
             }
@@ -229,17 +271,44 @@ fn copy_path(source: &Utf8PathBuf, target: &Utf8PathBuf, ignore: &[String]) -> R
     ignore_set.insert(".shipit".to_string());
     ignore_set.insert("Shipit".to_string());
 
-    if source.is_file() {
-        if let Some(parent) = target.parent() {
+    // Normalize/resolve absolute paths for consistent behavior across builders.
+    let mut src = source.clone();
+    if !src.is_absolute() {
+        // Try to canonicalize if the path exists; otherwise resolve relative to current dir.
+        if let Ok(canon) = std::fs::canonicalize(src.as_std_path()) {
+            src = Utf8PathBuf::from_path_buf(canon)
+                .map_err(|_| anyhow::anyhow!("Source path is not valid UTF-8"))?;
+        } else {
+            let cwd = std::env::current_dir()?;
+            let abs = cwd.join(src.as_str());
+            src = Utf8PathBuf::from_path_buf(abs)
+                .map_err(|_| anyhow::anyhow!("Source path is not valid UTF-8"))?;
+        }
+    }
+
+    let mut dst = target.clone();
+    if !dst.is_absolute() {
+        let cwd = std::env::current_dir()?;
+        let abs = cwd.join(dst.as_str());
+        dst = Utf8PathBuf::from_path_buf(abs)
+            .map_err(|_| anyhow::anyhow!("Target path is not valid UTF-8"))?;
+    }
+
+    // If the source is a file, copy it directly to the target path.
+    if src.is_file() {
+        if let Some(parent) = dst.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::copy(source, target)?;
+        std::fs::copy(src.as_std_path(), dst.as_std_path())
+            .with_context(|| format!("Failed to copy {} to {}", src, dst))?;
         return Ok(());
     }
 
-    for entry in walkdir::WalkDir::new(source) {
+    // Walk the source tree and copy entries into the destination tree,
+    // preserving relative layout from the source root.
+    for entry in walkdir::WalkDir::new(src.as_std_path()) {
         let entry = entry?;
-        let rel = entry.path().strip_prefix(source.as_std_path()).unwrap();
+        let rel = entry.path().strip_prefix(src.as_std_path()).unwrap();
         let name = rel
             .file_name()
             .and_then(|s| s.to_str())
@@ -248,16 +317,28 @@ fn copy_path(source: &Utf8PathBuf, target: &Utf8PathBuf, ignore: &[String]) -> R
         if ignore_set.contains(&name) {
             continue;
         }
+        let rel_str = rel.to_string_lossy();
+        if rel_str.starts_with(".shipit")
+            || rel_str.starts_with("Shipit")
+            || rel_str.contains("/.shipit/")
+            || rel_str.contains("/Shipit/")
+        {
+            continue;
+        }
         let rel_utf8 = Utf8PathBuf::from_path_buf(rel.to_path_buf())
             .map_err(|_| anyhow::anyhow!("Non-UTF8 path encountered during copy"))?;
-        let dest = target.join(rel_utf8);
+        let dest = dst.join(rel_utf8);
         if entry.file_type().is_dir() {
-            std::fs::create_dir_all(&dest)?;
+            std::fs::create_dir_all(&dest)
+                .with_context(|| format!("Failed to create directory {}", dest))?;
         } else {
             if let Some(parent) = dest.parent() {
-                std::fs::create_dir_all(parent)?;
+                std::fs::create_dir_all(&parent)
+                    .with_context(|| format!("Failed to create parent directory for {}", dest))?;
             }
-            std::fs::copy(entry.path(), dest)?;
+            std::fs::copy(entry.path(), dest.as_std_path()).with_context(|| {
+                format!("Failed to copy {} to {}", entry.path().display(), dest)
+            })?;
         }
     }
     Ok(())

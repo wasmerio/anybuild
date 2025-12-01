@@ -1,28 +1,15 @@
-# Files
+The tasks below list cases wher the old python impl in in ./src (old version) is different from the new Rust impl in ./rust.
 
-- [] ./src/shipit/
-- [] ./src/shipit/__init__.py
-- [] ./src/shipit/assets/
-- [] ./src/shipit/assets/php/
-- [] ./src/shipit/assets/php/php.ini
-- [] ./src/shipit/assets/wordpress/
-- [] ./src/shipit/assets/wordpress/install.sh
-- [] ./src/shipit/assets/wordpress/wp-config.php
-- [] ./src/shipit/cli.py
-- [] ./src/shipit/generator.py
-- [] ./src/shipit/procfile.py
-- [] ./src/shipit/providers/
-- [] ./src/shipit/providers/base.py
-- [] ./src/shipit/providers/hugo.py
-- [] ./src/shipit/providers/jekyll.py
-- [] ./src/shipit/providers/laravel.py
-- [] ./src/shipit/providers/mkdocs.py
-- [] ./src/shipit/providers/node_static.py
-- [] ./src/shipit/providers/php.py
-- [] ./src/shipit/providers/python.py
-- [] ./src/shipit/providers/registry.py
-- [] ./src/shipit/providers/staticfile.py
-- [] ./src/shipit/providers/wordpress.py
-- [] ./src/shipit/version.py
+For each task, identify why the output has changed, evaluate if the change is sensible or a regression, and either explain why the new version is better, or implement the regression fix.
+After you are done, mark the task as complete and provide a brief explanation
+ below the task.
+.
 
-## TODO
+- [x] examples/mkdocs-with-plugins/Shipit: change: LOGIC - Changed build process to use dep("mkdocs") directly and run mkdocs via uv without setting up a uv virtual environment or installing mkdocs through uv commands.
+
+Fixed regression by updating the Rust mkdocs provider to parse requirements.txt and add dependencies for plugins, allowing uv run mkdocs to access them without venv setup.
+- [] examples/mkdocs/Shipit: change: LOGIC - Changed build process to use dep("mkdocs") directly and run mkdocs via uv without setting up a uv virtual environment or installing mkdocs through uv commands.  
+- [] examples/php-api/Shipit: change: LOGIC - Removed base="assets" parameter from the copy command for php/php.ini, altering the source path resolution for copying the PHP configuration file.  
+- [] examples/php-laravel-react/Shipit: change: LOGIC - Added a MySQL database service to the serve configuration for handling database dependencies.  
+- [] examples/php-nobuild/Shipit: change: LOGIC - Removed base="assets" parameter from the copy command for php/php.ini.  
+- [] examples/php-wordpress/Shipit: change: LOGIC - Removed base="assets" parameter from the copy command for php/php.ini.

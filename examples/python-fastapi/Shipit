@@ -1,7 +1,16 @@
 python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"
-python = dep("python", python_version)
+
+python = dep(
+    "python",
+    python_version,
+)
+
 uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
-uv = dep("uv", uv_version)
+
+uv = dep(
+    "uv",
+    uv_version,
+)
 
 app = mount("app")
 
@@ -10,6 +19,7 @@ venv = mount("venv")
 local_venv = mount("local_venv")
 
 PORT = getenv("PORT") or "8080"
+
 cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
 python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")
 precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]
@@ -19,37 +29,51 @@ app_serve_path = app["serve"]
 
 
 serve(
-  name="python-fastapi",
-  provider="python",
-  cwd=app["serve"],
-  build=[
-    use(python, uv),
-    workdir(app["build"]),
-    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}"),
-    run(f"uv sync --locked", inputs=["pyproject.toml", "uv.lock", "README.md"], group="install"),
-    copy("pyproject.toml", "pyproject.toml"),
-    run(f"uv pip compile pyproject.toml --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,
-    run(f"uvx pip install -r cross-requirements.txt  --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
-    run("rm cross-requirements.txt") if cross_platform else None,
-    path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
-    copy(".", ".", ignore=[".venv", ".git", "__pycache__"])
-  ],
-  deps=[python],
-  prepare=[
-    run("echo \"Precompiling Python code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None,
-    run("echo \"Precompiling package code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None
-  ],
-  env = {
-    "PYTHONPATH": f"{app_serve_path}:{app_serve_path}/src:{python_serve_site_packages_path}",
-    "HOME": app["serve"]
-  },
-  commands = {
-    "start": f"python -m uvicorn src.main:app --host 0.0.0.0 --port {PORT}".replace("$PORT", PORT)
-  },
-  mounts=[
-    app,
-    venv
-  ],
+    name = "python-fastapi",
+    provider = "python",
+    cwd = app["serve"],
+    build = [
+        use(
+            python,
+            uv,
+        ),
+        workdir(app["build"]),
+        env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}"),
+        run(f"uv sync --locked", inputs=["pyproject.toml", "uv.lock", ".shipit/local/build/app/README.md", ".shipit/docker/out/app/README.md", "README.md", ".shipit/local/build/app/README.md", ".shipit/docker/out/app/README.md", "README.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/hypercorn-0.17.3.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/click-8.2.1.dist-info/licenses/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/fastapi-0.116.1.dist-info/licenses/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/h2-4.2.0.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/wsproto-1.2.0.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/sniffio-1.3.1.dist-info/LICENSE.APACHE2", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/sniffio-1.3.1.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/sniffio-1.3.1.dist-info/LICENSE.MIT", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/annotated_types-0.7.0.dist-info/licenses/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/anyio-4.9.0.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/typing_extensions-4.14.1.dist-info/licenses/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/typing_inspection-0.4.1.dist-info/licenses/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/h11-0.16.0.dist-info/licenses/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/hyperframe-6.1.0.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/pydantic-2.11.7.dist-info/licenses/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/uvicorn-0.35.0.dist-info/licenses/LICENSE.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/starlette-0.47.1.dist-info/licenses/LICENSE.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/hpack-4.1.0.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/idna-3.10.dist-info/LICENSE.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/priority-2.0.0.dist-info/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/pydantic_core-2.33.2.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/fastapi-0.122.0.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/starlette-0.50.0.dist-info/licenses/LICENSE.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/idna-3.11.dist-info/licenses/LICENSE.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/sniffio-1.3.1.dist-info/LICENSE.APACHE2", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/sniffio-1.3.1.dist-info/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/sniffio-1.3.1.dist-info/LICENSE.MIT", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/pydantic-2.11.10.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/annotated_types-0.7.0.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/wsproto-1.3.2.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/typing_inspection-0.4.2.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/h11-0.16.0.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/h2-4.3.0.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/hyperframe-6.1.0.dist-info/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/typing_extensions-4.15.0.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/anyio-4.11.0.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/hypercorn-0.18.0.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/hpack-4.1.0.dist-info/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/annotated_doc-0.0.4.dist-info/licenses/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/click-8.3.1.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/uvicorn-0.38.0.dist-info/licenses/LICENSE.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/priority-2.0.0.dist-info/LICENSE", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/pydantic_core-2.33.2.dist-info/licenses/LICENSE", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/uvicorn-0.35.0.dist-info/licenses/LICENSE.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/starlette-0.47.1.dist-info/licenses/LICENSE.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/idna-3.10.dist-info/LICENSE.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/starlette-0.50.0.dist-info/licenses/LICENSE.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/idna-3.11.dist-info/licenses/LICENSE.md", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/uvicorn-0.38.0.dist-info/licenses/LICENSE.md", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/click-8.2.1.dist-info/licenses/LICENSE.txt", ".shipit/local/build/opt/venv/lib/python3.13/site-packages/h11-0.16.0.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/h11-0.16.0.dist-info/licenses/LICENSE.txt", ".shipit/docker/out/opt/venv/lib/python3.13/site-packages/click-8.3.1.dist-info/licenses/LICENSE.txt"], group="install"),
+        copy(
+            "pyproject.toml",
+            target = "pyproject.toml",
+        ),
+        run(f"uv pip compile pyproject.toml --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None,
+        run(f"uvx pip install -r cross-requirements.txt  --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
+        run("rm cross-requirements.txt") if cross_platform else None,
+        path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
+        copy(
+            ".",
+            target = ".",
+            ignore = [
+                ".venv",
+                ".git",
+                "__pycache__",
+            ],
+        ),
+    ],
+    deps = [python],
+    prepare = [
+        run("echo \"Precompiling Python code...\"") if precompile_python else None,
+        run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None,
+        run("echo \"Precompiling package code...\"") if precompile_python else None,
+        run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None,
+    ],
+    env = {
+        "HOME": app["serve"],
+        "PYTHONPATH": f"{app_serve_path}:{app_serve_path}/src:{python_serve_site_packages_path}",
+    },
+    commands = {
+        "start": f"python -m uvicorn src.main:app --host 0.0.0.0 --port {PORT}".replace("$PORT", PORT),
+    },
+    mounts = [
+        app,
+        venv,
+    ],
 )
