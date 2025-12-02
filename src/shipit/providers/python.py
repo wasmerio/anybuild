@@ -421,10 +421,9 @@ class PythonProvider:
             if _exists(root_path, f"src/{path}"):
                 return f"src/{path}"
         for path in paths_to_try:
-            try:
-                found_path = next(root_path.glob(f"*/{path}"))
-            except StopIteration:
-                found_path = None
+            found_path = next(root_path.glob(f"*/{path}"), None)
+            if not found_path:
+                found_path = next(root_path.glob(f"*/*/{path}"), None)
             if found_path:
                 return str(found_path.relative_to(root_path))
         return None
@@ -436,6 +435,7 @@ class PythonProvider:
         if self.only_build:
             return {}
 
+        start_cmd = None
         if self.metadata.server == PythonServer.Daphne:
             assert self.metadata.asgi_application, "No ASGI application found for Daphne"
             start_cmd = (
@@ -445,7 +445,8 @@ class PythonProvider:
         #     assert self.metadata.wsgi_application, "No WSGI application found"
         #     start_cmd = f'f"gunicorn {self.metadata.wsgi_application} --bind 0.0.0.0 --port {{PORT}}"'
         elif self.metadata.server == PythonServer.Uvicorn:
-            assert self.metadata.asgi_application or self.metadata.wsgi_application, "No ASGI or WSGI application found"
+            if not self.metadata.main_file:
+                assert self.metadata.asgi_application or self.metadata.wsgi_application, "No ASGI or WSGI application found for Uvicorn and no main file found"
             if self.metadata.asgi_application:
                 start_cmd = f'f"uvicorn {self.metadata.asgi_application} --host 0.0.0.0 --port {{PORT}}"'
             elif self.metadata.wsgi_application:
@@ -465,7 +466,8 @@ class PythonProvider:
                 start_cmd = f'"python {main_file}"'
             else:
                 start_cmd = f'"python {{}}/bin/mcp run {main_file} --transport=streamable-http".format(venv["serve"])'
-        else:
+        
+        if not start_cmd:
             if self.metadata.main_file:
                 start_cmd = f'"python {self.metadata.main_file}"'
             else:
