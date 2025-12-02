@@ -1933,14 +1933,11 @@ def plan(
     #     provider_metadata = provider_metadata.model_copy(deep=True, update=metadata)
     provider_instance = provider_cls(path, provider_metadata)
     provider_instance.initialize()
-    platform = provider_instance.platform()
+    # platform = provider_instance.platform()
     plan_output = {
         "provider": serve.provider,
-        "metadata": {
-            "platform": platform,
-            "metadata": json.loads(provider_metadata.model_dump_json(exclude_defaults=True)),
-            "commands": metadata_commands,
-        },
+        "metadata": json.loads(provider_metadata.model_dump_json(exclude_defaults=True)),
+        "commands": metadata_commands,
         "config": sorted(ctx.getenv_variables),
         "services": [
             {"name": svc.name, "provider": svc.provider}

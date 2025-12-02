@@ -18,7 +18,7 @@ from .base import (
 
 class PhpMetadata(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    has_composer: bool = False
+    use_composer: bool = False
 
 class PhpProvider:
     def __init__(self, path: Path, metadata: PhpMetadata):
@@ -27,11 +27,11 @@ class PhpProvider:
 
     @classmethod
     def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> PhpMetadata:
-        has_composer = _exists(path, "composer.json", "composer.lock") or (
+        use_composer = _exists(path, "composer.json", "composer.lock") or (
             custom_commands.install and custom_commands.install.startswith("composer ")
         ) or False
         return PhpMetadata(
-            has_composer=has_composer
+            use_composer=use_composer
         )
 
     @classmethod
@@ -76,13 +76,13 @@ class PhpProvider:
                 use_in_serve=True,
             ),
         ]
-        if self.metadata.has_composer:
+        if self.metadata.use_composer:
             deps.append(DependencySpec("composer", use_in_build=True))
             deps.append(DependencySpec("bash", use_in_serve=True))
         return deps
 
     def declarations(self) -> Optional[str]:
-        if self.metadata.has_composer:
+        if self.metadata.use_composer:
             return 'HOME = getenv("HOME")\n'
         return None
 
@@ -97,7 +97,7 @@ class PhpProvider:
                 'copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets")'
             )
 
-        if self.metadata.has_composer:
+        if self.metadata.use_composer:
             steps.append('env(HOME=HOME, COMPOSER_FUND="0")')
             steps.append(
                 'run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'
