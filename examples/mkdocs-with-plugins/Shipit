@@ -26,7 +26,7 @@ serve(
     workdir(temp["build"]),
     env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
     run(f"uv init", inputs=[], outputs=["uv.lock"], group="install"),
-    run("uv add -r requirements.txt mkdocs", inputs=["requirements.txt"], group="install"),
+    run("uv add -r requirements.txt ", inputs=["requirements.txt"], group="install"),
     path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
     run("uv run mkdocs build --site-dir={}".format(app["build"]), outputs=["."], group="build")

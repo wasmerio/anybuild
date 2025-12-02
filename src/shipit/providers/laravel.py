@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Optional
+from pydantic import BaseModel, ConfigDict
 
 from .base import (
     DetectResult,
@@ -15,10 +16,18 @@ from .base import (
 )
 
 
+class LaravelMetadata(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+
 class LaravelProvider:
-    def __init__(self, path: Path, custom_commands: CustomCommands):
+    def __init__(self, path: Path, metadata: LaravelMetadata):
         self.path = path
-        self.custom_commands = custom_commands
+        self.metadata = metadata
+
+    @classmethod
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> LaravelMetadata:
+        return LaravelMetadata()
 
     @classmethod
     def name(cls) -> str:

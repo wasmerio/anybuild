@@ -1,5 +1,4 @@
 from __future__ import annotations
-from shipit.providers.php import PhpProvider
 
 from pathlib import Path
 from typing import Dict, Optional
@@ -18,9 +17,6 @@ from .php import PhpProvider
 
 
 class WordPressProvider(PhpProvider):
-    def __init__(self, path: Path, custom_commands: CustomCommands):
-        super().__init__(path, custom_commands)
-
     @classmethod
     def name(cls) -> str:
         return "wordpress"

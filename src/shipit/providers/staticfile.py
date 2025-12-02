@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, Optional
 import json
 import yaml
+from pydantic import BaseModel, ConfigDict
 
 from .base import (
     DetectResult,
@@ -16,21 +17,35 @@ from .base import (
     CustomCommands,
 )
 
+class StaticFileMetadata(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    root: Optional[str] = None
+
 
 class StaticFileProvider:
     config: Optional[dict] = None
     path: Path
-    custom_commands: CustomCommands
 
-    def __init__(self, path: Path, custom_commands: CustomCommands):
+    def __init__(self, path: Path, metadata: StaticFileMetadata):
         self.path = path
-        self.custom_commands = custom_commands
-        if (self.path / "Staticfile").exists():
+        self.metadata = metadata
+
+    @classmethod
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> StaticFileMetadata:
+        if (path / "Staticfile").exists():
+            config = None
             try:
-                self.config = yaml.safe_load((self.path / "Staticfile").read_text())
+                config = yaml.safe_load((path / "Staticfile").read_text())
             except yaml.YAMLError as e:
                 print(f"Error loading Staticfile: {e}")
                 pass
+
+            if config:
+                return StaticFileMetadata.model_validate(config)
+        if _exists(path, "public/index.html") or _exists(path, "public/index.htm"):
+            return StaticFileMetadata(root="public")
+        return StaticFileMetadata()
 
     @classmethod
     def name(cls) -> str:
@@ -40,11 +55,14 @@ class StaticFileProvider:
     def detect(
         cls, path: Path, custom_commands: CustomCommands
     ) -> Optional[DetectResult]:
+        is_python_php_js_project = _exists(
+            path, "package.json", "pyproject.toml", "composer.json"
+        )
         if _exists(path, "Staticfile"):
             return DetectResult(cls.name(), 50)
-        if _exists(path, "index.html") and not _exists(
-            path, "package.json", "pyproject.toml", "composer.json"
-        ):
+        if not is_python_php_js_project:
+            if _exists(path, "index.html", "index.htm", "public/index.htm", "public/index.html"):
+                return DetectResult(cls.name(), 10)
             return DetectResult(cls.name(), 10)
         if custom_commands.start and custom_commands.start.startswith(
             "static-web-server "
@@ -75,7 +93,7 @@ class StaticFileProvider:
         return [
             'workdir(app["build"])',
             'copy({}, ".", ignore=[".git"])'.format(
-                json.dumps(self.config and self.config.get("root") or ".")
+                json.dumps(self.metadata.root or ".")
             ),
         ]
 

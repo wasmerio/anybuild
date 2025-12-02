@@ -2,16 +2,20 @@ staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
 staticwebserver = dep("static-web-server", staticwebserver_version)
 
 app = mount("app")
+
+PORT = getenv("PORT") or "8080"
+
 serve(
   name="php-wordpress-theme",
   provider="staticfile",
+  cwd=app["serve"],
   build=[
     workdir(app["build"]),
     copy(".", ".", ignore=[".git"])
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root={} --log-level=info".format(app["serve"])
+    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT)
   },
   mounts=[
     app

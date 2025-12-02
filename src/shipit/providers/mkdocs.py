@@ -13,21 +13,29 @@ from .base import (
     VolumeSpec,
     CustomCommands,
 )
-from .staticfile import StaticFileProvider
+from .staticfile import StaticFileProvider, StaticFileMetadata
 from .python import PythonProvider
 
 
 class MkdocsProvider(StaticFileProvider):
-    def __init__(self, path: Path, custom_commands: CustomCommands):
+    def __init__(self, path: Path, metadata: StaticFileMetadata):
         self.path = path
-        self.python_provider = PythonProvider(path, custom_commands, only_build=True, extra_dependencies={"mkdocs"})
+        self.metadata = metadata
+        python_provider_metadata = PythonProvider.load_metadata(
+            path, CustomCommands(), must_have_deps={"mkdocs"}
+        )
+        self.python_provider = PythonProvider(
+            path, python_provider_metadata, only_build=True
+        )
 
     @classmethod
     def name(cls) -> str:
         return "mkdocs"
 
     @classmethod
-    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
+    def detect(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> Optional[DetectResult]:
         if _exists(path, "mkdocs.yml", "mkdocs.yaml"):
             return DetectResult(cls.name(), 85)
         if custom_commands.build and custom_commands.build.startswith("mkdocs "):
@@ -50,12 +58,14 @@ class MkdocsProvider(StaticFileProvider):
         ]
 
     def declarations(self) -> Optional[str]:
-        return "mkdocs_version = getenv(\"SHIPIT_MKDOCS_VERSION\") or \"1.6.1\"\n" + (self.python_provider.declarations() or "")
+        return 'mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"\n' + (
+            self.python_provider.declarations() or ""
+        )
 
     def build_steps(self) -> list[str]:
         return [
             *self.python_provider.build_steps(),
-            "run(\"uv run mkdocs build --site-dir={}\".format(app[\"build\"]), outputs=[\".\"], group=\"build\")",
+            'run("uv run mkdocs build --site-dir={}".format(app["build"]), outputs=["."], group="build")',
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:
@@ -69,6 +79,6 @@ class MkdocsProvider(StaticFileProvider):
 
     def env(self) -> Optional[Dict[str, str]]:
         return self.python_provider.env()
-    
+
     def services(self) -> list[ServiceSpec]:
         return []
