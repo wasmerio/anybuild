@@ -14,19 +14,35 @@ from .base import (
     CustomCommands,
 )
 from .staticfile import StaticFileProvider, StaticFileMetadata
-from .python import PythonProvider
+from .python import PythonProvider, PythonMetadata
+from pydantic import BaseModel, ConfigDict
+
+class MkdocsMetadata(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    default_version: Optional[str] = None
+    python: Optional[PythonMetadata] = None
+    staticfile: Optional[StaticFileMetadata] = None
 
 
 class MkdocsProvider(StaticFileProvider):
-    def __init__(self, path: Path, metadata: StaticFileMetadata):
+    def __init__(self, path: Path, metadata: MkdocsMetadata):
         self.path = path
-        self.metadata = metadata
-        python_provider_metadata = PythonProvider.load_metadata(
-            path, CustomCommands(), must_have_deps={"mkdocs"}
+        self.full_metadata = metadata
+        self.python_provider = PythonProvider(path, metadata.python, only_build=True)
+
+    @property
+    def metadata(self) -> StaticFileMetadata:
+        return self.full_metadata.staticfile
+
+    @classmethod
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> MkdocsMetadata:
+        python_metadata = PythonProvider.load_metadata(path, custom_commands, must_have_deps={"mkdocs"})
+        staticfile_metadata = StaticFileProvider.load_metadata(path, custom_commands)
+        metadata = MkdocsMetadata(
+            python=python_metadata,
+            staticfile=staticfile_metadata,
         )
-        self.python_provider = PythonProvider(
-            path, python_provider_metadata, only_build=True
-        )
+        return metadata
 
     @classmethod
     def name(cls) -> str:
@@ -46,9 +62,6 @@ class MkdocsProvider(StaticFileProvider):
         pass
 
     def serve_name(self) -> Optional[str]:
-        return None
-
-    def platform(self) -> Optional[str]:
         return None
 
     def dependencies(self) -> list[DependencySpec]:

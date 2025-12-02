@@ -1926,14 +1926,12 @@ def plan(
     metadata_build = _collect_group_commands("build")
     metadata_commands["install"] = metadata_install
     metadata_commands["build"] = metadata_build
-    platform: Optional[str]
     provider_cls = detect_provider(path, custom_commands)
     provider_metadata = provider_cls.load_metadata(path, custom_commands)
     # if metadata:
     #     provider_metadata = provider_metadata.model_copy(deep=True, update=metadata)
     provider_instance = provider_cls(path, provider_metadata)
     provider_instance.initialize()
-    # platform = provider_instance.platform()
     plan_output = {
         "provider": serve.provider,
         "metadata": json.loads(provider_metadata.model_dump_json(exclude_defaults=True)),

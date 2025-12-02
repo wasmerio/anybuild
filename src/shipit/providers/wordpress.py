@@ -39,9 +39,6 @@ class WordPressProvider(PhpProvider):
     def serve_name(self) -> Optional[str]:
         return None
 
-    def platform(self) -> Optional[str]:
-        return None
-
     def dependencies(self) -> list[DependencySpec]:
         return [
             *super().dependencies(),

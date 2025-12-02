@@ -53,7 +53,7 @@ class PythonMetadata(BaseModel):
     uses_pandoc: bool = False
     install_requires_all_files: bool = False
     main_file: Optional[str] = None
-    default_python_version: Optional[str] = None
+    version: Optional[str] = None
     start_command: Optional[str] = None
 
 
@@ -78,12 +78,12 @@ class PythonProvider:
         if not metadata.main_file:
             metadata.main_file = cls.detect_main_file(path)
 
-        if not metadata.default_python_version:
+        if not metadata.version:
             if _exists(path, ".python-version"):
                 python_version = (path / ".python-version").read_text().strip()
             else:
                 python_version = "3.13"
-            metadata.default_python_version = python_version
+            metadata.version = python_version
 
         pg_deps = {
             "asyncpg",
@@ -269,15 +269,12 @@ class PythonProvider:
     def serve_name(self) -> Optional[str]:
         return None
 
-    def platform(self) -> Optional[str]:
-        return self.metadata.framework.value if self.metadata.framework else None
-
     def dependencies(self) -> list[DependencySpec]:
         deps = [
             DependencySpec(
                 "python",
                 env_var="SHIPIT_PYTHON_VERSION",
-                default_version=self.metadata.default_python_version,
+                default_version=self.metadata.version,
                 use_in_build=True,
                 use_in_serve=True,
             ),

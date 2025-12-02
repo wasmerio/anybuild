@@ -244,9 +244,6 @@ class NodeStaticProvider(StaticFileProvider):
     def serve_name(self) -> Optional[str]:
         return None
 
-    def platform(self) -> Optional[str]:
-        return self.metadata.static_generator.value if self.metadata.static_generator else None
-
     def dependencies(self) -> list[DependencySpec]:
         package_manager_dep = self.metadata.package_manager.as_dependency(self.path)
         package_manager_dep.use_in_build = True
