@@ -20,6 +20,7 @@ serve(
     use(node, npm),
     workdir(temp["build"]),
     copy("package-lock.json"),
+    env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
     run("npm ci", inputs=["package.json"], group="install"),
     copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
     run("npm run build", outputs=[shipit_static_dir], group="build"),

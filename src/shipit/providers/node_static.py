@@ -337,6 +337,7 @@ class NodeStaticProvider(StaticFileProvider):
         return [
             'workdir(temp["build"])',
             f'copy("{lockfile}")' if has_lockfile else None,
+            'env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false")' if self.metadata.package_manager == PackageManager.NPM else None,
             # 'run("npx corepack enable", inputs=["package.json"], group="install")',
             f'run("{install_command}", inputs=[{inputs_install_files}], group="install")',
             f'copy(".", ignore=[{all_ignored_files}])',
