@@ -13,13 +13,24 @@ from .base import (
     VolumeSpec,
     CustomCommands,
 )
-from .php import PhpProvider
+from .php import PhpMetadata, PhpProvider
+from pydantic import ConfigDict
+
+
+class WordPressMetadata(PhpMetadata):
+    model_config = ConfigDict(extra="ignore")
+    wp_cli_version: Optional[str] = None
 
 
 class WordPressProvider(PhpProvider):
     @classmethod
     def name(cls) -> str:
         return "wordpress"
+
+    @classmethod
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> WordPressMetadata:
+        metadata = super().load_metadata(path, custom_commands)
+        return WordPressMetadata(**metadata.model_dump())
 
     @classmethod
     def detect(
@@ -44,11 +55,8 @@ class WordPressProvider(PhpProvider):
 
     def declarations(self) -> Optional[str]:
         return (super().declarations() or "") + (
-            'wp_cli_version = getenv("SHIPIT_WPCLI_VERSION")\n'
-            "if wp_cli_version:\n"
-            '    wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar"\n'
-            "else:\n"
-            '    wp_cli_download_url = "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"\n'
+            'wp_cli_version = metadata.wp_cli_version\n'
+            'wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar" if wp_cli_version else "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"\n'
         )
 
     def build_steps(self) -> list[str]:

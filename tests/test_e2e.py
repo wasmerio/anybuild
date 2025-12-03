@@ -221,9 +221,10 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     env = os.environ.copy()
     if case.use_random_port:
         port = get_free_port()
-        env["PORT"] = str(port)
     else:
         port = 8080 # This is the default port if not specified
+
+    cmd.append(f"--serve-port={port}")
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,

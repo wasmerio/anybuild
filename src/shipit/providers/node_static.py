@@ -47,7 +47,7 @@ class PackageManager(Enum):
 
         return DependencySpec(
             dep_name,
-            env_var=f"SHIPIT_{dep_name.upper()}_VERSION",
+            var_name=f"metadata.{dep_name.lower()}_version",
             default_version=default_version,
         )
 
@@ -115,16 +115,50 @@ class StaticGenerator(Enum):
     REMIX_OLD = "remix-old"
     REMIX_V2 = "remix-v2"
 
+    def get_output_dir(self) -> str:
+        if self == StaticGenerator.NEXT:
+            return "out"
+        elif self == StaticGenerator.NUXT_V3:
+            return ".output/public"
+        elif self in [
+            StaticGenerator.ASTRO,
+            StaticGenerator.VITE,
+            StaticGenerator.NUXT_OLD,
+            StaticGenerator.REMIX_V2,
+        ]:
+            return "dist"
+        elif self == StaticGenerator.GATSBY:
+            return "public"
+        elif self == StaticGenerator.REMIX_OLD:
+            return "build/client"
+        elif self in [
+            StaticGenerator.DOCUSAURUS,
+            StaticGenerator.DOCUSAURUS_OLD,
+            StaticGenerator.SVELTE,
+        ]:
+            return "build"
+        else:
+            return "dist"
+
 
 class NodeStaticMetadata(StaticFileMetadata):
     package_manager: Optional[PackageManager] = None
     extra_dependencies: Set[str] = Field(default_factory=set)
     static_generator: Optional[StaticGenerator] = None
     build_command: Optional[str] = None
+    node_version: Optional[str] = "22"
+    npm_version: Optional[str] = None
+    pnpm_version: Optional[str] = None
+    yarn_version: Optional[str] = None
+    bun_version: Optional[str] = None
+
 
 class NodeStaticProvider(StaticFileProvider):
-    def __init__(self, path: Path, metadata: NodeStaticMetadata):
+    only_build: bool = False
+
+    def __init__(self, path: Path, metadata: NodeStaticMetadata, only_build: bool = False):
         super().__init__(path, metadata)
+        self.only_build = only_build
 
     @classmethod
     def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> NodeStaticMetadata:
@@ -173,6 +207,9 @@ class NodeStaticProvider(StaticFileProvider):
 
         if not metadata.build_command:
             metadata.build_command = cls.get_build_command(package_json, metadata.package_manager, metadata.static_generator)
+
+        if not metadata.static_dir:
+            metadata.static_dir = metadata.static_generator.get_output_dir()
 
         return metadata
 
@@ -247,48 +284,21 @@ class NodeStaticProvider(StaticFileProvider):
         return [
             DependencySpec(
                 "node",
-                env_var="SHIPIT_NODE_VERSION",
-                default_version="22",
+                var_name="metadata.node_version",
                 use_in_build=True,
             ),
             package_manager_dep,
-            DependencySpec("static-web-server", use_in_serve=True),
+            *super().dependencies(),
         ]
-
-    def declarations(self) -> Optional[str]:
-        output_dir = self.get_output_dir()
-        return (
-            f'shipit_static_dir = getenv("SHIPIT_STATIC_DIR") or "{output_dir}"\n'
-        )
-
-    def get_output_dir(self) -> str:
-        if self.metadata.static_generator == StaticGenerator.NEXT:
-            return "out"
-        elif self.metadata.static_generator in [
-            StaticGenerator.ASTRO,
-            StaticGenerator.VITE,
-            StaticGenerator.NUXT_OLD,
-            StaticGenerator.NUXT_V3,
-            StaticGenerator.REMIX_V2,
-        ]:
-            return "dist"
-        elif self.metadata.static_generator == StaticGenerator.GATSBY:
-            return "public"
-        elif self.metadata.static_generator == StaticGenerator.REMIX_OLD:
-            return "build/client"
-        elif self.metadata.static_generator in [
-            StaticGenerator.DOCUSAURUS,
-            StaticGenerator.DOCUSAURUS_OLD,
-            StaticGenerator.SVELTE,
-        ]:
-            return "build"
-        else:
-            return "dist"
 
     @classmethod
     def get_build_command(cls, package_json: Optional[Dict[str, Any]], package_manager: PackageManager, static_generator: StaticGenerator) -> Optional[str]:
         if package_json:
-            build_command = package_json.get("scripts", {}).get("build")
+            scripts = package_json.get("scripts", {})
+            generate_command = scripts.get("generate")
+            if generate_command:
+                return package_manager.run_command("generate")
+            build_command = scripts.get("build")
             if build_command:
                 return package_manager.run_command("build")
         if static_generator == StaticGenerator.GATSBY:
@@ -331,21 +341,24 @@ class NodeStaticProvider(StaticFileProvider):
             ignored_files.append(lockfile)
         all_ignored_files = ", ".join([f'"{file}"' for file in ignored_files])
     
-        return [
-            'workdir(temp["build"])',
+        return filter(None, [
+            'workdir(temp["build"])' if not self.only_build else None,
             f'copy("{lockfile}")' if has_lockfile else None,
             'env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false")' if self.metadata.package_manager == PackageManager.NPM else None,
             # 'run("npx corepack enable", inputs=["package.json"], group="install")',
             f'run("{install_command}", inputs=[{inputs_install_files}], group="install")',
             f'copy(".", ignore=[{all_ignored_files}])',
-            f'run("{self.metadata.build_command}", outputs=[shipit_static_dir], group="build")',
-            f'run("cp -R {{}}/* {{}}/".format(shipit_static_dir, app["build"]))',
-        ]
+            f'run("{self.metadata.build_command}", outputs=[metadata.static_dir], group="build")' if not self.only_build else None,
+            f'run("{self.metadata.build_command}", group="build")' if self.only_build else None,
+            f'run("cp -R {{}}/* {{}}/".format(metadata.static_dir, static_app["build"]))' if not self.only_build else None,
+        ])
 
     def prepare_steps(self) -> Optional[list[str]]:
         return None
 
     def mounts(self) -> list[MountSpec]:
+        if self.only_build:
+            return []
         return [MountSpec("temp", attach_to_serve=False), *super().mounts()]
 
     def volumes(self) -> list[VolumeSpec]:

@@ -20,7 +20,8 @@ from .base import (
 class StaticFileMetadata(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    root: Optional[str] = None
+    sws_version: Optional[str] = "2.38.0"
+    static_dir: Optional[str] = None
 
 
 class StaticFileProvider:
@@ -42,9 +43,9 @@ class StaticFileProvider:
                 pass
 
             if config:
-                return StaticFileMetadata.model_validate(config)
+                return StaticFileMetadata.model_validate({"static_dir": config.get("root")})
         if _exists(path, "public/index.html") or _exists(path, "public/index.htm"):
-            return StaticFileMetadata(root="public")
+            return StaticFileMetadata(static_dir="public")
         return StaticFileMetadata()
 
     @classmethod
@@ -77,17 +78,16 @@ class StaticFileProvider:
         return [
             DependencySpec(
                 "static-web-server",
-                env_var="SHIPIT_SWS_VERSION",
-                default_version="2.38.0",
+                var_name="metadata.sws_version",
                 use_in_serve=True,
             )
         ]
 
     def build_steps(self) -> list[str]:
         return [
-            'workdir(app["build"])',
+            'workdir(static_app["build"])',
             'copy({}, ".", ignore=[".git"])'.format(
-                json.dumps(self.metadata.root or ".")
+                json.dumps(self.metadata.static_dir or ".")
             ),
         ]
 
@@ -99,11 +99,11 @@ class StaticFileProvider:
 
     def commands(self) -> Dict[str, str]:
         return {
-            "start": '"static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT)'
+            "start": '"static-web-server --root={} --log-level=info --port={}".format(static_app["serve"], PORT)'
         }
 
     def mounts(self) -> list[MountSpec]:
-        return [MountSpec("app")]
+        return [MountSpec("static_app")]
 
     def volumes(self) -> list[VolumeSpec]:
         return []

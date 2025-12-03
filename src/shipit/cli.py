@@ -1,3 +1,4 @@
+from termios import CSUSP
 import tempfile
 import hashlib
 import requests
@@ -35,9 +36,8 @@ from rich.rule import Rule
 from rich.syntax import Syntax
 
 from shipit.version import version as shipit_version
-from shipit.generator import generate_shipit, load_provider_metadata
+from shipit.generator import generate_shipit, load_provider, load_provider_metadata
 from shipit.providers.base import CustomCommands
-from shipit.procfile import Procfile
 from dotenv import dotenv_values
 
 
@@ -215,6 +215,9 @@ class DockerBuilder:
         self.env = {
             "HOME": "/root",
         }
+
+    def adapt_metadata(self, provider_metadata: Any) -> Any:
+        return provider_metadata
 
     def get_mount_path(self, name: str) -> Path:
         if name == "app":
@@ -534,6 +537,9 @@ class LocalBuilder:
 
     def get_serve_mount_path(self, name: str) -> Path:
         return self.get_mount_path(name)
+
+    def adapt_metadata(self, provider_metadata: Any) -> Any:
+        return provider_metadata
 
     def execute_step(self, step: Step, env: Dict[str, str]) -> None:
         build_path = self.workdir
@@ -863,14 +869,17 @@ class WasmerBuilder:
         self.wasmer_registry = registry
         self.wasmer_token = token
         self.bin = bin or "wasmer"
-        self.default_env = {
-            "SHIPIT_PYTHON_EXTRA_INDEX_URL": "https://pythonindex.wasix.org/simple",
-            "SHIPIT_PYTHON_CROSS_PLATFORM": "wasix_wasm32",
-            "SHIPIT_PYTHON_PRECOMPILE": "true",
-        }
 
     def getenv(self, name: str) -> Optional[str]:
         return self.inner_builder.getenv(name) or self.default_env.get(name)
+
+    def adapt_metadata(self, provider_metadata: Any) -> Any:
+        from shipit.providers.python import PythonMetadata
+        if isinstance(provider_metadata, PythonMetadata):
+            provider_metadata.python_extra_index_url = "https://pythonindex.wasix.org/simple"
+            provider_metadata.cross_platform = "wasix_wasm32"
+            provider_metadata.precompile_python = True
+        return provider_metadata
 
     def build(
         self, env: Dict[str, str], mounts: List[Mount], build: List[Step]
@@ -1404,11 +1413,13 @@ class Ctx:
         }
 
 
-def evaluate_shipit(shipit_file: Path, builder: Builder) -> Tuple[Ctx, Serve]:
+def evaluate_shipit(shipit_file: Path, builder: Builder, provider_metadata: dict, port: Optional[str] = None) -> Tuple[Ctx, Serve]:
     source = shipit_file.read_text()
     ctx = Ctx(builder)
     glb = sl.GlobalsBuilder.standard()
 
+    glb.set("PORT", port or "8080")
+    glb.set("metadata", provider_metadata)
     glb.set("service", ctx.service)
     glb.set("getenv", ctx.getenv)
     glb.set("dep", ctx.dep)
@@ -1547,6 +1558,10 @@ def auto(
         None,
         help="Use a specific provider to build the project.",
     ),
+    serve_port: Optional[str] = typer.Option(
+        None,
+        help="The port to use (defaults to 8080).",
+    ),
 ):
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -1588,6 +1603,7 @@ def auto(
         wasmer_bin=wasmer_bin,
         skip_prepare=skip_prepare,
         env_name=env_name,
+        serve_port=serve_port,
     )
     if start or wasmer_deploy or wasmer_deploy_config:
         serve(
@@ -1648,31 +1664,16 @@ def generate(
 
     if out is None:
         out = path / "Shipit"
-    custom_commands = CustomCommands()
-    # if (path / "Dockerfile").exists():
-    #     # We get the start command from the Dockerfile
-    #     with open(path / "Dockerfile", "r") as f:
-    #         cmd = None
-    #         for line in f:
-    #             if line.startswith("CMD "):
-    #                 cmd = line[4:].strip()
-    #                 cmd = json.loads(cmd)
-    #         # We get the last command
-    #         if cmd:
-    #             if isinstance(cmd, list):
-    #                 cmd = " ".join(cmd)
-    #             custom_commands.start = cmd
-    if use_procfile:
-        if (path / "Procfile").exists():
-            procfile = Procfile.loads((path / "Procfile").read_text())
-            custom_commands.start = procfile.get_start_command()
+    
+    custom_commands = CustomCommands.from_path(path, use_procfile)
     if start_command:
         custom_commands.start = start_command
     if install_command:
         custom_commands.install = install_command
     if build_command:
         custom_commands.build = build_command
-    provider_cls, metadata = load_provider_metadata(path, custom_commands, use_provider)
+    provider_cls = load_provider(path, custom_commands, use_provider)
+    metadata = load_provider_metadata(provider_cls, path, custom_commands)
     provider = provider_cls(path, metadata)
     content = generate_shipit(path, provider)
     metadata_json = metadata.model_dump_json(indent=2, exclude_defaults=True)
@@ -1886,14 +1887,7 @@ def plan(
             use_provider=use_provider,
         )
 
-    custom_commands = CustomCommands()
-    procfile_path = path / "Procfile"
-    if procfile_path.exists():
-        try:
-            procfile = Procfile.loads(procfile_path.read_text())
-            custom_commands.start = procfile.get_start_command()
-        except Exception:
-            pass
+    custom_commands = CustomCommands.from_path(path)
 
     shipit_file = get_shipit_path(path, shipit_path)
 
@@ -1907,7 +1901,10 @@ def plan(
             builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
         )
 
-    ctx, serve = evaluate_shipit(shipit_file, builder)
+    custom_commands = CustomCommands.from_path(path)
+    provider_cls = load_provider(path, custom_commands)
+    provider_metadata = load_provider_metadata(provider_cls, path, custom_commands)
+    ctx, serve = evaluate_shipit(shipit_file, builder, provider_metadata)
     metadata_commands: Dict[str, Optional[str]] = {
         "start": serve.commands.get("start"),
         "after_deploy": serve.commands.get("after_deploy"),
@@ -1927,7 +1924,6 @@ def plan(
     metadata_build = _collect_group_commands("build")
     metadata_commands["install"] = metadata_install
     metadata_commands["build"] = metadata_build
-    provider_cls, provider_metadata = load_provider_metadata(path, custom_commands)
     plan_output = {
         "provider": provider_cls.name(),
         "metadata": json.loads(provider_metadata.model_dump_json(exclude_defaults=True)),
@@ -1995,6 +1991,10 @@ def build(
         None,
         help="The environment to use (defaults to `.env`, it will use .env.<env_name> if provided)",
     ),
+    serve_port: Optional[str] = typer.Option(
+        None,
+        help="The port to use (defaults to 8080).",
+    ),
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -2011,7 +2011,12 @@ def build(
             builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
         )
 
-    ctx, serve = evaluate_shipit(shipit_file, builder)
+    custom_commands = CustomCommands.from_path(path)
+    provider_cls = load_provider(path, custom_commands)
+    provider_metadata = load_provider_metadata(provider_cls, path, custom_commands)
+    provider_metadata = builder.adapt_metadata(provider_metadata)
+    serve_port = serve_port or os.environ.get("PORT", "8080")
+    ctx, serve = evaluate_shipit(shipit_file, builder, provider_metadata, port=serve_port)
     env = {
         "PATH": "",
         "COLORTERM": os.environ.get("COLORTERM", ""),
@@ -2040,6 +2045,7 @@ def build(
                 docker_client=None,
                 skip_docker_if_safe_build=False,
                 env_name=env_name,
+                serve_port=serve_port,
             )
 
     serve.env = serve.env or {}

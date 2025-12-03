@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Literal
+from shipit.procfile import Procfile
 
 
 @dataclass
@@ -18,6 +19,33 @@ class CustomCommands:
     start: Optional[str] = None
     after_deploy: Optional[str] = None
 
+    # if (path / "Dockerfile").exists():
+    #     # We get the start command from the Dockerfile
+    #     with open(path / "Dockerfile", "r") as f:
+    #         cmd = None
+    #         for line in f:
+    #             if line.startswith("CMD "):
+    #                 cmd = line[4:].strip()
+    #                 cmd = json.loads(cmd)
+    #         # We get the last command
+    #         if cmd:
+    #             if isinstance(cmd, list):
+    #                 cmd = " ".join(cmd)
+    #             custom_commands.start = cmd
+
+    @classmethod
+    def from_path(cls, path: Path, use_procfile: bool = True) -> "CustomCommands":
+        custom_commands = cls()
+        if use_procfile:
+            procfile_path = path / "Procfile"
+            if procfile_path.exists():
+                try:
+                    procfile = Procfile.loads(procfile_path.read_text())
+                    custom_commands.start = procfile.get_start_command()
+                except Exception:
+                    pass
+        return custom_commands
+    
 
 class Provider(Protocol):
     def __init__(self, path: Path): ...
@@ -42,9 +70,9 @@ class Provider(Protocol):
 @dataclass
 class DependencySpec:
     name: str
-    env_var: Optional[str] = None
+    var_name: Optional[str] = None
     default_version: Optional[str] = None
-    architecture_var: Optional[str] = None
+    architecture_var_name: Optional[str] = None
     alias: Optional[str] = None  # Variable name in Shipit plan
     use_in_build: bool = False
     use_in_serve: bool = False

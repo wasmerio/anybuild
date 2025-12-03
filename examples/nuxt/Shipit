@@ -1,21 +1,13 @@
-node_version = getenv("SHIPIT_NODE_VERSION") or "22"
-node = dep("node", node_version)
-npm_version = getenv("SHIPIT_NPM_VERSION")
-npm = dep("npm", npm_version)
-staticwebserver = dep("static-web-server")
+node = dep("node", metadata.node_version)
+npm = dep("npm", metadata.npm_version)
+staticwebserver = dep("static-web-server", metadata.sws_version)
 
 temp = mount("temp")
-
-app = mount("app")
-
-PORT = getenv("PORT") or "8080"
-shipit_static_dir = getenv("SHIPIT_STATIC_DIR") or "dist"
-
+static_app = mount("static_app")
 
 serve(
   name="nuxt",
   provider="node-static",
-  cwd=app["serve"],
   build=[
     use(node, npm),
     workdir(temp["build"]),
@@ -23,14 +15,14 @@ serve(
     env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
     run("npm ci", inputs=["package.json"], group="install"),
     copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
-    run("npm run build", outputs=[shipit_static_dir], group="build"),
-    run("cp -R {}/* {}/".format(shipit_static_dir, app["build"]))
+    run("npm run generate", outputs=[metadata.static_dir], group="build"),
+    run("cp -R {}/* {}/".format(metadata.static_dir, static_app["build"]))
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT)
+    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app["serve"], PORT).replace("$PORT", PORT)
   },
   mounts=[
-    app
+    static_app
   ],
 )

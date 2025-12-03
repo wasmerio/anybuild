@@ -1,26 +1,19 @@
-python_version = getenv("SHIPIT_PYTHON_VERSION") or "3.13"
-python = dep("python", python_version)
-uv_version = getenv("SHIPIT_UV_VERSION") or "0.8.15"
-uv = dep("uv", uv_version)
-staticwebserver_version = getenv("SHIPIT_SWS_VERSION") or "2.38.0"
-staticwebserver = dep("static-web-server", staticwebserver_version)
-
-app = mount("app")
+python = dep("python", metadata.python_version)
+uv = dep("uv", metadata.uv_version)
+staticwebserver = dep("static-web-server", metadata.sws_version)
 
 temp = mount("temp")
-
 local_venv = mount("local_venv")
+static_app = mount("static_app")
 
-PORT = getenv("PORT") or "8080"
-mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"
-cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")
+python_version = metadata.python_version
+cross_platform = metadata.cross_platform
 venv = local_venv
 
 
 serve(
   name="mkdocs",
   provider="mkdocs",
-  cwd=app["serve"],
   build=[
     use(python, uv),
     workdir(temp["build"]),
@@ -29,14 +22,14 @@ serve(
     run("uv add mkdocs", group="install"),
     path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    run("uv run mkdocs build --site-dir={}".format(app["build"]), outputs=["."], group="build")
+    run("uv run mkdocs build --site-dir={}".format(static_app["build"]), outputs=["."], group="build")
   ],
   deps=[python, staticwebserver],
   env = {},
   commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(app["serve"], PORT).replace("$PORT", PORT)
+    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app["serve"], PORT).replace("$PORT", PORT)
   },
   mounts=[
-    app
+    static_app
   ],
 )

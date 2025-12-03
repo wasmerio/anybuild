@@ -1,12 +1,7 @@
-php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
-php_architecture = getenv("SHIPIT_PHP_ARCHITECTURE")
-php = dep("php", php_version, architecture=php_architecture)
+php = dep("php", metadata.php_version, architecture=metadata.php_architecture)
 
 app = mount("app")
-
 assets = mount("assets")
-
-PORT = getenv("PORT") or "8080"
 
 serve(
   name="php-nobuild",

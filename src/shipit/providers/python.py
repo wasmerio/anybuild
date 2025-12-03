@@ -53,8 +53,14 @@ class PythonMetadata(BaseModel):
     uses_pandoc: bool = False
     install_requires_all_files: bool = False
     main_file: Optional[str] = None
-    version: Optional[str] = None
+    python_version: Optional[str] = "3.13"
+    uv_version: Optional[str] = "0.8.15"
+    precompile_python: bool = True
+    cross_platform: bool = False
+    python_extra_index_url: Optional[str] = None
     start_command: Optional[str] = None
+    pandoc_version: Optional[str] = None
+    ffmpeg_version: Optional[str] = None
 
 
 class PythonProvider:
@@ -78,12 +84,12 @@ class PythonProvider:
         if not metadata.main_file:
             metadata.main_file = cls.detect_main_file(path)
 
-        if not metadata.version:
+        if not metadata.python_version:
             if _exists(path, ".python-version"):
                 python_version = (path / ".python-version").read_text().strip()
             else:
                 python_version = "3.13"
-            metadata.version = python_version
+            metadata.python_version = python_version
 
         pg_deps = {
             "asyncpg",
@@ -270,15 +276,13 @@ class PythonProvider:
         deps = [
             DependencySpec(
                 "python",
-                env_var="SHIPIT_PYTHON_VERSION",
-                default_version=self.metadata.version,
+                var_name="metadata.python_version",
                 use_in_build=True,
                 use_in_serve=True,
             ),
             DependencySpec(
                 "uv",
-                env_var="SHIPIT_UV_VERSION",
-                default_version="0.8.15",
+                var_name="metadata.uv_version",
                 use_in_build=True,
             ),
         ]
@@ -286,7 +290,7 @@ class PythonProvider:
             deps.append(
                 DependencySpec(
                     "pandoc",
-                    env_var="SHIPIT_PANDOC_VERSION",
+                    var_name="metadata.pandoc_version",
                     use_in_build=False,
                     use_in_serve=True,
                 )
@@ -295,7 +299,7 @@ class PythonProvider:
             deps.append(
                 DependencySpec(
                     "ffmpeg",
-                    env_var="SHIPIT_FFMPEG_VERSION",
+                    var_name="metadata.ffmpeg_version",
                     use_in_build=False,
                     use_in_serve=True,
                 )
@@ -305,13 +309,15 @@ class PythonProvider:
     def declarations(self) -> Optional[str]:
         if self.only_build:
             return (
-                'cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")\n'
+                'python_version = metadata.python_version\n'
+                'cross_platform = metadata.cross_platform\n'
                 "venv = local_venv\n"
             )
         return (
-            'cross_platform = getenv("SHIPIT_PYTHON_CROSS_PLATFORM")\n'
-            'python_extra_index_url = getenv("SHIPIT_PYTHON_EXTRA_INDEX_URL")\n'
-            'precompile_python = getenv("SHIPIT_PYTHON_PRECOMPILE") in ["true", "True", "TRUE", "1", "on", "yes", "y", "Y", "YES", "On", "ON"]\n'
+            'python_version = metadata.python_version\n'
+            'cross_platform = metadata.cross_platform\n'
+            'python_extra_index_url = metadata.python_extra_index_url\n'
+            'precompile_python = metadata.precompile_python\n'
             'python_cross_packages_path = venv["build"] + f"/lib/python{python_version}/site-packages"\n'
             'python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv["serve"], python_version)\n'
             'app_serve_path = app["serve"]\n'

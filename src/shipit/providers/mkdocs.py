@@ -17,30 +17,23 @@ from .staticfile import StaticFileProvider, StaticFileMetadata
 from .python import PythonProvider, PythonMetadata
 from pydantic import BaseModel, ConfigDict
 
-class MkdocsMetadata(BaseModel):
+class MkdocsMetadata(PythonMetadata, StaticFileMetadata):
     model_config = ConfigDict(extra="ignore")
-    default_version: Optional[str] = None
-    python: Optional[PythonMetadata] = None
-    staticfile: Optional[StaticFileMetadata] = None
+    mkdocs_version: Optional[str] = None
 
 
 class MkdocsProvider(StaticFileProvider):
     def __init__(self, path: Path, metadata: MkdocsMetadata):
         self.path = path
-        self.full_metadata = metadata
-        self.python_provider = PythonProvider(path, metadata.python, only_build=True)
-
-    @property
-    def metadata(self) -> StaticFileMetadata:
-        return self.full_metadata.staticfile
+        self.python_provider = PythonProvider(path, metadata, only_build=True)
 
     @classmethod
     def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> MkdocsMetadata:
         python_metadata = PythonProvider.load_metadata(path, custom_commands, must_have_deps={"mkdocs"})
         staticfile_metadata = StaticFileProvider.load_metadata(path, custom_commands)
         metadata = MkdocsMetadata(
-            python=python_metadata,
-            staticfile=staticfile_metadata,
+            **python_metadata.model_dump(),
+            **staticfile_metadata.model_dump(),
         )
         return metadata
 
@@ -68,21 +61,19 @@ class MkdocsProvider(StaticFileProvider):
         ]
 
     def declarations(self) -> Optional[str]:
-        return 'mkdocs_version = getenv("SHIPIT_MKDOCS_VERSION") or "1.6.1"\n' + (
-            self.python_provider.declarations() or ""
-        )
+        return self.python_provider.declarations() or ""
 
     def build_steps(self) -> list[str]:
         return [
             *self.python_provider.build_steps(),
-            'run("uv run mkdocs build --site-dir={}".format(app["build"]), outputs=["."], group="build")',
+            'run("uv run mkdocs build --site-dir={}".format(static_app["build"]), outputs=["."], group="build")',
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:
         return self.python_provider.prepare_steps()
 
     def mounts(self) -> list[MountSpec]:
-        return [MountSpec("app"), *self.python_provider.mounts()]
+        return [*self.python_provider.mounts(), *super().mounts()]
 
     def volumes(self) -> list[VolumeSpec]:
         return []

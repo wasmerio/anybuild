@@ -1,15 +1,11 @@
-from __future__ import annotations
-
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from shipit.providers.base import (
     DependencySpec,
     Provider,
     ProviderPlan,
     DetectResult,
-    MountSpec,
-    VolumeSpec,
     CustomCommands,
 )
 from shipit.providers.registry import providers as registry_providers
@@ -64,35 +60,35 @@ def _emit_dependencies_declarations(
         declared.add(alias)
 
         version_var = None
-        architecture_var = None
-        if dep.env_var:
-            default = f' or "{dep.default_version}"' if dep.default_version else ""
-            version_key = alias + "_version"
-            lines.append(f'{version_key} = getenv("{dep.env_var}"){default}')
-            version_var = version_key
-        if dep.architecture_var:
-            architecture_key = alias + "_architecture"
-            lines.append(f'{architecture_key} = getenv("{dep.architecture_var}")')
-            architecture_var = architecture_key
+        architecture_env_var = None
+        if dep.var_name:
+            version_var = dep.var_name
+        if dep.architecture_var_name:
+            architecture_env_var = dep.architecture_var_name
         vars = [f'"{dep.name}"']
         if version_var:
             vars.append(version_var)
-        if architecture_var:
-            vars.append(f"architecture={architecture_var}")
+        if architecture_env_var:
+            vars.append(f"architecture={architecture_env_var}")
         lines.append(f"{alias} = dep({', '.join(vars)})")
 
     return "\n".join(lines), serve_vars, build_vars
 
-def load_provider_metadata(path: Path, custom_commands: CustomCommands, use_provider: Optional[str] = None, metadata: Optional[dict] = None) -> dict:
+
+def load_provider(path: Path, custom_commands: CustomCommands, use_provider: Optional[str] = None) -> type[Provider]:
     provider_cls = None
     if use_provider:
         provider_cls = next((p for p in _providers() if p.name().lower() == use_provider.lower()), None)
     if not provider_cls:
         provider_cls = detect_provider(path, custom_commands)
+    return provider_cls
+
+
+def load_provider_metadata(provider_cls: type[Provider], path: Path, custom_commands: CustomCommands, metadata: Optional[dict] = None) -> dict:
     provider_metadata = provider_cls.load_metadata(path, custom_commands)
     if metadata:
         provider_metadata = metadata.model_copy(deep=True, update=metadata)
-    return provider_cls, provider_metadata
+    return provider_metadata
 
 
 def generate_shipit(path: Path, provider: Provider) -> str:
@@ -155,14 +151,15 @@ def generate_shipit(path: Path, provider: Provider) -> str:
         out.append(dep_block)
         out.append("")
 
-    for m in plan.mounts:
-        out.append(f'{m.name} = mount("{m.name}")')
+    if plan.mounts:
+        for m in plan.mounts:
+            out.append(f'{m.name} = mount("{m.name}")')
         out.append("")
 
     if plan.volumes:
         for v in plan.volumes:
             out.append(f'{v.var_name or v.name} = volume("{v.name}", {v.serve_path})')
-        out.append("")
+        out.append("")    
 
     if plan.services:
         for s in plan.services:
@@ -171,12 +168,10 @@ def generate_shipit(path: Path, provider: Provider) -> str:
             )
         out.append("")
 
-    out.append('PORT = getenv("PORT") or "8080"')
-
     if plan.declarations:
         out.append(plan.declarations)
+        out.append("")
 
-    out.append("")
     out.append("serve(")
     out.append(f'  name="{plan.serve_name}",')
     out.append(f'  provider="{plan.provider}",')

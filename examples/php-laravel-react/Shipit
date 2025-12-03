@@ -1,30 +1,28 @@
-php_version = getenv("SHIPIT_PHP_VERSION") or "8.3"
-php = dep("php", php_version)
+php = dep("php", metadata.php_version)
 composer = dep("composer")
-pie = dep("pie")
-pnpm = dep("pnpm")
+node = dep("node", metadata.node_version)
+npm = dep("npm", metadata.npm_version)
+staticwebserver = dep("static-web-server", metadata.sws_version)
 bash = dep("bash")
 
 app = mount("app")
-
-PORT = getenv("PORT") or "8080"
-HOME = getenv("HOME")
 
 serve(
   name="php-laravel-react",
   provider="laravel",
   cwd=app["serve"],
   build=[
-    use(php, composer, pie, pnpm),
-    env(HOME=HOME, COMPOSER_FUND="0"),
+    use(php, composer, node, npm),
+    env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0"),
     workdir(app["build"]),
-    run("pie install php/pdo_pgsql"),
     run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install"),
-    run("pnpm install", inputs=["package.json", "package-lock.json"], outputs=["."], group="install"),
-    copy(".", ".", ignore=[".git"]),
-    run("pnpm run build", outputs=["."], group="build")
+    copy("package-lock.json"),
+    env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
+    run("npm ci", inputs=["package.json"], group="install"),
+    copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
+    run("npm run build", group="build")
   ],
-  deps=[php, bash],
+  deps=[php, staticwebserver, bash],
   prepare=[
     workdir(app["serve"]),
     run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache"),

@@ -14,20 +14,27 @@ from .base import (
     VolumeSpec,
     CustomCommands,
 )
+from .php import PhpMetadata, PhpProvider
+from .node_static import NodeStaticMetadata, NodeStaticProvider
 
 
-class LaravelMetadata(BaseModel):
+class LaravelMetadata(PhpMetadata, NodeStaticMetadata):
     model_config = ConfigDict(extra="ignore")
 
 
-class LaravelProvider:
+class LaravelProvider(PhpProvider):
     def __init__(self, path: Path, metadata: LaravelMetadata):
         self.path = path
+        self.node_provider = NodeStaticProvider(path, metadata, only_build=True)
         self.metadata = metadata
 
     @classmethod
     def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> LaravelMetadata:
-        return LaravelMetadata()
+        metadata = super().load_metadata(path, custom_commands)
+        node_metadata = NodeStaticProvider.load_metadata(path, custom_commands)
+        node_metadata.static_dir = None
+        node_metadata.static_generator = None
+        return LaravelMetadata(**metadata.model_dump(), **node_metadata.model_dump())
 
     @classmethod
     def name(cls) -> str:
@@ -46,29 +53,23 @@ class LaravelProvider:
         return [
             DependencySpec(
                 "php",
-                env_var="SHIPIT_PHP_VERSION",
-                default_version="8.3",
+                var_name="metadata.php_version",
                 use_in_build=True,
                 use_in_serve=True,
             ),
             DependencySpec("composer", use_in_build=True),
-            DependencySpec("pie", use_in_build=True),
-            DependencySpec("pnpm", use_in_build=True),
+            # DependencySpec("pie", use_in_build=True),
+            *self.node_provider.dependencies(),
             DependencySpec("bash", use_in_serve=True),
         ]
 
-    def declarations(self) -> Optional[str]:
-        return "HOME = getenv(\"HOME\")"
-
     def build_steps(self) -> list[str]:
         return [
-            "env(HOME=HOME, COMPOSER_FUND=\"0\")",
+            "env(COMPOSER_HOME=\"/tmp\", COMPOSER_FUND=\"0\")",
             "workdir(app[\"build\"])",
-            "run(\"pie install php/pdo_pgsql\")",
+            # "run(\"pie install php/pdo_pgsql\")",
             "run(\"composer install --optimize-autoloader --no-scripts --no-interaction\", inputs=[\"composer.json\", \"composer.lock\", \"artisan\"], outputs=[\".\"], group=\"install\")",
-            "run(\"pnpm install\", inputs=[\"package.json\", \"package-lock.json\"], outputs=[\".\"], group=\"install\")",
-            "copy(\".\", \".\", ignore=[\".git\"])",
-            "run(\"pnpm run build\", outputs=[\".\"], group=\"build\")",
+            *self.node_provider.build_steps(),
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:
@@ -88,7 +89,7 @@ class LaravelProvider:
         }
 
     def mounts(self) -> list[MountSpec]:
-        return [MountSpec("app")]
+        return [MountSpec("app"), *self.node_provider.mounts()]
 
     def volumes(self) -> list[VolumeSpec]:
         return []

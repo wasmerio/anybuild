@@ -4,9 +4,23 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from .base import DetectResult, DependencySpec, Provider, _exists, ServiceSpec, VolumeSpec, CustomCommands, MountSpec
-from .staticfile import StaticFileProvider
+from .staticfile import StaticFileProvider, StaticFileMetadata
+from pydantic import ConfigDict
+
+class HugoMetadata(StaticFileMetadata):
+    model_config = ConfigDict(extra="ignore")
+
+    hugo_version: Optional[str] = "0.149.0"
+
 
 class HugoProvider(StaticFileProvider):
+    def __init__(self, path: Path, metadata: HugoMetadata):
+        super().__init__(path, metadata)
+
+    @classmethod
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> HugoMetadata:
+        metadata = super().load_metadata(path, custom_commands)
+        return HugoMetadata(**metadata.model_dump())
 
     @classmethod
     def name(cls) -> str:
@@ -31,8 +45,7 @@ class HugoProvider(StaticFileProvider):
         return [
             DependencySpec(
                 "hugo",
-                env_var="SHIPIT_HUGO_VERSION",
-                default_version="0.149.0",
+                var_name="metadata.hugo_version",
                 use_in_build=True,
             ),
             *super().dependencies(),
@@ -42,7 +55,7 @@ class HugoProvider(StaticFileProvider):
         return [
             'workdir(temp["build"])',
             'copy(".", ".", ignore=[".git"])',
-            'run("hugo build --destination={}".format(app["build"]), group="build")',
+            'run("hugo build --destination={}".format(static_app["build"]), group="build")',
         ]
 
     def mounts(self) -> list[MountSpec]:

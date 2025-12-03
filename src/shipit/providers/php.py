@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Literal
 from pydantic import BaseModel, ConfigDict
 
 from .base import (
@@ -19,6 +19,8 @@ from .base import (
 class PhpMetadata(BaseModel):
     model_config = ConfigDict(extra="ignore")
     use_composer: bool = False
+    php_version: Optional[str] = "8.3"
+    php_architecture: Optional[Literal["64-bit", "32-bit"]] = "64-bit"
 
 class PhpProvider:
     def __init__(self, path: Path, metadata: PhpMetadata):
@@ -63,9 +65,8 @@ class PhpProvider:
         deps = [
             DependencySpec(
                 "php",
-                env_var="SHIPIT_PHP_VERSION",
-                default_version="8.3",
-                architecture_var="SHIPIT_PHP_ARCHITECTURE",
+                var_name="metadata.php_version",
+                architecture_var_name="metadata.php_architecture",
                 use_in_build=True,
                 use_in_serve=True,
             ),
@@ -76,8 +77,6 @@ class PhpProvider:
         return deps
 
     def declarations(self) -> Optional[str]:
-        if self.metadata.use_composer:
-            return 'HOME = getenv("HOME")\n'
         return None
 
     def build_steps(self) -> list[str]:
@@ -92,7 +91,7 @@ class PhpProvider:
             )
 
         if self.metadata.use_composer:
-            steps.append('env(HOME=HOME, COMPOSER_FUND="0")')
+            steps.append('env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0")')
             steps.append(
                 'run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'
             )

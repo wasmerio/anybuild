@@ -14,12 +14,24 @@ from .base import (
     CustomCommands,
 )
 from .staticfile import StaticFileProvider, StaticFileMetadata
+from pydantic import ConfigDict
+
+class JekyllMetadata(StaticFileMetadata):
+    model_config = ConfigDict(extra="ignore")
+
+    ruby_version: Optional[str] = "3.4.7"
+    jekyll_version: Optional[str] = "4.3.0"
 
 
 class JekyllProvider(StaticFileProvider):
-    def __init__(self, path: Path, metadata: StaticFileMetadata):
+    def __init__(self, path: Path, metadata: JekyllMetadata):
         self.path = path
         self.metadata = metadata
+
+    @classmethod
+    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> JekyllMetadata:
+        metadata = super().load_metadata(path, custom_commands)
+        return JekyllMetadata(**metadata.model_dump())
 
     @classmethod
     def name(cls) -> str:
@@ -44,15 +56,12 @@ class JekyllProvider(StaticFileProvider):
         return [
             DependencySpec(
                 "ruby",
-                env_var="SHIPIT_RUBY_VERSION",
+                var_name="metadata.ruby_version",
                 use_in_build=True,
                 use_in_serve=False,
             ),
             *super().dependencies(),
         ]
-
-    def declarations(self) -> Optional[str]:
-        return 'jekyll_version = getenv("SHIPIT_JEKYLL_VERSION") or "1.6.1"\n'
 
     def build_steps(self) -> list[str]:
         if _exists(self.path, "Gemfile"):
@@ -67,12 +76,15 @@ class JekyllProvider(StaticFileProvider):
                     *install_commands,
                 ]
         else:
-            install_commands = ['run("gem install jekyll", group="build")']
+            install_commands = [
+                'run("bundle init", group="build")',
+                'run("bundle add jekyll -v {}".format(metadata.jekyll_version), group="build")'
+            ]
         return [
             'workdir(temp["build"])',
-            'copy(".", ignore=[".git"])',
             *install_commands,
-            'run("jekyll build --destination={}".format(app["build"]), outputs=["."], group="build")',
+            'copy(".", ignore=[".git"])',
+            'run("jekyll build --destination={}".format(static_app["build"]), outputs=["."], group="build")',
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:
