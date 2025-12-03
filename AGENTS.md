@@ -12,8 +12,10 @@ for popular frameworks.
 
 - **CLI**: `src/shipit/cli.py` implements the Typer commands `build`, `serve`,
   and `auto`.
-- **Builders**: `LocalBuilder`, `DockerBuilder`, and `WasmerBuilder` generate
-  artifacts and run them.
+- **Build backends**: `LocalBuildBackend` runs steps on the host while
+  `DockerBuildBackend` produces artifacts inside a container and exports them.
+- **Runners**: `LocalRunner` executes the generated commands locally, and
+  `WasmerRunner` packages artifacts and runs them with Wasmer.
 - **Starlark runtime**: Build steps are defined in a `Shipit` file and executed
   through the `Ctx` interface.
 - **Assets**: Templates and config snippets live under `src/shipit/assets`.
