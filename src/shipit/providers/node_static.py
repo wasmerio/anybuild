@@ -139,6 +139,22 @@ class StaticGenerator(Enum):
         else:
             return "dist"
 
+    def build_command(self) -> str:
+        return {
+            StaticGenerator.GATSBY: "gatsby build",
+            StaticGenerator.ASTRO: "astro build",
+            StaticGenerator.REMIX_OLD: "remix-ssg build",
+            StaticGenerator.REMIX_V2: "vite build",
+            StaticGenerator.DOCUSAURUS: "docusaurus build",
+            StaticGenerator.DOCUSAURUS_OLD: "docusaurus build",
+            StaticGenerator.SVELTE: "svelte-kit build",
+            StaticGenerator.VITE: "vite build",
+            StaticGenerator.NEXT: "next export",
+            StaticGenerator.NUXT_V3: "nuxi generate",
+            StaticGenerator.NUXT_OLD: "nuxt generate",
+            StaticGenerator.REMIX: "remix-ssg build",
+        }[self]
+
 
 class NodeStaticMetadata(StaticFileMetadata):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
@@ -313,29 +329,8 @@ class NodeStaticProvider(StaticFileProvider):
             build_command = scripts.get("build")
             if build_command:
                 return package_manager.run_command("build")
-        if static_generator == StaticGenerator.GATSBY:
-            return package_manager.run_execute_command("gatsby build")
-        elif static_generator == StaticGenerator.ASTRO:
-            return package_manager.run_execute_command("astro build")
-        elif static_generator == StaticGenerator.REMIX_OLD:
-            return package_manager.run_execute_command("remix-ssg build")
-        elif static_generator == StaticGenerator.REMIX_V2:
-            return package_manager.run_execute_command("vite build")
-        elif static_generator == StaticGenerator.DOCUSAURUS:
-            return package_manager.run_execute_command("docusaurus build")
-        elif static_generator == StaticGenerator.DOCUSAURUS_OLD:
-            return package_manager.run_execute_command("docusaurus build")
-        elif static_generator == StaticGenerator.SVELTE:
-            return package_manager.run_execute_command("svelte-kit build")
-        elif static_generator == StaticGenerator.VITE:
-            return package_manager.run_execute_command("vite build")
-        elif static_generator == StaticGenerator.NEXT:
-            return package_manager.run_execute_command("next export")
-        elif static_generator == StaticGenerator.NUXT_V3:
-            return package_manager.run_execute_command("nuxi generate")
-        elif static_generator == StaticGenerator.NUXT_OLD:
-            return package_manager.run_execute_command("nuxt generate")
-        return None
+        command = static_generator.build_command()
+        return package_manager.run_execute_command(command)
 
     def build_steps(self) -> list[str]:
         lockfile = self.metadata.package_manager.lockfile()
