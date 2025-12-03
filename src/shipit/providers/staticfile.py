@@ -70,9 +70,6 @@ class StaticFileProvider:
             return DetectResult(cls.name(), 70)
         return None
 
-    def initialize(self) -> None:
-        pass
-
     def serve_name(self) -> Optional[str]:
         return None
 

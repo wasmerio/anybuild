@@ -33,9 +33,6 @@ class WordPressProvider(PhpProvider):
             return DetectResult(cls.name(), 80)
         return None
 
-    def initialize(self) -> None:
-        pass
-
     def serve_name(self) -> Optional[str]:
         return None
 

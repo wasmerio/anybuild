@@ -83,19 +83,19 @@ def _emit_dependencies_declarations(
 
     return "\n".join(lines), serve_vars, build_vars
 
-
-def generate_shipit(path: Path, custom_commands: CustomCommands, use_provider: Optional[str] = None, metadata: Optional[dict] = None) -> str:
+def load_provider_metadata(path: Path, custom_commands: CustomCommands, use_provider: Optional[str] = None, metadata: Optional[dict] = None) -> dict:
     provider_cls = None
     if use_provider:
         provider_cls = next((p for p in _providers() if p.name().lower() == use_provider.lower()), None)
     if not provider_cls:
         provider_cls = detect_provider(path, custom_commands)
-    
     provider_metadata = provider_cls.load_metadata(path, custom_commands)
     if metadata:
-        provider_metadata = provider_metadata.model_copy(deep=True, update=metadata)
-    provider = provider_cls(path, provider_metadata)
+        provider_metadata = metadata.model_copy(deep=True, update=metadata)
+    return provider_cls, provider_metadata
 
+
+def generate_shipit(path: Path, provider: Provider) -> str:
     default_serve_name = path.absolute().name
 
     # Collect parts
@@ -217,4 +217,4 @@ def generate_shipit(path: Path, custom_commands: CustomCommands, use_provider: O
         out.append("  ],")
     out.append(")")
     out.append("")
-    return "\n".join(out), provider_metadata
+    return "\n".join(out)

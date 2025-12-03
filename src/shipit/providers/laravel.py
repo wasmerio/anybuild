@@ -39,9 +39,6 @@ class LaravelProvider:
             return DetectResult(cls.name(), 95)
         return None
 
-    def initialize(self) -> None:
-        pass
-
     def serve_name(self) -> Optional[str]:
         return None
 

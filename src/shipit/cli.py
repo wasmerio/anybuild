@@ -35,7 +35,7 @@ from rich.rule import Rule
 from rich.syntax import Syntax
 
 from shipit.version import version as shipit_version
-from shipit.generator import generate_shipit, detect_provider
+from shipit.generator import generate_shipit, load_provider_metadata
 from shipit.providers.base import CustomCommands
 from shipit.procfile import Procfile
 from dotenv import dotenv_values
@@ -1672,7 +1672,9 @@ def generate(
         custom_commands.install = install_command
     if build_command:
         custom_commands.build = build_command
-    content, metadata = generate_shipit(path, custom_commands, use_provider=use_provider)
+    provider_cls, metadata = load_provider_metadata(path, custom_commands, use_provider)
+    provider = provider_cls(path, metadata)
+    content = generate_shipit(path, provider)
     metadata_json = metadata.model_dump_json(indent=2, exclude_defaults=True)
     if metadata_json and metadata_json != "{}":
         manifest_panel = Panel(
@@ -1925,14 +1927,9 @@ def plan(
     metadata_build = _collect_group_commands("build")
     metadata_commands["install"] = metadata_install
     metadata_commands["build"] = metadata_build
-    provider_cls = detect_provider(path, custom_commands)
-    provider_metadata = provider_cls.load_metadata(path, custom_commands)
-    # if metadata:
-    #     provider_metadata = provider_metadata.model_copy(deep=True, update=metadata)
-    provider_instance = provider_cls(path, provider_metadata)
-    provider_instance.initialize()
+    provider_cls, provider_metadata = load_provider_metadata(path, custom_commands)
     plan_output = {
-        "provider": serve.provider,
+        "provider": provider_cls.name(),
         "metadata": json.loads(provider_metadata.model_dump_json(exclude_defaults=True)),
         "commands": metadata_commands,
         "config": sorted(ctx.getenv_variables),

@@ -263,9 +263,6 @@ class PythonProvider:
             return DetectResult(cls.name(), 10)
         return None
 
-    def initialize(self) -> None:
-        pass
-
     def serve_name(self) -> Optional[str]:
         return None
 

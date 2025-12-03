@@ -58,9 +58,6 @@ class MkdocsProvider(StaticFileProvider):
             return DetectResult(cls.name(), 85)
         return None
 
-    def initialize(self) -> None:
-        pass
-
     def serve_name(self) -> Optional[str]:
         return None
 
