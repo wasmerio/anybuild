@@ -151,7 +151,13 @@ class WasmerRunner:
             provider_metadata.precompile_python = True
         return provider_metadata
 
+    def build(self, serve: Serve) -> None:
+        self.build_prepare(serve)
+        self.build_serve(serve)
+
     def build_prepare(self, serve: Serve) -> None:
+        if not serve.prepare:
+            return
         prepare_dir = self.wasmer_dir_path / "prepare"
         prepare_dir.mkdir(parents=True, exist_ok=True)
         env = serve.env or {}

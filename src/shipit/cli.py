@@ -883,9 +883,7 @@ def build(
 
     # Build and serve
     build_backend.build(serve.name, env, serve.mounts or [], serve.build)
-    if serve.prepare:
-        runner.build_prepare(serve)
-    runner.build_serve(serve)
+    runner.build(serve)
     if serve.prepare and not skip_prepare:
         runner.prepare(env, serve.prepare)
 

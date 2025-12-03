@@ -29,7 +29,13 @@ class LocalRunner:
     def get_serve_mount_path(self, name: str) -> Path:
         return self.build_backend.get_artifact_mount_path(name)
 
+    def build(self, serve: Serve) -> None:
+        self.build_prepare(serve)
+        self.build_serve(serve)
+
     def build_prepare(self, serve: Serve) -> None:
+        if not serve.prepare:
+            return
         self.prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
         commands: List[str] = []
         if serve.cwd:
