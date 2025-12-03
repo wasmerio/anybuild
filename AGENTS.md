@@ -42,6 +42,8 @@ for popular frameworks.
 
 - Follow Python conventions (PEP 8) and existing patterns in the codebase.
 - Use type hints where reasonable.
+- Stick to the repo’s current Python baseline (3.13) and avoid shims for older
+  versions; if a feature exists in 3.13, just use it without compatibility code.
 - Avoid comments that simply restate code; explain *why*, not *what*.
 - Keep imports grouped and sorted.
 - Lines should be kept to 80 characters where possible.
