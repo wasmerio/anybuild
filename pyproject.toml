@@ -13,7 +13,7 @@ dependencies = [
     "rich>=14.1.0",
     "semantic-version>=2.10.0",
     "sh>=2.2.2",
-    "starlark-pyo3>=2025.1",
+    "xingque>=0.2.1",
     "tomlkit>=0.13.3",
     "typer>=0.16.1",
 ]

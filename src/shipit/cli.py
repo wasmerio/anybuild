@@ -26,7 +26,7 @@ from typing import (
 from shutil import copy, copytree, ignore_patterns
 
 import sh  # type: ignore[import-untyped]
-import starlark as sl
+import xingque as sl
 import typer
 from rich import box
 from rich.console import Console
@@ -1407,28 +1407,27 @@ class Ctx:
 def evaluate_shipit(shipit_file: Path, builder: Builder) -> Tuple[Ctx, Serve]:
     source = shipit_file.read_text()
     ctx = Ctx(builder)
-    glb = sl.Globals.standard()
-    mod = sl.Module()
+    glb = sl.GlobalsBuilder.standard()
 
-    mod.add_callable("service", ctx.service)
-    mod.add_callable("getenv", ctx.getenv)
-    mod.add_callable("dep", ctx.dep)
-    mod.add_callable("serve", ctx.serve)
-    mod.add_callable("run", ctx.run)
-    mod.add_callable("mount", ctx.mount)
-    mod.add_callable("volume", ctx.volume)
-    mod.add_callable("workdir", ctx.workdir)
-    mod.add_callable("copy", ctx.copy)
-    mod.add_callable("path", ctx.path)
-    mod.add_callable("env", ctx.env)
-    mod.add_callable("use", ctx.use)
+    glb.set("service", ctx.service)
+    glb.set("getenv", ctx.getenv)
+    glb.set("dep", ctx.dep)
+    glb.set("serve", ctx.serve)
+    glb.set("run", ctx.run)
+    glb.set("mount", ctx.mount)
+    glb.set("volume", ctx.volume)
+    glb.set("workdir", ctx.workdir)
+    glb.set("copy", ctx.copy)
+    glb.set("path", ctx.path)
+    glb.set("env", ctx.env)
+    glb.set("use", ctx.use)
 
-    dialect = sl.Dialect.extended()
-    dialect.enable_f_strings = True
+    dialect = sl.Dialect(enable_keyword_only_arguments=True, enable_f_strings = True)
 
-    ast = sl.parse("shipit", source, dialect=dialect)
+    ast = sl.AstModule.parse("Shipit", source, dialect=dialect)
 
-    sl.eval(mod, ast, glb)
+    evaluator = sl.Evaluator()
+    evaluator.eval_module(ast, glb.build())
     if not ctx.serves:
         raise ValueError(f"No serve definition found in {shipit_file}")
     assert len(ctx.serves) <= 1, "Only one serve is allowed for now"
