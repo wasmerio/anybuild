@@ -215,7 +215,7 @@ class DockerBuilder:
             "HOME": "/root",
         }
 
-    def adapt_metadata(self, provider_metadata: Any) -> Any:
+    def prepare_metadata(self, provider_metadata: Any) -> Any:
         return provider_metadata
 
     def get_mount_path(self, name: str) -> Path:
@@ -534,7 +534,7 @@ class LocalBuilder:
     def get_serve_mount_path(self, name: str) -> Path:
         return self.get_mount_path(name)
 
-    def adapt_metadata(self, provider_metadata: Any) -> Any:
+    def prepare_metadata(self, provider_metadata: Any) -> Any:
         return provider_metadata
 
     def execute_step(self, step: Step, env: Dict[str, str]) -> None:
@@ -863,7 +863,7 @@ class WasmerBuilder:
         self.wasmer_token = token
         self.bin = bin or "wasmer"
 
-    def adapt_metadata(self, provider_metadata: Any) -> Any:
+    def prepare_metadata(self, provider_metadata: Any) -> Any:
         from shipit.providers.python import PythonMetadata
         if isinstance(provider_metadata, PythonMetadata):
             provider_metadata.python_extra_index_url = "https://pythonindex.wasix.org/simple"
@@ -1997,7 +1997,7 @@ def build(
     custom_commands = CustomCommands.from_path(path)
     provider_cls = load_provider(path, custom_commands)
     provider_metadata = load_provider_metadata(provider_cls, path, custom_commands)
-    provider_metadata = builder.adapt_metadata(provider_metadata)
+    provider_metadata = builder.prepare_metadata(provider_metadata)
     serve_port = serve_port or os.environ.get("PORT", "8080")
     ctx, serve = evaluate_shipit(shipit_file, builder, provider_metadata, port=serve_port)
     env = {
