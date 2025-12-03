@@ -9,7 +9,6 @@ import xingque as sl
 import typer
 from rich import box
 from rich.panel import Panel
-from rich.rule import Rule
 from rich.syntax import Syntax
 
 from shipit.generator import generate_shipit, load_provider, load_provider_metadata

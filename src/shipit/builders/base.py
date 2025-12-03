@@ -1,4 +1,3 @@
-from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, TYPE_CHECKING
