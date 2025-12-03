@@ -15,10 +15,12 @@ from .base import (
 )
 from .staticfile import StaticFileProvider, StaticFileMetadata
 from .python import PythonProvider, PythonMetadata
-from pydantic import BaseModel, ConfigDict
+from pydantic_settings import SettingsConfigDict
+
 
 class MkdocsMetadata(PythonMetadata, StaticFileMetadata):
-    model_config = ConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
+
     mkdocs_version: Optional[str] = None
 
 

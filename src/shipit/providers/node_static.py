@@ -19,6 +19,7 @@ from .base import (
     CustomCommands,
 )
 from .staticfile import StaticFileProvider, StaticFileMetadata
+from pydantic_settings import SettingsConfigDict
 
 
 class PackageManager(Enum):
@@ -142,6 +143,8 @@ class StaticGenerator(Enum):
 
 
 class NodeStaticMetadata(StaticFileMetadata):
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
+
     package_manager: Optional[PackageManager] = None
     extra_dependencies: Set[str] = Field(default_factory=set)
     static_generator: Optional[StaticGenerator] = None

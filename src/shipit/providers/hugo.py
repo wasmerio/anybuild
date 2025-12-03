@@ -5,10 +5,11 @@ from typing import Dict, Optional
 
 from .base import DetectResult, DependencySpec, Provider, _exists, ServiceSpec, VolumeSpec, CustomCommands, MountSpec
 from .staticfile import StaticFileProvider, StaticFileMetadata
-from pydantic import ConfigDict
+from pydantic_settings import SettingsConfigDict
+
 
 class HugoMetadata(StaticFileMetadata):
-    model_config = ConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     hugo_version: Optional[str] = "0.149.0"
 

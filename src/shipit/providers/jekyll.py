@@ -14,10 +14,10 @@ from .base import (
     CustomCommands,
 )
 from .staticfile import StaticFileProvider, StaticFileMetadata
-from pydantic import ConfigDict
+from pydantic_settings import SettingsConfigDict
 
 class JekyllMetadata(StaticFileMetadata):
-    model_config = ConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     ruby_version: Optional[str] = "3.4.7"
     jekyll_version: Optional[str] = "4.3.0"

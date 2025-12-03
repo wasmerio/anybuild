@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Dict, Optional, Set
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+from pydantic_settings import SettingsConfigDict
 
 from .base import (
     DetectResult,
@@ -41,7 +42,7 @@ class DatabaseType(Enum):
 
 
 class PythonMetadata(BaseModel):
-    model_config = ConfigDict(use_enum_values=True, extra="ignore")
+    model_config = SettingsConfigDict(use_enum_values=True, extra="ignore", env_prefix="SHIPIT_")
 
     framework: Optional[PythonFramework] = None
     server: Optional[PythonServer] = None

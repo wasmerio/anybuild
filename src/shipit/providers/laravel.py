@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Optional
-from pydantic import BaseModel, ConfigDict
 
 from .base import (
     DetectResult,
@@ -16,10 +15,11 @@ from .base import (
 )
 from .php import PhpMetadata, PhpProvider
 from .node_static import NodeStaticMetadata, NodeStaticProvider
+from pydantic_settings import SettingsConfigDict
 
 
 class LaravelMetadata(PhpMetadata, NodeStaticMetadata):
-    model_config = ConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
 
 class LaravelProvider(PhpProvider):

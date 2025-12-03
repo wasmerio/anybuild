@@ -14,11 +14,12 @@ from .base import (
     CustomCommands,
 )
 from .php import PhpMetadata, PhpProvider
-from pydantic import ConfigDict
+from pydantic_settings import SettingsConfigDict
 
 
 class WordPressMetadata(PhpMetadata):
-    model_config = ConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
+
     wp_cli_version: Optional[str] = None
 
 

@@ -15,12 +15,15 @@ from .base import (
     VolumeSpec,
     CustomCommands,
 )
+from pydantic_settings import SettingsConfigDict
 
 class PhpMetadata(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
+
     use_composer: bool = False
     php_version: Optional[str] = "8.3"
     php_architecture: Optional[Literal["64-bit", "32-bit"]] = "64-bit"
+
 
 class PhpProvider:
     def __init__(self, path: Path, metadata: PhpMetadata):

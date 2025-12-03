@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import Dict, Optional
 import json
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
+from pydantic_settings import SettingsConfigDict
 
 from .base import (
     DetectResult,
@@ -18,7 +19,7 @@ from .base import (
 )
 
 class StaticFileMetadata(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     sws_version: Optional[str] = "2.38.0"
     static_dir: Optional[str] = None
