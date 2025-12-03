@@ -196,9 +196,6 @@ class WasmerRunner:
         (prepare_dir / "prepare.sh").write_text(content)
         (prepare_dir / "prepare.sh").chmod(0o755)
 
-    def finalize_build(self, serve: Serve) -> None:
-        pass
-
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         prepare_dir = self.wasmer_dir_path / "prepare"
         self.run_serve_command(

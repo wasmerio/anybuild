@@ -92,9 +92,6 @@ class LocalRunner:
             console.print(manifest_panel, markup=False, highlight=True)
             command_path.chmod(0o755)
 
-    def finalize_build(self, serve: Serve) -> None:
-        pass
-
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         sh.Command(str(self.prepare_bash_script))(_out=write_stdout, _err=write_stderr)
 
