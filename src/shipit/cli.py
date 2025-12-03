@@ -169,23 +169,26 @@ class MapperItem(TypedDict):
     aliases: Dict[str, str]
 
 
-class Builder(Protocol):
+class BuildBackend(Protocol):
     def build(
         self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
     ) -> None: ...
+    def finalize_build(self, serve: Serve) -> None: ...
+    def get_build_mount_path(self, name: str) -> Path: ...
+    def get_artifact_mount_path(self, name: str) -> Path: ...
+    def get_runtime_path(self) -> Optional[str]: ...
+
+
+class Runner(Protocol):
+    def prepare_metadata(self, provider_metadata: Any) -> Any: ...
     def build_prepare(self, serve: Serve) -> None: ...
     def build_serve(self, serve: Serve) -> None: ...
-    def finalize_build(self, serve: Serve) -> None: ...
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None: ...
     def run_serve_command(self, command: str) -> None: ...
-    def run_command(
-        self, command: str, extra_args: Optional[List[str]] | None = None
-    ) -> Any: ...
-    def get_build_mount_path(self, name: str) -> Path: ...
     def get_serve_mount_path(self, name: str) -> Path: ...
 
 
-class DockerBuilder:
+class DockerBuildBackend:
     mise_mapper = {
         "php": {
             "source": "ubi:adwinying/php",
@@ -214,9 +217,7 @@ class DockerBuilder:
         self.env = {
             "HOME": "/root",
         }
-
-    def prepare_metadata(self, provider_metadata: Any) -> Any:
-        return provider_metadata
+        self.runtime_path: Optional[str] = None
 
     def get_mount_path(self, name: str) -> Path:
         if name == "app":
@@ -228,7 +229,7 @@ class DockerBuilder:
         path = Path("/") / self.get_mount_path(name)
         return path
 
-    def get_serve_mount_path(self, name: str) -> Path:
+    def get_artifact_mount_path(self, name: str) -> Path:
         return self.docker_out_path / self.get_mount_path(name)
 
     @property
@@ -291,34 +292,6 @@ class DockerBuilder:
         self.build_dockerfile(serve.name)
         console.print(Rule(characters="-", style="bright_black"))
         console.print(f"[bold]Build complete ✅[/bold]")
-
-    def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
-        image_name = self.docker_name_path.read_text()
-        docker_args: List[str] = [
-            "run",
-            "-p",
-            "80:80",
-            "--rm",
-        ]
-        # Attach volumes if present
-        # if serve.volumes:
-        #     for vol in serve.volumes:
-        #         docker_args += [
-        #             "--mount",
-        #             f"type=volume,source={vol.name},target={str(vol.serve_path)}",
-        #         ]
-        return sh.Command("docker")(
-            *docker_args,
-            image_name,
-            command,
-            *(extra_args or []),
-            _env={
-                "DOCKER_BUILDKIT": "1",
-                **os.environ,
-            },  # Pass the current environment variables to the Docker client
-            _out=write_stdout,
-            _err=write_stderr,
-        )
 
     def create_file(self, path: Path, content: str, mode: int = 0o755) -> Path:
         # docker_files = self.docker_path / "files" / path.name
@@ -466,8 +439,10 @@ RUN curl https://mise.run | sh
                     [f"{key}={value}" for key, value in step.variables.items()]
                 )
                 self.docker_file_contents += f"ENV {env_vars}\n"
+                env.update(step.variables)
             elif isinstance(step, PathStep):
                 self.docker_file_contents += f"ENV PATH={step.path}:$PATH\n"
+                env["PATH"] = f"{step.path}{os.pathsep}{env.get('PATH', '')}"
             elif isinstance(step, UseStep):
                 for dependency in step.dependencies:
                     self.add_dependency(dependency)
@@ -480,6 +455,8 @@ FROM scratch
                 f"COPY --from=build {mount.build_path} {mount.build_path}\n"
             )
 
+        self.runtime_path = env.get("PATH")
+
         self.docker_ignore_path.write_text("""
 .shipit
 Shipit
@@ -488,39 +465,17 @@ Shipit
     def get_path(self) -> Path:
         return Path("/")
 
-    def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
-        raise NotImplementedError
-
-    def build_serve(self, serve: Serve) -> None:
-        # DockerBuild doesn't support serving commands yet
-        pass
-        # serve_command_path = self.mkdir(Path("serve") / "bin")
-        # console.print(f"[bold]Serve Commands:[/bold]")
-        # for dep in serve.deps:
-        #     self.add_dependency(dep)
-
-        # for command in serve.commands:
-        #     console.print(f"* {command}")
-        #     command_path = serve_command_path / command
-        #     self.create_file(
-        #         command_path,
-        #         f"#!/bin/bash\ncd {serve.cwd}\n{serve.commands[command]}",
-        #         mode=0o755,
-        #     )
-
-    def run_serve_command(self, command: str) -> None:
-        path = self.shipit_docker_path / "serve" / "bin" / command
-        self.run_command(str(path))
+    def get_runtime_path(self) -> Optional[str]:
+        return self.runtime_path
 
 
-class LocalBuilder:
+class LocalBuildBackend:
     def __init__(self, src_dir: Path) -> None:
         self.src_dir = src_dir
         self.local_path = self.src_dir / ".shipit" / "local"
-        self.serve_bin_path = self.local_path / "serve" / "bin"
-        self.prepare_bash_script = self.local_path / "prepare" / "prepare.sh"
         self.build_path = self.local_path / "build"
         self.workdir = self.build_path
+        self.runtime_path: Optional[str] = None
 
     def get_mount_path(self, name: str) -> Path:
         if name == "app":
@@ -531,11 +486,8 @@ class LocalBuilder:
     def get_build_mount_path(self, name: str) -> Path:
         return self.get_mount_path(name)
 
-    def get_serve_mount_path(self, name: str) -> Path:
+    def get_artifact_mount_path(self, name: str) -> Path:
         return self.get_mount_path(name)
-
-    def prepare_metadata(self, provider_metadata: Any) -> Any:
-        return provider_metadata
 
     def execute_step(self, step: Step, env: Dict[str, str]) -> None:
         build_path = self.workdir
@@ -647,30 +599,31 @@ class LocalBuilder:
         if "PATH" in env:
             path = base_path / ".path"
             path.write_text(env["PATH"])  # type: ignore
+        self.runtime_path = env.get("PATH")
 
         console.print(Rule(characters="-", style="bright_black"))
         console.print(f"[bold]Build complete ✅[/bold]")
 
-    def mkdir(self, path: Path) -> Path:
-        path = self.get_path() / path
-        path.mkdir(parents=True, exist_ok=True)
-        return path.absolute()
+    def finalize_build(self, serve: Serve) -> None:
+        pass
 
-    def create_file(self, path: Path, content: str, mode: int = 0o755) -> Path:
-        path.write_text(content)
-        path.chmod(mode)
-        return path.absolute()
+    def get_runtime_path(self) -> Optional[str]:
+        return self.runtime_path
 
-    def run_command(self, command: str, extra_args: Optional[List[str]] = None) -> Any:
-        return sh.Command(command)(
-            *(extra_args or []),
-            _out=write_stdout,
-            _err=write_stderr,
-            _env=os.environ,
-        )
 
-    def get_path(self) -> Path:
-        return self.local_path
+class LocalRunner:
+    def __init__(self, build_backend: BuildBackend, src_dir: Path) -> None:
+        self.build_backend = build_backend
+        self.src_dir = src_dir
+        self.runner_path = self.src_dir / ".shipit" / "runner" / "local"
+        self.serve_bin_path = self.runner_path / "serve" / "bin"
+        self.prepare_bash_script = self.runner_path / "prepare" / "prepare.sh"
+
+    def prepare_metadata(self, provider_metadata: Any) -> Any:
+        return provider_metadata
+
+    def get_serve_mount_path(self, name: str) -> Path:
+        return self.build_backend.get_artifact_mount_path(name)
 
     def build_prepare(self, serve: Serve) -> None:
         self.prepare_bash_script.parent.mkdir(parents=True, exist_ok=True)
@@ -703,20 +656,12 @@ class LocalBuilder:
         self.prepare_bash_script.write_text(content)
         self.prepare_bash_script.chmod(0o755)
 
-    def finalize_build(self, serve: Serve) -> None:
-        pass
-
-    def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
-        sh.Command(f"{self.prepare_bash_script.absolute()}")(
-            _out=write_stdout, _err=write_stderr
-        )
-
     def build_serve(self, serve: Serve) -> None:
-        # Remember serve configuration for run-time
         console.print("\n[bold]Building serve[/bold]")
-        self.serve_bin_path.mkdir(parents=True, exist_ok=False)
-        path = self.get_path() / ".path"
-        path_text = path.read_text()
+        shutil.rmtree(self.serve_bin_path.parent, ignore_errors=True)
+        self.serve_bin_path.mkdir(parents=True, exist_ok=True)
+        runtime_path = self.build_backend.get_runtime_path() or ""
+        path_prefix = f"PATH={runtime_path}:$PATH " if runtime_path else ""
         console.print(f"[bold]Serve Commands:[/bold]")
         for command in serve.commands:
             console.print(f"* {command}")
@@ -724,8 +669,12 @@ class LocalBuilder:
             env_vars = ""
             if serve.env:
                 env_vars = " ".join([f"{k}={v}" for k, v in serve.env.items()])
-
-            content = f"#!/bin/bash\ncd {serve.cwd}\nPATH={path_text}:$PATH {env_vars} {serve.commands[command]}"
+            cmd_body = f"{path_prefix}{env_vars} {serve.commands[command]}".strip()
+            lines = ["#!/bin/bash"]
+            if serve.cwd:
+                lines.append(f"cd {serve.cwd}")
+            lines.append(cmd_body)
+            content = "\n".join(lines) + "\n"
             command_path.write_text(content)
             manifest_panel = Panel(
                 Syntax(
@@ -742,16 +691,16 @@ class LocalBuilder:
             console.print(manifest_panel, markup=False, highlight=True)
             command_path.chmod(0o755)
 
+    def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
+        sh.Command(str(self.prepare_bash_script))(_out=write_stdout, _err=write_stderr)
+
     def run_serve_command(self, command: str) -> None:
         console.print(f"\n[bold]Running {command} command[/bold]")
         command_path = self.serve_bin_path / command
         sh.Command(str(command_path))(_out=write_stdout, _err=write_stderr)
 
 
-class WasmerBuilder:
-    def get_build_mount_path(self, name: str) -> Path:
-        return self.inner_builder.get_build_mount_path(name)
-
+class WasmerRunner:
     def get_serve_mount_path(self, name: str) -> Path:
         if name == "app":
             return Path("/app")
@@ -849,15 +798,15 @@ class WasmerBuilder:
 
     def __init__(
         self,
-        inner_builder: Builder,
+        build_backend: BuildBackend,
         src_dir: Path,
         registry: Optional[str] = None,
         token: Optional[str] = None,
         bin: Optional[str] = None,
     ) -> None:
         self.src_dir = src_dir
-        self.inner_builder = inner_builder
-        # The path where we store the directory of the wasmer app in the inner builder
+        self.build_backend = build_backend
+        # The path where we store the directory of the Wasmer app inside the build backend output
         self.wasmer_dir_path = self.src_dir / ".shipit" / "wasmer"
         self.wasmer_registry = registry
         self.wasmer_token = token
@@ -870,11 +819,6 @@ class WasmerBuilder:
             provider_metadata.cross_platform = "wasix_wasm32"
             provider_metadata.precompile_python = True
         return provider_metadata
-
-    def build(
-        self, env: Dict[str, str], mounts: List[Mount], build: List[Step]
-    ) -> None:
-        return self.inner_builder.build(env, mounts, build)
 
     def build_prepare(self, serve: Serve) -> None:
         print("Building prepare")
@@ -926,10 +870,6 @@ class WasmerBuilder:
             content,
         )
         (prepare_dir / "prepare.sh").chmod(0o755)
-
-    def finalize_build(self, serve: Serve) -> None:
-        inner = cast(Any, self.inner_builder)
-        inner.finalize_build(serve)
 
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         prepare_dir = self.wasmer_dir_path / "prepare"
@@ -1002,12 +942,13 @@ class WasmerBuilder:
 
         fs = table()
         doc.add("fs", fs)
-        inner = cast(Any, self.inner_builder)
         if serve.mounts:
             for mount in serve.mounts:
                 fs.add(
                     str(mount.serve_path.absolute()),
-                    str(self.inner_builder.get_serve_mount_path(mount.name).absolute()),
+                    str(
+                        self.build_backend.get_artifact_mount_path(mount.name).absolute()
+                    ),
                 )
 
         doc.add(nl())
@@ -1042,7 +983,6 @@ class WasmerBuilder:
                 title = string("annotations.wasi", literal=False)
                 command.add(title, wasi_args)
 
-        inner = cast(Any, self.inner_builder)
         self.wasmer_dir_path.mkdir(parents=True, exist_ok=True)
 
         manifest = doc.as_string().replace(
@@ -1135,7 +1075,7 @@ class WasmerBuilder:
         console.print(app_yaml_panel, markup=False, highlight=True)
         (self.wasmer_dir_path / "app.yaml").write_text(app_yaml)
 
-        # self.inner_builder.build_serve(serve)
+        # self.build_backend.build_serve(serve)
 
     def run_serve_command(
         self, command: str, extra_args: Optional[List[str]] = None
@@ -1223,8 +1163,9 @@ class WasmerBuilder:
 
 
 class Ctx:
-    def __init__(self, builder: Builder) -> None:
-        self.builder = builder
+    def __init__(self, build_backend: BuildBackend, runner: Runner) -> None:
+        self.build_backend = build_backend
+        self.runner = runner
         self.packages: Dict[str, Package] = {}
         self.builds: List[Build] = []
         self.steps: List[Step] = []
@@ -1374,8 +1315,8 @@ class Ctx:
         return f"ref:mount:{len(self.mounts) - 1}"
 
     def mount(self, name: str) -> Optional[str]:
-        build_path = self.builder.get_build_mount_path(name)
-        serve_path = self.builder.get_serve_mount_path(name)
+        build_path = self.build_backend.get_build_mount_path(name)
+        serve_path = self.runner.get_serve_mount_path(name)
         mount = Mount(name, build_path, serve_path)
         ref = self.add_mount(mount)
         return {
@@ -1398,9 +1339,15 @@ class Ctx:
         }
 
 
-def evaluate_shipit(shipit_file: Path, builder: Builder, provider_metadata: dict, port: Optional[str] = None) -> Tuple[Ctx, Serve]:
+def evaluate_shipit(
+    shipit_file: Path,
+    build_backend: BuildBackend,
+    runner: Runner,
+    provider_metadata: dict,
+    port: Optional[str] = None,
+) -> Tuple[Ctx, Serve]:
     source = shipit_file.read_text()
-    ctx = Ctx(builder)
+    ctx = Ctx(build_backend, runner)
     glb = sl.GlobalsBuilder.standard()
 
     glb.set("PORT", port or "8080")
@@ -1754,22 +1701,33 @@ def serve(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
-    builder: Builder
     if docker or docker_client:
-        builder = DockerBuilder(path, docker_client)
+        build_backend: BuildBackend = DockerBuildBackend(path, docker_client)
     else:
-        builder = LocalBuilder(path)
-    if wasmer or wasmer_deploy or wasmer_deploy_config:
-        builder = WasmerBuilder(
-            builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
+        build_backend = LocalBuildBackend(path)
+
+    needs_wasmer = wasmer or wasmer_deploy or wasmer_deploy_config
+    if needs_wasmer:
+        runner: Runner = WasmerRunner(
+            build_backend,
+            path,
+            registry=wasmer_registry,
+            token=wasmer_token,
+            bin=wasmer_bin,
         )
+    else:
+        runner = LocalRunner(build_backend, path)
 
     if wasmer_deploy_config:
-        builder.deploy_config(wasmer_deploy_config)
+        if not isinstance(runner, WasmerRunner):
+            raise RuntimeError("--wasmer-deploy-config requires the Wasmer runner")
+        runner.deploy_config(wasmer_deploy_config)
     elif wasmer_deploy:
-        builder.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
+        if not isinstance(runner, WasmerRunner):
+            raise RuntimeError("--wasmer-deploy requires the Wasmer runner")
+        runner.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
     elif start:
-        builder.run_serve_command("start")
+        runner.run_serve_command("start")
 
 
 @app.command(name="plan")
@@ -1871,24 +1829,28 @@ def plan(
             use_provider=use_provider,
         )
 
-    custom_commands = CustomCommands.from_path(path)
-
     shipit_file = get_shipit_path(path, shipit_path)
 
-    builder: Builder
     if docker or docker_client:
-        builder = DockerBuilder(path, docker_client)
+        build_backend: BuildBackend = DockerBuildBackend(path, docker_client)
     else:
-        builder = LocalBuilder(path)
+        build_backend = LocalBuildBackend(path)
     if wasmer:
-        builder = WasmerBuilder(
-            builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
+        runner: Runner = WasmerRunner(
+            build_backend,
+            path,
+            registry=wasmer_registry,
+            token=wasmer_token,
+            bin=wasmer_bin,
         )
+    else:
+        runner = LocalRunner(build_backend, path)
 
     custom_commands = CustomCommands.from_path(path)
     provider_cls = load_provider(path, custom_commands)
     provider_metadata = load_provider_metadata(provider_cls, path, custom_commands)
-    ctx, serve = evaluate_shipit(shipit_file, builder, provider_metadata)
+    provider_metadata = runner.prepare_metadata(provider_metadata)
+    ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_metadata)
     metadata_commands: Dict[str, Optional[str]] = {
         "start": serve.commands.get("start"),
         "after_deploy": serve.commands.get("after_deploy"),
@@ -1984,22 +1946,29 @@ def build(
 
     shipit_file = get_shipit_path(path, shipit_path)
 
-    builder: Builder
     if docker or docker_client:
-        builder = DockerBuilder(path, docker_client)
+        build_backend: BuildBackend = DockerBuildBackend(path, docker_client)
     else:
-        builder = LocalBuilder(path)
+        build_backend = LocalBuildBackend(path)
     if wasmer:
-        builder = WasmerBuilder(
-            builder, path, registry=wasmer_registry, token=wasmer_token, bin=wasmer_bin
+        runner: Runner = WasmerRunner(
+            build_backend,
+            path,
+            registry=wasmer_registry,
+            token=wasmer_token,
+            bin=wasmer_bin,
         )
+    else:
+        runner = LocalRunner(build_backend, path)
 
     custom_commands = CustomCommands.from_path(path)
     provider_cls = load_provider(path, custom_commands)
     provider_metadata = load_provider_metadata(provider_cls, path, custom_commands)
-    provider_metadata = builder.prepare_metadata(provider_metadata)
+    provider_metadata = runner.prepare_metadata(provider_metadata)
     serve_port = serve_port or os.environ.get("PORT", "8080")
-    ctx, serve = evaluate_shipit(shipit_file, builder, provider_metadata, port=serve_port)
+    ctx, serve = evaluate_shipit(
+        shipit_file, build_backend, runner, provider_metadata, port=serve_port
+    )
     env = {
         "PATH": "",
         "COLORTERM": os.environ.get("COLORTERM", ""),
@@ -2041,14 +2010,14 @@ def build(
         serve.env.update(env_vars)
 
     # Build and serve
-    builder.build(env, serve.mounts, serve.build)
+    build_backend.build(env, serve.mounts or [], serve.build)
     if serve.prepare:
-        builder.build_prepare(serve)
-    builder.build_serve(serve)
+        runner.build_prepare(serve)
+    runner.build_serve(serve)
     # Finalizing the build
-    builder.finalize_build(serve)
+    build_backend.finalize_build(serve)
     if serve.prepare and not skip_prepare:
-        builder.prepare(env, serve.prepare)
+        runner.prepare(env, serve.prepare)
 
 
 def get_shipit_path(path: Path, shipit_path: Optional[Path] = None) -> Path:
