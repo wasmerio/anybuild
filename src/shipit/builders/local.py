@@ -137,7 +137,7 @@ class LocalBuildBackend:
         else:
             raise Exception(f"Unknown step type: {type(step)}")
 
-    def build(self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
+    def build(self, name: str, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
         console.print(f"\n[bold]Building... 🚀[/bold]")
         base_path = self.local_path
         shutil.rmtree(base_path, ignore_errors=True)
@@ -156,9 +156,6 @@ class LocalBuildBackend:
 
         console.print(Rule(characters="-", style="bright_black"))
         console.print(f"[bold]Build complete ✅[/bold]")
-
-    def finalize_build(self, serve: "Serve") -> None:
-        pass
 
     def get_runtime_path(self) -> Optional[str]:
         return self.runtime_path

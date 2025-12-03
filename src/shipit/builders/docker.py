@@ -44,7 +44,6 @@ class DockerBuildBackend:
     ) -> None:
         self.src_dir = src_dir
         self.assets_path = assets_path
-        self.docker_file_contents = ""
         self.docker_path = self.src_dir / ".shipit" / "docker"
         self.docker_path.mkdir(parents=True, exist_ok=True)
         self.docker_out_path = self.docker_path / "out"
@@ -75,15 +74,10 @@ class DockerBuildBackend:
     def is_depot(self) -> bool:
         return self.docker_client == "depot"
 
-    def mkdir(self, path: Path) -> Path:
-        path = self.shipit_docker_path / path
-        self.docker_file_contents += f"RUN mkdir -p {str(path.absolute())}\n"
-        return path.absolute()
-
-    def build_dockerfile(self, image_name: str) -> None:
-        self.docker_file_path.write_text(self.docker_file_contents)
+    def build_dockerfile(self, image_name: str, contents: str) -> None:
+        self.docker_file_path.write_text(contents)
         self.docker_name_path.write_text(image_name)
-        self.print_dockerfile()
+        self.print_dockerfile(contents)
         extra_args: List[str] = []
         sh.Command(self.docker_client)(
             "build",
@@ -103,28 +97,10 @@ class DockerBuildBackend:
             _err=write_stderr,
         )
 
-    def finalize_build(self, serve: "Serve") -> None:
-        console.print(f"\n[bold]Building Docker file[/bold]")
-        self.build_dockerfile(serve.name)
-        console.print(Rule(characters="-", style="bright_black"))
-        console.print(f"[bold]Build complete ✅[/bold]")
-
-    def create_file(self, path: Path, content: str, mode: int = 0o755) -> Path:
-        self.docker_file_contents += f"""
-RUN cat > {path.absolute()} <<'EOF'
-{content}
-EOF
-
-RUN chmod {oct(mode)[2:]} {path.absolute()}
-"""
-
-        return path.absolute()
-
-    def print_dockerfile(self) -> None:
-        docker_file = self.docker_path / "Dockerfile"
+    def print_dockerfile(self, contents: str) -> None:
         manifest_panel = Panel(
             Syntax(
-                docker_file.read_text(),
+                contents,
                 "dockerfile",
                 theme="monokai",
                 background_color="default",
@@ -136,39 +112,16 @@ RUN chmod {oct(mode)[2:]} {path.absolute()}
         )
         console.print(manifest_panel, markup=False, highlight=True)
 
-    def add_dependency(self, dependency: "Package"):
-        if dependency.name == "pie":
-            self.docker_file_contents += "RUN apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n"
-            self.docker_file_contents += "RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n"
-            return
-        elif dependency.name == "static-web-server":
-            if dependency.version:
-                self.docker_file_contents += (
-                    f"ENV SWS_INSTALL_VERSION={dependency.version}\n"
-                )
-            self.docker_file_contents += (
-                "RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n"
-            )
-            return
+    def build(self, name: str, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
+        docker_file_contents = ""
 
-        mapped_dependency = self.mise_mapper.get(dependency.name, {})
-        package_name = mapped_dependency.get("source", dependency.name)
-        if dependency.version:
-            self.docker_file_contents += (
-                f"RUN mise use --global {package_name}@{dependency.version}\n"
-            )
-        else:
-            self.docker_file_contents += f"RUN mise use --global {package_name}\n"
-        if mapped_dependency.get("postinstall"):
-            self.docker_file_contents += f"RUN {mapped_dependency.get('postinstall')}\n"
-
-    def build(self, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
         base_path = self.docker_path
         shutil.rmtree(base_path, ignore_errors=True)
         base_path.mkdir(parents=True, exist_ok=True)
-        self.docker_file_contents = "# syntax=docker/dockerfile:1.7-labs\n"
-        self.docker_file_contents += "FROM debian:trixie-slim AS build\n"
-        self.docker_file_contents += """
+
+        docker_file_contents = "# syntax=docker/dockerfile:1.7-labs\n"
+        docker_file_contents += "FROM debian:trixie-slim AS build\n"
+        docker_file_contents += """
 RUN apt-get update \\
     && apt-get -y --no-install-recommends install \\
         build-essential gcc make autoconf libtool bison \\
@@ -189,11 +142,11 @@ ENV PATH="/mise/shims:$PATH"
 RUN curl https://mise.run | sh
 """
         for mount in mounts:
-            self.docker_file_contents += f"RUN mkdir -p {mount.build_path.absolute()}\n"
+            docker_file_contents += f"RUN mkdir -p {mount.build_path.absolute()}\n"
 
         for step in steps:
             if isinstance(step, WorkdirStep):
-                self.docker_file_contents += f"WORKDIR {step.path.absolute()}\n"
+                docker_file_contents += f"WORKDIR {step.path.absolute()}\n"
             elif isinstance(step, RunStep):
                 if step.inputs:
                     pre = "\\\n  " + "".join(
@@ -204,10 +157,10 @@ RUN curl https://mise.run | sh
                     )
                 else:
                     pre = ""
-                self.docker_file_contents += f"RUN {pre}{step.command}\n"
+                docker_file_contents += f"RUN {pre}{step.command}\n"
             elif isinstance(step, CopyStep):
                 if step.is_download():
-                    self.docker_file_contents += (
+                    docker_file_contents += (
                         "ADD " + step.source + " " + step.target + "\n"
                     )
                 elif step.base == "assets":
@@ -216,7 +169,7 @@ RUN curl https://mise.run | sh
                         content_base64 = base64.b64encode(
                             asset_path.read_bytes()
                         ).decode("utf-8")
-                        self.docker_file_contents += (
+                        docker_file_contents += (
                             f"RUN echo '{content_base64}' | base64 -d > {step.target}\n"
                         )
                     elif asset_path.is_dir():
@@ -236,27 +189,50 @@ RUN curl https://mise.run | sh
                         )
                     else:
                         exclude = ""
-                    self.docker_file_contents += (
+                    docker_file_contents += (
                         f"COPY{exclude} {step.source} {step.target}\n"
                     )
             elif isinstance(step, EnvStep):
                 env_vars = " ".join(
                     [f"{key}={value}" for key, value in step.variables.items()]
                 )
-                self.docker_file_contents += f"ENV {env_vars}\n"
+                docker_file_contents += f"ENV {env_vars}\n"
                 env.update(step.variables)
             elif isinstance(step, PathStep):
-                self.docker_file_contents += f"ENV PATH={step.path}:$PATH\n"
+                docker_file_contents += f"ENV PATH={step.path}:$PATH\n"
                 env["PATH"] = f"{step.path}{os.pathsep}{env.get('PATH', '')}"
             elif isinstance(step, UseStep):
                 for dependency in step.dependencies:
-                    self.add_dependency(dependency)
+                    if dependency.name == "pie":
+                        docker_file_contents += "RUN apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n"
+                        docker_file_contents += "RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n"
+                        return
+                    elif dependency.name == "static-web-server":
+                        if dependency.version:
+                            docker_file_contents += (
+                                f"ENV SWS_INSTALL_VERSION={dependency.version}\n"
+                            )
+                        docker_file_contents += (
+                            "RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n"
+                        )
+                        return
 
-        self.docker_file_contents += """
+                    mapped_dependency = self.mise_mapper.get(dependency.name, {})
+                    package_name = mapped_dependency.get("source", dependency.name)
+                    if dependency.version:
+                        docker_file_contents += (
+                            f"RUN mise use --global {package_name}@{dependency.version}\n"
+                        )
+                    else:
+                        docker_file_contents += f"RUN mise use --global {package_name}\n"
+                    if mapped_dependency.get("postinstall"):
+                        docker_file_contents += f"RUN {mapped_dependency.get('postinstall')}\n"
+
+        docker_file_contents += """
 FROM scratch
 """
         for mount in mounts:
-            self.docker_file_contents += (
+            docker_file_contents += (
                 f"COPY --from=build {mount.build_path} {mount.build_path}\n"
             )
 
@@ -266,6 +242,10 @@ FROM scratch
 .shipit
 Shipit
 """)
+        console.print(f"\n[bold]Building Docker file[/bold]")
+        self.build_dockerfile(name, docker_file_contents)
+        console.print(Rule(characters="-", style="bright_black"))
+        console.print(f"[bold]Build complete ✅[/bold]")
 
     def get_runtime_path(self) -> Optional[str]:
         return self.runtime_path
