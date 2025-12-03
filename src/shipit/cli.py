@@ -177,7 +177,6 @@ class Builder(Protocol):
     def build_serve(self, serve: Serve) -> None: ...
     def finalize_build(self, serve: Serve) -> None: ...
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None: ...
-    def getenv(self, name: str) -> Optional[str]: ...
     def run_serve_command(self, command: str) -> None: ...
     def run_command(
         self, command: str, extra_args: Optional[List[str]] | None = None
@@ -235,9 +234,6 @@ class DockerBuilder:
     @property
     def is_depot(self) -> bool:
         return self.docker_client == "depot"
-
-    def getenv(self, name: str) -> Optional[str]:
-        return self.env.get(name) or os.environ.get(name)
 
     def mkdir(self, path: Path) -> Path:
         path = self.shipit_docker_path / path
@@ -673,9 +669,6 @@ class LocalBuilder:
             _env=os.environ,
         )
 
-    def getenv(self, name: str) -> Optional[str]:
-        return os.environ.get(name)
-
     def get_path(self) -> Path:
         return self.local_path
 
@@ -869,9 +862,6 @@ class WasmerBuilder:
         self.wasmer_registry = registry
         self.wasmer_token = token
         self.bin = bin or "wasmer"
-
-    def getenv(self, name: str) -> Optional[str]:
-        return self.inner_builder.getenv(name) or self.default_env.get(name)
 
     def adapt_metadata(self, provider_metadata: Any) -> Any:
         from shipit.providers.python import PythonMetadata
@@ -1242,7 +1232,6 @@ class Ctx:
         self.mounts: List[Mount] = []
         self.volumes: List[Volume] = []
         self.services: Dict[str, Service] = {}
-        self.getenv_variables: Set[str] = set()
 
     def add_package(self, package: Package) -> str:
         index = f"{package.name}@{package.version}" if package.version else package.name
@@ -1287,10 +1276,6 @@ class Ctx:
             return None
         self.steps.append(step)
         return f"ref:step:{len(self.steps) - 1}"
-
-    def getenv(self, name: str) -> Optional[str]:
-        self.getenv_variables.add(name)
-        return self.builder.getenv(name)
 
     def dep(
         self,
@@ -1421,7 +1406,6 @@ def evaluate_shipit(shipit_file: Path, builder: Builder, provider_metadata: dict
     glb.set("PORT", port or "8080")
     glb.set("metadata", provider_metadata)
     glb.set("service", ctx.service)
-    glb.set("getenv", ctx.getenv)
     glb.set("dep", ctx.dep)
     glb.set("serve", ctx.serve)
     glb.set("run", ctx.run)
@@ -1928,7 +1912,6 @@ def plan(
         "provider": provider_cls.name(),
         "metadata": json.loads(provider_metadata.model_dump_json(exclude_defaults=True)),
         "commands": metadata_commands,
-        "config": sorted(ctx.getenv_variables),
         "services": [
             {"name": svc.name, "provider": svc.provider}
             for svc in (serve.services or [])
