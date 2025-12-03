@@ -25,7 +25,8 @@ for popular frameworks.
 - `uv run shipit generate` – Generate the `Shipit` file.
 - `uv run shipit build` – Build the project defined by the `Shipit` file.
 - `uv run shipit serve` – Serve the built project.
-- `uv run python` – Run Python
+- `uv run python` – Run Python (always prefer this over calling `python`
+  directly).
 - `uv run pytest` – Run the test suite (if tests exist).
 
 ## Testing
