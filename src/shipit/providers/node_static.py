@@ -1,4 +1,3 @@
-
 import json
 import yaml
 from pathlib import Path
@@ -158,12 +157,16 @@ class NodeStaticMetadata(StaticFileMetadata):
 class NodeStaticProvider(StaticFileProvider):
     only_build: bool = False
 
-    def __init__(self, path: Path, metadata: NodeStaticMetadata, only_build: bool = False):
+    def __init__(
+        self, path: Path, metadata: NodeStaticMetadata, only_build: bool = False
+    ):
         super().__init__(path, metadata)
         self.only_build = only_build
 
     @classmethod
-    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> NodeStaticMetadata:
+    def load_metadata(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> NodeStaticMetadata:
         metadata = NodeStaticMetadata()
         if not metadata.package_manager:
             if (path / "package-lock.json").exists():
@@ -208,7 +211,9 @@ class NodeStaticProvider(StaticFileProvider):
                 metadata.static_generator = StaticGenerator.NUXT_V3
 
         if not metadata.build_command:
-            metadata.build_command = cls.get_build_command(package_json, metadata.package_manager, metadata.static_generator)
+            metadata.build_command = cls.get_build_command(
+                package_json, metadata.package_manager, metadata.static_generator
+            )
 
         if not metadata.static_dir:
             metadata.static_dir = metadata.static_generator.get_output_dir()
@@ -294,7 +299,12 @@ class NodeStaticProvider(StaticFileProvider):
         ]
 
     @classmethod
-    def get_build_command(cls, package_json: Optional[Dict[str, Any]], package_manager: PackageManager, static_generator: StaticGenerator) -> Optional[str]:
+    def get_build_command(
+        cls,
+        package_json: Optional[Dict[str, Any]],
+        package_manager: PackageManager,
+        static_generator: StaticGenerator,
+    ) -> Optional[str]:
         if package_json:
             scripts = package_json.get("scripts", {})
             generate_command = scripts.get("generate")
@@ -342,18 +352,29 @@ class NodeStaticProvider(StaticFileProvider):
         if has_lockfile:
             ignored_files.append(lockfile)
         all_ignored_files = ", ".join([f'"{file}"' for file in ignored_files])
-    
-        return filter(None, [
-            'workdir(temp["build"])' if not self.only_build else None,
-            f'copy("{lockfile}")' if has_lockfile else None,
-            'env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false")' if self.metadata.package_manager == PackageManager.NPM else None,
-            # 'run("npx corepack enable", inputs=["package.json"], group="install")',
-            f'run("{install_command}", inputs=[{inputs_install_files}], group="install")',
-            f'copy(".", ignore=[{all_ignored_files}])',
-            f'run("{self.metadata.build_command}", outputs=[metadata.static_dir], group="build")' if not self.only_build else None,
-            f'run("{self.metadata.build_command}", group="build")' if self.only_build else None,
-            f'run("cp -R {{}}/* {{}}/".format(metadata.static_dir, static_app["build"]))' if not self.only_build else None,
-        ])
+
+        return filter(
+            None,
+            [
+                'workdir(temp["build"])' if not self.only_build else None,
+                f'copy("{lockfile}")' if has_lockfile else None,
+                'env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false")'
+                if self.metadata.package_manager == PackageManager.NPM
+                else None,
+                # 'run("npx corepack enable", inputs=["package.json"], group="install")',
+                f'run("{install_command}", inputs=[{inputs_install_files}], group="install")',
+                f'copy(".", ignore=[{all_ignored_files}])',
+                f'run("{self.metadata.build_command}", outputs=[metadata.static_dir], group="build")'
+                if not self.only_build
+                else None,
+                f'run("{self.metadata.build_command}", group="build")'
+                if self.only_build
+                else None,
+                f'run("cp -R {{}}/* {{}}/".format(metadata.static_dir, static_app["build"]))'
+                if not self.only_build
+                else None,
+            ],
+        )
 
     def prepare_steps(self) -> Optional[list[str]]:
         return None

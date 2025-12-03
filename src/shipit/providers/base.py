@@ -1,4 +1,3 @@
-
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Literal
@@ -44,14 +43,16 @@ class CustomCommands:
                 except Exception:
                     pass
         return custom_commands
-    
+
 
 class Provider(Protocol):
     def __init__(self, path: Path): ...
     @classmethod
     def name(cls) -> str: ...
     @classmethod
-    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]: ...
+    def detect(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> Optional[DetectResult]: ...
     # Structured plan steps (no path args; use self.path)
     def serve_name(self) -> Optional[str]: ...
     def dependencies(self) -> list["DependencySpec"]: ...

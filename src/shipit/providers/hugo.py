@@ -1,8 +1,16 @@
-
 from pathlib import Path
 from typing import Dict, Optional
 
-from .base import DetectResult, DependencySpec, Provider, _exists, ServiceSpec, VolumeSpec, CustomCommands, MountSpec
+from .base import (
+    DetectResult,
+    DependencySpec,
+    Provider,
+    _exists,
+    ServiceSpec,
+    VolumeSpec,
+    CustomCommands,
+    MountSpec,
+)
 from .staticfile import StaticFileProvider, StaticFileMetadata
 from pydantic_settings import SettingsConfigDict
 
@@ -27,7 +35,9 @@ class HugoProvider(StaticFileProvider):
         return "hugo"
 
     @classmethod
-    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
+    def detect(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> Optional[DetectResult]:
         if _exists(path, "hugo.toml", "hugo.json", "hugo.yaml", "hugo.yml"):
             return DetectResult(cls.name(), 80)
         if (

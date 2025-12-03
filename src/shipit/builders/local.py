@@ -1,4 +1,3 @@
-
 import os
 import shlex
 import shutil
@@ -136,7 +135,9 @@ class LocalBuildBackend:
         else:
             raise Exception(f"Unknown step type: {type(step)}")
 
-    def build(self, name: str, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
+    def build(
+        self, name: str, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
+    ) -> None:
         console.print(f"\n[bold]Building... 🚀[/bold]")
         base_path = self.local_path
         shutil.rmtree(base_path, ignore_errors=True)

@@ -1,4 +1,3 @@
-
 import hashlib
 import json
 import os
@@ -273,7 +272,9 @@ class WasmerRunner:
                 fs.add(
                     str(mount.serve_path.absolute()),
                     str(
-                        self.build_backend.get_artifact_mount_path(mount.name).absolute()
+                        self.build_backend.get_artifact_mount_path(
+                            mount.name
+                        ).absolute()
                     ),
                 )
 

@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -28,7 +27,9 @@ class LaravelProvider(PhpProvider):
         self.metadata = metadata
 
     @classmethod
-    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> LaravelMetadata:
+    def load_metadata(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> LaravelMetadata:
         metadata = super().load_metadata(path, custom_commands)
         node_metadata = NodeStaticProvider.load_metadata(path, custom_commands)
         node_metadata.static_dir = None
@@ -40,7 +41,9 @@ class LaravelProvider(PhpProvider):
         return "laravel"
 
     @classmethod
-    def detect(cls, path: Path, custom_commands: CustomCommands) -> Optional[DetectResult]:
+    def detect(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> Optional[DetectResult]:
         if _exists(path, "artisan") and _exists(path, "composer.json"):
             return DetectResult(cls.name(), 95)
         return None
@@ -64,10 +67,10 @@ class LaravelProvider(PhpProvider):
 
     def build_steps(self) -> list[str]:
         return [
-            "env(COMPOSER_HOME=\"/tmp\", COMPOSER_FUND=\"0\")",
-            "workdir(app[\"build\"])",
+            'env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0")',
+            'workdir(app["build"])',
             # "run(\"pie install php/pdo_pgsql\")",
-            "run(\"composer install --optimize-autoloader --no-scripts --no-interaction\", inputs=[\"composer.json\", \"composer.lock\", \"artisan\"], outputs=[\".\"], group=\"install\")",
+            'run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install")',
             *self.node_provider.build_steps(),
         ]
 
@@ -95,6 +98,6 @@ class LaravelProvider(PhpProvider):
 
     def env(self) -> Optional[Dict[str, str]]:
         return None
-    
+
     def services(self) -> list[ServiceSpec]:
         return []

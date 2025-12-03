@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from typing import Dict, Optional
 import json
@@ -17,6 +16,7 @@ from .base import (
     CustomCommands,
 )
 
+
 class StaticFileMetadata(BaseModel):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
@@ -33,7 +33,9 @@ class StaticFileProvider:
         self.metadata = metadata
 
     @classmethod
-    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> StaticFileMetadata:
+    def load_metadata(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> StaticFileMetadata:
         if (path / "Staticfile").exists():
             config = None
             try:
@@ -43,7 +45,9 @@ class StaticFileProvider:
                 pass
 
             if config:
-                return StaticFileMetadata.model_validate({"static_dir": config.get("root")})
+                return StaticFileMetadata.model_validate(
+                    {"static_dir": config.get("root")}
+                )
         if _exists(path, "public/index.html") or _exists(path, "public/index.htm"):
             return StaticFileMetadata(static_dir="public")
         return StaticFileMetadata()
@@ -62,7 +66,9 @@ class StaticFileProvider:
         if _exists(path, "Staticfile"):
             return DetectResult(cls.name(), 50)
         if not is_python_php_js_project:
-            if _exists(path, "index.html", "index.htm", "public/index.htm", "public/index.html"):
+            if _exists(
+                path, "index.html", "index.htm", "public/index.htm", "public/index.html"
+            ):
                 return DetectResult(cls.name(), 10)
             return DetectResult(cls.name(), 10)
         if custom_commands.start and custom_commands.start.startswith(

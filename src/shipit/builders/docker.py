@@ -1,4 +1,3 @@
-
 import base64
 import json
 import os
@@ -111,7 +110,9 @@ class DockerBuildBackend:
         )
         console.print(manifest_panel, markup=False, highlight=True)
 
-    def build(self, name: str, env: Dict[str, str], mounts: List[Mount], steps: List[Step]) -> None:
+    def build(
+        self, name: str, env: Dict[str, str], mounts: List[Mount], steps: List[Step]
+    ) -> None:
         docker_file_contents = ""
 
         base_path = self.docker_path
@@ -211,21 +212,21 @@ RUN curl https://mise.run | sh
                             docker_file_contents += (
                                 f"ENV SWS_INSTALL_VERSION={dependency.version}\n"
                             )
-                        docker_file_contents += (
-                            "RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n"
-                        )
+                        docker_file_contents += "RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n"
                         return
 
                     mapped_dependency = self.mise_mapper.get(dependency.name, {})
                     package_name = mapped_dependency.get("source", dependency.name)
                     if dependency.version:
-                        docker_file_contents += (
-                            f"RUN mise use --global {package_name}@{dependency.version}\n"
-                        )
+                        docker_file_contents += f"RUN mise use --global {package_name}@{dependency.version}\n"
                     else:
-                        docker_file_contents += f"RUN mise use --global {package_name}\n"
+                        docker_file_contents += (
+                            f"RUN mise use --global {package_name}\n"
+                        )
                     if mapped_dependency.get("postinstall"):
-                        docker_file_contents += f"RUN {mapped_dependency.get('postinstall')}\n"
+                        docker_file_contents += (
+                            f"RUN {mapped_dependency.get('postinstall')}\n"
+                        )
 
         docker_file_contents += """
 FROM scratch

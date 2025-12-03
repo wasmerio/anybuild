@@ -243,7 +243,7 @@ def evaluate_shipit(
     glb.set("env", ctx.env)
     glb.set("use", ctx.use)
 
-    dialect = sl.Dialect(enable_keyword_only_arguments=True, enable_f_strings = True)
+    dialect = sl.Dialect(enable_keyword_only_arguments=True, enable_f_strings=True)
 
     ast = sl.AstModule.parse("Shipit", source, dialect=dialect)
 
@@ -264,6 +264,7 @@ def print_help() -> None:
         expand=False,
     )
     console.print(panel)
+
 
 @app.command(name="auto")
 def auto(
@@ -466,7 +467,7 @@ def generate(
 
     if out is None:
         out = path / "Shipit"
-    
+
     custom_commands = CustomCommands.from_path(path, use_procfile)
     if start_command:
         custom_commands.start = start_command
@@ -573,7 +574,9 @@ def serve(
         raise Exception(f"The path {path} does not exist")
 
     if docker or docker_client:
-        build_backend: BuildBackend = DockerBuildBackend(path, ASSETS_PATH, docker_client)
+        build_backend: BuildBackend = DockerBuildBackend(
+            path, ASSETS_PATH, docker_client
+        )
     else:
         build_backend = LocalBuildBackend(path, ASSETS_PATH)
 
@@ -703,7 +706,9 @@ def plan(
     shipit_file = get_shipit_path(path, shipit_path)
 
     if docker or docker_client:
-        build_backend: BuildBackend = DockerBuildBackend(path, ASSETS_PATH, docker_client)
+        build_backend: BuildBackend = DockerBuildBackend(
+            path, ASSETS_PATH, docker_client
+        )
     else:
         build_backend = LocalBuildBackend(path, ASSETS_PATH)
     if wasmer:
@@ -743,7 +748,9 @@ def plan(
     metadata_commands["build"] = metadata_build
     plan_output = {
         "provider": provider_cls.name(),
-        "metadata": json.loads(provider_metadata.model_dump_json(exclude_defaults=True)),
+        "metadata": json.loads(
+            provider_metadata.model_dump_json(exclude_defaults=True)
+        ),
         "commands": metadata_commands,
         "services": [
             {"name": svc.name, "provider": svc.provider}
@@ -818,7 +825,9 @@ def build(
     shipit_file = get_shipit_path(path, shipit_path)
 
     if docker or docker_client:
-        build_backend: BuildBackend = DockerBuildBackend(path, ASSETS_PATH, docker_client)
+        build_backend: BuildBackend = DockerBuildBackend(
+            path, ASSETS_PATH, docker_client
+        )
     else:
         build_backend = LocalBuildBackend(path, ASSETS_PATH)
     if wasmer:

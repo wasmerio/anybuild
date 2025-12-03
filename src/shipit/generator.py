@@ -75,16 +75,25 @@ def _emit_dependencies_declarations(
     return "\n".join(lines), serve_vars, build_vars
 
 
-def load_provider(path: Path, custom_commands: CustomCommands, use_provider: Optional[str] = None) -> type[Provider]:
+def load_provider(
+    path: Path, custom_commands: CustomCommands, use_provider: Optional[str] = None
+) -> type[Provider]:
     provider_cls = None
     if use_provider:
-        provider_cls = next((p for p in _providers() if p.name().lower() == use_provider.lower()), None)
+        provider_cls = next(
+            (p for p in _providers() if p.name().lower() == use_provider.lower()), None
+        )
     if not provider_cls:
         provider_cls = detect_provider(path, custom_commands)
     return provider_cls
 
 
-def load_provider_metadata(provider_cls: type[Provider], path: Path, custom_commands: CustomCommands, metadata: Optional[dict] = None) -> dict:
+def load_provider_metadata(
+    provider_cls: type[Provider],
+    path: Path,
+    custom_commands: CustomCommands,
+    metadata: Optional[dict] = None,
+) -> dict:
     provider_metadata = provider_cls.load_metadata(path, custom_commands)
     if metadata:
         provider_metadata = metadata.model_copy(deep=True, update=metadata)
@@ -159,7 +168,7 @@ def generate_shipit(path: Path, provider: Provider) -> str:
     if plan.volumes:
         for v in plan.volumes:
             out.append(f'{v.var_name or v.name} = volume("{v.name}", {v.serve_path})')
-        out.append("")    
+        out.append("")
 
     if plan.services:
         for s in plan.services:

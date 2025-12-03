@@ -2,7 +2,7 @@
 # MIT License
 import re
 
-PROCFILE_LINE = re.compile(r'^([A-Za-z0-9_-]+):\s*(.+)$')
+PROCFILE_LINE = re.compile(r"^([A-Za-z0-9_-]+):\s*(.+)$")
 
 
 class Procfile(object):
@@ -21,10 +21,11 @@ class Procfile(object):
         return p
 
     def add_process(self, name, command):
-        assert name not in self.processes, \
+        assert name not in self.processes, (
             "process names must be unique within a Procfile"
+        )
         self.processes[name] = command
-    
+
     def get_start_command(self):
         if "web" in self.processes:
             return self.processes["web"]

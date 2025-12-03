@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -15,6 +14,7 @@ from .base import (
 from .staticfile import StaticFileProvider, StaticFileMetadata
 from pydantic_settings import SettingsConfigDict
 
+
 class JekyllMetadata(StaticFileMetadata):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
@@ -28,7 +28,9 @@ class JekyllProvider(StaticFileProvider):
         self.metadata = metadata
 
     @classmethod
-    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> JekyllMetadata:
+    def load_metadata(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> JekyllMetadata:
         metadata = super().load_metadata(path, custom_commands)
         return JekyllMetadata(**metadata.model_dump())
 
@@ -77,7 +79,7 @@ class JekyllProvider(StaticFileProvider):
         else:
             install_commands = [
                 'run("bundle init", group="build")',
-                'run("bundle add jekyll -v {}".format(metadata.jekyll_version), group="build")'
+                'run("bundle add jekyll -v {}".format(metadata.jekyll_version), group="build")',
             ]
         return [
             'workdir(temp["build"])',

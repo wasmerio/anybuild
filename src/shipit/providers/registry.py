@@ -1,4 +1,3 @@
-
 from .base import Provider
 from .hugo import HugoProvider
 from .laravel import LaravelProvider

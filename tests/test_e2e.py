@@ -178,7 +178,7 @@ class E2ECase(NamedTuple):
         BuildMode.Local,
         BuildMode.Wasmer,
         BuildMode.WasmerAndDocker,
-    ]
+    ],
 )
 async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     # Skip if `uv` is not available in PATH
@@ -214,15 +214,13 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
 
     # Start process in a new session/process group to simplify termination.
     start_new_session = os.name != "nt"
-    creationflags = (
-        subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-    )
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
 
     env = os.environ.copy()
     if case.use_random_port:
         port = get_free_port()
     else:
-        port = 8080 # This is the default port if not specified
+        port = 8080  # This is the default port if not specified
 
     cmd.append(f"--serve-port={port}")
 
@@ -243,7 +241,7 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     async def reader(label: str, stream: asyncio.StreamReader) -> None:
         async for line in stream:
             line = line.decode("utf-8", errors="replace")
-            print(f"[{label}] {line}", end='')
+            print(f"[{label}] {line}", end="")
             output_lines.append(f"[{label}] {line}")
             if (not found_build.is_set()) and (build_phrase in line):
                 found_build.set()

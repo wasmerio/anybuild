@@ -25,9 +25,11 @@ form_html = """
 </html>
 """
 
+
 @app.get("/", response_class=HTMLResponse)
 async def read_form():
     return form_html
+
 
 @app.get("/process")
 async def process_image(

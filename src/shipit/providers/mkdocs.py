@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -29,8 +28,12 @@ class MkdocsProvider(StaticFileProvider):
         self.python_provider = PythonProvider(path, metadata, only_build=True)
 
     @classmethod
-    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> MkdocsMetadata:
-        python_metadata = PythonProvider.load_metadata(path, custom_commands, must_have_deps={"mkdocs"})
+    def load_metadata(
+        cls, path: Path, custom_commands: CustomCommands
+    ) -> MkdocsMetadata:
+        python_metadata = PythonProvider.load_metadata(
+            path, custom_commands, must_have_deps={"mkdocs"}
+        )
         staticfile_metadata = StaticFileProvider.load_metadata(path, custom_commands)
         metadata = MkdocsMetadata(
             **python_metadata.model_dump(),

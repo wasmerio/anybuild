@@ -101,7 +101,10 @@ async def index() -> HTMLResponse:
 
 
 @app.get("/process", response_class=HTMLResponse)
-async def process(url: str = Query(..., description="Video URL"), time: int = Query(1, description="Time in seconds")) -> HTMLResponse:
+async def process(
+    url: str = Query(..., description="Video URL"),
+    time: int = Query(1, description="Time in seconds"),
+) -> HTMLResponse:
     # Download video to a temp file
     try:
         resp = requests.get(url, stream=True, timeout=30)
@@ -119,18 +122,20 @@ async def process(url: str = Query(..., description="Video URL"), time: int = Qu
     # Prepare output image path
     out_path = OUTPUT_DIR / f"{uuid.uuid4().hex}.jpg"
 
-
     # Use ffmpeg-python to seek to 1 second and write 1 frame
     try:
         (
-            ffmpeg
-            .input(str(temp_path), ss=time)
-            .output(str(out_path), vframes=1, format='image2', vcodec='mjpeg')
+            ffmpeg.input(str(temp_path), ss=time)
+            .output(str(out_path), vframes=1, format="image2", vcodec="mjpeg")
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )
     except ffmpeg.Error as e:
-        err = e.stderr.decode(errors="ignore") if isinstance(e.stderr, (bytes, bytearray)) else str(e)
+        err = (
+            e.stderr.decode(errors="ignore")
+            if isinstance(e.stderr, (bytes, bytearray))
+            else str(e)
+        )
         try:
             temp_path.unlink(missing_ok=True)
         finally:
@@ -148,11 +153,16 @@ async def process(url: str = Query(..., description="Video URL"), time: int = Qu
             img_bytes = f.read()
         image_b64 = base64.b64encode(img_bytes).decode("ascii")
     except Exception:
-        raise HTTPException(status_code=500, detail=f"Failed to read image (did the video has less than {time} seconds?)")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read image (did the video has less than {time} seconds?)",
+        )
     finally:
         try:
             out_path.unlink(missing_ok=True)
         except Exception:
             pass
 
-    return HTMLResponse(RESULT_HTML.replace("{time}", str(time)).replace("{image_b64}", image_b64))
+    return HTMLResponse(
+        RESULT_HTML.replace("{time}", str(time)).replace("{image_b64}", image_b64)
+    )
