@@ -181,7 +181,6 @@ class NodeStaticConfig(StaticFileConfig):
     package_manager: Optional[PackageManager] = None
     extra_dependencies: Set[str] = Field(default_factory=set)
     static_generator: Optional[StaticGenerator] = None
-    build_command: Optional[str] = None
     node_version: Optional[str] = "22"
     npm_version: Optional[str] = None
     pnpm_version: Optional[str] = None
@@ -245,8 +244,8 @@ class NodeStaticProvider(StaticFileProvider):
             elif cls.has_dependency(package_json, "nuxt"):
                 config.static_generator = StaticGenerator.NUXT_V3
 
-        if not config.build_command:
-            config.build_command = cls.get_build_command(
+        if not config.commands.build:
+            config.commands.build = cls.get_build_command(
                 package_json, config.package_manager, config.static_generator
             )
 
@@ -397,10 +396,10 @@ class NodeStaticProvider(StaticFileProvider):
                 # 'run("npx corepack enable", inputs=["package.json"], group="install")',
                 f'run("{install_command}", inputs=[{inputs_install_files}], group="install")',
                 f'copy(".", ignore=[{all_ignored_files}])',
-                f'run("{self.config.build_command}", outputs=[config.static_dir], group="build")'
+                f'run("{self.config.commands.build}", outputs=[config.static_dir], group="build")'
                 if not self.only_build
                 else None,
-                f'run("{self.config.build_command}", group="build")'
+                f'run("{self.config.commands.build}", group="build")'
                 if self.only_build
                 else None,
                 f'run("cp -R {{}}/* {{}}/".format(config.static_dir, static_app.path))'

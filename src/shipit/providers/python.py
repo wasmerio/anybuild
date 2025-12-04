@@ -57,9 +57,8 @@ class PythonConfig(Config):
     python_version: Optional[str] = "3.13"
     uv_version: Optional[str] = "0.8.15"
     precompile_python: bool = True
-    cross_platform: bool = False
+    cross_platform: Optional[str] = None
     python_extra_index_url: Optional[str] = None
-    start_command: Optional[str] = None
     pandoc_version: Optional[str] = None
     ffmpeg_version: Optional[str] = None
 

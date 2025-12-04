@@ -775,10 +775,6 @@ def plan(
     provider_config = load_provider_config(provider_cls, path, base_config)
     provider_config = runner.prepare_config(provider_config)
     ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
-    config_commands: Dict[str, Optional[str]] = {
-        "start": serve.commands.get("start"),
-        "after_deploy": serve.commands.get("after_deploy"),
-    }
 
     def _collect_group_commands(group: str) -> Optional[str]:
         commands = [
@@ -790,16 +786,23 @@ def plan(
             return None
         return " && ".join(commands)
 
-    config_install = _collect_group_commands("install")
-    config_build = _collect_group_commands("build")
-    config_commands["install"] = config_install
-    config_commands["build"] = config_build
+    start_command = serve.commands.get("start")
+    after_deploy_command = serve.commands.get("after_deploy")
+    install_command = _collect_group_commands("install")
+    build_command = _collect_group_commands("build")
+    if start_command:
+        provider_config.commands.start = start_command
+    if after_deploy_command:
+        provider_config.commands.after_deploy = after_deploy_command
+    if install_command:
+        provider_config.commands.install = install_command
+    if build_command:
+        provider_config.commands.build = build_command
     plan_output = {
         "provider": provider_cls.name(),
         "config": json.loads(
             provider_config.model_dump_json(exclude_defaults=True)
         ),
-        "commands": config_commands,
         "services": [
             {"name": svc.name, "provider": svc.provider}
             for svc in (serve.services or [])
