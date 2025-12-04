@@ -10,36 +10,36 @@ from .base import (
     ServiceSpec,
     VolumeSpec,
     CustomCommands,
-    Metadata,
+    Config,
 )
-from .staticfile import StaticFileProvider, StaticFileMetadata
-from .python import PythonProvider, PythonMetadata
+from .staticfile import StaticFileProvider, StaticFileConfig
+from .python import PythonProvider, PythonConfig
 from pydantic_settings import SettingsConfigDict
 
 
-class MkdocsMetadata(PythonMetadata, StaticFileMetadata):
+class MkdocsConfig(PythonConfig, StaticFileConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     mkdocs_version: Optional[str] = None
 
 
 class MkdocsProvider(StaticFileProvider):
-    def __init__(self, path: Path, metadata: MkdocsMetadata):
+    def __init__(self, path: Path, config: MkdocsConfig):
         self.path = path
-        self.python_provider = PythonProvider(path, metadata, only_build=True)
+        self.python_provider = PythonProvider(path, config, only_build=True)
 
     @classmethod
-    def load_metadata(cls, path: Path, base_metadata: Metadata) -> MkdocsMetadata:
-        python_metadata = PythonProvider.load_metadata(
-            path, base_metadata, must_have_deps={"mkdocs"}
+    def load_config(cls, path: Path, base_config: Config) -> MkdocsConfig:
+        python_config = PythonProvider.load_config(
+            path, base_config, must_have_deps={"mkdocs"}
         )
-        staticfile_metadata = StaticFileProvider.load_metadata(path, base_metadata)
+        staticfile_config = StaticFileProvider.load_config(path, base_config)
 
-        return MkdocsMetadata(
+        return MkdocsConfig(
             **(
-                python_metadata.model_dump()
-                | staticfile_metadata.model_dump()
-                | base_metadata.model_dump()
+                python_config.model_dump()
+                | staticfile_config.model_dump()
+                | base_config.model_dump()
             )
         )
 
@@ -48,10 +48,10 @@ class MkdocsProvider(StaticFileProvider):
         return "mkdocs"
 
     @classmethod
-    def detect(cls, path: Path, metadata: Metadata) -> Optional[DetectResult]:
+    def detect(cls, path: Path, config: Config) -> Optional[DetectResult]:
         if _exists(path, "mkdocs.yml", "mkdocs.yaml"):
             return DetectResult(cls.name(), 85)
-        if metadata.commands.build and metadata.commands.build.startswith("mkdocs "):
+        if config.commands.build and config.commands.build.startswith("mkdocs "):
             return DetectResult(cls.name(), 85)
         return None
 

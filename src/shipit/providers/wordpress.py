@@ -9,13 +9,13 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    Metadata,
+    Config,
 )
-from .php import PhpMetadata, PhpProvider
+from .php import PhpConfig, PhpProvider
 from pydantic_settings import SettingsConfigDict
 
 
-class WordPressMetadata(PhpMetadata):
+class WordPressConfig(PhpConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     wp_cli_version: Optional[str] = None
@@ -27,15 +27,15 @@ class WordPressProvider(PhpProvider):
         return "wordpress"
 
     @classmethod
-    def load_metadata(
-        cls, path: Path, metadata: Metadata
-    ) -> WordPressMetadata:
-        php_metadata = super().load_metadata(path, metadata)
-        return WordPressMetadata(**php_metadata.model_dump())
+    def load_config(
+        cls, path: Path, config: Config
+    ) -> WordPressConfig:
+        php_config = super().load_config(path, config)
+        return WordPressConfig(**php_config.model_dump())
 
     @classmethod
     def detect(
-        cls, path: Path, metadata: Metadata
+        cls, path: Path, config: Config
     ) -> Optional[DetectResult]:
         if (
             _exists(path, "wp-content")
@@ -56,7 +56,7 @@ class WordPressProvider(PhpProvider):
 
     def declarations(self) -> Optional[str]:
         return (super().declarations() or "") + (
-            "wp_cli_version = metadata.wp_cli_version\n"
+            "wp_cli_version = config.wp_cli_version\n"
             'wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar" if wp_cli_version else "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"\n'
         )
 

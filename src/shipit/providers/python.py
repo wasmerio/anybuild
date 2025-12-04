@@ -14,7 +14,7 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    Metadata,
+    Config,
 )
 
 
@@ -39,7 +39,7 @@ class DatabaseType(Enum):
     PostgreSQL = "postgresql"
 
 
-class PythonMetadata(Metadata):
+class PythonConfig(Config):
     model_config = SettingsConfigDict(
         use_enum_values=True, extra="ignore", env_prefix="SHIPIT_"
     )
@@ -70,31 +70,31 @@ class PythonProvider:
     def __init__(
         self,
         path: Path,
-        metadata: PythonMetadata,
+        config: PythonConfig,
         only_build: bool = False,
     ):
         self.path = path
-        self.metadata = metadata
+        self.config = config
         self.only_build = only_build
 
     @classmethod
-    def load_metadata(
+    def load_config(
         cls,
         path: Path,
-        base_metadata: Metadata,
+        base_config: Config,
         must_have_deps: Optional[Set[str]] = None,
-    ) -> PythonMetadata:
-        metadata = PythonMetadata(**base_metadata.model_dump())
+    ) -> PythonConfig:
+        config = PythonConfig(**base_config.model_dump())
 
-        if not metadata.main_file:
-            metadata.main_file = cls.detect_main_file(path)
+        if not config.main_file:
+            config.main_file = cls.detect_main_file(path)
 
-        if not metadata.python_version:
+        if not config.python_version:
             if _exists(path, ".python-version"):
                 python_version = (path / ".python-version").read_text().strip()
             else:
                 python_version = "3.13"
-            metadata.python_version = python_version
+            config.python_version = python_version
 
         pg_deps = {
             "asyncpg",
@@ -135,9 +135,9 @@ class PythonProvider:
         )
 
         if "file://" in found_deps:
-            metadata.install_requires_all_files = True
+            config.install_requires_all_files = True
 
-        if not metadata.server:
+        if not config.server:
             # ASGI/WSGI Server
             if "uvicorn" in found_deps:
                 server = PythonServer.Uvicorn
@@ -149,14 +149,14 @@ class PythonProvider:
                 server = PythonServer.Daphne
             else:
                 server = None
-            metadata.server = server
+            config.server = server
 
         if "ffmpeg" in found_deps:
-            metadata.uses_ffmpeg = True
+            config.uses_ffmpeg = True
         if "pandoc" in found_deps:
-            metadata.uses_pandoc = True
+            config.uses_pandoc = True
 
-        if not metadata.framework:
+        if not config.framework:
             # Set framework
             if _exists(path, "manage.py") and ("django" in found_deps):
                 framework = PythonFramework.Django
@@ -172,23 +172,23 @@ class PythonProvider:
                 framework = PythonFramework.FastHTML
             else:
                 framework = None
-            metadata.framework = framework
+            config.framework = framework
 
-        if not metadata.server and metadata.framework:
-            if metadata.framework == PythonFramework.Django:
-                metadata.server = PythonServer.Uvicorn
-            elif metadata.framework == PythonFramework.FastAPI:
-                metadata.server = PythonServer.Uvicorn
-            elif metadata.framework == PythonFramework.Flask:
-                metadata.server = PythonServer.Uvicorn
-            elif metadata.framework == PythonFramework.FastHTML:
-                metadata.server = PythonServer.Uvicorn
+        if not config.server and config.framework:
+            if config.framework == PythonFramework.Django:
+                config.server = PythonServer.Uvicorn
+            elif config.framework == PythonFramework.FastAPI:
+                config.server = PythonServer.Uvicorn
+            elif config.framework == PythonFramework.Flask:
+                config.server = PythonServer.Uvicorn
+            elif config.framework == PythonFramework.FastHTML:
+                config.server = PythonServer.Uvicorn
 
-            if metadata.server == PythonServer.Uvicorn:
+            if config.server == PythonServer.Uvicorn:
                 must_have_deps.add("uvicorn")
 
-        if not metadata.asgi_application and not metadata.wsgi_application:
-            if metadata.framework == PythonFramework.Django:
+        if not config.asgi_application and not config.wsgi_application:
+            if config.framework == PythonFramework.Django:
                 # Find the settings.py file using glob
                 try:
                     settings_file = next(path.glob("**/settings.py"))
@@ -200,7 +200,7 @@ class PythonProvider:
                         settings_file.read_text(),
                     )
                     if asgi_match:
-                        metadata.asgi_application = format_app_import(
+                        config.asgi_application = format_app_import(
                             asgi_match.group(1)
                         )
                     else:
@@ -209,39 +209,39 @@ class PythonProvider:
                             settings_file.read_text(),
                         )
                         if wsgi_match:
-                            metadata.wsgi_application = format_app_import(
+                            config.wsgi_application = format_app_import(
                                 wsgi_match.group(1)
                             )
 
-            python_path = file_to_python_path(metadata.main_file)
-            if metadata.framework == PythonFramework.FastAPI:
-                metadata.asgi_application = python_path
-            elif metadata.framework == PythonFramework.Flask:
-                metadata.wsgi_application = python_path
-            elif metadata.framework == PythonFramework.MCP:
-                metadata.asgi_application = python_path
-            elif metadata.framework == PythonFramework.FastHTML:
-                metadata.asgi_application = python_path
+            python_path = file_to_python_path(config.main_file)
+            if config.framework == PythonFramework.FastAPI:
+                config.asgi_application = python_path
+            elif config.framework == PythonFramework.Flask:
+                config.wsgi_application = python_path
+            elif config.framework == PythonFramework.MCP:
+                config.asgi_application = python_path
+            elif config.framework == PythonFramework.FastHTML:
+                config.asgi_application = python_path
 
-        is_uvicorn_start = metadata.commands.start and metadata.commands.start.startswith(
+        is_uvicorn_start = config.commands.start and config.commands.start.startswith(
             "uvicorn "
         )
-        framework_should_use_uvicorn = metadata.framework in [
+        framework_should_use_uvicorn = config.framework in [
             PythonFramework.Django,
             PythonFramework.FastAPI,
             PythonFramework.Flask,
         ]
-        if is_uvicorn_start or (framework_should_use_uvicorn and not metadata.server):
+        if is_uvicorn_start or (framework_should_use_uvicorn and not config.server):
             must_have_deps.add("uvicorn")
-            metadata.server = PythonServer.Uvicorn
-        if metadata.framework == PythonFramework.MCP:
+            config.server = PythonServer.Uvicorn
+        if config.framework == PythonFramework.MCP:
             must_have_deps.add("mcp[cli]")
 
         for dep in must_have_deps:
             if dep not in found_deps:
-                metadata.extra_dependencies.add(dep)
+                config.extra_dependencies.add(dep)
 
-        if not metadata.database:
+        if not config.database:
             # Database
             if mysql_deps & found_deps:
                 database = DatabaseType.MySQL
@@ -249,9 +249,9 @@ class PythonProvider:
                 database = DatabaseType.PostgreSQL
             else:
                 database = None
-            metadata.database = database
+            config.database = database
 
-        return metadata
+        return config
 
     @classmethod
     def check_deps(cls, path: Path, *deps: str) -> Set[str]:
@@ -277,18 +277,18 @@ class PythonProvider:
 
     @classmethod
     def detect(
-        cls, path: Path, metadata: Metadata
+        cls, path: Path, config: Config
     ) -> Optional[DetectResult]:
         if _exists(path, "pyproject.toml", "requirements.txt"):
             if _exists(path, "manage.py"):
                 return DetectResult(cls.name(), 70)
             return DetectResult(cls.name(), 50)
-        if metadata.commands.start:
+        if config.commands.start:
             if (
-                metadata.commands.start.startswith("python ")
-                or metadata.commands.start.startswith("uv ")
-                or metadata.commands.start.startswith("uvicorn ")
-                or metadata.commands.start.startswith("gunicorn ")
+                config.commands.start.startswith("python ")
+                or config.commands.start.startswith("uv ")
+                or config.commands.start.startswith("uvicorn ")
+                or config.commands.start.startswith("gunicorn ")
             ):
                 return DetectResult(cls.name(), 80)
         if cls.detect_main_file(path):
@@ -302,30 +302,30 @@ class PythonProvider:
         deps = [
             DependencySpec(
                 "python",
-                var_name="metadata.python_version",
+                var_name="config.python_version",
                 use_in_build=True,
                 use_in_serve=True,
             ),
             DependencySpec(
                 "uv",
-                var_name="metadata.uv_version",
+                var_name="config.uv_version",
                 use_in_build=True,
             ),
         ]
-        if self.metadata.uses_pandoc:
+        if self.config.uses_pandoc:
             deps.append(
                 DependencySpec(
                     "pandoc",
-                    var_name="metadata.pandoc_version",
+                    var_name="config.pandoc_version",
                     use_in_build=False,
                     use_in_serve=True,
                 )
             )
-        if self.metadata.uses_ffmpeg:
+        if self.config.uses_ffmpeg:
             deps.append(
                 DependencySpec(
                     "ffmpeg",
-                    var_name="metadata.ffmpeg_version",
+                    var_name="config.ffmpeg_version",
                     use_in_build=False,
                     use_in_serve=True,
                 )
@@ -335,15 +335,15 @@ class PythonProvider:
     def declarations(self) -> Optional[str]:
         if self.only_build:
             return (
-                "python_version = metadata.python_version\n"
-                "cross_platform = metadata.cross_platform\n"
+                "python_version = config.python_version\n"
+                "cross_platform = config.cross_platform\n"
                 "venv = local_venv\n"
             )
         return (
-            "python_version = metadata.python_version\n"
-            "cross_platform = metadata.cross_platform\n"
-            "python_extra_index_url = metadata.python_extra_index_url\n"
-            "precompile_python = metadata.precompile_python\n"
+            "python_version = config.python_version\n"
+            "cross_platform = config.cross_platform\n"
+            "python_extra_index_url = config.python_extra_index_url\n"
+            "precompile_python = config.precompile_python\n"
             'python_cross_packages_path = venv.path + f"/lib/python{python_version}/site-packages"\n'
             'python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv.serve_path, python_version)\n'
             'app_serve_path = app.serve_path\n'
@@ -355,7 +355,7 @@ class PythonProvider:
         else:
             steps = ['workdir(temp.path)']
 
-        extra_deps = ", ".join([f"{dep}" for dep in self.metadata.extra_dependencies])
+        extra_deps = ", ".join([f"{dep}" for dep in self.config.extra_dependencies])
         has_requirements = _exists(self.path, "requirements.txt")
         if _exists(self.path, "pyproject.toml"):
             input_files = ["pyproject.toml"]
@@ -377,10 +377,10 @@ class PythonProvider:
             inputs = ", ".join([f'"{input}"' for input in input_files])
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path, UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}")',
-                'copy(".", ".")' if self.metadata.install_requires_all_files else None,
+                'copy(".", ".")' if self.config.install_requires_all_files else None,
                 f'run(f"uv sync{extra_args}", inputs=[{inputs}], group="install")',
                 'copy("pyproject.toml", "pyproject.toml")'
-                if not self.metadata.install_requires_all_files
+                if not self.config.install_requires_all_files
                 else None,
                 f'run("uv add {extra_deps}", group="install")' if extra_deps else None,
             ]
@@ -395,7 +395,7 @@ class PythonProvider:
                 'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path)',
                 'run(f"uv init", inputs=[], outputs=["uv.lock"], group="install")',
                 'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
-                if self.metadata.install_requires_all_files
+                if self.config.install_requires_all_files
                 else None,
             ]
             if has_requirements:
@@ -416,15 +416,15 @@ class PythonProvider:
         steps += [
             'path((local_venv.path if cross_platform else venv.path) + "/bin")',
             'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
-            if not self.metadata.install_requires_all_files
+            if not self.config.install_requires_all_files
             else None,
         ]
-        if self.metadata.framework == PythonFramework.MCP:
+        if self.config.framework == PythonFramework.MCP:
             steps += [
                 'run("mkdir -p {}/bin".format(venv.path)) if cross_platform else None',
                 'run("cp {}/bin/mcp {}/bin/mcp".format(local_venv.path, venv.path)) if cross_platform else None',
             ]
-        if self.metadata.framework == PythonFramework.Django:
+        if self.config.framework == PythonFramework.Django:
             steps += [
                 'run("python manage.py collectstatic --noinput", group="build")',
             ]
@@ -466,38 +466,38 @@ class PythonProvider:
             return {}
 
         start_cmd = None
-        if self.metadata.server == PythonServer.Daphne:
-            assert self.metadata.asgi_application, (
+        if self.config.server == PythonServer.Daphne:
+            assert self.config.asgi_application, (
                 "No ASGI application found for Daphne"
             )
-            start_cmd = f'f"daphne {self.metadata.asgi_application} --bind 0.0.0.0 --port {{PORT}}"'
-        # elif self.metadata.server == PythonServer.Gunicorn:
-        #     assert self.metadata.wsgi_application, "No WSGI application found"
-        #     start_cmd = f'f"gunicorn {self.metadata.wsgi_application} --bind 0.0.0.0 --port {{PORT}}"'
-        elif self.metadata.server == PythonServer.Uvicorn:
-            if not self.metadata.main_file:
+            start_cmd = f'f"daphne {self.config.asgi_application} --bind 0.0.0.0 --port {{PORT}}"'
+        # elif self.config.server == PythonServer.Gunicorn:
+        #     assert self.config.wsgi_application, "No WSGI application found"
+        #     start_cmd = f'f"gunicorn {self.config.wsgi_application} --bind 0.0.0.0 --port {{PORT}}"'
+        elif self.config.server == PythonServer.Uvicorn:
+            if not self.config.main_file:
                 assert (
-                    self.metadata.asgi_application or self.metadata.wsgi_application
+                    self.config.asgi_application or self.config.wsgi_application
                 ), (
                     "No ASGI or WSGI application found for Uvicorn and no main file found"
                 )
-            if self.metadata.asgi_application:
-                start_cmd = f'f"uvicorn {self.metadata.asgi_application} --host 0.0.0.0 --port {{PORT}}"'
-            elif self.metadata.wsgi_application:
-                start_cmd = f'f"uvicorn {self.metadata.wsgi_application} --interface=wsgi --host 0.0.0.0 --port {{PORT}}"'
-        elif self.metadata.server == PythonServer.Hypercorn:
-            assert self.metadata.asgi_application, (
+            if self.config.asgi_application:
+                start_cmd = f'f"uvicorn {self.config.asgi_application} --host 0.0.0.0 --port {{PORT}}"'
+            elif self.config.wsgi_application:
+                start_cmd = f'f"uvicorn {self.config.wsgi_application} --interface=wsgi --host 0.0.0.0 --port {{PORT}}"'
+        elif self.config.server == PythonServer.Hypercorn:
+            assert self.config.asgi_application, (
                 "No ASGI application found for Hypercorn"
             )
             start_cmd = (
-                f'f"hypercorn {self.metadata.asgi_application} --bind 0.0.0.0:{{PORT}}"'
+                f'f"hypercorn {self.config.asgi_application} --bind 0.0.0.0:{{PORT}}"'
             )
-        elif self.metadata.framework == PythonFramework.Streamlit:
-            assert self.metadata.main_file, "No main file found for Streamlit"
-            main_file = self.metadata.main_file
+        elif self.config.framework == PythonFramework.Streamlit:
+            assert self.config.main_file, "No main file found for Streamlit"
+            main_file = self.config.main_file
             start_cmd = f'f"streamlit run {main_file} --server.port {{PORT}} --server.address 0.0.0.0 --server.headless true"'
-        elif self.metadata.framework == PythonFramework.MCP:
-            main_file = self.metadata.main_file
+        elif self.config.framework == PythonFramework.MCP:
+            main_file = self.config.main_file
             assert main_file, "No main file found for MCP"
             contents = (self.path / main_file).read_text()
             if 'if __name__ == "__main__"' in contents or "mcp.run" in contents:
@@ -506,10 +506,10 @@ class PythonProvider:
                 start_cmd = f'"python {{}}/bin/mcp run {main_file} --transport=streamable-http".format(venv.serve_path)'
 
         if not start_cmd:
-            if self.metadata.main_file:
-                start_cmd = f'"python {self.metadata.main_file}"'
+            if self.config.main_file:
+                start_cmd = f'"python {self.config.main_file}"'
 
-        if self.metadata.framework == PythonFramework.Django:
+        if self.config.framework == PythonFramework.Django:
             if not start_cmd:
                 start_cmd = 'f"python manage.py runserver 0.0.0.0:{PORT}"'
             migrate_cmd = '"python manage.py migrate"'
@@ -541,23 +541,23 @@ class PythonProvider:
         # For Django projects, generate an empty env dict to surface the field
         # in the Shipit file. Other Python projects omit it by default.
         python_path = 'f"{app_serve_path}:{python_serve_site_packages_path}"'
-        main_file = self.metadata.main_file
+        main_file = self.config.main_file
         if main_file and main_file.startswith("src/"):
             python_path = 'f"{app_serve_path}:{app_serve_path}/src:{python_serve_site_packages_path}"'
         else:
             python_path = 'f"{app_serve_path}:{python_serve_site_packages_path}"'
         env_vars = {"PYTHONPATH": python_path, "HOME": 'app.serve_path'}
-        if self.metadata.framework == PythonFramework.Streamlit:
+        if self.config.framework == PythonFramework.Streamlit:
             env_vars["STREAMLIT_SERVER_HEADLESS"] = '"true"'
-        elif self.metadata.framework == PythonFramework.MCP:
+        elif self.config.framework == PythonFramework.MCP:
             env_vars["FASTMCP_HOST"] = '"0.0.0.0"'
             env_vars["FASTMCP_PORT"] = "PORT"
         return env_vars
 
     def services(self) -> list[ServiceSpec]:
-        if self.metadata.database == DatabaseType.MySQL:
+        if self.config.database == DatabaseType.MySQL:
             return [ServiceSpec(name="database", provider="mysql")]
-        elif self.metadata.database == DatabaseType.PostgreSQL:
+        elif self.config.database == DatabaseType.PostgreSQL:
             return [ServiceSpec(name="database", provider="postgres")]
         return []
 

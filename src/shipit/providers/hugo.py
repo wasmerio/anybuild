@@ -10,26 +10,26 @@ from .base import (
     VolumeSpec,
     CustomCommands,
     MountSpec,
-    Metadata,
+    Config,
 )
-from .staticfile import StaticFileProvider, StaticFileMetadata
+from .staticfile import StaticFileProvider, StaticFileConfig
 from pydantic_settings import SettingsConfigDict
 
 
-class HugoMetadata(StaticFileMetadata):
+class HugoConfig(StaticFileConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     hugo_version: Optional[str] = "0.149.0"
 
 
 class HugoProvider(StaticFileProvider):
-    def __init__(self, path: Path, metadata: HugoMetadata):
-        super().__init__(path, metadata)
+    def __init__(self, path: Path, config: HugoConfig):
+        super().__init__(path, config)
 
     @classmethod
-    def load_metadata(cls, path: Path, base_metadata: Metadata) -> HugoMetadata:
-        metadata = super().load_metadata(path, base_metadata)
-        return HugoMetadata(**metadata.model_dump())
+    def load_config(cls, path: Path, base_config: Config) -> HugoConfig:
+        config = super().load_config(path, base_config)
+        return HugoConfig(**config.model_dump())
 
     @classmethod
     def name(cls) -> str:
@@ -37,7 +37,7 @@ class HugoProvider(StaticFileProvider):
 
     @classmethod
     def detect(
-        cls, path: Path, metadata: Metadata
+        cls, path: Path, config: Config
     ) -> Optional[DetectResult]:
         if _exists(path, "hugo.toml", "hugo.json", "hugo.yaml", "hugo.yml"):
             return DetectResult(cls.name(), 80)
@@ -56,7 +56,7 @@ class HugoProvider(StaticFileProvider):
         return [
             DependencySpec(
                 "hugo",
-                var_name="metadata.hugo_version",
+                var_name="config.hugo_version",
                 use_in_build=True,
             ),
             *super().dependencies(),

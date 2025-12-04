@@ -1,8 +1,8 @@
-php = dep("php", metadata.php_version)
+php = dep("php", config.php_version)
 composer = dep("composer")
-node = dep("node", metadata.node_version)
-npm = dep("npm", metadata.npm_version)
-staticwebserver = dep("static-web-server", metadata.sws_version)
+node = dep("node", config.node_version)
+npm = dep("npm", config.npm_version)
+staticwebserver = dep("static-web-server", config.sws_version)
 bash = dep("bash")
 
 app = mount("app")

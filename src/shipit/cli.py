@@ -12,8 +12,8 @@ from rich import box
 from rich.panel import Panel
 from rich.syntax import Syntax
 
-from shipit.generator import generate_shipit, load_provider, load_provider_metadata
-from shipit.providers.base import Metadata
+from shipit.generator import generate_shipit, load_provider, load_provider_config
+from shipit.providers.base import Config
 from dotenv import dotenv_values
 from shipit.builders import BuildBackend, DockerBuildBackend, LocalBuildBackend
 from shipit.runners import Runner, LocalRunner, WasmerRunner
@@ -227,15 +227,15 @@ def evaluate_shipit(
     shipit_file: Path,
     build_backend: BuildBackend,
     runner: Runner,
-    provider_metadata: Metadata,
+    provider_config: Config,
 ) -> Tuple[Ctx, Serve]:
     source = shipit_file.read_text()
     ctx = Ctx(build_backend, runner)
     glb = sl.GlobalsBuilder.standard()
 
-    print("PORT", provider_metadata.port)
-    glb.set("PORT", str(provider_metadata.port or "8080"))
-    glb.set("metadata", provider_metadata)
+    print("PORT", provider_config.port)
+    glb.set("PORT", str(provider_config.port or "8080"))
+    glb.set("config", provider_config)
     glb.set("service", ctx.service)
     glb.set("dep", ctx.dep)
     glb.set("serve", ctx.serve)
@@ -260,39 +260,39 @@ def evaluate_shipit(
     serve = next(iter(ctx.serves.values()))
     
     # Now we apply the custom commands (start, after_deploy, build, install)
-    if provider_metadata.commands.start:
-        serve.commands["start"] = provider_metadata.commands.start
+    if provider_config.commands.start:
+        serve.commands["start"] = provider_config.commands.start
 
-    if provider_metadata.commands.after_deploy:
-        serve.commands["after_deploy"] = provider_metadata.commands.after_deploy
+    if provider_config.commands.after_deploy:
+        serve.commands["after_deploy"] = provider_config.commands.after_deploy
 
-    if provider_metadata.commands.build or provider_metadata.commands.install:
+    if provider_config.commands.build or provider_config.commands.install:
         new_build = []
         has_done_build = False
         has_done_install = False
         for step in serve.build:
             if isinstance(step, RunStep):
-                if step.group == "build" and not has_done_build and provider_metadata.commands.build:
-                    new_build.append(RunStep(provider_metadata.commands.build, group="build"))
+                if step.group == "build" and not has_done_build and provider_config.commands.build:
+                    new_build.append(RunStep(provider_config.commands.build, group="build"))
                     has_done_build = True
-                elif step.group == "install" and not has_done_install and provider_metadata.commands.install:
-                    new_build.append(RunStep(provider_metadata.commands.install, group="install"))
+                elif step.group == "install" and not has_done_install and provider_config.commands.install:
+                    new_build.append(RunStep(provider_config.commands.install, group="install"))
                     has_done_install = True
                 else:
                     new_build.append(step)
             else:
                 new_build.append(step)
-        if not has_done_install and provider_metadata.commands.install:
-            new_build.append(RunStep(provider_metadata.commands.install, group="install"))
-        if not has_done_build and provider_metadata.commands.build:
-            new_build.append(RunStep(provider_metadata.commands.build, group="build"))
+        if not has_done_install and provider_config.commands.install:
+            new_build.append(RunStep(provider_config.commands.install, group="install"))
+        if not has_done_build and provider_config.commands.build:
+            new_build.append(RunStep(provider_config.commands.build, group="build"))
         serve.build = new_build
 
     if serve.commands.get("start"):
-        serve.commands["start"] = serve.commands["start"].replace("$PORT", str(provider_metadata.port or "8080"))
+        serve.commands["start"] = serve.commands["start"].replace("$PORT", str(provider_config.port or "8080"))
     
     if serve.commands.get("after_deploy"):
-        serve.commands["after_deploy"] = serve.commands["after_deploy"].replace("$PORT", str(provider_metadata.port or "8080"))
+        serve.commands["after_deploy"] = serve.commands["after_deploy"].replace("$PORT", str(provider_config.port or "8080"))
 
     print(serve.commands)
 
@@ -514,23 +514,23 @@ def generate(
     if out is None:
         out = path / "Shipit"
 
-    base_metadata = Metadata()
-    base_metadata.commands.enrich_from_path(path)
+    base_config = Config()
+    base_config.commands.enrich_from_path(path)
     if start_command:
-        base_metadata.commands.start = start_command
+        base_config.commands.start = start_command
     if install_command:
-        base_metadata.commands.install = install_command
+        base_config.commands.install = install_command
     if build_command:
-        base_metadata.commands.build = build_command
-    provider_cls = load_provider(path, base_metadata, use_provider)
-    metadata = load_provider_metadata(provider_cls, path, base_metadata)
-    provider = provider_cls(path, metadata)
+        base_config.commands.build = build_command
+    provider_cls = load_provider(path, base_config, use_provider)
+    config = load_provider_config(provider_cls, path, base_config)
+    provider = provider_cls(path, config)
     content = generate_shipit(path, provider)
-    metadata_json = metadata.model_dump_json(indent=2, exclude_defaults=True)
-    if metadata_json and metadata_json != "{}":
+    config_json = config.model_dump_json(indent=2, exclude_defaults=True)
+    if config_json and config_json != "{}":
         manifest_panel = Panel(
             Syntax(
-                metadata_json,
+                config_json,
                 "json",
                 theme="monokai",
                 background_color="default",
@@ -769,13 +769,13 @@ def plan(
     else:
         runner = LocalRunner(build_backend, path)
 
-    base_metadata = Metadata()
-    base_metadata.commands.enrich_from_path(path)
-    provider_cls = load_provider(path, base_metadata)
-    provider_metadata = load_provider_metadata(provider_cls, path, base_metadata)
-    provider_metadata = runner.prepare_metadata(provider_metadata)
-    ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_metadata)
-    metadata_commands: Dict[str, Optional[str]] = {
+    base_config = Config()
+    base_config.commands.enrich_from_path(path)
+    provider_cls = load_provider(path, base_config)
+    provider_config = load_provider_config(provider_cls, path, base_config)
+    provider_config = runner.prepare_config(provider_config)
+    ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
+    config_commands: Dict[str, Optional[str]] = {
         "start": serve.commands.get("start"),
         "after_deploy": serve.commands.get("after_deploy"),
     }
@@ -790,16 +790,16 @@ def plan(
             return None
         return " && ".join(commands)
 
-    metadata_install = _collect_group_commands("install")
-    metadata_build = _collect_group_commands("build")
-    metadata_commands["install"] = metadata_install
-    metadata_commands["build"] = metadata_build
+    config_install = _collect_group_commands("install")
+    config_build = _collect_group_commands("build")
+    config_commands["install"] = config_install
+    config_commands["build"] = config_build
     plan_output = {
         "provider": provider_cls.name(),
-        "metadata": json.loads(
-            provider_metadata.model_dump_json(exclude_defaults=True)
+        "config": json.loads(
+            provider_config.model_dump_json(exclude_defaults=True)
         ),
-        "commands": metadata_commands,
+        "commands": config_commands,
         "services": [
             {"name": svc.name, "provider": svc.provider}
             for svc in (serve.services or [])
@@ -901,23 +901,23 @@ def build(
     else:
         runner = LocalRunner(build_backend, path)
 
-    metadata = Metadata()
-    metadata.commands.enrich_from_path(path)
+    config = Config()
+    config.commands.enrich_from_path(path)
     if start_command:
-        metadata.commands.start = start_command
+        config.commands.start = start_command
     if install_command:
-        metadata.commands.install = install_command
+        config.commands.install = install_command
     if build_command:
-        metadata.commands.build = build_command
+        config.commands.build = build_command
     serve_port = serve_port or os.environ.get("PORT")
     if serve_port:
-        metadata.port = serve_port
+        config.port = serve_port
 
-    provider_cls = load_provider(path, metadata)
-    provider_metadata = load_provider_metadata(provider_cls, path, metadata)
-    provider_metadata = runner.prepare_metadata(provider_metadata)
+    provider_cls = load_provider(path, config)
+    provider_config = load_provider_config(provider_cls, path, config)
+    provider_config = runner.prepare_config(provider_config)
     ctx, serve = evaluate_shipit(
-        shipit_file, build_backend, runner, provider_metadata
+        shipit_file, build_backend, runner, provider_config
     )
     env = {
         "PATH": "",

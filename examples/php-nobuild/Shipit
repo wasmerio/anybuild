@@ -1,4 +1,4 @@
-php = dep("php", metadata.php_version, architecture=metadata.php_architecture)
+php = dep("php", config.php_version, architecture=config.php_architecture)
 
 app = mount("app")
 assets = mount("assets")

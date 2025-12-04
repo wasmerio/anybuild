@@ -1,4 +1,4 @@
-staticwebserver = dep("static-web-server", metadata.sws_version)
+staticwebserver = dep("static-web-server", config.sws_version)
 
 static_app = mount("static_app")
 

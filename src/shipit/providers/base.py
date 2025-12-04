@@ -46,7 +46,7 @@ class CustomCommands(BaseModel):
         return self
 
 
-class Metadata(BaseModel):
+class Config(BaseModel):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     port: Optional[int] = 8080
@@ -55,15 +55,16 @@ class Metadata(BaseModel):
     def __getattr__(self, name: str) -> Any:
         return getattr(self.commands, name, None)
 
+
 class Provider(Protocol):
     def __init__(self, path: Path): ...
     @classmethod
     def name(cls) -> str: ...
     @classmethod
-    def load_metadata(cls, path: Path, metadata: Metadata) -> Metadata: ...
+    def load_config(cls, path: Path, config: Config) -> Config: ...
     @classmethod
     def detect(
-        cls, path: Path, metadata: Metadata
+        cls, path: Path, config: Config
     ) -> Optional[DetectResult]: ...
     # Structured plan steps (no path args; use self.path)
     def serve_name(self) -> Optional[str]: ...

@@ -1,4 +1,4 @@
-php = dep("php", metadata.php_version, architecture=metadata.php_architecture)
+php = dep("php", config.php_version, architecture=config.php_architecture)
 composer = dep("composer")
 bash = dep("bash")
 

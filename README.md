@@ -52,7 +52,7 @@ with `--use-provider`.
 uvx shipit-cli plan --out plan.json
 ```
 
-Evaluate the project and emit metadata, derived commands, and required
+ Evaluate the project and emit config, derived commands, and required
 services without building. Helpful for CI checks or debugging configuration.
 
 ### `build`

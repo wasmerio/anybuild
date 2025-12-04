@@ -30,7 +30,7 @@ def test_generate_shipit_matches_example(example_dir: Path) -> None:
         procfile = Procfile.loads((example_dir / "Procfile").read_text())
         custom_commands.start = procfile.get_start_command()
 
-    generated, metadata = generate_shipit(example_dir, custom_commands=custom_commands)
+    generated, config = generate_shipit(example_dir, custom_commands=custom_commands)
     expected = (example_dir / "Shipit").read_text()
     # Use raw assert to let pytest show a unified diff on mismatch
     assert generated == expected

@@ -1,6 +1,6 @@
-node = dep("node", metadata.node_version)
-npm = dep("npm", metadata.npm_version)
-staticwebserver = dep("static-web-server", metadata.sws_version)
+node = dep("node", config.node_version)
+npm = dep("npm", config.npm_version)
+staticwebserver = dep("static-web-server", config.sws_version)
 
 temp = mount("temp")
 static_app = mount("static_app")
@@ -15,8 +15,8 @@ serve(
     env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
     run("npm ci", inputs=["package.json"], group="install"),
     copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
-    run("npm run build", outputs=[metadata.static_dir], group="build"),
-    run("cp -R {}/* {}/".format(metadata.static_dir, static_app.path))
+    run("npm run build", outputs=[config.static_dir], group="build"),
+    run("cp -R {}/* {}/".format(config.static_dir, static_app.path))
   ],
   deps=[staticwebserver],
   commands = {

@@ -10,34 +10,34 @@ from .base import (
     ServiceSpec,
     VolumeSpec,
     CustomCommands,
-    Metadata,
+    Config,
 )
-from .php import PhpMetadata, PhpProvider
-from .node_static import NodeStaticMetadata, NodeStaticProvider
+from .php import PhpConfig, PhpProvider
+from .node_static import NodeStaticConfig, NodeStaticProvider
 from pydantic_settings import SettingsConfigDict
 
 
-class LaravelMetadata(PhpMetadata, NodeStaticMetadata):
+class LaravelConfig(PhpConfig, NodeStaticConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
 
 class LaravelProvider(PhpProvider):
-    def __init__(self, path: Path, metadata: LaravelMetadata):
+    def __init__(self, path: Path, config: LaravelConfig):
         self.path = path
-        self.node_provider = NodeStaticProvider(path, metadata, only_build=True)
-        self.metadata = metadata
+        self.node_provider = NodeStaticProvider(path, config, only_build=True)
+        self.config = config
 
     @classmethod
-    def load_metadata(cls, path: Path, base_metadata: Metadata) -> LaravelMetadata:
-        metadata = super().load_metadata(path, base_metadata)
-        node_metadata = NodeStaticProvider.load_metadata(path, base_metadata)
-        node_metadata.static_dir = None
-        node_metadata.static_generator = None
-        return LaravelMetadata(
+    def load_config(cls, path: Path, base_config: Config) -> LaravelConfig:
+        config = super().load_config(path, base_config)
+        node_config = NodeStaticProvider.load_config(path, base_config)
+        node_config.static_dir = None
+        node_config.static_generator = None
+        return LaravelConfig(
             **(
-                metadata.model_dump()
-                | node_metadata.model_dump()
-                | base_metadata.model_dump()
+                config.model_dump()
+                | node_config.model_dump()
+                | base_config.model_dump()
             )
         )
 
@@ -46,7 +46,7 @@ class LaravelProvider(PhpProvider):
         return "laravel"
 
     @classmethod
-    def detect(cls, path: Path, metadata: Metadata) -> Optional[DetectResult]:
+    def detect(cls, path: Path, config: Config) -> Optional[DetectResult]:
         if _exists(path, "artisan") and _exists(path, "composer.json"):
             return DetectResult(cls.name(), 95)
         return None
@@ -58,7 +58,7 @@ class LaravelProvider(PhpProvider):
         return [
             DependencySpec(
                 "php",
-                var_name="metadata.php_version",
+                var_name="config.php_version",
                 use_in_build=True,
                 use_in_serve=True,
             ),

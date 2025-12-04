@@ -12,11 +12,11 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    Metadata,
+    Config,
 )
 
 
-class StaticFileMetadata(Metadata):
+class StaticFileConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     sws_version: Optional[str] = "2.38.0"
@@ -27,14 +27,14 @@ class StaticFileProvider:
     config: Optional[dict] = None
     path: Path
 
-    def __init__(self, path: Path, metadata: StaticFileMetadata):
+    def __init__(self, path: Path, config: StaticFileConfig):
         self.path = path
-        self.metadata = metadata
+        self.config = config
 
     @classmethod
-    def load_metadata(
-        cls, path: Path, base_metadata: Metadata
-    ) -> StaticFileMetadata:
+    def load_config(
+        cls, path: Path, base_config: Config
+    ) -> StaticFileConfig:
         if (path / "Staticfile").exists():
             config = None
             try:
@@ -44,14 +44,14 @@ class StaticFileProvider:
                 pass
 
             if config:
-                return StaticFileMetadata(
-                    **base_metadata.model_dump(),
+                return StaticFileConfig(
+                    **base_config.model_dump(),
                     static_dir=config.get("root"),
                 )
         if _exists(path, "public/index.html") or _exists(path, "public/index.htm"):
-            return StaticFileMetadata(static_dir="public", **base_metadata.model_dump())
+            return StaticFileConfig(static_dir="public", **base_config.model_dump())
 
-        return StaticFileMetadata(**base_metadata.model_dump())
+        return StaticFileConfig(**base_config.model_dump())
 
     @classmethod
     def name(cls) -> str:
@@ -59,7 +59,7 @@ class StaticFileProvider:
 
     @classmethod
     def detect(
-        cls, path: Path, metadata: Metadata
+        cls, path: Path, config: Config
     ) -> Optional[DetectResult]:
         is_python_php_js_project = _exists(
             path, "package.json", "pyproject.toml", "composer.json"
@@ -72,7 +72,7 @@ class StaticFileProvider:
             ):
                 return DetectResult(cls.name(), 10)
             return DetectResult(cls.name(), 10)
-        if metadata.commands.start and metadata.commands.start.startswith(
+        if config.commands.start and config.commands.start.startswith(
             "static-web-server "
         ):
             return DetectResult(cls.name(), 70)
@@ -85,7 +85,7 @@ class StaticFileProvider:
         return [
             DependencySpec(
                 "static-web-server",
-                var_name="metadata.sws_version",
+                var_name="config.sws_version",
                 use_in_serve=True,
             )
         ]
@@ -94,7 +94,7 @@ class StaticFileProvider:
         return [
             'workdir(static_app.path)',
             'copy({}, ".", ignore=[".git"])'.format(
-                json.dumps(self.metadata.static_dir or ".")
+                json.dumps(self.config.static_dir or ".")
             ),
         ]
 

@@ -21,8 +21,8 @@ class LocalRunner:
         self.serve_bin_path = self.runner_path / "serve" / "bin"
         self.prepare_bash_script = self.runner_path / "prepare" / "prepare.sh"
 
-    def prepare_metadata(self, provider_metadata: object) -> object:
-        return provider_metadata
+    def prepare_config(self, provider_config: object) -> object:
+        return provider_config
 
     def get_serve_mount_path(self, name: str) -> Path:
         return self.build_backend.get_artifact_mount_path(name)

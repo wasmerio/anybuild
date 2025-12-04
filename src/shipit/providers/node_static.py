@@ -14,9 +14,9 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    Metadata,
+    Config,
 )
-from .staticfile import StaticFileProvider, StaticFileMetadata
+from .staticfile import StaticFileProvider, StaticFileConfig
 from pydantic_settings import SettingsConfigDict
 
 
@@ -46,7 +46,7 @@ class PackageManager(Enum):
 
         return DependencySpec(
             dep_name,
-            var_name=f"metadata.{dep_name.lower()}_version",
+            var_name=f"config.{dep_name.lower()}_version",
             default_version=default_version,
         )
 
@@ -175,7 +175,7 @@ class StaticGenerator(Enum):
         }[self]
 
 
-class NodeStaticMetadata(StaticFileMetadata):
+class NodeStaticConfig(StaticFileConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     package_manager: Optional[PackageManager] = None
@@ -193,67 +193,67 @@ class NodeStaticProvider(StaticFileProvider):
     only_build: bool = False
 
     def __init__(
-        self, path: Path, metadata: NodeStaticMetadata, only_build: bool = False
+        self, path: Path, config: NodeStaticConfig, only_build: bool = False
     ):
-        super().__init__(path, metadata)
+        super().__init__(path, config)
         self.only_build = only_build
 
     @classmethod
-    def load_metadata(
-        cls, path: Path, base_metadata: Metadata
-    ) -> NodeStaticMetadata:
-        metadata = NodeStaticMetadata(**base_metadata.model_dump())
-        if not metadata.package_manager:
+    def load_config(
+        cls, path: Path, base_config: Config
+    ) -> NodeStaticConfig:
+        config = NodeStaticConfig(**base_config.model_dump())
+        if not config.package_manager:
             if (path / "package-lock.json").exists():
-                metadata.package_manager = PackageManager.NPM
+                config.package_manager = PackageManager.NPM
             elif (path / "pnpm-lock.yaml").exists():
-                metadata.package_manager = PackageManager.PNPM
+                config.package_manager = PackageManager.PNPM
             elif (path / "yarn.lock").exists():
-                metadata.package_manager = PackageManager.YARN
+                config.package_manager = PackageManager.YARN
             elif (path / "bun.lockb").exists():
-                metadata.package_manager = PackageManager.BUN
+                config.package_manager = PackageManager.BUN
             else:
-                metadata.package_manager = PackageManager.PNPM
+                config.package_manager = PackageManager.PNPM
 
         package_json = cls.parse_package_json(path)
 
-        if not metadata.static_generator:
+        if not config.static_generator:
             if cls.has_dependency(package_json, "gatsby"):
-                metadata.static_generator = StaticGenerator.GATSBY
+                config.static_generator = StaticGenerator.GATSBY
             elif cls.has_dependency(package_json, "astro"):
-                metadata.static_generator = StaticGenerator.ASTRO
+                config.static_generator = StaticGenerator.ASTRO
             elif cls.has_dependency(package_json, "docusaurus"):
-                metadata.static_generator = StaticGenerator.DOCUSAURUS_OLD
+                config.static_generator = StaticGenerator.DOCUSAURUS_OLD
             elif cls.has_dependency(package_json, "@docusaurus/core"):
-                metadata.static_generator = StaticGenerator.DOCUSAURUS
+                config.static_generator = StaticGenerator.DOCUSAURUS
             elif cls.has_dependency(package_json, "svelte"):
-                metadata.static_generator = StaticGenerator.SVELTE
+                config.static_generator = StaticGenerator.SVELTE
             elif cls.has_dependency(
                 package_json, "@remix-run/dev", "1"
             ) or cls.has_dependency(package_json, "@remix-run/dev", "0"):
-                metadata.static_generator = StaticGenerator.REMIX_OLD
+                config.static_generator = StaticGenerator.REMIX_OLD
             elif cls.has_dependency(package_json, "@remix-run/dev"):
-                metadata.static_generator = StaticGenerator.REMIX_V2
+                config.static_generator = StaticGenerator.REMIX_V2
             elif cls.has_dependency(package_json, "vite"):
-                metadata.static_generator = StaticGenerator.VITE
+                config.static_generator = StaticGenerator.VITE
             elif cls.has_dependency(package_json, "next"):
-                metadata.static_generator = StaticGenerator.NEXT
+                config.static_generator = StaticGenerator.NEXT
             elif cls.has_dependency(package_json, "nuxt", "2") or cls.has_dependency(
                 package_json, "nuxt", "1"
             ):
-                metadata.static_generator = StaticGenerator.NUXT_OLD
+                config.static_generator = StaticGenerator.NUXT_OLD
             elif cls.has_dependency(package_json, "nuxt"):
-                metadata.static_generator = StaticGenerator.NUXT_V3
+                config.static_generator = StaticGenerator.NUXT_V3
 
-        if not metadata.build_command:
-            metadata.build_command = cls.get_build_command(
-                package_json, metadata.package_manager, metadata.static_generator
+        if not config.build_command:
+            config.build_command = cls.get_build_command(
+                package_json, config.package_manager, config.static_generator
             )
 
-        if not metadata.static_dir:
-            metadata.static_dir = metadata.static_generator.get_output_dir()
+        if not config.static_dir:
+            config.static_dir = config.static_generator.get_output_dir()
 
-        return metadata
+        return config
 
     @classmethod
     def parse_package_json(cls, path: Path) -> Optional[Dict[str, Any]]:
@@ -297,24 +297,24 @@ class NodeStaticProvider(StaticFileProvider):
 
     @classmethod
     def detect(
-        cls, path: Path, metadata: Metadata
+        cls, path: Path, config: Config
     ) -> Optional[DetectResult]:
-        if metadata.commands.install:
+        if config.commands.install:
             # Detect this provider from the install command
-            if metadata.commands.install in ["npm install", "npm ci", "npm i", "pnpm install", "pnpm ci", "pnpm i", "yarn install", "yarn ci", "yarn i", "bun install", "bun ci", "bun i"]:
+            if config.commands.install in ["npm install", "npm ci", "npm i", "pnpm install", "pnpm ci", "pnpm i", "yarn install", "yarn ci", "yarn i", "bun install", "bun ci", "bun i"]:
                 return DetectResult(cls.name(), 40)
 
-        if metadata.commands.build:
-            if metadata.commands.build.startswith("npm run "):
+        if config.commands.build:
+            if config.commands.build.startswith("npm run "):
                 return DetectResult(cls.name(), 40)
-            elif metadata.commands.build.startswith("pnpm run "):
+            elif config.commands.build.startswith("pnpm run "):
                 return DetectResult(cls.name(), 40)
-            elif metadata.commands.build.startswith("yarn run "):
+            elif config.commands.build.startswith("yarn run "):
                 return DetectResult(cls.name(), 40)
-            elif metadata.commands.build.startswith("bun run "):
+            elif config.commands.build.startswith("bun run "):
                 return DetectResult(cls.name(), 40)
 
-            static_generators = StaticGenerator.detect_generators_from_command(metadata.commands.build)
+            static_generators = StaticGenerator.detect_generators_from_command(config.commands.build)
             if static_generators:
                 return DetectResult(cls.name(), 40)
 
@@ -340,12 +340,12 @@ class NodeStaticProvider(StaticFileProvider):
         return None
 
     def dependencies(self) -> list[DependencySpec]:
-        package_manager_dep = self.metadata.package_manager.as_dependency(self.path)
+        package_manager_dep = self.config.package_manager.as_dependency(self.path)
         package_manager_dep.use_in_build = True
         return [
             DependencySpec(
                 "node",
-                var_name="metadata.node_version",
+                var_name="config.node_version",
                 use_in_build=True,
             ),
             package_manager_dep,
@@ -371,9 +371,9 @@ class NodeStaticProvider(StaticFileProvider):
         return package_manager.run_execute_command(command)
 
     def build_steps(self) -> list[str]:
-        lockfile = self.metadata.package_manager.lockfile()
+        lockfile = self.config.package_manager.lockfile()
         has_lockfile = (self.path / lockfile).exists()
-        install_command = self.metadata.package_manager.install_command(
+        install_command = self.config.package_manager.install_command(
             has_lockfile=has_lockfile
         )
         input_files = ["package.json"]
@@ -392,18 +392,18 @@ class NodeStaticProvider(StaticFileProvider):
                 'workdir(temp.path)' if not self.only_build else None,
                 f'copy("{lockfile}")' if has_lockfile else None,
                 'env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false")'
-                if self.metadata.package_manager == PackageManager.NPM
+                if self.config.package_manager == PackageManager.NPM
                 else None,
                 # 'run("npx corepack enable", inputs=["package.json"], group="install")',
                 f'run("{install_command}", inputs=[{inputs_install_files}], group="install")',
                 f'copy(".", ignore=[{all_ignored_files}])',
-                f'run("{self.metadata.build_command}", outputs=[metadata.static_dir], group="build")'
+                f'run("{self.config.build_command}", outputs=[config.static_dir], group="build")'
                 if not self.only_build
                 else None,
-                f'run("{self.metadata.build_command}", group="build")'
+                f'run("{self.config.build_command}", group="build")'
                 if self.only_build
                 else None,
-                f'run("cp -R {{}}/* {{}}/".format(metadata.static_dir, static_app.path))'
+                f'run("cp -R {{}}/* {{}}/".format(config.static_dir, static_app.path))'
                 if not self.only_build
                 else None,
             ],

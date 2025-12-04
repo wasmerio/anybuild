@@ -1,15 +1,15 @@
-python = dep("python", metadata.python_version)
-uv = dep("uv", metadata.uv_version)
-pandoc = dep("pandoc", metadata.pandoc_version)
+python = dep("python", config.python_version)
+uv = dep("uv", config.uv_version)
+pandoc = dep("pandoc", config.pandoc_version)
 
 app = mount("app")
 venv = mount("venv")
 local_venv = mount("local_venv")
 
-python_version = metadata.python_version
-cross_platform = metadata.cross_platform
-python_extra_index_url = metadata.python_extra_index_url
-precompile_python = metadata.precompile_python
+python_version = config.python_version
+cross_platform = config.cross_platform
+python_extra_index_url = config.python_extra_index_url
+precompile_python = config.precompile_python
 python_cross_packages_path = venv.path + f"/lib/python{python_version}/site-packages"
 python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv.serve_path, python_version)
 app_serve_path = app.serve_path

@@ -1,5 +1,5 @@
-hugo = dep("hugo", metadata.hugo_version)
-staticwebserver = dep("static-web-server", metadata.sws_version)
+hugo = dep("hugo", config.hugo_version)
+staticwebserver = dep("static-web-server", config.sws_version)
 
 temp = mount("temp")
 static_app = mount("static_app")

@@ -10,12 +10,12 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    Metadata,
+    Config,
 )
 from pydantic_settings import SettingsConfigDict
 
 
-class PhpMetadata(Metadata):
+class PhpConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     use_composer: bool = False
@@ -24,21 +24,21 @@ class PhpMetadata(Metadata):
 
 
 class PhpProvider:
-    def __init__(self, path: Path, metadata: PhpMetadata):
+    def __init__(self, path: Path, config: PhpConfig):
         self.path = path
-        self.metadata = metadata
+        self.config = config
 
     @classmethod
-    def load_metadata(cls, path: Path, base_metadata: Metadata) -> PhpMetadata:
+    def load_config(cls, path: Path, base_config: Config) -> PhpConfig:
         use_composer = (
             _exists(path, "composer.json", "composer.lock")
             or (
-                base_metadata.commands.install
-                and base_metadata.commands.install.startswith("composer ")
+                base_config.commands.install
+                and base_config.commands.install.startswith("composer ")
             )
             or False
         )
-        return PhpMetadata(use_composer=use_composer, **base_metadata.model_dump())
+        return PhpConfig(use_composer=use_composer, **base_config.model_dump())
 
     @classmethod
     def name(cls) -> str:
@@ -46,7 +46,7 @@ class PhpProvider:
 
     @classmethod
     def detect(
-        cls, path: Path, metadata: Metadata
+        cls, path: Path, config: Config
     ) -> Optional[DetectResult]:
         if _exists(path, "composer.json") and _exists(path, "public/index.php"):
             return DetectResult(cls.name(), 60)
@@ -56,9 +56,9 @@ class PhpProvider:
             or _exists(path, "app/index.php")
         ):
             return DetectResult(cls.name(), 10)
-        if metadata.commands.start and metadata.commands.start.startswith("php "):
+        if config.commands.start and config.commands.start.startswith("php "):
             return DetectResult(cls.name(), 70)
-        if metadata.commands.install and metadata.commands.install.startswith("composer "):
+        if config.commands.install and config.commands.install.startswith("composer "):
             return DetectResult(cls.name(), 30)
         return None
 
@@ -69,13 +69,13 @@ class PhpProvider:
         deps = [
             DependencySpec(
                 "php",
-                var_name="metadata.php_version",
-                architecture_var_name="metadata.php_architecture",
+                var_name="config.php_version",
+                architecture_var_name="config.php_architecture",
                 use_in_build=True,
                 use_in_serve=True,
             ),
         ]
-        if self.metadata.use_composer:
+        if self.config.use_composer:
             deps.append(DependencySpec("composer", use_in_build=True))
             deps.append(DependencySpec("bash", use_in_serve=True))
         return deps
@@ -94,7 +94,7 @@ class PhpProvider:
                 'copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets")'
             )
 
-        if self.metadata.use_composer:
+        if self.config.use_composer:
             steps.append('env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0")')
             steps.append(
                 'run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'

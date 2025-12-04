@@ -22,7 +22,7 @@ class FetchResult(BaseModel):
     title: str
     text: str
     url: str | None = None
-    metadata: dict[str, str] | None = None
+    config: dict[str, str] | None = None
 
 
 def create_server():
@@ -42,7 +42,7 @@ def create_server():
                 [
                     r.get("title", ""),
                     r.get("text", ""),
-                    " ".join(r.get("metadata", {}).values()),
+                    " ".join(r.get("config", {}).values()),
                 ]
             ).lower()
             if any(t in hay for t in toks):
@@ -71,7 +71,7 @@ def create_server():
             title=r.get("title", ""),
             text=r.get("text", ""),
             url=r.get("url"),
-            metadata=r.get("metadata"),
+            config=r.get("config"),
         )
 
     return mcp

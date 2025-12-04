@@ -1,4 +1,4 @@
-php = dep("php", metadata.php_version, architecture=metadata.php_architecture)
+php = dep("php", config.php_version, architecture=config.php_architecture)
 bash = dep("bash")
 
 app = mount("app")
@@ -11,7 +11,7 @@ database = service(
   provider="mysql"
 )
 
-wp_cli_version = metadata.wp_cli_version
+wp_cli_version = config.wp_cli_version
 wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar" if wp_cli_version else "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"
 
 

@@ -138,16 +138,16 @@ class WasmerRunner:
         else:
             return Path("/opt") / name
 
-    def prepare_metadata(self, provider_metadata: Any) -> Any:
-        from shipit.providers.python import PythonMetadata
+    def prepare_config(self, provider_config: Any) -> Any:
+        from shipit.providers.python import PythonConfig
 
-        if isinstance(provider_metadata, PythonMetadata):
-            provider_metadata.python_extra_index_url = (
+        if isinstance(provider_config, PythonConfig):
+            provider_config.python_extra_index_url = (
                 "https://pythonindex.wasix.org/simple"
             )
-            provider_metadata.cross_platform = "wasix_wasm32"
-            provider_metadata.precompile_python = True
-        return provider_metadata
+            provider_config.cross_platform = "wasix_wasm32"
+            provider_config.precompile_python = True
+        return provider_config
 
     def build(self, serve: Serve) -> None:
         self.build_prepare(serve)

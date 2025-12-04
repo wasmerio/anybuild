@@ -1,13 +1,13 @@
-python = dep("python", metadata.python_version)
-uv = dep("uv", metadata.uv_version)
-staticwebserver = dep("static-web-server", metadata.sws_version)
+python = dep("python", config.python_version)
+uv = dep("uv", config.uv_version)
+staticwebserver = dep("static-web-server", config.sws_version)
 
 temp = mount("temp")
 local_venv = mount("local_venv")
 static_app = mount("static_app")
 
-python_version = metadata.python_version
-cross_platform = metadata.cross_platform
+python_version = config.python_version
+cross_platform = config.cross_platform
 venv = local_venv
 
 
