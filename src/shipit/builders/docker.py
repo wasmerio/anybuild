@@ -45,7 +45,6 @@ class DockerBuildBackend:
         self.docker_path = self.src_dir / ".shipit" / "docker"
         self.docker_path.mkdir(parents=True, exist_ok=True)
         self.docker_out_path = self.docker_path / "out"
-        self.depot_metadata = self.docker_path / "depot-build.json"
         self.docker_file_path = self.docker_path / "Dockerfile"
         self.docker_name_path = self.docker_path / "name"
         self.docker_ignore_path = self.docker_path / "Dockerfile.dockerignore"
