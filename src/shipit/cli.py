@@ -400,7 +400,7 @@ def auto(
         None,
         help="The environment to use (defaults to `.env`, it will use .env.<env_name> if provided)",
     ),
-    use_provider: Optional[str] = typer.Option(
+    provider: Optional[str] = typer.Option(
         None,
         help="Use a specific provider to build the project.",
     ),
@@ -434,7 +434,7 @@ def auto(
             install_command=install_command,
             build_command=build_command,
             start_command=start_command,
-            use_provider=use_provider,
+            provider=provider,
         )
 
     build(
@@ -503,7 +503,7 @@ def generate(
         None,
         help="The start command to use (overwrites the default)",
     ),
-    use_provider: Optional[str] = typer.Option(
+    provider: Optional[str] = typer.Option(
         None,
         help="Use a specific provider to build the project.",
     ),
@@ -522,7 +522,7 @@ def generate(
         base_config.commands.install = install_command
     if build_command:
         base_config.commands.build = build_command
-    provider_cls = load_provider(path, base_config, use_provider)
+    provider_cls = load_provider(path, base_config, provider)
     config = load_provider_config(provider_cls, path, base_config)
     provider = provider_cls(path, config)
     content = generate_shipit(path, provider)
@@ -717,7 +717,7 @@ def plan(
         None,
         help="The start command to use (overwrites the default)",
     ),
-    use_provider: Optional[str] = typer.Option(
+    provider: Optional[str] = typer.Option(
         None,
         help="Use a specific provider to build the project.",
     ),
@@ -747,7 +747,7 @@ def plan(
             install_command=install_command,
             build_command=build_command,
             start_command=start_command,
-            use_provider=use_provider,
+            provider=provider,
         )
 
     shipit_file = get_shipit_path(path, shipit_path)

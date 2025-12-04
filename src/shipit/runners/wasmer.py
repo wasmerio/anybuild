@@ -294,7 +294,9 @@ class WasmerRunner:
                 elif program not in binaries:
                     raise Exception(f"Binary {program} not runable in Wasmer yet")
                 command.add("name", command_name)
-                program_binary = binaries[program]
+                program_binary = binaries.get(program)
+                if not program_binary:
+                    raise Exception(f"Command {command_name} is trying to run {program} but it is not available (dependencies: {', '.join(dependencies.keys())}, programs: {', '.join(binaries.keys())})")
                 command.add("module", program_binary["script"])
                 command.add("runner", "wasi")
                 wasi_args = table()
