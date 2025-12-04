@@ -3,6 +3,7 @@ import os
 import sys
 import json
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, cast, Literal
 
 import xingque as sl
@@ -39,6 +40,13 @@ app = typer.Typer(invoke_without_command=True)
 
 DIR_PATH = Path(__file__).resolve().parent
 ASSETS_PATH = DIR_PATH / "assets"
+
+
+@dataclass
+class CtxMount:
+    ref: str
+    path: str
+    serve_path: str
 
 
 class Ctx:
@@ -145,7 +153,7 @@ class Ctx:
             commands=commands,
             prepare=prepare_steps,
             workers=workers,
-            mounts=self.get_refs([mount["ref"] for mount in mounts])
+            mounts=self.get_refs([mount.ref for mount in mounts])
             if mounts
             else None,
             volumes=self.get_refs([volume["ref"] for volume in volumes])
@@ -198,11 +206,8 @@ class Ctx:
         serve_path = self.runner.get_serve_mount_path(name)
         mount = Mount(name, build_path, serve_path)
         ref = self.add_mount(mount)
-        return {
-            "ref": ref,
-            "build": str(build_path.absolute()),
-            "serve": str(serve_path.absolute()),
-        }
+        
+        return CtxMount(ref=ref, path=str(build_path.absolute()), serve_path=str(serve_path.absolute()))
 
     def add_volume(self, volume: Volume) -> Optional[str]:
         self.volumes.append(volume)

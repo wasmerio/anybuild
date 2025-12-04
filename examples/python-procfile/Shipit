@@ -9,19 +9,19 @@ python_version = metadata.python_version
 cross_platform = metadata.cross_platform
 python_extra_index_url = metadata.python_extra_index_url
 precompile_python = metadata.precompile_python
-python_cross_packages_path = venv["build"] + f"/lib/python{python_version}/site-packages"
-python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv["serve"], python_version)
-app_serve_path = app["serve"]
+python_cross_packages_path = venv.path + f"/lib/python{python_version}/site-packages"
+python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv.serve_path, python_version)
+app_serve_path = app.serve_path
 
 
 serve(
   name="python-procfile",
   provider="python",
-  cwd=app["serve"],
+  cwd=app.serve_path,
   build=[
     use(python, uv),
-    workdir(app["build"]),
-    path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
+    workdir(app.path),
+    path((local_venv.path if cross_platform else venv.path) + "/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"])
   ],
   deps=[python],
@@ -33,7 +33,7 @@ serve(
   ],
   env = {
     "PYTHONPATH": f"{app_serve_path}:{python_serve_site_packages_path}",
-    "HOME": app["serve"]
+    "HOME": app.serve_path
   },
   commands = {},
   mounts=[

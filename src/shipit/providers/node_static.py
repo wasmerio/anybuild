@@ -389,7 +389,7 @@ class NodeStaticProvider(StaticFileProvider):
         return filter(
             None,
             [
-                'workdir(temp["build"])' if not self.only_build else None,
+                'workdir(temp.path)' if not self.only_build else None,
                 f'copy("{lockfile}")' if has_lockfile else None,
                 'env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false")'
                 if self.metadata.package_manager == PackageManager.NPM
@@ -403,7 +403,7 @@ class NodeStaticProvider(StaticFileProvider):
                 f'run("{self.metadata.build_command}", group="build")'
                 if self.only_build
                 else None,
-                f'run("cp -R {{}}/* {{}}/".format(metadata.static_dir, static_app["build"]))'
+                f'run("cp -R {{}}/* {{}}/".format(metadata.static_dir, static_app.path))'
                 if not self.only_build
                 else None,
             ],

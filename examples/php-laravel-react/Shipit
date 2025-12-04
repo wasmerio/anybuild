@@ -10,11 +10,11 @@ app = mount("app")
 serve(
   name="php-laravel-react",
   provider="laravel",
-  cwd=app["serve"],
+  cwd=app.serve_path,
   build=[
     use(php, composer, node, npm),
     env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0"),
-    workdir(app["build"]),
+    workdir(app.path),
     run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install"),
     copy("package-lock.json"),
     env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
@@ -24,7 +24,7 @@ serve(
   ],
   deps=[php, staticwebserver, bash],
   prepare=[
-    workdir(app["serve"]),
+    workdir(app.serve_path),
     run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache"),
     run("php artisan config:cache"),
     run("php artisan event:cache"),

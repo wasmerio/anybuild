@@ -344,16 +344,16 @@ class PythonProvider:
             "cross_platform = metadata.cross_platform\n"
             "python_extra_index_url = metadata.python_extra_index_url\n"
             "precompile_python = metadata.precompile_python\n"
-            'python_cross_packages_path = venv["build"] + f"/lib/python{python_version}/site-packages"\n'
-            'python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv["serve"], python_version)\n'
-            'app_serve_path = app["serve"]\n'
+            'python_cross_packages_path = venv.path + f"/lib/python{python_version}/site-packages"\n'
+            'python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv.serve_path, python_version)\n'
+            'app_serve_path = app.serve_path\n'
         )
 
     def build_steps(self) -> list[str]:
         if not self.only_build:
-            steps = ['workdir(app["build"])']
+            steps = ['workdir(app.path)']
         else:
-            steps = ['workdir(temp["build"])']
+            steps = ['workdir(temp.path)']
 
         extra_deps = ", ".join([f"{dep}" for dep in self.metadata.extra_dependencies])
         has_requirements = _exists(self.path, "requirements.txt")
@@ -376,7 +376,7 @@ class PythonProvider:
             # Join inputs
             inputs = ", ".join([f'"{input}"' for input in input_files])
             steps += [
-                'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"], UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}")',
+                'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path, UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}")',
                 'copy(".", ".")' if self.metadata.install_requires_all_files else None,
                 f'run(f"uv sync{extra_args}", inputs=[{inputs}], group="install")',
                 'copy("pyproject.toml", "pyproject.toml")'
@@ -392,7 +392,7 @@ class PythonProvider:
                 ]
         elif has_requirements or extra_deps:
             steps += [
-                'env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"])',
+                'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path)',
                 'run(f"uv init", inputs=[], outputs=["uv.lock"], group="install")',
                 'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
                 if self.metadata.install_requires_all_files
@@ -414,15 +414,15 @@ class PythonProvider:
                 ]
 
         steps += [
-            'path((local_venv["build"] if cross_platform else venv["build"]) + "/bin")',
+            'path((local_venv.path if cross_platform else venv.path) + "/bin")',
             'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
             if not self.metadata.install_requires_all_files
             else None,
         ]
         if self.metadata.framework == PythonFramework.MCP:
             steps += [
-                'run("mkdir -p {}/bin".format(venv["build"])) if cross_platform else None',
-                'run("cp {}/bin/mcp {}/bin/mcp".format(local_venv["build"], venv["build"])) if cross_platform else None',
+                'run("mkdir -p {}/bin".format(venv.path)) if cross_platform else None',
+                'run("cp {}/bin/mcp {}/bin/mcp".format(local_venv.path, venv.path)) if cross_platform else None',
             ]
         if self.metadata.framework == PythonFramework.Django:
             steps += [
@@ -503,7 +503,7 @@ class PythonProvider:
             if 'if __name__ == "__main__"' in contents or "mcp.run" in contents:
                 start_cmd = f'"python {main_file}"'
             else:
-                start_cmd = f'"python {{}}/bin/mcp run {main_file} --transport=streamable-http".format(venv["serve"])'
+                start_cmd = f'"python {{}}/bin/mcp run {main_file} --transport=streamable-http".format(venv.serve_path)'
 
         if not start_cmd:
             if self.metadata.main_file:
@@ -546,7 +546,7 @@ class PythonProvider:
             python_path = 'f"{app_serve_path}:{app_serve_path}/src:{python_serve_site_packages_path}"'
         else:
             python_path = 'f"{app_serve_path}:{python_serve_site_packages_path}"'
-        env_vars = {"PYTHONPATH": python_path, "HOME": 'app["serve"]'}
+        env_vars = {"PYTHONPATH": python_path, "HOME": 'app.serve_path'}
         if self.metadata.framework == PythonFramework.Streamlit:
             env_vars["STREAMLIT_SERVER_HEADLESS"] = '"true"'
         elif self.metadata.framework == PythonFramework.MCP:

@@ -10,17 +10,17 @@ serve(
   provider="node-static",
   build=[
     use(node, npm),
-    workdir(temp["build"]),
+    workdir(temp.path),
     copy("package-lock.json"),
     env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
     run("npm ci", inputs=["package.json"], group="install"),
     copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
     run("npm run build", outputs=[metadata.static_dir], group="build"),
-    run("cp -R {}/* {}/".format(metadata.static_dir, static_app["build"]))
+    run("cp -R {}/* {}/".format(metadata.static_dir, static_app.path))
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app["serve"], PORT)
+    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app.serve_path, PORT)
   },
   mounts=[
     static_app

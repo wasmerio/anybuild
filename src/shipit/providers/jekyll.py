@@ -83,10 +83,10 @@ class JekyllProvider(StaticFileProvider):
                 'run("bundle add jekyll -v {}".format(metadata.jekyll_version), group="build")',
             ]
         return [
-            'workdir(temp["build"])',
+            'workdir(temp.path)',
             *install_commands,
             'copy(".", ignore=[".git"])',
-            'run("jekyll build --destination={}".format(static_app["build"]), outputs=["."], group="build")',
+            'run("jekyll build --destination={}".format(static_app.path), outputs=["."], group="build")',
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:

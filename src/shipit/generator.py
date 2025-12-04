@@ -190,7 +190,7 @@ def generate_shipit(path: Path, provider: Provider) -> str:
     out.append(f'  provider="{plan.provider}",')
     # If app is mounted for serve, set cwd to the app serve path
     if "app" in attach_serve_names:
-        out.append('  cwd=app["serve"],')
+        out.append('  cwd=app.serve_path,')
     out.append("  build=[")
     out.append(build_steps_block)
     out.append("  ],")

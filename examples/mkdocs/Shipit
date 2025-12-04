@@ -16,18 +16,18 @@ serve(
   provider="mkdocs",
   build=[
     use(python, uv),
-    workdir(temp["build"]),
-    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
+    workdir(temp.path),
+    env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path),
     run(f"uv init", inputs=[], outputs=["uv.lock"], group="install"),
     run("uv add mkdocs", group="install"),
-    path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
+    path((local_venv.path if cross_platform else venv.path) + "/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"]),
-    run("uv run mkdocs build --site-dir={}".format(static_app["build"]), outputs=["."], group="build")
+    run("uv run mkdocs build --site-dir={}".format(static_app.path), outputs=["."], group="build")
   ],
   deps=[python, staticwebserver],
   env = {},
   commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app["serve"], PORT)
+    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app.serve_path, PORT)
   },
   mounts=[
     static_app

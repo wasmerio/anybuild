@@ -70,7 +70,7 @@ class MkdocsProvider(StaticFileProvider):
     def build_steps(self) -> list[str]:
         return [
             *self.python_provider.build_steps(),
-            'run("uv run mkdocs build --site-dir={}".format(static_app["build"]), outputs=["."], group="build")',
+            'run("uv run mkdocs build --site-dir={}".format(static_app.path), outputs=["."], group="build")',
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:

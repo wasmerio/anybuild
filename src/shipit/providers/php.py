@@ -85,13 +85,13 @@ class PhpProvider:
 
     def build_steps(self) -> list[str]:
         steps = [
-            'workdir(app["build"])',
+            'workdir(app.path)',
         ]
         if _exists(self.path, "php.ini"):
-            steps.append('copy("php.ini", "{}/php.ini".format(assets["build"]))')
+            steps.append('copy("php.ini", "{}/php.ini".format(assets.path))')
         else:
             steps.append(
-                'copy("php/php.ini", "{}/php.ini".format(assets["build"]), base="assets")'
+                'copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets")'
             )
 
         if self.metadata.use_composer:
@@ -112,16 +112,16 @@ class PhpProvider:
     def base_commands(self) -> Dict[str, str]:
         if _exists(self.path, "public/index.php"):
             return {
-                "start": '"php -S localhost:{} -t {}/public".format(PORT, app["serve"])'
+                "start": '"php -S localhost:{} -t {}/public".format(PORT, app.serve_path)'
             }
         elif _exists(self.path, "app/index.php"):
             return {
-                "start": '"php -S localhost:{} -t {}/app".format(PORT, app["serve"])'
+                "start": '"php -S localhost:{} -t {}/app".format(PORT, app.serve_path)'
             }
         elif _exists(self.path, "index.php"):
-            return {"start": '"php -S localhost:{} -t {}".format(PORT, app["serve"])'}
+            return {"start": '"php -S localhost:{} -t {}".format(PORT, app.serve_path)'}
         return {
-            "start": '"php -S localhost:{} -t {}".format(PORT, app["serve"])',
+            "start": '"php -S localhost:{} -t {}".format(PORT, app.serve_path)',
         }
 
     def mounts(self) -> list[MountSpec]:
@@ -135,7 +135,7 @@ class PhpProvider:
 
     def env(self) -> Optional[Dict[str, str]]:
         return {
-            "PHP_INI_SCAN_DIR": '"{}".format(assets["serve"])',
+            "PHP_INI_SCAN_DIR": '"{}".format(assets.serve_path)',
         }
 
     def services(self) -> list[ServiceSpec]:

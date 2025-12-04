@@ -71,7 +71,7 @@ class LaravelProvider(PhpProvider):
     def build_steps(self) -> list[str]:
         return [
             'env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0")',
-            'workdir(app["build"])',
+            'workdir(app.path)',
             # "run(\"pie install php/pdo_pgsql\")",
             'run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install")',
             *self.node_provider.build_steps(),
@@ -79,7 +79,7 @@ class LaravelProvider(PhpProvider):
 
     def prepare_steps(self) -> Optional[list[str]]:
         return [
-            'workdir(app["serve"])',
+            'workdir(app.serve_path)',
             'run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache")',
             'run("php artisan config:cache")',
             'run("php artisan event:cache")',

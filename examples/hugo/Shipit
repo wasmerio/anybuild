@@ -9,13 +9,13 @@ serve(
   provider="hugo",
   build=[
     use(hugo),
-    workdir(temp["build"]),
+    workdir(temp.path),
     copy(".", ".", ignore=[".git"]),
-    run("hugo build --destination={}".format(static_app["build"]), group="build")
+    run("hugo build --destination={}".format(static_app.path), group="build")
   ],
   deps=[staticwebserver],
   commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app["serve"], PORT)
+    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app.serve_path, PORT)
   },
   mounts=[
     static_app

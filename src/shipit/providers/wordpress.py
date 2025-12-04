@@ -62,12 +62,12 @@ class WordPressProvider(PhpProvider):
 
     def build_steps(self) -> list[str]:
         steps = [
-            'copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets["build"]))',
-            'copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets["build"]), base="assets")',
+            'copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets.path))',
+            'copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets.path), base="assets")',
         ]
         if not _exists(self.path, "wp-config.php"):
             steps.append(
-                'copy("wordpress/wp-config.php", "{}/wp-config.php".format(app["build"]), base="assets")'
+                'copy("wordpress/wp-config.php", "{}/wp-config.php".format(app.path), base="assets")'
             )
         return steps + super().build_steps()
 
@@ -77,8 +77,8 @@ class WordPressProvider(PhpProvider):
     def commands(self) -> Dict[str, str]:
         commands = super().commands()
         return {
-            # "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets["serve"], app["serve"])',
-            "after_deploy": '"bash {}/setup-wp.sh".format(assets["serve"])',
+            # "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path)',
+            "after_deploy": '"bash {}/setup-wp.sh".format(assets.serve_path)',
             **commands,
         }
 
@@ -89,7 +89,7 @@ class WordPressProvider(PhpProvider):
         return [
             VolumeSpec(
                 name="wp-content",
-                serve_path='"{}/wp-content/".format(app["serve"])',
+                serve_path='"{}/wp-content/".format(app.serve_path)',
                 var_name="wp_content",
             )
         ]

@@ -92,7 +92,7 @@ class StaticFileProvider:
 
     def build_steps(self) -> list[str]:
         return [
-            'workdir(static_app["build"])',
+            'workdir(static_app.path)',
             'copy({}, ".", ignore=[".git"])'.format(
                 json.dumps(self.metadata.static_dir or ".")
             ),
@@ -106,7 +106,7 @@ class StaticFileProvider:
 
     def commands(self) -> Dict[str, str]:
         return {
-            "start": '"static-web-server --root={} --log-level=info --port={}".format(static_app["serve"], PORT)'
+            "start": '"static-web-server --root={} --log-level=info --port={}".format(static_app.serve_path, PORT)'
         }
 
     def mounts(self) -> list[MountSpec]:

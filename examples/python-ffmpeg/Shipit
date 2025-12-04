@@ -10,25 +10,25 @@ python_version = metadata.python_version
 cross_platform = metadata.cross_platform
 python_extra_index_url = metadata.python_extra_index_url
 precompile_python = metadata.precompile_python
-python_cross_packages_path = venv["build"] + f"/lib/python{python_version}/site-packages"
-python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv["serve"], python_version)
-app_serve_path = app["serve"]
+python_cross_packages_path = venv.path + f"/lib/python{python_version}/site-packages"
+python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv.serve_path, python_version)
+app_serve_path = app.serve_path
 
 
 serve(
   name="python-ffmpeg",
   provider="python",
-  cwd=app["serve"],
+  cwd=app.serve_path,
   build=[
     use(python, uv),
-    workdir(app["build"]),
-    env(UV_PROJECT_ENVIRONMENT=local_venv["build"] if cross_platform else venv["build"]),
+    workdir(app.path),
+    env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path),
     run(f"uv init", inputs=[], outputs=["uv.lock"], group="install"),
     run("uv add -r requirements.txt uvicorn", inputs=["requirements.txt"], group="install"),
     run(f"uv pip compile requirements.txt --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", inputs=["requirements.txt"], outputs=["cross-requirements.txt"]) if cross_platform else None,
     run(f"uvx pip install -r cross-requirements.txt uvicorn --target {python_cross_packages_path} --platform {cross_platform} --only-binary=:all: --python-version={python_version} --compile") if cross_platform else None,
     run("rm cross-requirements.txt") if cross_platform else None,
-    path((local_venv["build"] if cross_platform else venv["build"]) + "/bin"),
+    path((local_venv.path if cross_platform else venv.path) + "/bin"),
     copy(".", ".", ignore=[".venv", ".git", "__pycache__"])
   ],
   deps=[python, ffmpeg],
@@ -40,7 +40,7 @@ serve(
   ],
   env = {
     "PYTHONPATH": f"{app_serve_path}:{python_serve_site_packages_path}",
-    "HOME": app["serve"]
+    "HOME": app.serve_path
   },
   commands = {
     "start": f"uvicorn main:app --host 0.0.0.0 --port {PORT}"
