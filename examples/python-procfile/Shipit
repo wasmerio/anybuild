@@ -27,16 +27,16 @@ serve(
   deps=[python],
   prepare=[
     run("echo \"Precompiling Python code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None,
+    run(f"python -m compileall -o 2 {python_serve_site_packages_path} || true") if precompile_python else None,
     run("echo \"Precompiling package code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None
+    run(f"python -m compileall -o 2 {app_serve_path} || true") if precompile_python else None
   ],
   env = {
     "PYTHONPATH": f"{app_serve_path}:{python_serve_site_packages_path}",
     "HOME": app["serve"]
   },
   commands = {
-    "start": "python -m http.server $PORT -d public".replace("$PORT", PORT)
+    "start": (metadata.commands.start or None).replace("$PORT", PORT)
   },
   mounts=[
     app,

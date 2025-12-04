@@ -131,8 +131,13 @@ def generate_shipit(path: Path, provider: Provider) -> str:
 
     build_steps_block = ",\n".join([f"    {s}" for s in build_steps])
     deps_array = ", ".join(serve_dep_vars)
+    def format_command(k: str, v: str) -> str:
+        if k == "start":
+            v = f"(metadata.commands.start or {v})"
+        return f'    "{k}": {v}.replace("$PORT", PORT)'
+
     commands_lines = ",\n".join(
-        [f'    "{k}": {v}.replace("$PORT", PORT)' for k, v in plan.commands.items()]
+        [format_command(k, v) for k, v in plan.commands.items()]
     )
     env_lines = None
     if plan.env is not None:

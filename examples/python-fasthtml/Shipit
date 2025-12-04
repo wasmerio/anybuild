@@ -33,16 +33,16 @@ serve(
   deps=[python],
   prepare=[
     run("echo \"Precompiling Python code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None,
+    run(f"python -m compileall -o 2 {python_serve_site_packages_path} || true") if precompile_python else None,
     run("echo \"Precompiling package code...\"") if precompile_python else None,
-    run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None
+    run(f"python -m compileall -o 2 {app_serve_path} || true") if precompile_python else None
   ],
   env = {
     "PYTHONPATH": f"{app_serve_path}:{python_serve_site_packages_path}",
     "HOME": app["serve"]
   },
   commands = {
-    "start": f"uvicorn main:app --host 0.0.0.0 --port {PORT}".replace("$PORT", PORT)
+    "start": (metadata.commands.start or f"uvicorn main:app --host 0.0.0.0 --port {PORT}").replace("$PORT", PORT)
   },
   mounts=[
     app,

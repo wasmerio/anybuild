@@ -435,9 +435,9 @@ class PythonProvider:
             return []
         return [
             'run("echo \\"Precompiling Python code...\\"") if precompile_python else None',
-            'run(f"python -m compileall -o 2 {python_serve_site_packages_path}") if precompile_python else None',
+            'run(f"python -m compileall -o 2 {python_serve_site_packages_path} || true") if precompile_python else None',
             'run("echo \\"Precompiling package code...\\"") if precompile_python else None',
-            'run(f"python -m compileall -o 2 {app_serve_path}") if precompile_python else None',
+            'run(f"python -m compileall -o 2 {app_serve_path} || true") if precompile_python else None',
         ]
 
     @classmethod
@@ -508,13 +508,6 @@ class PythonProvider:
         if not start_cmd:
             if self.metadata.main_file:
                 start_cmd = f'"python {self.metadata.main_file}"'
-            else:
-                if self.metadata.commands.start:
-                    start_cmd = f'"{self.metadata.commands.start}"'
-                else:
-                    raise Exception(
-                        "Shipit could not detect a start command, please provide a start command manually"
-                    )
 
         if self.metadata.framework == PythonFramework.Django:
             if not start_cmd:

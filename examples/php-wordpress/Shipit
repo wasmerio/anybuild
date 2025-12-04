@@ -35,7 +35,7 @@ serve(
   },
   commands = {
     "after_deploy": "bash {}/setup-wp.sh".format(assets["serve"]).replace("$PORT", PORT),
-    "start": "php -S localhost:{} -t {}".format(PORT, app["serve"]).replace("$PORT", PORT)
+    "start": (metadata.commands.start or "php -S localhost:{} -t {}".format(PORT, app["serve"])).replace("$PORT", PORT)
   },
   services=[
     database,

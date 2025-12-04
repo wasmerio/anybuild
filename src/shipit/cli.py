@@ -916,6 +916,8 @@ def build(
         env_vars = dotenv_values(path / f".env.{env_name}")
         serve.env.update(env_vars)
 
+    assert serve.commands.get("start"), "No start command could be found, please provide a start command"
+
     # Build and serve
     build_backend.build(serve.name, env, serve.mounts or [], serve.build)
     runner.build(serve)

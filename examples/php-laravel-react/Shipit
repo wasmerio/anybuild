@@ -32,7 +32,7 @@ serve(
     run("php artisan view:cache")
   ],
   commands = {
-    "start": f"php -S localhost:{PORT} -t public".replace("$PORT", PORT),
+    "start": (metadata.commands.start or f"php -S localhost:{PORT} -t public").replace("$PORT", PORT),
     "after_deploy": "php artisan migrate".replace("$PORT", PORT)
   },
   mounts=[

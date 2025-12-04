@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Protocol, Literal
+from typing import Any, Dict, List, Optional, Protocol, Literal
 from shipit.procfile import Procfile
 from pydantic import BaseModel, Field
 from pydantic_settings import SettingsConfigDict
@@ -52,6 +52,8 @@ class Metadata(BaseModel):
     port: Optional[int] = 8080
     commands: CustomCommands = Field(default_factory=CustomCommands)
 
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.commands, name, None)
 
 class Provider(Protocol):
     def __init__(self, path: Path): ...
