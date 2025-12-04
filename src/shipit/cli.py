@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 
 from shipit.generator import generate_shipit, load_provider, load_provider_metadata
-from shipit.providers.base import CustomCommands
+from shipit.providers.base import Metadata
 from dotenv import dotenv_values
 from shipit.builders import BuildBackend, DockerBuildBackend, LocalBuildBackend
 from shipit.runners import Runner, LocalRunner, WasmerRunner
@@ -397,6 +397,9 @@ def auto(
     build(
         path,
         shipit_path=shipit_path,
+        install_command=install_command,
+        build_command=build_command,
+        start_command=start_command,
         wasmer=(wasmer or wasmer_deploy),
         docker=docker,
         docker_client=docker_client,
@@ -468,15 +471,16 @@ def generate(
     if out is None:
         out = path / "Shipit"
 
-    custom_commands = CustomCommands.from_path(path, use_procfile)
+    base_metadata = Metadata()
+    base_metadata.commands.enrich_from_path(path)
     if start_command:
-        custom_commands.start = start_command
+        base_metadata.commands.start = start_command
     if install_command:
-        custom_commands.install = install_command
+        base_metadata.commands.install = install_command
     if build_command:
-        custom_commands.build = build_command
-    provider_cls = load_provider(path, custom_commands, use_provider)
-    metadata = load_provider_metadata(provider_cls, path, custom_commands)
+        base_metadata.commands.build = build_command
+    provider_cls = load_provider(path, base_metadata, use_provider)
+    metadata = load_provider_metadata(provider_cls, path, base_metadata)
     provider = provider_cls(path, metadata)
     content = generate_shipit(path, provider)
     metadata_json = metadata.model_dump_json(indent=2, exclude_defaults=True)
@@ -722,9 +726,10 @@ def plan(
     else:
         runner = LocalRunner(build_backend, path)
 
-    custom_commands = CustomCommands.from_path(path)
-    provider_cls = load_provider(path, custom_commands)
-    provider_metadata = load_provider_metadata(provider_cls, path, custom_commands)
+    base_metadata = Metadata()
+    base_metadata.commands.enrich_from_path(path)
+    provider_cls = load_provider(path, base_metadata)
+    provider_metadata = load_provider_metadata(provider_cls, path, base_metadata)
     provider_metadata = runner.prepare_metadata(provider_metadata)
     ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_metadata)
     metadata_commands: Dict[str, Optional[str]] = {
@@ -777,6 +782,18 @@ def build(
     shipit_path: Optional[Path] = typer.Option(
         None,
         help="The path to the Shipit file (defaults to Shipit in the provided path).",
+    ),
+    start_command: Optional[str] = typer.Option(
+        None,
+        help="The start command to use (overwrites the default)",
+    ),
+    install_command: Optional[str] = typer.Option(
+        None,
+        help="The install command to use (overwrites the default)",
+    ),
+    build_command: Optional[str] = typer.Option(
+        None,
+        help="The build command to use (overwrites the default)",
     ),
     wasmer: bool = typer.Option(
         False,
@@ -841,9 +858,16 @@ def build(
     else:
         runner = LocalRunner(build_backend, path)
 
-    custom_commands = CustomCommands.from_path(path)
-    provider_cls = load_provider(path, custom_commands)
-    provider_metadata = load_provider_metadata(provider_cls, path, custom_commands)
+    metadata = Metadata()
+    metadata.commands.enrich_from_path(path)
+    if start_command:
+        metadata.commands.start = start_command
+    if install_command:
+        metadata.commands.install = install_command
+    if build_command:
+        metadata.commands.build = build_command
+    provider_cls = load_provider(path, metadata)
+    provider_metadata = load_provider_metadata(provider_cls, path, metadata)
     provider_metadata = runner.prepare_metadata(provider_metadata)
     serve_port = serve_port or os.environ.get("PORT", "8080")
     ctx, serve = evaluate_shipit(
@@ -868,6 +892,9 @@ def build(
             return build(
                 path,
                 shipit_path=shipit_path,
+                install_command=install_command,
+                build_command=build_command,
+                start_command=start_command,
                 wasmer=wasmer,
                 skip_prepare=skip_prepare,
                 wasmer_bin=wasmer_bin,

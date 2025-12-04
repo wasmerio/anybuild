@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Literal
 from shipit.procfile import Procfile
+from pydantic import BaseModel, Field
+from pydantic_settings import SettingsConfigDict
 
 
 @dataclass
@@ -10,8 +12,9 @@ class DetectResult:
     score: int  # Higher score wins when multiple providers match
 
 
-@dataclass
-class CustomCommands:
+class CustomCommands(BaseModel):
+    model_config = SettingsConfigDict(extra="ignore")
+
     install: Optional[str] = None
     build: Optional[str] = None
     start: Optional[str] = None
@@ -31,18 +34,23 @@ class CustomCommands:
     #                 cmd = " ".join(cmd)
     #             custom_commands.start = cmd
 
-    @classmethod
-    def from_path(cls, path: Path, use_procfile: bool = True) -> "CustomCommands":
-        custom_commands = cls()
+    def enrich_from_path(self, path: Path, use_procfile: bool = True) -> "CustomCommands":
         if use_procfile:
             procfile_path = path / "Procfile"
             if procfile_path.exists():
                 try:
                     procfile = Procfile.loads(procfile_path.read_text())
-                    custom_commands.start = procfile.get_start_command()
+                    self.start = procfile.get_start_command()
                 except Exception:
                     pass
-        return custom_commands
+        return self
+
+
+class Metadata(BaseModel):
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
+
+    port: Optional[int] = 8080
+    commands: CustomCommands = Field(default_factory=CustomCommands)
 
 
 class Provider(Protocol):
@@ -50,8 +58,10 @@ class Provider(Protocol):
     @classmethod
     def name(cls) -> str: ...
     @classmethod
+    def load_metadata(cls, path: Path, metadata: Metadata) -> Metadata: ...
+    @classmethod
     def detect(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, metadata: Metadata
     ) -> Optional[DetectResult]: ...
     # Structured plan steps (no path args; use self.path)
     def serve_name(self) -> Optional[str]: ...

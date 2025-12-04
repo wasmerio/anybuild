@@ -10,6 +10,7 @@ from .base import (
     ServiceSpec,
     VolumeSpec,
     CustomCommands,
+    Metadata,
 )
 from .staticfile import StaticFileProvider, StaticFileMetadata
 from .python import PythonProvider, PythonMetadata
@@ -28,30 +29,29 @@ class MkdocsProvider(StaticFileProvider):
         self.python_provider = PythonProvider(path, metadata, only_build=True)
 
     @classmethod
-    def load_metadata(
-        cls, path: Path, custom_commands: CustomCommands
-    ) -> MkdocsMetadata:
+    def load_metadata(cls, path: Path, base_metadata: Metadata) -> MkdocsMetadata:
         python_metadata = PythonProvider.load_metadata(
-            path, custom_commands, must_have_deps={"mkdocs"}
+            path, base_metadata, must_have_deps={"mkdocs"}
         )
-        staticfile_metadata = StaticFileProvider.load_metadata(path, custom_commands)
-        metadata = MkdocsMetadata(
-            **python_metadata.model_dump(),
-            **staticfile_metadata.model_dump(),
+        staticfile_metadata = StaticFileProvider.load_metadata(path, base_metadata)
+
+        return MkdocsMetadata(
+            **(
+                python_metadata.model_dump()
+                | staticfile_metadata.model_dump()
+                | base_metadata.model_dump()
+            )
         )
-        return metadata
 
     @classmethod
     def name(cls) -> str:
         return "mkdocs"
 
     @classmethod
-    def detect(
-        cls, path: Path, custom_commands: CustomCommands
-    ) -> Optional[DetectResult]:
+    def detect(cls, path: Path, metadata: Metadata) -> Optional[DetectResult]:
         if _exists(path, "mkdocs.yml", "mkdocs.yaml"):
             return DetectResult(cls.name(), 85)
-        if custom_commands.build and custom_commands.build.startswith("mkdocs "):
+        if metadata.commands.build and metadata.commands.build.startswith("mkdocs "):
             return DetectResult(cls.name(), 85)
         return None
 

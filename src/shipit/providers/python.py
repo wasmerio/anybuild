@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, Optional, Set
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
 from .base import (
@@ -14,7 +14,7 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    CustomCommands,
+    Metadata,
 )
 
 
@@ -39,7 +39,7 @@ class DatabaseType(Enum):
     PostgreSQL = "postgresql"
 
 
-class PythonMetadata(BaseModel):
+class PythonMetadata(Metadata):
     model_config = SettingsConfigDict(
         use_enum_values=True, extra="ignore", env_prefix="SHIPIT_"
     )
@@ -81,10 +81,10 @@ class PythonProvider:
     def load_metadata(
         cls,
         path: Path,
-        custom_commands: CustomCommands,
+        base_metadata: Metadata,
         must_have_deps: Optional[Set[str]] = None,
     ) -> PythonMetadata:
-        metadata = PythonMetadata()
+        metadata = PythonMetadata(**base_metadata.model_dump())
 
         if not metadata.main_file:
             metadata.main_file = cls.detect_main_file(path)
@@ -223,10 +223,7 @@ class PythonProvider:
             elif metadata.framework == PythonFramework.FastHTML:
                 metadata.asgi_application = python_path
 
-        if not metadata.start_command:
-            metadata.start_command = custom_commands.start
-
-        is_uvicorn_start = custom_commands.start and custom_commands.start.startswith(
+        is_uvicorn_start = metadata.commands.start and metadata.commands.start.startswith(
             "uvicorn "
         )
         framework_should_use_uvicorn = metadata.framework in [
@@ -280,18 +277,18 @@ class PythonProvider:
 
     @classmethod
     def detect(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, metadata: Metadata
     ) -> Optional[DetectResult]:
         if _exists(path, "pyproject.toml", "requirements.txt"):
             if _exists(path, "manage.py"):
                 return DetectResult(cls.name(), 70)
             return DetectResult(cls.name(), 50)
-        if custom_commands.start:
+        if metadata.commands.start:
             if (
-                custom_commands.start.startswith("python ")
-                or custom_commands.start.startswith("uv ")
-                or custom_commands.start.startswith("uvicorn ")
-                or custom_commands.start.startswith("gunicorn ")
+                metadata.commands.start.startswith("python ")
+                or metadata.commands.start.startswith("uv ")
+                or metadata.commands.start.startswith("uvicorn ")
+                or metadata.commands.start.startswith("gunicorn ")
             ):
                 return DetectResult(cls.name(), 80)
         if cls.detect_main_file(path):
@@ -512,8 +509,8 @@ class PythonProvider:
             if self.metadata.main_file:
                 start_cmd = f'"python {self.metadata.main_file}"'
             else:
-                if self.metadata.start_command:
-                    start_cmd = f'"{self.metadata.start_command}"'
+                if self.metadata.commands.start:
+                    start_cmd = f'"{self.metadata.commands.start}"'
                 else:
                     raise Exception(
                         "Shipit could not detect a start command, please provide a start command manually"

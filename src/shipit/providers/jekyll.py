@@ -10,6 +10,7 @@ from .base import (
     ServiceSpec,
     VolumeSpec,
     CustomCommands,
+    Metadata,
 )
 from .staticfile import StaticFileProvider, StaticFileMetadata
 from pydantic_settings import SettingsConfigDict
@@ -29,9 +30,9 @@ class JekyllProvider(StaticFileProvider):
 
     @classmethod
     def load_metadata(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, base_metadata: Metadata
     ) -> JekyllMetadata:
-        metadata = super().load_metadata(path, custom_commands)
+        metadata = super().load_metadata(path, base_metadata)
         return JekyllMetadata(**metadata.model_dump())
 
     @classmethod
@@ -40,13 +41,13 @@ class JekyllProvider(StaticFileProvider):
 
     @classmethod
     def detect(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, metadata: Metadata
     ) -> Optional[DetectResult]:
         if _exists(path, "_config.yml", "_config.yaml"):
             if _exists(path, "Gemfile"):
                 return DetectResult(cls.name(), 85)
             return DetectResult(cls.name(), 40)
-        if custom_commands.build and custom_commands.build.startswith("jekyll "):
+        if metadata.commands.build and metadata.commands.build.startswith("jekyll "):
             return DetectResult(cls.name(), 85)
         return None
 

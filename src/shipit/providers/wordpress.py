@@ -9,7 +9,7 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    CustomCommands,
+    Metadata,
 )
 from .php import PhpMetadata, PhpProvider
 from pydantic_settings import SettingsConfigDict
@@ -28,14 +28,14 @@ class WordPressProvider(PhpProvider):
 
     @classmethod
     def load_metadata(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, metadata: Metadata
     ) -> WordPressMetadata:
-        metadata = super().load_metadata(path, custom_commands)
-        return WordPressMetadata(**metadata.model_dump())
+        php_metadata = super().load_metadata(path, metadata)
+        return WordPressMetadata(**php_metadata.model_dump())
 
     @classmethod
     def detect(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, metadata: Metadata
     ) -> Optional[DetectResult]:
         if (
             _exists(path, "wp-content")

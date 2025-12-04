@@ -6,7 +6,7 @@ from shipit.providers.base import (
     Provider,
     ProviderPlan,
     DetectResult,
-    CustomCommands,
+    Metadata,
 )
 from shipit.providers.registry import providers as registry_providers
 
@@ -16,10 +16,10 @@ def _providers() -> list[type[Provider]]:
     return registry_providers()
 
 
-def detect_provider(path: Path, custom_commands: CustomCommands) -> Provider:
+def detect_provider(path: Path, base_metadata: Metadata) -> Provider:
     matches: list[tuple[type[Provider], DetectResult]] = []
     for provider_cls in _providers():
-        res = provider_cls.detect(path, custom_commands)
+        res = provider_cls.detect(path, base_metadata)
         if res:
             matches.append((provider_cls, res))
     if not matches:
@@ -76,7 +76,7 @@ def _emit_dependencies_declarations(
 
 
 def load_provider(
-    path: Path, custom_commands: CustomCommands, use_provider: Optional[str] = None
+    path: Path, base_metadata: Metadata, use_provider: Optional[str] = None
 ) -> type[Provider]:
     provider_cls = None
     if use_provider:
@@ -84,17 +84,17 @@ def load_provider(
             (p for p in _providers() if p.name().lower() == use_provider.lower()), None
         )
     if not provider_cls:
-        provider_cls = detect_provider(path, custom_commands)
+        provider_cls = detect_provider(path, base_metadata)
     return provider_cls
 
 
 def load_provider_metadata(
     provider_cls: type[Provider],
     path: Path,
-    custom_commands: CustomCommands,
+    base_metadata: Metadata,
     metadata: Optional[dict] = None,
 ) -> dict:
-    provider_metadata = provider_cls.load_metadata(path, custom_commands)
+    provider_metadata = provider_cls.load_metadata(path, base_metadata)
     if metadata:
         provider_metadata = metadata.model_copy(deep=True, update=metadata)
     return provider_metadata

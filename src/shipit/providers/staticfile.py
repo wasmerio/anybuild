@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Dict, Optional
 import json
 import yaml
-from pydantic import BaseModel
 from pydantic_settings import SettingsConfigDict
 
 from .base import (
@@ -13,11 +12,11 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    CustomCommands,
+    Metadata,
 )
 
 
-class StaticFileMetadata(BaseModel):
+class StaticFileMetadata(Metadata):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     sws_version: Optional[str] = "2.38.0"
@@ -34,7 +33,7 @@ class StaticFileProvider:
 
     @classmethod
     def load_metadata(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, base_metadata: Metadata
     ) -> StaticFileMetadata:
         if (path / "Staticfile").exists():
             config = None
@@ -45,12 +44,14 @@ class StaticFileProvider:
                 pass
 
             if config:
-                return StaticFileMetadata.model_validate(
-                    {"static_dir": config.get("root")}
+                return StaticFileMetadata(
+                    **base_metadata.model_dump(),
+                    static_dir=config.get("root"),
                 )
         if _exists(path, "public/index.html") or _exists(path, "public/index.htm"):
-            return StaticFileMetadata(static_dir="public")
-        return StaticFileMetadata()
+            return StaticFileMetadata(static_dir="public", **base_metadata.model_dump())
+
+        return StaticFileMetadata(**base_metadata.model_dump())
 
     @classmethod
     def name(cls) -> str:
@@ -58,7 +59,7 @@ class StaticFileProvider:
 
     @classmethod
     def detect(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, metadata: Metadata
     ) -> Optional[DetectResult]:
         is_python_php_js_project = _exists(
             path, "package.json", "pyproject.toml", "composer.json"
@@ -71,7 +72,7 @@ class StaticFileProvider:
             ):
                 return DetectResult(cls.name(), 10)
             return DetectResult(cls.name(), 10)
-        if custom_commands.start and custom_commands.start.startswith(
+        if metadata.commands.start and metadata.commands.start.startswith(
             "static-web-server "
         ):
             return DetectResult(cls.name(), 70)

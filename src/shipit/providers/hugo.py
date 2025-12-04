@@ -10,6 +10,7 @@ from .base import (
     VolumeSpec,
     CustomCommands,
     MountSpec,
+    Metadata,
 )
 from .staticfile import StaticFileProvider, StaticFileMetadata
 from pydantic_settings import SettingsConfigDict
@@ -26,8 +27,8 @@ class HugoProvider(StaticFileProvider):
         super().__init__(path, metadata)
 
     @classmethod
-    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> HugoMetadata:
-        metadata = super().load_metadata(path, custom_commands)
+    def load_metadata(cls, path: Path, base_metadata: Metadata) -> HugoMetadata:
+        metadata = super().load_metadata(path, base_metadata)
         return HugoMetadata(**metadata.model_dump())
 
     @classmethod
@@ -36,7 +37,7 @@ class HugoProvider(StaticFileProvider):
 
     @classmethod
     def detect(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, metadata: Metadata
     ) -> Optional[DetectResult]:
         if _exists(path, "hugo.toml", "hugo.json", "hugo.yaml", "hugo.yml"):
             return DetectResult(cls.name(), 80)

@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 from typing import Dict, Optional, Literal
-from pydantic import BaseModel, ConfigDict
 
 from .base import (
     DetectResult,
@@ -11,12 +10,12 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    CustomCommands,
+    Metadata,
 )
 from pydantic_settings import SettingsConfigDict
 
 
-class PhpMetadata(BaseModel):
+class PhpMetadata(Metadata):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     use_composer: bool = False
@@ -30,16 +29,16 @@ class PhpProvider:
         self.metadata = metadata
 
     @classmethod
-    def load_metadata(cls, path: Path, custom_commands: CustomCommands) -> PhpMetadata:
+    def load_metadata(cls, path: Path, base_metadata: Metadata) -> PhpMetadata:
         use_composer = (
             _exists(path, "composer.json", "composer.lock")
             or (
-                custom_commands.install
-                and custom_commands.install.startswith("composer ")
+                base_metadata.commands.install
+                and base_metadata.commands.install.startswith("composer ")
             )
             or False
         )
-        return PhpMetadata(use_composer=use_composer)
+        return PhpMetadata(use_composer=use_composer, **base_metadata.model_dump())
 
     @classmethod
     def name(cls) -> str:
@@ -47,7 +46,7 @@ class PhpProvider:
 
     @classmethod
     def detect(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, metadata: Metadata
     ) -> Optional[DetectResult]:
         if _exists(path, "composer.json") and _exists(path, "public/index.php"):
             return DetectResult(cls.name(), 60)
@@ -57,9 +56,9 @@ class PhpProvider:
             or _exists(path, "app/index.php")
         ):
             return DetectResult(cls.name(), 10)
-        if custom_commands.start and custom_commands.start.startswith("php "):
+        if metadata.commands.start and metadata.commands.start.startswith("php "):
             return DetectResult(cls.name(), 70)
-        if custom_commands.install and custom_commands.install.startswith("composer "):
+        if metadata.commands.install and metadata.commands.install.startswith("composer "):
             return DetectResult(cls.name(), 30)
         return None
 

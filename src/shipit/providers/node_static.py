@@ -1,7 +1,7 @@
 import json
 import yaml
 from pathlib import Path
-from typing import Dict, Optional, Any, Set
+from typing import Dict, Optional, Any, Set, List
 from enum import Enum
 from semantic_version import Version, NpmSpec
 from pydantic import Field
@@ -14,7 +14,7 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    CustomCommands,
+    Metadata,
 )
 from .staticfile import StaticFileProvider, StaticFileMetadata
 from pydantic_settings import SettingsConfigDict
@@ -139,6 +139,25 @@ class StaticGenerator(Enum):
         else:
             return "dist"
 
+    @classmethod
+    def detect_generators_from_command(cls, build_command) -> List["StaticGenerator"]:
+        commands = {
+            "gatsby": [StaticGenerator.GATSBY],
+            "astro": [StaticGenerator.ASTRO],
+            "remix-ssg": [StaticGenerator.REMIX_OLD],
+            "vite": [StaticGenerator.VITE, StaticGenerator.REMIX_V2],
+            "docusaurus": [StaticGenerator.DOCUSAURUS, StaticGenerator.DOCUSAURUS_OLD],
+            "next": [StaticGenerator.NEXT],
+            "nuxi": [StaticGenerator.NUXT_V3],
+            "nuxt": [StaticGenerator.NUXT_OLD],
+            "svelte-kit": [StaticGenerator.SVELTE],
+        }
+        build_command = build_command.split(" ")[0]
+        if build_command in commands:
+            return commands[build_command]
+        else:
+            return []
+    
     def build_command(self) -> str:
         return {
             StaticGenerator.GATSBY: "gatsby build",
@@ -181,9 +200,9 @@ class NodeStaticProvider(StaticFileProvider):
 
     @classmethod
     def load_metadata(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, base_metadata: Metadata
     ) -> NodeStaticMetadata:
-        metadata = NodeStaticMetadata()
+        metadata = NodeStaticMetadata(**base_metadata.model_dump())
         if not metadata.package_manager:
             if (path / "package-lock.json").exists():
                 metadata.package_manager = PackageManager.NPM
@@ -278,8 +297,27 @@ class NodeStaticProvider(StaticFileProvider):
 
     @classmethod
     def detect(
-        cls, path: Path, custom_commands: CustomCommands
+        cls, path: Path, metadata: Metadata
     ) -> Optional[DetectResult]:
+        if metadata.commands.install:
+            # Detect this provider from the install command
+            if metadata.commands.install in ["npm install", "npm ci", "npm i", "pnpm install", "pnpm ci", "pnpm i", "yarn install", "yarn ci", "yarn i", "bun install", "bun ci", "bun i"]:
+                return DetectResult(cls.name(), 40)
+
+        if metadata.commands.build:
+            if metadata.commands.build.startswith("npm run "):
+                return DetectResult(cls.name(), 40)
+            elif metadata.commands.build.startswith("pnpm run "):
+                return DetectResult(cls.name(), 40)
+            elif metadata.commands.build.startswith("yarn run "):
+                return DetectResult(cls.name(), 40)
+            elif metadata.commands.build.startswith("bun run "):
+                return DetectResult(cls.name(), 40)
+
+            static_generators = StaticGenerator.detect_generators_from_command(metadata.commands.build)
+            if static_generators:
+                return DetectResult(cls.name(), 40)
+
         package_json = cls.parse_package_json(path)
         if not package_json:
             return None

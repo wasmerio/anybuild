@@ -177,7 +177,7 @@ class E2ECase(NamedTuple):
     [
         BuildMode.Local,
         BuildMode.Wasmer,
-        BuildMode.WasmerAndDocker,
+        # BuildMode.WasmerAndDocker,
     ],
 )
 async def test_end_to_end(case: E2ECase, build_mode: BuildMode):

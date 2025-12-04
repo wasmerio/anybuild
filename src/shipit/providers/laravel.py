@@ -10,6 +10,7 @@ from .base import (
     ServiceSpec,
     VolumeSpec,
     CustomCommands,
+    Metadata,
 )
 from .php import PhpMetadata, PhpProvider
 from .node_static import NodeStaticMetadata, NodeStaticProvider
@@ -27,23 +28,25 @@ class LaravelProvider(PhpProvider):
         self.metadata = metadata
 
     @classmethod
-    def load_metadata(
-        cls, path: Path, custom_commands: CustomCommands
-    ) -> LaravelMetadata:
-        metadata = super().load_metadata(path, custom_commands)
-        node_metadata = NodeStaticProvider.load_metadata(path, custom_commands)
+    def load_metadata(cls, path: Path, base_metadata: Metadata) -> LaravelMetadata:
+        metadata = super().load_metadata(path, base_metadata)
+        node_metadata = NodeStaticProvider.load_metadata(path, base_metadata)
         node_metadata.static_dir = None
         node_metadata.static_generator = None
-        return LaravelMetadata(**metadata.model_dump(), **node_metadata.model_dump())
+        return LaravelMetadata(
+            **(
+                metadata.model_dump()
+                | node_metadata.model_dump()
+                | base_metadata.model_dump()
+            )
+        )
 
     @classmethod
     def name(cls) -> str:
         return "laravel"
 
     @classmethod
-    def detect(
-        cls, path: Path, custom_commands: CustomCommands
-    ) -> Optional[DetectResult]:
+    def detect(cls, path: Path, metadata: Metadata) -> Optional[DetectResult]:
         if _exists(path, "artisan") and _exists(path, "composer.json"):
             return DetectResult(cls.name(), 95)
         return None
