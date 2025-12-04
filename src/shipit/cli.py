@@ -228,6 +228,7 @@ def evaluate_shipit(
     ctx = Ctx(build_backend, runner)
     glb = sl.GlobalsBuilder.standard()
 
+    print("PORT", provider_metadata.port)
     glb.set("PORT", str(provider_metadata.port or "8080"))
     glb.set("metadata", provider_metadata)
     glb.set("service", ctx.service)
@@ -285,6 +286,11 @@ def evaluate_shipit(
     if serve.commands.get("start"):
         serve.commands["start"] = serve.commands["start"].replace("$PORT", str(provider_metadata.port or "8080"))
     
+    if serve.commands.get("after_deploy"):
+        serve.commands["after_deploy"] = serve.commands["after_deploy"].replace("$PORT", str(provider_metadata.port or "8080"))
+
+    print(serve.commands)
+
     return ctx, serve
 
 
@@ -898,12 +904,13 @@ def build(
         metadata.commands.install = install_command
     if build_command:
         metadata.commands.build = build_command
-    provider_cls = load_provider(path, metadata)
-    provider_metadata = load_provider_metadata(provider_cls, path, metadata)
-    provider_metadata = runner.prepare_metadata(provider_metadata)
     serve_port = serve_port or os.environ.get("PORT")
     if serve_port:
         metadata.port = serve_port
+
+    provider_cls = load_provider(path, metadata)
+    provider_metadata = load_provider_metadata(provider_cls, path, metadata)
+    provider_metadata = runner.prepare_metadata(provider_metadata)
     ctx, serve = evaluate_shipit(
         shipit_file, build_backend, runner, provider_metadata
     )
