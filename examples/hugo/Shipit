@@ -15,7 +15,7 @@ serve(
   ],
   deps=[staticwebserver],
   commands = {
-    "start": (metadata.commands.start or "static-web-server --root={} --log-level=info --port={}".format(static_app["serve"], PORT)).replace("$PORT", PORT)
+    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app["serve"], PORT)
   },
   mounts=[
     static_app

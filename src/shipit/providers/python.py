@@ -515,7 +515,10 @@ class PythonProvider:
             migrate_cmd = '"python manage.py migrate"'
             return {"start": start_cmd, "after_deploy": migrate_cmd}
 
-        return {"start": start_cmd}
+        if start_cmd:
+            return {"start": start_cmd}
+        else:
+            return {}
 
     def mounts(self) -> list[MountSpec]:
         if self.only_build:

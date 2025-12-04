@@ -22,7 +22,7 @@ serve(
     "PHP_INI_SCAN_DIR": "{}".format(assets["serve"])
   },
   commands = {
-    "start": (metadata.commands.start or "php -S localhost:{} -t {}/public".format(PORT, app["serve"])).replace("$PORT", PORT)
+    "start": "php -S localhost:{} -t {}/public".format(PORT, app["serve"])
   },
   mounts=[
     app,

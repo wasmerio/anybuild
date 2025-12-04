@@ -35,9 +35,7 @@ serve(
     "PYTHONPATH": f"{app_serve_path}:{python_serve_site_packages_path}",
     "HOME": app["serve"]
   },
-  commands = {
-    "start": (metadata.commands.start or None).replace("$PORT", PORT)
-  },
+  commands = {},
   mounts=[
     app,
     venv

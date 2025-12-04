@@ -43,7 +43,7 @@ serve(
     "HOME": app["serve"]
   },
   commands = {
-    "start": (metadata.commands.start or f"uvicorn main:app --host 0.0.0.0 --port {PORT}").replace("$PORT", PORT)
+    "start": f"uvicorn main:app --host 0.0.0.0 --port {PORT}"
   },
   mounts=[
     app,

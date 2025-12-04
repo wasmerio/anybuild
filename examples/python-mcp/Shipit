@@ -47,7 +47,7 @@ serve(
     "FASTMCP_PORT": PORT
   },
   commands = {
-    "start": (metadata.commands.start or "python main.py").replace("$PORT", PORT)
+    "start": "python main.py"
   },
   mounts=[
     app,

@@ -222,14 +222,13 @@ def evaluate_shipit(
     shipit_file: Path,
     build_backend: BuildBackend,
     runner: Runner,
-    provider_metadata: dict,
-    port: Optional[str] = None,
+    provider_metadata: Metadata,
 ) -> Tuple[Ctx, Serve]:
     source = shipit_file.read_text()
     ctx = Ctx(build_backend, runner)
     glb = sl.GlobalsBuilder.standard()
 
-    glb.set("PORT", port or "8080")
+    glb.set("PORT", str(provider_metadata.port or "8080"))
     glb.set("metadata", provider_metadata)
     glb.set("service", ctx.service)
     glb.set("dep", ctx.dep)
@@ -253,6 +252,39 @@ def evaluate_shipit(
         raise ValueError(f"No serve definition found in {shipit_file}")
     assert len(ctx.serves) <= 1, "Only one serve is allowed for now"
     serve = next(iter(ctx.serves.values()))
+    
+    # Now we apply the custom commands (start, after_deploy, build, install)
+    if provider_metadata.commands.start:
+        serve.commands["start"] = provider_metadata.commands.start
+
+    if provider_metadata.commands.after_deploy:
+        serve.commands["after_deploy"] = provider_metadata.commands.after_deploy
+
+    if provider_metadata.commands.build or provider_metadata.commands.install:
+        new_build = []
+        has_done_build = False
+        has_done_install = False
+        for step in serve.build:
+            if isinstance(step, RunStep):
+                if step.group == "build" and not has_done_build and provider_metadata.commands.build:
+                    new_build.append(RunStep(provider_metadata.commands.build, group="build"))
+                    has_done_build = True
+                elif step.group == "install" and not has_done_install and provider_metadata.commands.install:
+                    new_build.append(RunStep(provider_metadata.commands.install, group="install"))
+                    has_done_install = True
+                else:
+                    new_build.append(step)
+            else:
+                new_build.append(step)
+        if not has_done_install and provider_metadata.commands.install:
+            new_build.append(RunStep(provider_metadata.commands.install, group="install"))
+        if not has_done_build and provider_metadata.commands.build:
+            new_build.append(RunStep(provider_metadata.commands.build, group="build"))
+        serve.build = new_build
+
+    if serve.commands.get("start"):
+        serve.commands["start"] = serve.commands["start"].replace("$PORT", str(provider_metadata.port or "8080"))
+    
     return ctx, serve
 
 
@@ -361,7 +393,7 @@ def auto(
         None,
         help="Use a specific provider to build the project.",
     ),
-    serve_port: Optional[str] = typer.Option(
+    serve_port: Optional[int] = typer.Option(
         None,
         help="The port to use (defaults to 8080).",
     ),
@@ -831,7 +863,7 @@ def build(
         None,
         help="The environment to use (defaults to `.env`, it will use .env.<env_name> if provided)",
     ),
-    serve_port: Optional[str] = typer.Option(
+    serve_port: Optional[int] = typer.Option(
         None,
         help="The port to use (defaults to 8080).",
     ),
@@ -869,9 +901,11 @@ def build(
     provider_cls = load_provider(path, metadata)
     provider_metadata = load_provider_metadata(provider_cls, path, metadata)
     provider_metadata = runner.prepare_metadata(provider_metadata)
-    serve_port = serve_port or os.environ.get("PORT", "8080")
+    serve_port = serve_port or os.environ.get("PORT")
+    if serve_port:
+        metadata.port = serve_port
     ctx, serve = evaluate_shipit(
-        shipit_file, build_backend, runner, provider_metadata, port=serve_port
+        shipit_file, build_backend, runner, provider_metadata
     )
     env = {
         "PATH": "",
