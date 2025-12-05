@@ -1,5 +1,6 @@
+import json
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from shipit.providers.base import (
     DependencySpec,
@@ -92,11 +93,14 @@ def load_provider_config(
     provider_cls: type[Provider],
     path: Path,
     base_config: Config,
-    config: Optional[dict] = None,
+    config: Optional[Union[dict, str]] = None,
 ) -> dict:
     provider_config = provider_cls.load_config(path, base_config)
     if config:
-        provider_config = config.model_copy(deep=True, update=config)
+        if isinstance(config, str):
+            config = json.loads(config)
+        assert isinstance(config, dict), "Config must be a dictionary, got %s" % type(config)
+        provider_config = provider_config.__class__.model_validate({**(provider_config.model_dump() | config)})
     return provider_config
 
 

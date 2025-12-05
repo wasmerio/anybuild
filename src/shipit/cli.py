@@ -233,7 +233,6 @@ def evaluate_shipit(
     ctx = Ctx(build_backend, runner)
     glb = sl.GlobalsBuilder.standard()
 
-    print("PORT", provider_config.port)
     glb.set("PORT", str(provider_config.port or "8080"))
     glb.set("config", provider_config)
     glb.set("service", ctx.service)
@@ -293,8 +292,6 @@ def evaluate_shipit(
     
     if serve.commands.get("after_deploy"):
         serve.commands["after_deploy"] = serve.commands["after_deploy"].replace("$PORT", str(provider_config.port or "8080"))
-
-    print(serve.commands)
 
     return ctx, serve
 
@@ -400,6 +397,10 @@ def auto(
         None,
         help="Use a specific provider to build the project.",
     ),
+    config: Optional[str] = typer.Option(
+        None,
+        help="The JSON content to use as input.",
+    ),
     serve_port: Optional[int] = typer.Option(
         None,
         help="The port to use (defaults to 8080).",
@@ -430,6 +431,7 @@ def auto(
             build_command=build_command,
             start_command=start_command,
             provider=provider,
+            config=config,
         )
 
     build(
@@ -449,6 +451,7 @@ def auto(
         env_name=env_name,
         serve_port=serve_port,
         provider=provider,
+        config=config,
     )
     if start or wasmer_deploy or wasmer_deploy_config:
         serve(
@@ -499,6 +502,10 @@ def generate(
         None,
         help="Use a specific provider to build the project.",
     ),
+    config: Optional[str] = typer.Option(
+        None,
+        help="The JSON content to use as input.",
+    ),
 ):
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -515,10 +522,10 @@ def generate(
     if build_command:
         base_config.commands.build = build_command
     provider_cls = load_provider(path, base_config, use_provider=provider)
-    config = load_provider_config(provider_cls, path, base_config)
-    provider = provider_cls(path, config)
+    provider_config = load_provider_config(provider_cls, path, base_config, config=config)
+    provider = provider_cls(path, provider_config)
     content = generate_shipit(path, provider)
-    config_json = config.model_dump_json(indent=2, exclude_defaults=True)
+    config_json = provider_config.model_dump_json(indent=2, exclude_defaults=True)
     if config_json and config_json != "{}":
         manifest_panel = Panel(
             Syntax(
@@ -709,6 +716,14 @@ def plan(
         None,
         help="Use a specific provider to build the project.",
     ),
+    config: Optional[str] = typer.Option(
+        None,
+        help="The JSON content to use as input.",
+    ),
+    serve_port: Optional[int] = typer.Option(
+        None,
+        help="The port to use (defaults to 8080).",
+    ),
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -735,6 +750,7 @@ def plan(
             build_command=build_command,
             start_command=start_command,
             provider=provider,
+            config=config,
         )
 
     shipit_file = get_shipit_path(path, shipit_path)
@@ -758,9 +774,11 @@ def plan(
 
     base_config = Config()
     base_config.commands.enrich_from_path(path)
+    if serve_port:
+        base_config.port = serve_port
     provider_cls = load_provider(path, base_config, use_provider=provider)
-    provider_config = load_provider_config(provider_cls, path, base_config)
-    provider_config = runner.prepare_config(provider_config)
+    provider_config = load_provider_config(provider_cls, path, base_config, config=config)
+    # provider_config = runner.prepare_config(provider_config)
     ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
 
     def _collect_group_commands(group: str) -> Optional[str]:
@@ -872,6 +890,10 @@ def build(
         None,
         help="Use a specific provider to build the project.",
     ),
+    config: Optional[str] = typer.Option(
+        None,
+        help="The JSON content to use as input.",
+    ),
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -895,20 +917,20 @@ def build(
     else:
         runner = LocalRunner(build_backend, path)
 
-    config = Config()
-    config.commands.enrich_from_path(path)
+    base_config = Config()
+    base_config.commands.enrich_from_path(path)
     if start_command:
-        config.commands.start = start_command
+        base_config.commands.start = start_command
     if install_command:
-        config.commands.install = install_command
+        base_config.commands.install = install_command
     if build_command:
-        config.commands.build = build_command
+        base_config.commands.build = build_command
     serve_port = serve_port or os.environ.get("PORT")
     if serve_port:
-        config.port = serve_port
+        base_config.port = serve_port
 
-    provider_cls = load_provider(path, config, use_provider=provider)
-    provider_config = load_provider_config(provider_cls, path, config)
+    provider_cls = load_provider(path, base_config, use_provider=provider)
+    provider_config = load_provider_config(provider_cls, path, base_config, config=config)
     provider_config = runner.prepare_config(provider_config)
     ctx, serve = evaluate_shipit(
         shipit_file, build_backend, runner, provider_config
@@ -946,6 +968,7 @@ def build(
                 env_name=env_name,
                 serve_port=serve_port,
                 provider=provider,
+                config=config,
             )
 
     serve.env = serve.env or {}

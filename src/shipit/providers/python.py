@@ -41,7 +41,7 @@ class DatabaseType(Enum):
 
 class PythonConfig(Config):
     model_config = SettingsConfigDict(
-        use_enum_values=True, extra="ignore", env_prefix="SHIPIT_"
+        extra="ignore", env_prefix="SHIPIT_"
     )
 
     framework: Optional[PythonFramework] = None
