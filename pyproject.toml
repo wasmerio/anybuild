@@ -16,6 +16,7 @@ dependencies = [
     "xingque>=0.2.1",
     "tomlkit>=0.13.3",
     "typer>=0.16.1",
+    "toml>=0.10.2",
 ]
 
 [project.urls]

@@ -11,7 +11,8 @@ serve(
     use(hugo),
     workdir(temp.path),
     copy(".", ".", ignore=[".git"]),
-    run("hugo build --destination={}".format(static_app.path), group="build")
+    run("hugo build", group="build"),
+    run("cp -r public/* {}".format(static_app.path))
   ],
   deps=[staticwebserver],
   commands = {
