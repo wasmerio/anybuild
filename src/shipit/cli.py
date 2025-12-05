@@ -380,10 +380,6 @@ def auto(
         None,
         help="Name of the Wasmer app.",
     ),
-    use_procfile: bool = typer.Option(
-        True,
-        help="Use the Procfile to generate the default custom commands (install, build, start, after_deploy).",
-    ),
     install_command: Optional[str] = typer.Option(
         None,
         help="The install command to use (overwrites the default)",
@@ -430,7 +426,6 @@ def auto(
         generate(
             path,
             out=shipit_path,
-            use_procfile=use_procfile,
             install_command=install_command,
             build_command=build_command,
             start_command=start_command,
@@ -453,6 +448,7 @@ def auto(
         skip_prepare=skip_prepare,
         env_name=env_name,
         serve_port=serve_port,
+        provider=provider,
     )
     if start or wasmer_deploy or wasmer_deploy_config:
         serve(
@@ -487,10 +483,6 @@ def generate(
         "--shipit-path",
         help="Output path (defaults to the Shipit file in the provided path).",
     ),
-    use_procfile: bool = typer.Option(
-        True,
-        help="Use the Procfile to generate the default custom commands (install, build, start, after_deploy).",
-    ),
     install_command: Optional[str] = typer.Option(
         None,
         help="The install command to use (overwrites the default)",
@@ -522,7 +514,7 @@ def generate(
         base_config.commands.install = install_command
     if build_command:
         base_config.commands.build = build_command
-    provider_cls = load_provider(path, base_config, provider)
+    provider_cls = load_provider(path, base_config, use_provider=provider)
     config = load_provider_config(provider_cls, path, base_config)
     provider = provider_cls(path, config)
     content = generate_shipit(path, provider)
@@ -701,10 +693,6 @@ def plan(
         None,
         help="Use a specific Docker client (such as depot, podman, etc.)",
     ),
-    use_procfile: bool = typer.Option(
-        True,
-        help="Use the Procfile to generate the default custom commands (install, build, start, after_deploy).",
-    ),
     install_command: Optional[str] = typer.Option(
         None,
         help="The install command to use (overwrites the default)",
@@ -743,7 +731,6 @@ def plan(
         generate(
             path,
             out=shipit_path,
-            use_procfile=use_procfile,
             install_command=install_command,
             build_command=build_command,
             start_command=start_command,
@@ -771,7 +758,7 @@ def plan(
 
     base_config = Config()
     base_config.commands.enrich_from_path(path)
-    provider_cls = load_provider(path, base_config)
+    provider_cls = load_provider(path, base_config, use_provider=provider)
     provider_config = load_provider_config(provider_cls, path, base_config)
     provider_config = runner.prepare_config(provider_config)
     ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
@@ -881,6 +868,10 @@ def build(
         None,
         help="The port to use (defaults to 8080).",
     ),
+    provider: Optional[str] = typer.Option(
+        None,
+        help="Use a specific provider to build the project.",
+    ),
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -916,7 +907,7 @@ def build(
     if serve_port:
         config.port = serve_port
 
-    provider_cls = load_provider(path, config)
+    provider_cls = load_provider(path, config, use_provider=provider)
     provider_config = load_provider_config(provider_cls, path, config)
     provider_config = runner.prepare_config(provider_config)
     ctx, serve = evaluate_shipit(
@@ -954,6 +945,7 @@ def build(
                 skip_docker_if_safe_build=False,
                 env_name=env_name,
                 serve_port=serve_port,
+                provider=provider,
             )
 
     serve.env = serve.env or {}
