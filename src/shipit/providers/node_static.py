@@ -181,6 +181,7 @@ class NodeStaticConfig(StaticFileConfig):
     package_manager: Optional[PackageManager] = None
     extra_dependencies: Set[str] = Field(default_factory=set)
     static_generator: Optional[StaticGenerator] = None
+    build_command: Optional[str] = None
     node_version: Optional[str] = "22"
     npm_version: Optional[str] = None
     pnpm_version: Optional[str] = None
@@ -244,8 +245,8 @@ class NodeStaticProvider(StaticFileProvider):
             elif cls.has_dependency(package_json, "nuxt"):
                 config.static_generator = StaticGenerator.NUXT_V3
 
-        if not config.commands.build:
-            config.commands.build = cls.get_build_command(
+        if not config.build_command:
+            config.build_command = cls.get_build_command(
                 package_json, config.package_manager, config.static_generator
             )
 
@@ -375,11 +376,6 @@ class NodeStaticProvider(StaticFileProvider):
         install_command = self.config.package_manager.install_command(
             has_lockfile=has_lockfile
         )
-        input_files = ["package.json"]
-        # if has_lockfile:
-        #     input_files.append(lockfile)
-        inputs_install_files = ", ".join([f'"{file}"' for file in input_files])
-
         ignored_files = ["node_modules", ".git"]
         if has_lockfile:
             ignored_files.append(lockfile)
@@ -394,12 +390,12 @@ class NodeStaticProvider(StaticFileProvider):
                 if self.config.package_manager == PackageManager.NPM
                 else None,
                 # 'run("npx corepack enable", inputs=["package.json"], group="install")',
-                f'run("{install_command}", inputs=[{inputs_install_files}], group="install")',
+                f'run("{install_command}", inputs=["package.json"], group="install")',
                 f'copy(".", ignore=[{all_ignored_files}])',
-                f'run("{self.config.commands.build}", outputs=[config.static_dir], group="build")'
+                f'run("{self.config.build_command}", outputs=[config.static_dir], group="build")'
                 if not self.only_build
                 else None,
-                f'run("{self.config.commands.build}", group="build")'
+                f'run("{self.config.build_command}", group="build")'
                 if self.only_build
                 else None,
                 f'run("cp -R {{}}/* {{}}/".format(config.static_dir, static_app.path))'
