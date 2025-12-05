@@ -34,27 +34,27 @@ class HugoProvider(StaticFileProvider):
     def load_config(cls, path: Path, base_config: Config) -> HugoConfig:
         config = super().load_config(path, base_config)
         if _exists(path, "hugo.toml"):
-            config_dict = toml.load(path / "hugo.toml")
+            config_dict = toml.load(open(path / "hugo.toml"))
         elif _exists(path, "hugo.json"):
-            config_dict = json.load(path / "hugo.json")
+            config_dict = json.load(open(path / "hugo.json"))
         elif _exists(path, "hugo.yaml"):
-            config_dict = yaml.safe_load(path / "hugo.yaml")
+            config_dict = yaml.safe_load(open(path / "hugo.yaml"))
         elif _exists(path, "hugo.yml"):
-            config_dict = yaml.safe_load(path / "hugo.yml")
+            config_dict = yaml.safe_load(open(path / "hugo.yml"))
         else:
             config_dict = {}
         
         config = HugoConfig(**config.model_dump())
         if not config.static_dir:
+            hugo_publish_dir = None
             if isinstance(config_dict, dict):
                 hugo_publish_dir = config_dict.get("publishDir")
                 if not hugo_publish_dir:
                     # Use destination as fallback
                     hugo_publish_dir = config_dict.get("destination")
-                if hugo_publish_dir:
-                    config.static_dir = hugo_publish_dir
-        if not config.static_dir:
-            config.static_dir = "public"
+            hugo_publish_dir = hugo_publish_dir or "public"
+            assert isinstance(hugo_publish_dir, str), "publishDir in hugo config must be a string"
+            config.static_dir = hugo_publish_dir
         return config
 
     @classmethod

@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Dict, Optional
+import yaml
 
 from .base import (
     DetectResult,
@@ -22,6 +23,8 @@ class JekyllConfig(StaticFileConfig):
     ruby_version: Optional[str] = "3.4.7"
     jekyll_version: Optional[str] = "4.3.0"
 
+    static_dir: Optional[str] = "_site"
+
 
 class JekyllProvider(StaticFileProvider):
     def __init__(self, path: Path, config: JekyllConfig):
@@ -33,7 +36,21 @@ class JekyllProvider(StaticFileProvider):
         cls, path: Path, base_config: Config
     ) -> JekyllConfig:
         config = super().load_config(path, base_config)
-        return JekyllConfig(**config.model_dump())
+        config = JekyllConfig(**config.model_dump())
+        if not config.static_dir:
+            jekyll_static_dir = None
+            if _exists(path, "_config.yml"):
+                config_dict = yaml.safe_load(open(path / "_config.yml"))
+            elif _exists(path, "_config.yaml"):
+                config_dict = yaml.safe_load(open(path / "_config.yaml"))
+            else:
+                config_dict = {}
+            if config_dict and isinstance(config_dict, dict):
+                jekyll_static_dir = config_dict.get("destination")
+            jekyll_static_dir = jekyll_static_dir or "_site"
+            assert isinstance(jekyll_static_dir, str), "destination in Jekyll config must be a string"
+            config.static_dir = jekyll_static_dir
+        return config
 
     @classmethod
     def name(cls) -> str:
@@ -70,7 +87,7 @@ class JekyllProvider(StaticFileProvider):
             install_deps = ["Gemfile"]
             install_deps_str = ", ".join([f'"{dep}"' for dep in install_deps])
             install_commands = [
-                f'run("bundle install", inputs=[{install_deps_str}], group="build")'
+                f'run("bundle install", inputs=[{install_deps_str}], group="install")'
             ]
             if _exists(self.path, "Gemfile.lock"):
                 install_commands = [
@@ -79,14 +96,15 @@ class JekyllProvider(StaticFileProvider):
                 ]
         else:
             install_commands = [
-                'run("bundle init", group="build")',
-                'run("bundle add jekyll -v {}".format(config.jekyll_version), group="build")',
+                'run("bundle init", group="install")',
+                'run("bundle add jekyll -v {}".format(config.jekyll_version), group="install")',
             ]
         return [
             'workdir(temp.path)',
             *install_commands,
             'copy(".", ignore=[".git"])',
-            'run("jekyll build --destination={}".format(static_app.path), outputs=["."], group="build")',
+            'run("jekyll build", group="build")',
+            'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:
