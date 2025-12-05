@@ -774,6 +774,12 @@ def plan(
 
     base_config = Config()
     base_config.commands.enrich_from_path(path)
+    if install_command:
+        base_config.commands.install = install_command
+    if build_command:
+        base_config.commands.build = build_command
+    if start_command:
+        base_config.commands.start = start_command
     if serve_port:
         base_config.port = serve_port
     provider_cls = load_provider(path, base_config, use_provider=provider)

@@ -12,7 +12,7 @@ serve(
     workdir(temp.path),
     copy(".", ".", ignore=[".git"]),
     run("hugo build", group="build"),
-    run("cp -r public/* {}".format(static_app.path))
+    run("cp -R {}/* {}/".format(config.static_dir, static_app.path))
   ],
   deps=[staticwebserver],
   commands = {

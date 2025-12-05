@@ -23,6 +23,7 @@ class HugoConfig(StaticFileConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     hugo_version: Optional[str] = "0.149.0"
+    static_dir: Optional[str] = "public"
 
 
 class HugoProvider(StaticFileProvider):
@@ -72,6 +73,8 @@ class HugoProvider(StaticFileProvider):
             and (_exists(path, "static") or _exists(path, "themes"))
         ):
             return DetectResult(cls.name(), 40)
+        if config.commands.build and config.commands.build.startswith("hugo "):
+            return DetectResult(cls.name(), 80)
         return None
 
     def serve_name(self) -> Optional[str]:
@@ -92,9 +95,7 @@ class HugoProvider(StaticFileProvider):
             'workdir(temp.path)',
             'copy(".", ".", ignore=[".git"])',
             'run("hugo build", group="build")',
-            'run("cp -r {}/* {{}}".format(static_app.path))'.format(
-                self.config.static_dir or "."
-            ),
+            'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
         ]
 
     def mounts(self) -> list[MountSpec]:

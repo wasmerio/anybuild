@@ -398,7 +398,7 @@ class NodeStaticProvider(StaticFileProvider):
                 f'run("{self.config.build_command}", group="build")'
                 if self.only_build
                 else None,
-                f'run("cp -R {{}}/* {{}}/".format(config.static_dir, static_app.path))'
+                'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
                 if not self.only_build
                 else None,
             ],
