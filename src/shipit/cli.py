@@ -153,9 +153,7 @@ class Ctx:
             commands=commands,
             prepare=prepare_steps,
             workers=workers,
-            mounts=self.get_refs([mount.ref for mount in mounts])
-            if mounts
-            else None,
+            mounts=self.get_refs([mount.ref for mount in mounts]) if mounts else None,
             volumes=self.get_refs([volume["ref"] for volume in volumes])
             if volumes
             else None,
@@ -206,8 +204,12 @@ class Ctx:
         serve_path = self.runner.get_serve_mount_path(name)
         mount = Mount(name, build_path, serve_path)
         ref = self.add_mount(mount)
-        
-        return CtxMount(ref=ref, path=str(build_path.absolute()), serve_path=str(serve_path.absolute()))
+
+        return CtxMount(
+            ref=ref,
+            path=str(build_path.absolute()),
+            serve_path=str(serve_path.absolute()),
+        )
 
     def add_volume(self, volume: Volume) -> Optional[str]:
         self.volumes.append(volume)
@@ -257,7 +259,7 @@ def evaluate_shipit(
         raise ValueError(f"No serve definition found in {shipit_file}")
     assert len(ctx.serves) <= 1, "Only one serve is allowed for now"
     serve = next(iter(ctx.serves.values()))
-    
+
     # Now we apply the custom commands (start, after_deploy, build, install)
     if provider_config.commands.start:
         serve.commands["start"] = provider_config.commands.start
@@ -271,11 +273,23 @@ def evaluate_shipit(
         has_done_install = False
         for step in serve.build:
             if isinstance(step, RunStep):
-                if step.group == "build" and not has_done_build and provider_config.commands.build:
-                    new_build.append(RunStep(provider_config.commands.build, group="build"))
+                if (
+                    step.group == "build"
+                    and not has_done_build
+                    and provider_config.commands.build
+                ):
+                    new_build.append(
+                        RunStep(provider_config.commands.build, group="build")
+                    )
                     has_done_build = True
-                elif step.group == "install" and not has_done_install and provider_config.commands.install:
-                    new_build.append(RunStep(provider_config.commands.install, group="install"))
+                elif (
+                    step.group == "install"
+                    and not has_done_install
+                    and provider_config.commands.install
+                ):
+                    new_build.append(
+                        RunStep(provider_config.commands.install, group="install")
+                    )
                     has_done_install = True
                 else:
                     new_build.append(step)
@@ -288,10 +302,14 @@ def evaluate_shipit(
         serve.build = new_build
 
     if serve.commands.get("start"):
-        serve.commands["start"] = serve.commands["start"].replace("$PORT", str(provider_config.port or "8080"))
-    
+        serve.commands["start"] = serve.commands["start"].replace(
+            "$PORT", str(provider_config.port or "8080")
+        )
+
     if serve.commands.get("after_deploy"):
-        serve.commands["after_deploy"] = serve.commands["after_deploy"].replace("$PORT", str(provider_config.port or "8080"))
+        serve.commands["after_deploy"] = serve.commands["after_deploy"].replace(
+            "$PORT", str(provider_config.port or "8080")
+        )
 
     return ctx, serve
 
@@ -434,13 +452,14 @@ def auto(
             config=config,
         )
 
+    build_with_wasmer = wasmer or wasmer_deploy or wasmer_deploy_config
     build(
         path,
         shipit_path=shipit_path,
         install_command=install_command,
         build_command=build_command,
         start_command=start_command,
-        wasmer=(wasmer or wasmer_deploy),
+        wasmer=build_with_wasmer,
         docker=docker,
         docker_client=docker_client,
         skip_docker_if_safe_build=skip_docker_if_safe_build,
@@ -522,7 +541,9 @@ def generate(
     if build_command:
         base_config.commands.build = build_command
     provider_cls = load_provider(path, base_config, use_provider=provider)
-    provider_config = load_provider_config(provider_cls, path, base_config, config=config)
+    provider_config = load_provider_config(
+        provider_cls, path, base_config, config=config
+    )
     provider = provider_cls(path, provider_config)
     content = generate_shipit(path, provider)
     config_json = provider_config.model_dump_json(indent=2, exclude_defaults=True)
@@ -783,7 +804,9 @@ def plan(
     if serve_port:
         base_config.port = serve_port
     provider_cls = load_provider(path, base_config, use_provider=provider)
-    provider_config = load_provider_config(provider_cls, path, base_config, config=config)
+    provider_config = load_provider_config(
+        provider_cls, path, base_config, config=config
+    )
     # provider_config = runner.prepare_config(provider_config)
     ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
 
@@ -811,9 +834,7 @@ def plan(
         provider_config.commands.build = build_command
     plan_output = {
         "provider": provider_cls.name(),
-        "config": json.loads(
-            provider_config.model_dump_json(exclude_defaults=True)
-        ),
+        "config": json.loads(provider_config.model_dump_json(exclude_defaults=True)),
         "services": [
             {"name": svc.name, "provider": svc.provider}
             for svc in (serve.services or [])
@@ -936,11 +957,11 @@ def build(
         base_config.port = serve_port
 
     provider_cls = load_provider(path, base_config, use_provider=provider)
-    provider_config = load_provider_config(provider_cls, path, base_config, config=config)
-    provider_config = runner.prepare_config(provider_config)
-    ctx, serve = evaluate_shipit(
-        shipit_file, build_backend, runner, provider_config
+    provider_config = load_provider_config(
+        provider_cls, path, base_config, config=config
     )
+    provider_config = runner.prepare_config(provider_config)
+    ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
     env = {
         "PATH": "",
         "COLORTERM": os.environ.get("COLORTERM", ""),
@@ -986,7 +1007,9 @@ def build(
         env_vars = dotenv_values(path / f".env.{env_name}")
         serve.env.update(env_vars)
 
-    assert serve.commands.get("start"), "No start command could be found, please provide a start command"
+    assert serve.commands.get("start"), (
+        "No start command could be found, please provide a start command"
+    )
 
     # Build and serve
     build_backend.build(serve.name, env, serve.mounts or [], serve.build)
