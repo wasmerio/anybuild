@@ -424,6 +424,9 @@ def auto(
         help="The port to use (defaults to 8080).",
     ),
 ):
+    # We assume wasmer as an active flag if we pass wasmer deploy or wasmer deploy config
+    wasmer = wasmer or wasmer_deploy or (wasmer_deploy_config is not None)
+
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
@@ -452,14 +455,13 @@ def auto(
             config=config,
         )
 
-    build_with_wasmer = wasmer or wasmer_deploy or wasmer_deploy_config
     build(
         path,
         shipit_path=shipit_path,
         install_command=install_command,
         build_command=build_command,
         start_command=start_command,
-        wasmer=build_with_wasmer,
+        wasmer=wasmer,
         docker=docker,
         docker_client=docker_client,
         skip_docker_if_safe_build=skip_docker_if_safe_build,
@@ -637,6 +639,9 @@ def serve(
         help="Save the output of the Wasmer build to a json file",
     ),
 ) -> None:
+    # We assume wasmer as an active flag if we pass wasmer deploy or wasmer deploy config
+    wasmer = wasmer or wasmer_deploy or (wasmer_deploy_config is not None)
+
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
@@ -647,8 +652,7 @@ def serve(
     else:
         build_backend = LocalBuildBackend(path, ASSETS_PATH)
 
-    needs_wasmer = wasmer or wasmer_deploy or wasmer_deploy_config
-    if needs_wasmer:
+    if wasmer:
         runner: Runner = WasmerRunner(
             build_backend,
             path,
