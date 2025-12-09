@@ -38,7 +38,9 @@ class PhpProvider:
             )
             or False
         )
-        return PhpConfig(use_composer=use_composer, **base_config.model_dump())
+        config = PhpConfig(use_composer=use_composer, **base_config.model_dump())
+        print(f"Loaded PHP config: {config}")
+        return config
 
     @classmethod
     def name(cls) -> str:

@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Literal
 from shipit.procfile import Procfile
-from pydantic import BaseModel, Field
-from pydantic_settings import SettingsConfigDict
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 @dataclass
@@ -12,7 +12,7 @@ class DetectResult:
     score: int  # Higher score wins when multiple providers match
 
 
-class CustomCommands(BaseModel):
+class CustomCommands(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     install: Optional[str] = None
@@ -46,7 +46,7 @@ class CustomCommands(BaseModel):
         return self
 
 
-class Config(BaseModel):
+class Config(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     port: Optional[int] = 8080
