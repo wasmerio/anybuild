@@ -101,6 +101,11 @@ class PhpProvider:
             )
 
         steps.append('copy(".", ".", ignore=[".git"])')
+
+        # Since we don't run the scripts during the install step, we need to run them after the build step
+        if self.config.use_composer:
+            steps.append('run("composer run-script post-install-cmd", outputs=["."], group="build")')
+
         return steps
 
     def prepare_steps(self) -> Optional[list[str]]:
