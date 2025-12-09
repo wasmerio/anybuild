@@ -19,6 +19,7 @@ class PhpConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     use_composer: bool = False
+    composer_build_script: Optional[str] = None
     php_version: Optional[str] = "8.3"
     php_architecture: Optional[Literal["64-bit", "32-bit"]] = "64-bit"
 
@@ -38,8 +39,15 @@ class PhpProvider:
             )
             or False
         )
-        config = PhpConfig(use_composer=use_composer, **base_config.model_dump())
-        print(f"Loaded PHP config: {config}")
+        composer_build_script = None
+        if use_composer:
+            composer_config = json.load(open(path / "composer.json"))
+            if "scripts" in composer_config:
+                assert isinstance(composer_config["scripts"], dict), "Scripts must be a dictionary"
+                composer_build_script = "post-update-cmd" if "post-update-cmd" in composer_config["scripts"] else None
+                if not composer_build_script and "post-install-cmd" in composer_config["scripts"]:
+                    composer_build_script = "post-install-cmd"
+        config = PhpConfig(use_composer=use_composer, composer_build_script=composer_build_script, **base_config.model_dump())
         return config
 
     @classmethod
@@ -99,14 +107,14 @@ class PhpProvider:
         if self.config.use_composer:
             steps.append('env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0")')
             steps.append(
-                'run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'
+                'run("composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'
             )
 
         steps.append('copy(".", ".", ignore=[".git"])')
 
         # Since we don't run the scripts during the install step, we need to run them after the build step
-        if self.config.use_composer:
-            steps.append('run("composer run-script post-install-cmd", outputs=["."], group="build")')
+        if self.config.use_composer and self.config.composer_build_script:
+            steps.append(f'run("composer run-script {self.config.composer_build_script}", outputs=["."], group="build")')
 
         return steps
 
