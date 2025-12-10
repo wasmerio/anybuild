@@ -21,12 +21,55 @@ define( 'WP_AUTO_UPDATE_CORE', false); // Disable automatic aupdates and checks
  * @package WordPress
  */
 
+// Deserialize the value from the environment variable value
+function env_var_deserialize(string $value) {
+    $v = trim($value);
+    if ($v === '') {
+        return '';
+    }
+    $len = strlen($v);
+    if ($len >= 2 && ($v[0] === '"' || $v[0] === "'") && $v[0] === $v[$len - 1]) {
+        return substr($v, 1, -1);
+    }
+    $lower = strtolower($v);
+    static $scalarMap = [
+        'true'  => true,
+        'yes'   => true,
+        'on'    => true,
+        'y'     => true,
+        'false' => false,
+        'no'    => false,
+        'off'   => false,
+        'n'     => false,
+        'null'  => null,
+    ];
+    if (array_key_exists($lower, $scalarMap)) {
+        return $scalarMap[$lower];
+    }
+    if (ctype_digit($v) || ($v[0] === '-' && ctype_digit(substr($v, 1)))) {
+        return (int) $v;
+    }
+    if (is_numeric($v)) {
+        return (float) $v;
+    }
+    if (strpos($v, '://') !== false && filter_var($v, FILTER_VALIDATE_URL)) {
+        return $v;
+    }
+    if (strpos($v, ',') !== false) {
+        if (strncmp($v, 'http://', 7) === 0 || strncmp($v, 'https://', 8) === 0) {
+            return $v;
+        }
+        return array_map('trim', explode(',', $v));
+    }
+    return $v;
+}
 
-function get_env_var(string $name, string $default = ''): string
+
+function get_env_var(string $name, string $default = '')
 {
     $value = getenv($name);
     if ($value !== false) {
-        return $value;
+        return env_var_deserialize($value);
     }
 
     if ($default === '') {
@@ -34,11 +77,6 @@ function get_env_var(string $name, string $default = ''): string
     }
 
     return $default;
-}
-
-function get_env_var_bool(string $name, bool $default = false): bool
-{
-    return in_array(get_env_var($name, $default ? "1" : "0"), ["1", "true", "yes", "on", "y"], true);
 }
 
 // ** Database settings - You can get this info from your web host ** //
@@ -98,7 +136,7 @@ define( 'WP_SITEURL', get_env_var('WP_SITEURL', WP_HOME . '/') );
 
 define( 'WP_MEMORY_LIMIT', get_env_var('WP_MEMORY_LIMIT', '256M') );
 define( 'WP_MAX_MEMORY_LIMIT', get_env_var('WP_MAX_MEMORY_LIMIT', '256M') );
-define( 'WP_POST_REVISIONS', get_env_var_bool('WP_POST_REVISIONS', false));
+define( 'WP_POST_REVISIONS', get_env_var('WP_POST_REVISIONS', false));
 
 /**#@-*/
 
@@ -122,7 +160,7 @@ $table_prefix = 'wp_';
  *
  * @link https://wordpress.org/support/article/debugging-in-wordpress/
  */
-define( 'WP_DEBUG', get_env_var_bool('WP_DEBUG', false) );
+define( 'WP_DEBUG', get_env_var('WP_DEBUG', false) );
 
 /* Add any custom values between this line and the "stop editing" line. */
 
@@ -137,12 +175,32 @@ if ( getenv('WP_ADDITIONAL_CONFIG') ) {
     }
 }
 
-/* That's all, stop editing! Happy publishing. */
-
 /** Absolute path to the WordPress directory. */
 if ( ! defined( 'ABSPATH' ) ) {
     define( 'ABSPATH', __DIR__ . '/' );
 }
+
+function wpdefine_load_env_defines(string $prefix = 'WPDEFINE_'): void {
+    $env = $_ENV + $_SERVER;
+    $prefixLen = strlen($prefix);
+    foreach ($env as $key => $rawValue) {
+        if (!is_string($key) || strncmp($key, $prefix, $prefixLen) !== 0) {
+            continue;
+        }
+        $const = substr($key, $prefixLen);
+        if ($const === '' || defined($const)) {
+            continue;
+        }
+        if (!preg_match('/^[A-Z_][A-Z0-9_]*$/', $const)) {
+            continue;
+        }
+        define($const, env_var_deserialize((string) $rawValue));
+    }
+}
+
+wpdefine_load_env_defines();
+
+/* That's all, stop editing! Happy publishing. */
 
 /** Sets up WordPress vars and included files. */
 require_once ABSPATH . 'wp-settings.php';
