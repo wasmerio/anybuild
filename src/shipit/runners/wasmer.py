@@ -1,3 +1,4 @@
+from functools import reduce
 from shipit.shipit_types import EnvStep
 from shipit.shipit_types import UseStep
 import hashlib
@@ -22,6 +23,7 @@ from shipit.version import version as shipit_version
 
 if TYPE_CHECKING:
     from shipit.shipit_types import Step
+
 
 class MapperItem(TypedDict, total=False):
     dependencies: Dict[str, str]
@@ -169,10 +171,14 @@ class WasmerRunner:
                     step = UseStep(dependencies=deps)
                 new_build_steps.append(step)
                 if found_go:
-                    new_build_steps.append(EnvStep(variables={
-                        "GOOS": "wasip1",
-                        "GOARCH": "wasm",
-                    }))
+                    new_build_steps.append(
+                        EnvStep(
+                            variables={
+                                "GOOS": "wasip1",
+                                "GOARCH": "wasm",
+                            }
+                        )
+                    )
             else:
                 new_build_steps.append(step)
         return new_build_steps
@@ -244,9 +250,9 @@ class WasmerRunner:
         for mount in serve.mounts:
             if program.startswith(str(mount.serve_path.absolute())):
                 module_path = program_path.relative_to(mount.serve_path).as_posix()
-                full_module_path = self.build_backend.get_artifact_mount_path(
-                    mount.name
-                ) / module_path
+                full_module_path = (
+                    self.build_backend.get_artifact_mount_path(mount.name) / module_path
+                )
                 return full_module_path
         return None
 
@@ -338,15 +344,19 @@ class WasmerRunner:
                         # It's an executable
                         full_module_path = self.find_file_in_mounts(serve, program)
                         if not full_module_path:
-                            raise Exception(f"Could not find {program} in the mounts or in the binaries list")
+                            raise Exception(
+                                f"Could not find {program} in the mounts or in the binaries list"
+                            )
                         # Check if is a WebAssembly module by checking the contents
                         if not full_module_path.read_bytes().startswith(b"\0asm"):
-                            raise Exception(f"Wasmer can only execute WebAssembly modules, binary {program} is not.")
-                        
+                            raise Exception(
+                                f"Wasmer can only execute WebAssembly modules, binary {program} is not."
+                            )
+
                         if not modules:
                             modules = aot()
                             doc.add("module", modules)
-                        
+
                         module = table()
                         modules.append(module)
                         module_name = program.replace("/", "_").lower().lstrip("_")
@@ -356,11 +366,13 @@ class WasmerRunner:
                         command_module = module_name
                     else:
                         raise Exception(f"Binary {program} not runable in Wasmer yet")
-                
+
                 if not command_module:
                     program_binary = binaries.get(program)
                     if not program_binary:
-                        raise Exception(f"Command {command_name} is trying to run {program} but it is not available (dependencies: {', '.join(dependencies.keys())}, programs: {', '.join(binaries.keys())})")
+                        raise Exception(
+                            f"Command {command_name} is trying to run {program} but it is not available (dependencies: {', '.join(dependencies.keys())}, programs: {', '.join(binaries.keys())})"
+                        )
                     command_module = program_binary["script"]
                     command_env.update(program_binary.get("env") or {})
 
@@ -374,7 +386,9 @@ class WasmerRunner:
                 if serve.env:
                     command_env.update(serve.env)
                 if command_env:
-                    arr = array([f"{k}={v}" for k, v in command_env.items()]).multiline(True)
+                    arr = array([f"{k}={v}" for k, v in command_env.items()]).multiline(
+                        True
+                    )
                     wasi_args.add("env", arr)
                 title = string("annotations.wasi", literal=False)
                 command.add(title, wasi_args)
@@ -430,7 +444,14 @@ class WasmerRunner:
             yaml_config["volumes"] = volumes_yaml
 
         has_php = any(dep.name == "php" for dep in serve.deps)
-        if has_php:
+        build_deps = reduce(
+            lambda acc, dep: acc + dep.dependencies,
+            [step for step in serve.build if isinstance(step, UseStep)],
+            [],
+        )
+        is_built_with_go = any(dep.name in ["go", "go-wasix"] for dep in build_deps)
+
+        if has_php or is_built_with_go:
             scaling = yaml_config.get("scaling", {})
             scaling["mode"] = "single_concurrency"
             yaml_config["scaling"] = scaling
