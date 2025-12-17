@@ -89,7 +89,7 @@ class GoProvider(Provider):
             'copy(".", ".", ignore=[".git"])',
             'env(GOCACHE="/tmp/.cache/go-build", GOPATH=temp.path)',
             'run("go build -o {} {}".format(config.serve_binary, config.go_build_file), group="build")',
-            'copy("{}/{}".format(temp.path, config.serve_binary), "{}/{}".format(app.path, config.serve_binary))',
+            'run("cp {}/{} {}/{}".format(temp.path, config.serve_binary, app.path, config.serve_binary))',
         ]
 
     def mounts(self) -> list[MountSpec]:
