@@ -328,6 +328,7 @@ class WasmerRunner:
                 parts = shlex.split(command_line)
                 program = parts[0]
                 command_env = {}
+                command_module = None
                 if program in self.rewrite_binaries:
                     rewritten_program = shlex.split(self.rewrite_binaries[program])
                     program = rewritten_program[0]
@@ -355,7 +356,8 @@ class WasmerRunner:
                         command_module = module_name
                     else:
                         raise Exception(f"Binary {program} not runable in Wasmer yet")
-                else:
+                
+                if not command_module:
                     program_binary = binaries.get(program)
                     if not program_binary:
                         raise Exception(f"Command {command_name} is trying to run {program} but it is not available (dependencies: {', '.join(dependencies.keys())}, programs: {', '.join(binaries.keys())})")
