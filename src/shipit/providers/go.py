@@ -37,7 +37,7 @@ class GoProvider(Provider):
         if not config.go_build_file:
             raise Exception("No build file for go found")
         if not config.serve_binary:
-            config.serve_binary = config.go_build_file.replace(".go", "")
+            config.serve_binary = config.go_build_file.replace("/", "_").lower().lstrip("_").replace(".go", "")
         if not config.serve_binary:
             raise Exception("No serve binary for go found")
         return config
@@ -87,8 +87,8 @@ class GoProvider(Provider):
             "workdir(temp.path)",
             "use(go)",
             'copy(".", ".", ignore=[".git"])',
-            'env(GOCACHE="/tmp/.cache/go-build")',
-            'run("go build {}".format(config.go_build_file), group="build")',
+            'env(GOCACHE="/tmp/.cache/go-build", GOPATH=temp.path)',
+            'run("go build -o {} {}".format(config.serve_binary, config.go_build_file), group="build")',
             'copy("{}/{}".format(temp.path, config.serve_binary), "{}/{}".format(app.path, config.serve_binary))',
         ]
 
