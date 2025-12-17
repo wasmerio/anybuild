@@ -32,7 +32,7 @@ class DockerBuildBackend:
             "source": "ubi:adwinying/php",
         },
         "go-wasix": {
-            "source": "ubi:wasix-org/go",
+            "source": "ubi:wasix-org/go[extract_all=true,bin_path=bin/]",
         },
         "composer": {
             "source": "ubi:composer/composer",
@@ -41,7 +41,8 @@ class DockerBuildBackend:
     }
 
     def __init__(
-        self, src_dir: Path, assets_path: Path, docker_client: Optional[str] = None
+        self, src_dir: Path, assets_path: Path, docker_client: Optional[str] = None,
+        docker_opts: Optional[str] = None
     ) -> None:
         self.src_dir = src_dir
         self.assets_path = assets_path
@@ -53,6 +54,7 @@ class DockerBuildBackend:
         self.docker_ignore_path = self.docker_path / "Dockerfile.dockerignore"
         self.shipit_docker_path = Path("/shipit")
         self.docker_client = docker_client or "docker"
+        self.docker_opts = docker_opts
         self.env = {
             "HOME": "/root",
         }
@@ -79,6 +81,8 @@ class DockerBuildBackend:
         self.docker_name_path.write_text(image_name)
         self.print_dockerfile(contents)
         extra_args: List[str] = []
+        if self.docker_opts:
+            extra_args.append(self.docker_opts)
         sh.Command(self.docker_client)(
             "build",
             "-f",
@@ -220,10 +224,10 @@ RUN curl https://mise.run | sh
                     mapped_dependency = self.mise_mapper.get(dependency.name, {})
                     package_name = mapped_dependency.get("source", dependency.name)
                     if dependency.version:
-                        docker_file_contents += f"RUN mise use --global {package_name}@{dependency.version}\n"
+                        docker_file_contents += f"RUN mise use --global \"{package_name}@{dependency.version}\"\n"
                     else:
                         docker_file_contents += (
-                            f"RUN mise use --global {package_name}\n"
+                            f"RUN mise use --global \"{package_name}\"\n"
                         )
                     if mapped_dependency.get("postinstall"):
                         docker_file_contents += (

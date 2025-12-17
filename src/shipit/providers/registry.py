@@ -7,6 +7,7 @@ from .wordpress import WordPressProvider
 from .php import PhpProvider
 from .python import PythonProvider
 from .jekyll import JekyllProvider
+from .go import GoProvider
 from .staticfile import StaticFileProvider
 
 
@@ -21,5 +22,6 @@ def providers() -> list[type[Provider]]:
         PhpProvider,
         NodeStaticProvider,
         JekyllProvider,
+        GoProvider,
         StaticFileProvider,
     ]

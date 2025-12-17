@@ -1,3 +1,5 @@
+from shipit.shipit_types import EnvStep
+from shipit.shipit_types import UseStep
 import hashlib
 import json
 import os
@@ -152,7 +154,28 @@ class WasmerRunner:
         return provider_config
 
     def prepare_build_steps(self, build_steps: List["Step"]) -> List["Step"]:
-        return build_steps
+        new_build_steps: List["Step"] = []
+        for step in build_steps:
+            if isinstance(step, UseStep):
+                deps = []
+                found_go = False
+                for package in step.dependencies:
+                    if package.name == "go":
+                        deps.append(Package(name="go-wasix"))
+                        found_go = True
+                    else:
+                        deps.append(package)
+                if found_go:
+                    step = UseStep(dependencies=deps)
+                new_build_steps.append(step)
+                if found_go:
+                    new_build_steps.append(EnvStep(variables={
+                        "GOOS": "wasip1",
+                        "GOARCH": "wasm",
+                    }))
+            else:
+                new_build_steps.append(step)
+        return new_build_steps
 
     def build(self, serve: Serve) -> None:
         self.build_prepare(serve)
@@ -215,6 +238,17 @@ class WasmerRunner:
                 "/prepare/prepare.sh",
             ],
         )
+
+    def find_file_in_mounts(self, serve: Serve, program: str) -> Optional[Path]:
+        program_path = Path(program)
+        for mount in serve.mounts:
+            if program.startswith(str(mount.serve_path.absolute())):
+                module_path = program_path.relative_to(mount.serve_path).as_posix()
+                full_module_path = self.build_backend.get_artifact_mount_path(
+                    mount.name
+                ) / module_path
+                return full_module_path
+        return None
 
     def build_serve(self, serve: Serve) -> None:
         doc = document()
@@ -283,7 +317,8 @@ class WasmerRunner:
                     ),
                 )
 
-        doc.add(nl())
+        modules = None
+
         if serve.commands:
             commands = aot()
             doc.add("command", commands)
@@ -292,27 +327,52 @@ class WasmerRunner:
                 commands.append(command)
                 parts = shlex.split(command_line)
                 program = parts[0]
+                command_env = {}
                 if program in self.rewrite_binaries:
                     rewritten_program = shlex.split(self.rewrite_binaries[program])
                     program = rewritten_program[0]
                     parts[:1] = rewritten_program
                 elif program not in binaries:
-                    raise Exception(f"Binary {program} not runable in Wasmer yet")
+                    if program.startswith("/"):
+                        # It's an executable
+                        full_module_path = self.find_file_in_mounts(serve, program)
+                        if not full_module_path:
+                            raise Exception(f"Could not find {program} in the mounts or in the binaries list")
+                        # Check if is a WebAssembly module by checking the contents
+                        if not full_module_path.read_bytes().startswith(b"\0asm"):
+                            raise Exception(f"Wasmer can only execute WebAssembly modules, binary {program} is not.")
+                        
+                        if not modules:
+                            modules = aot()
+                            doc.add("module", modules)
+                        
+                        module = table()
+                        modules.append(module)
+                        module_name = program.replace("/", "_").lower().lstrip("_")
+                        module.add("name", module_name)
+                        module.add("source", str(full_module_path.absolute()))
+
+                        command_module = module_name
+                    else:
+                        raise Exception(f"Binary {program} not runable in Wasmer yet")
+                else:
+                    program_binary = binaries.get(program)
+                    if not program_binary:
+                        raise Exception(f"Command {command_name} is trying to run {program} but it is not available (dependencies: {', '.join(dependencies.keys())}, programs: {', '.join(binaries.keys())})")
+                    command_module = program_binary["script"]
+                    command_env.update(program_binary.get("env") or {})
+
                 command.add("name", command_name)
-                program_binary = binaries.get(program)
-                if not program_binary:
-                    raise Exception(f"Command {command_name} is trying to run {program} but it is not available (dependencies: {', '.join(dependencies.keys())}, programs: {', '.join(binaries.keys())})")
-                command.add("module", program_binary["script"])
+                command.add("module", command_module)
                 command.add("runner", "wasi")
                 wasi_args = table()
                 if serve.cwd:
                     wasi_args.add("cwd", serve.cwd)
                 wasi_args.add("main-args", array(parts[1:]).multiline(True))
-                env = program_binary.get("env") or {}
                 if serve.env:
-                    env.update(serve.env)
-                if env:
-                    arr = array([f"{k}={v}" for k, v in env.items()]).multiline(True)
+                    command_env.update(serve.env)
+                if command_env:
+                    arr = array([f"{k}={v}" for k, v in command_env.items()]).multiline(True)
                     wasi_args.add("env", arr)
                 title = string("annotations.wasi", literal=False)
                 command.add(title, wasi_args)

@@ -347,6 +347,10 @@ def auto(
         None,
         help="Use a specific Docker client (such as depot, podman, etc.)",
     ),
+    docker_opts: Optional[str] = typer.Option(
+        None,
+        help="Additional options to pass to the Docker client.",
+    ),
     skip_docker_if_safe_build: Optional[bool] = typer.Option(
         True,
         help="Skip Docker if the build can be done safely locally (only copy commands).",
@@ -464,6 +468,7 @@ def auto(
         wasmer=wasmer,
         docker=docker,
         docker_client=docker_client,
+        docker_opts=docker_opts,
         skip_docker_if_safe_build=skip_docker_if_safe_build,
         wasmer_registry=wasmer_registry,
         wasmer_token=wasmer_token,
@@ -610,6 +615,10 @@ def serve(
         None,
         help="Use a specific Docker client (such as depot, podman, etc.)",
     ),
+    docker_opts: Optional[str] = typer.Option(
+        None,
+        help="Additional options to pass to the Docker client.",
+    ),
     start: Optional[bool] = typer.Option(
         True,
         help="Run the start command after building.",
@@ -647,7 +656,7 @@ def serve(
 
     if docker or docker_client:
         build_backend: BuildBackend = DockerBuildBackend(
-            path, ASSETS_PATH, docker_client
+            path, ASSETS_PATH, docker_client, docker_opts
         )
     else:
         build_backend = LocalBuildBackend(path, ASSETS_PATH)
@@ -905,6 +914,10 @@ def build(
         None,
         help="Use a specific Docker client (such as depot, podman, etc.)",
     ),
+    docker_opts: Optional[str] = typer.Option(
+        None,
+        help="Additional options to pass to the Docker client.",
+    ),
     skip_docker_if_safe_build: Optional[bool] = typer.Option(
         True,
         help="Skip Docker if the build can be done safely locally (only copy commands).",
@@ -933,7 +946,7 @@ def build(
 
     if docker or docker_client:
         build_backend: BuildBackend = DockerBuildBackend(
-            path, ASSETS_PATH, docker_client
+            path, ASSETS_PATH, docker_client, docker_opts=docker_opts
         )
     else:
         build_backend = LocalBuildBackend(path, ASSETS_PATH)
@@ -995,6 +1008,7 @@ def build(
                 wasmer_token=wasmer_token,
                 docker=False,
                 docker_client=None,
+                docker_opts=None,
                 skip_docker_if_safe_build=False,
                 env_name=env_name,
                 serve_port=serve_port,
