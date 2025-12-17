@@ -3,7 +3,7 @@ import json
 import os
 import shlex
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, TypedDict, cast
+from typing import Any, Dict, List, Optional, Set, TypedDict, TYPE_CHECKING
 
 import sh  # type: ignore[import-untyped]
 import yaml
@@ -14,10 +14,12 @@ from tomlkit import array, aot, comment, document, nl, string, table
 
 from shipit.builders.base import BuildBackend
 from shipit.runners.base import Runner
-from shipit.shipit_types import Package, PrepareStep, RunStep, Serve, WorkdirStep
+from shipit.shipit_types import Package, PrepareStep, Serve
 from shipit.ui import console, write_stderr, write_stdout
 from shipit.version import version as shipit_version
 
+if TYPE_CHECKING:
+    from shipit.shipit_types import Step
 
 class MapperItem(TypedDict, total=False):
     dependencies: Dict[str, str]
@@ -148,6 +150,9 @@ class WasmerRunner:
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
         return provider_config
+
+    def prepare_build_steps(self, build_steps: List["Step"]) -> List["Step"]:
+        return build_steps
 
     def build(self, serve: Serve) -> None:
         self.build_prepare(serve)

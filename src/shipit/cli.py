@@ -1015,8 +1015,11 @@ def build(
         "No start command could be found, please provide a start command"
     )
 
+    # Prepare the build steps (sometimes the runners need to adapt the dependencies)
+    build_steps = runner.prepare_build_steps(serve.build)
+
     # Build and serve
-    build_backend.build(serve.name, env, serve.mounts or [], serve.build)
+    build_backend.build(serve.name, env, serve.mounts or [], build_steps)
     runner.build(serve)
     if serve.prepare and not skip_prepare:
         runner.prepare(env, serve.prepare)

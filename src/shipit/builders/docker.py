@@ -31,6 +31,9 @@ class DockerBuildBackend:
         "php": {
             "source": "ubi:adwinying/php",
         },
+        "go-wasix": {
+            "source": "ubi:wasix-org/go",
+        },
         "composer": {
             "source": "ubi:composer/composer",
             "postinstall": """composer_dir=$(mise where ubi:composer/composer); ln -s "$composer_dir/composer.phar" /usr/local/bin/composer""",

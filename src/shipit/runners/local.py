@@ -1,6 +1,6 @@
 import shutil
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, TYPE_CHECKING
 
 import sh  # type: ignore[import-untyped]
 from rich import box
@@ -11,6 +11,9 @@ from shipit.builders.base import BuildBackend
 from shipit.runners.base import Runner
 from shipit.shipit_types import PrepareStep, Serve
 from shipit.ui import console, write_stderr, write_stdout
+
+if TYPE_CHECKING:
+    from shipit.shipit_types import Step
 
 
 class LocalRunner:
@@ -23,6 +26,9 @@ class LocalRunner:
 
     def prepare_config(self, provider_config: object) -> object:
         return provider_config
+
+    def prepare_build_steps(self, build_steps: List["Step"]) -> List["Step"]:
+        return build_steps
 
     def get_serve_mount_path(self, name: str) -> Path:
         return self.build_backend.get_artifact_mount_path(name)
