@@ -73,7 +73,7 @@ function get_env_var(string $name, string $default = '')
     }
 
     if ($default === '') {
-        error_log("Configuration error: environment variable " . $name . " not provided.");
+        error_log("Warning: env var " . $name . " was not provided.");
     }
 
     return $default;
