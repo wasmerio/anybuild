@@ -13,9 +13,9 @@ serve(
     use(php, composer),
     workdir(app.path),
     copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
-    env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0"),
+    env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER="1"),
     run("composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install"),
-    copy(".", ".", ignore=[".git"])
+    copy(".", ".", ignore=[".git", "vendor"])
   ],
   deps=[php, bash],
   env = {

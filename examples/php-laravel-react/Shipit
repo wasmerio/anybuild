@@ -13,7 +13,7 @@ serve(
   cwd=app.serve_path,
   build=[
     use(php, composer, node, npm),
-    env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0"),
+    env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER="1"),
     workdir(app.path),
     run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install"),
     copy("package-lock.json"),

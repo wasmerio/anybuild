@@ -114,7 +114,7 @@ class PhpProvider:
             )
 
         if self.config.use_composer:
-            steps.append('env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER=1)')
+            steps.append('env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER="1")')
             steps.append(
                 'run("composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'
             )
@@ -125,7 +125,7 @@ class PhpProvider:
         if self.config.framework == PhpFramework.Symfony:
             dirs_to_ignore.append("var")
 
-        steps.append('copy(".", ".", ignore={})'.format(dirs_to_ignore))
+        steps.append('copy(".", ".", ignore={})'.format(json.dumps(dirs_to_ignore)))
 
         # Since we don't run the scripts during the install step, we need to run them after the build step
         if self.config.use_composer and self.config.composer_build_script:
