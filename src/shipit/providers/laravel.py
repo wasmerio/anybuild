@@ -70,7 +70,7 @@ class LaravelProvider(PhpProvider):
 
     def build_steps(self) -> list[str]:
         return [
-            'env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0")',
+            'env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER=1)',
             'workdir(app.path)',
             # "run(\"pie install php/pdo_pgsql\")",
             'run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install")',

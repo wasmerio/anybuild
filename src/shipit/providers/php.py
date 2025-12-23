@@ -12,12 +12,18 @@ from .base import (
     VolumeSpec,
     Config,
 )
+from enum import Enum
 from pydantic_settings import SettingsConfigDict
+
+class PhpFramework(Enum):
+    Laravel = "laravel"
+    Symfony = "symfony"
 
 
 class PhpConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
+    framework: Optional[PhpFramework] = None
     use_composer: bool = False
     composer_build_script: Optional[str] = None
     php_version: Optional[str] = "8.3"
@@ -48,6 +54,9 @@ class PhpProvider:
                 if not composer_build_script and "post-install-cmd" in composer_config["scripts"]:
                     composer_build_script = "post-install-cmd"
         config = PhpConfig(use_composer=use_composer, composer_build_script=composer_build_script, **base_config.model_dump())
+        if not config.framework:
+            if _exists(path, "symfony.lock"):
+                config.framework = PhpFramework.Symfony
         return config
 
     @classmethod
@@ -105,12 +114,18 @@ class PhpProvider:
             )
 
         if self.config.use_composer:
-            steps.append('env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0")')
+            steps.append('env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER=1)')
             steps.append(
                 'run("composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'
             )
 
-        steps.append('copy(".", ".", ignore=[".git"])')
+        dirs_to_ignore = [".git"]   
+        if self.config.use_composer:
+            dirs_to_ignore.append("vendor")
+        if self.config.framework == PhpFramework.Symfony:
+            dirs_to_ignore.append("var")
+
+        steps.append('copy(".", ".", ignore={})'.format(dirs_to_ignore))
 
         # Since we don't run the scripts during the install step, we need to run them after the build step
         if self.config.use_composer and self.config.composer_build_script:
