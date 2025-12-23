@@ -38,6 +38,9 @@ class DockerBuildBackend:
             "source": "ubi:composer/composer",
             "postinstall": """composer_dir=$(mise where ubi:composer/composer); ln -s "$composer_dir/composer.phar" /usr/local/bin/composer""",
         },
+        "hugo": {
+            "source": "ubi:gohugoio/hugo[matching=extended]",
+        },
     }
 
     def __init__(
