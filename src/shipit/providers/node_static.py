@@ -1,3 +1,4 @@
+from shipit.providers.base import _exists
 import json
 import yaml
 from pathlib import Path
@@ -113,6 +114,7 @@ class StaticGenerator(Enum):
     NUXT_V3 = "nuxt3"
     REMIX_OLD = "remix-old"
     REMIX_V2 = "remix-v2"
+    REMIX_V2_CLASSIC = "remix-v2-classic"
 
     def get_output_dir(self) -> str:
         if self == StaticGenerator.NEXT:
@@ -123,13 +125,18 @@ class StaticGenerator(Enum):
             StaticGenerator.ASTRO,
             StaticGenerator.VITE,
             StaticGenerator.NUXT_OLD,
-            StaticGenerator.REMIX_V2,
         ]:
             return "dist"
         elif self == StaticGenerator.GATSBY:
             return "public"
-        elif self == StaticGenerator.REMIX_OLD:
+        elif self in [
+            StaticGenerator.REMIX_OLD,
+            StaticGenerator.REMIX,
+            StaticGenerator.REMIX_V2,
+        ]:
             return "build/client"
+        elif self == StaticGenerator.REMIX_V2_CLASSIC:
+            return "public"
         elif self in [
             StaticGenerator.DOCUSAURUS,
             StaticGenerator.DOCUSAURUS_OLD,
@@ -145,7 +152,8 @@ class StaticGenerator(Enum):
             "gatsby": [StaticGenerator.GATSBY],
             "astro": [StaticGenerator.ASTRO],
             "remix-ssg": [StaticGenerator.REMIX_OLD],
-            "vite": [StaticGenerator.VITE, StaticGenerator.REMIX_V2],
+            "remix": [StaticGenerator.REMIX_V2_CLASSIC, StaticGenerator.REMIX_V2],
+            "vite": [StaticGenerator.VITE],
             "docusaurus": [StaticGenerator.DOCUSAURUS, StaticGenerator.DOCUSAURUS_OLD],
             "next": [StaticGenerator.NEXT],
             "nuxi": [StaticGenerator.NUXT_V3],
@@ -164,6 +172,7 @@ class StaticGenerator(Enum):
             StaticGenerator.ASTRO: "astro build",
             StaticGenerator.REMIX_OLD: "remix-ssg build",
             StaticGenerator.REMIX_V2: "vite build",
+            StaticGenerator.REMIX_V2_CLASSIC: "remix build",
             StaticGenerator.DOCUSAURUS: "docusaurus build",
             StaticGenerator.DOCUSAURUS_OLD: "docusaurus build",
             StaticGenerator.SVELTE: "svelte-kit build",
@@ -171,7 +180,7 @@ class StaticGenerator(Enum):
             StaticGenerator.NEXT: "next export",
             StaticGenerator.NUXT_V3: "nuxi generate",
             StaticGenerator.NUXT_OLD: "nuxt generate",
-            StaticGenerator.REMIX: "remix-ssg build",
+            StaticGenerator.REMIX: "remix build",
         }[self]
 
 
@@ -233,7 +242,11 @@ class NodeStaticProvider(StaticFileProvider):
             ) or cls.has_dependency(package_json, "@remix-run/dev", "0"):
                 config.static_generator = StaticGenerator.REMIX_OLD
             elif cls.has_dependency(package_json, "@remix-run/dev"):
-                config.static_generator = StaticGenerator.REMIX_V2
+                has_vite = cls.has_dependency(package_json, "@remix-run/vite") or cls.has_dependency(package_json, "vite") or _exists(path, "vite.config.js", "vite.config.ts", "vite.config.mjs", "vite.config.cjs")
+                if has_vite:
+                    config.static_generator = StaticGenerator.REMIX_V2
+                else:
+                    config.static_generator = StaticGenerator.REMIX_V2_CLASSIC
             elif cls.has_dependency(package_json, "vite"):
                 config.static_generator = StaticGenerator.VITE
             elif cls.has_dependency(package_json, "next"):
