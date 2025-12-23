@@ -17,12 +17,27 @@ from pydantic_settings import SettingsConfigDict
 import toml
 import json
 import yaml
+from pyripgrep import Grep
+
+
+def is_old_hugo(src_dir: Path) -> dict:
+    rg = Grep()
+
+    # Hard-fail signal: old Hugo
+    if rg.search("resources.ToCSS", path=str(src_dir)):
+        return True
+
+    # Modern Hugo signal
+    if rg.search("css.Sass", path=str(src_dir)):
+        return False
+    
+    return False
 
 
 class HugoConfig(StaticFileConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
-    hugo_version: Optional[str] = "0.149.0"
+    hugo_version: Optional[str] = None
     static_dir: Optional[str] = "public"
 
 
@@ -55,6 +70,12 @@ class HugoProvider(StaticFileProvider):
             hugo_publish_dir = hugo_publish_dir or "public"
             assert isinstance(hugo_publish_dir, str), "publishDir in hugo config must be a string"
             config.static_dir = hugo_publish_dir
+        
+        if not config.hugo_version:
+            if is_old_hugo(path):
+                config.hugo_version = "0.139.0"
+            else:
+                config.hugo_version = "0.153.2"
         return config
 
     @classmethod
@@ -94,7 +115,7 @@ class HugoProvider(StaticFileProvider):
         return [
             'workdir(temp.path)',
             'copy(".", ".", ignore=[".git"])',
-            'run("hugo build", group="build")',
+            'run("hugo build --gc --minify", group="build")',
             'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
         ]
 

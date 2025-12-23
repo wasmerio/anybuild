@@ -17,6 +17,7 @@ dependencies = [
     "tomlkit>=0.13.3",
     "typer>=0.16.1",
     "toml>=0.10.2",
+    "ripgrep-python>=0.1.0",
 ]
 
 [project.urls]

@@ -11,7 +11,7 @@ serve(
     use(hugo),
     workdir(temp.path),
     copy(".", ".", ignore=[".git"]),
-    run("hugo build", group="build"),
+    run("hugo build --gc --minify", group="build"),
     run("cp -R {}/* {}/".format(config.static_dir, static_app.path))
   ],
   deps=[staticwebserver],
