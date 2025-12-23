@@ -138,7 +138,7 @@ RUN apt-get update \\
         libmariadb-dev libmariadb-dev-compat libpq-dev \\
         libvips-dev default-libmysqlclient-dev libmagickwand-dev \\
         libicu-dev libxml2-dev libxslt-dev libyaml-dev \\
-        sudo curl ca-certificates \\
+        sudo curl ca-certificates unzip git \\
     && rm -rf /var/lib/apt/lists/*
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -215,14 +215,18 @@ RUN curl https://mise.run | sh
                     if dependency.name == "pie":
                         docker_file_contents += "RUN apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n"
                         docker_file_contents += "RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n"
-                        return
+                        continue
+                    elif dependency.name == "composer":
+                        version = dependency.version or "2.9.2"
+                        docker_file_contents += f"RUN curl -L --output /usr/bin/composer https://github.com/composer/composer/releases/download/{version}/composer.phar && chmod +x /usr/bin/composer\n"
+                        continue
                     elif dependency.name == "static-web-server":
                         if dependency.version:
                             docker_file_contents += (
                                 f"ENV SWS_INSTALL_VERSION={dependency.version}\n"
                             )
                         docker_file_contents += "RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n"
-                        return
+                        continue
 
                     mapped_dependency = self.mise_mapper.get(dependency.name, {})
                     package_name = mapped_dependency.get("source", dependency.name)
