@@ -34,6 +34,17 @@ class PythonServer(Enum):
     Daphne = "daphne"
 
 
+class MigrationStrategy(Enum):
+    Django = "django"
+    Alembic = "alembic"
+
+    def get_migration_command(self) -> str:
+        if self == MigrationStrategy.Django:
+            return 'f"python manage.py migrate"'
+        elif self == MigrationStrategy.Alembic:
+            return 'f"alembic upgrade head"'
+
+
 class DatabaseType(Enum):
     MySQL = "mysql"
     PostgreSQL = "postgresql"
@@ -46,6 +57,7 @@ class PythonConfig(Config):
 
     framework: Optional[PythonFramework] = None
     server: Optional[PythonServer] = None
+    migration_strategy: Optional[MigrationStrategy] = None
     database: Optional[DatabaseType] = None
     extra_dependencies: Set[str] = Field(default_factory=set)
     asgi_application: Optional[str] = None
@@ -109,12 +121,14 @@ class PythonProvider:
             "mysql-connector-python",
             "aiomysql",
             "asyncmy",
+            "mariadb",
         }
         must_have_deps = must_have_deps or set()
         found_deps = cls.check_deps(
             path,
             "file://",  # This is not really a dependency, but as a way to check if the install script requires all files
             "streamlit",
+            "alembic",
             "django",
             "mcp",
             "mcp[cli]",
@@ -159,6 +173,7 @@ class PythonProvider:
             # Set framework
             if _exists(path, "manage.py") and ("django" in found_deps):
                 framework = PythonFramework.Django
+                config.migration_strategy = MigrationStrategy.Django
             elif "streamlit" in found_deps:
                 framework = PythonFramework.Streamlit
             elif "mcp" in found_deps:
@@ -172,6 +187,12 @@ class PythonProvider:
             else:
                 framework = None
             config.framework = framework
+
+        if not config.migration_strategy:
+            if config.framework == PythonFramework.Django:
+                config.migration_strategy = MigrationStrategy.Django
+            elif "alembic" in found_deps or _exists(path, "alembic.ini"):
+                config.migration_strategy = MigrationStrategy.Alembic
 
         if not config.server and config.framework:
             if config.framework == PythonFramework.Django:
@@ -465,6 +486,7 @@ class PythonProvider:
             return {}
 
         start_cmd = None
+        migrate_cmd = None
         if self.config.server == PythonServer.Daphne:
             assert self.config.asgi_application, (
                 "No ASGI application found for Daphne"
@@ -503,21 +525,22 @@ class PythonProvider:
                 start_cmd = f'"python {main_file}"'
             else:
                 start_cmd = f'"python {{}}/bin/mcp run {main_file} --transport=streamable-http".format(venv.serve_path)'
+        elif self.config.framework == PythonFramework.Django:
+            start_cmd = 'f"python manage.py runserver 0.0.0.0:{PORT}"'
 
         if not start_cmd:
             if self.config.main_file:
                 start_cmd = f'"python {self.config.main_file}"'
+        
+        if self.config.migration_strategy:
+            migrate_cmd = self.config.migration_strategy.get_migration_command()
 
-        if self.config.framework == PythonFramework.Django:
-            if not start_cmd:
-                start_cmd = 'f"python manage.py runserver 0.0.0.0:{PORT}"'
-            migrate_cmd = '"python manage.py migrate"'
-            return {"start": start_cmd, "after_deploy": migrate_cmd}
-
+        commands = {}
         if start_cmd:
-            return {"start": start_cmd}
-        else:
-            return {}
+            commands["start"] = start_cmd
+        if migrate_cmd:
+            commands["after_deploy"] = migrate_cmd
+        return commands
 
     def mounts(self) -> list[MountSpec]:
         if self.only_build:
