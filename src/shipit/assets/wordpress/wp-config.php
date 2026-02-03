@@ -145,6 +145,7 @@ define( 'WP_SITEURL', get_env_var('WP_SITEURL', WP_HOME . '/') );
 define( 'WP_MEMORY_LIMIT', get_env_var('WP_MEMORY_LIMIT', '256M') );
 define( 'WP_MAX_MEMORY_LIMIT', get_env_var('WP_MAX_MEMORY_LIMIT', '256M') );
 define( 'WP_POST_REVISIONS', get_env_var('WP_POST_REVISIONS', false));
+define( 'DISABLE_WP_CRON', true );
 
 /**#@-*/
 
