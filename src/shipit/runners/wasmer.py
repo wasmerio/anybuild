@@ -52,8 +52,8 @@ class WasmerRunner:
     mapper: Dict[str, MapperItem] = {
         "python": {
             "dependencies": {
-                "latest": "python/python@=3.13.3",
-                "3.13": "python/python@=3.13.3",
+                "latest": "python/python@=3.13.5",
+                "3.13": "python/python@=3.13.5",
             },
             "scripts": {"python"},
             "aliases": {},
