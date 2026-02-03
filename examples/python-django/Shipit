@@ -50,7 +50,7 @@ serve(
   },
   commands = {
     "start": f"uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port {PORT}",
-    "after_deploy": "python manage.py migrate"
+    "after_deploy": f"python manage.py migrate"
   },
   services=[
     database,
