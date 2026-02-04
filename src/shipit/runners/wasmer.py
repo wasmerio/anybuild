@@ -459,6 +459,8 @@ class WasmerRunner:
 
         if "after_deploy" in serve.commands:
             jobs = yaml_config.get("jobs", [])
+            # Filter out any existing after_deploy job
+            jobs = [job for job in jobs if job.get("name") != "after_deploy"]
             jobs.append(
                 {
                     "name": "after_deploy",
