@@ -1,0 +1,14 @@
+site_name: My Documentation
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - About: about.md
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
