@@ -115,12 +115,7 @@ impl BuildCommand {
 
     /// Get the effective value of skip_docker_if_safe_build flag (defaults to true)
     pub fn should_skip_docker_if_safe(&self) -> bool {
-        if self.no_skip_docker_if_safe_build {
-            false
-        } else {
-            // Default to true if neither flag is set, or if skip flag is set
-            !self.skip_docker_if_safe_build || self.skip_docker_if_safe_build
-        }
+        !self.no_skip_docker_if_safe_build
     }
 
     /// Execute the build command
@@ -263,10 +258,22 @@ impl BuildCommand {
         // Command::new() inherits parent environment, these just set defaults
         let mut env = std::collections::HashMap::new();
         env.insert("PATH".to_string(), String::new());
-        env.insert("COLORTERM".to_string(), std::env::var("COLORTERM").unwrap_or_default());
-        env.insert("LSCOLORS".to_string(), std::env::var("LSCOLORS").unwrap_or_else(|_| "0".to_string()));
-        env.insert("LS_COLORS".to_string(), std::env::var("LS_COLORS").unwrap_or_else(|_| "0".to_string()));
-        env.insert("CLICOLOR".to_string(), std::env::var("CLICOLOR").unwrap_or_else(|_| "0".to_string()));
+        env.insert(
+            "COLORTERM".to_string(),
+            std::env::var("COLORTERM").unwrap_or_default(),
+        );
+        env.insert(
+            "LSCOLORS".to_string(),
+            std::env::var("LSCOLORS").unwrap_or_else(|_| "0".to_string()),
+        );
+        env.insert(
+            "LS_COLORS".to_string(),
+            std::env::var("LS_COLORS").unwrap_or_else(|_| "0".to_string()),
+        );
+        env.insert(
+            "CLICOLOR".to_string(),
+            std::env::var("CLICOLOR").unwrap_or_else(|_| "0".to_string()),
+        );
 
         let total_steps = steps.len();
         let pb = output.progress_bar(total_steps as u64, "Building...");

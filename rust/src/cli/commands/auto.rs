@@ -103,7 +103,10 @@ pub struct AutoCommand {
     pub skip_docker_if_safe_build: bool,
 
     /// Do not skip Docker even if build is safe
-    #[arg(long = "no-skip-docker-if-safe-build", overrides_with = "skip_docker_if_safe_build")]
+    #[arg(
+        long = "no-skip-docker-if-safe-build",
+        overrides_with = "skip_docker_if_safe_build"
+    )]
     pub no_skip_docker_if_safe_build: bool,
 
     /// Skip running prepare steps
@@ -160,12 +163,7 @@ impl AutoCommand {
 
     /// Get the effective value of skip_docker_if_safe_build flag (defaults to true)
     pub fn should_skip_docker_if_safe(&self) -> bool {
-        if self.no_skip_docker_if_safe_build {
-            false
-        } else {
-            // Default to true if neither flag is set, or if skip flag is set
-            !self.skip_docker_if_safe_build || self.skip_docker_if_safe_build
-        }
+        !self.no_skip_docker_if_safe_build
     }
 
     /// Get the effective value of skip_prepare flag
@@ -215,15 +213,11 @@ impl AutoCommand {
             output.blank();
             output.step("🔨", "Building project...");
 
-            let provider_config = provider
-                .provider_config(&self.path)
-                .unwrap_or_default();
+            let provider_config = provider.provider_config(&self.path).unwrap_or_default();
 
-            let (ctx, mut serve_ctx) = crate::starlark::evaluate_shipit_file(
-                &shipit_path,
-                provider_config,
-            )
-                .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
+            let (ctx, mut serve_ctx) =
+                crate::starlark::evaluate_shipit_file(&shipit_path, provider_config)
+                    .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
 
             // Load environment variables from .env files
             let env_path = self.path.join(".env");
@@ -276,10 +270,22 @@ impl AutoCommand {
                 // Command::new() inherits parent environment, these just set defaults
                 let mut env = std::collections::HashMap::new();
                 env.insert("PATH".to_string(), String::new());
-                env.insert("COLORTERM".to_string(), std::env::var("COLORTERM").unwrap_or_default());
-                env.insert("LSCOLORS".to_string(), std::env::var("LSCOLORS").unwrap_or_else(|_| "0".to_string()));
-                env.insert("LS_COLORS".to_string(), std::env::var("LS_COLORS").unwrap_or_else(|_| "0".to_string()));
-                env.insert("CLICOLOR".to_string(), std::env::var("CLICOLOR").unwrap_or_else(|_| "0".to_string()));
+                env.insert(
+                    "COLORTERM".to_string(),
+                    std::env::var("COLORTERM").unwrap_or_default(),
+                );
+                env.insert(
+                    "LSCOLORS".to_string(),
+                    std::env::var("LSCOLORS").unwrap_or_else(|_| "0".to_string()),
+                );
+                env.insert(
+                    "LS_COLORS".to_string(),
+                    std::env::var("LS_COLORS").unwrap_or_else(|_| "0".to_string()),
+                );
+                env.insert(
+                    "CLICOLOR".to_string(),
+                    std::env::var("CLICOLOR").unwrap_or_else(|_| "0".to_string()),
+                );
 
                 let pb = output.progress_bar(steps.len() as u64, "Building...");
                 for (i, step) in steps.iter().enumerate() {
@@ -301,15 +307,11 @@ impl AutoCommand {
             output.step("🚀", "Starting server...");
 
             // Re-evaluate to get fresh context
-            let provider_config = provider
-                .provider_config(&self.path)
-                .unwrap_or_default();
+            let provider_config = provider.provider_config(&self.path).unwrap_or_default();
 
-            let (ctx, mut serve_ctx) = crate::starlark::evaluate_shipit_file(
-                &shipit_path,
-                provider_config,
-            )
-                .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
+            let (ctx, mut serve_ctx) =
+                crate::starlark::evaluate_shipit_file(&shipit_path, provider_config)
+                    .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
 
             // Load environment variables from .env files
             let env_path = self.path.join(".env");
