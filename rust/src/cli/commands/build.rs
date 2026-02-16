@@ -8,30 +8,159 @@ use std::path::PathBuf;
 
 /// Build the project
 #[derive(Args, Debug)]
+#[command(after_help = "EXAMPLES:\n  \
+    shipit build                # Build current directory\n  \
+    shipit build my-app         # Build 'my-app' directory\n  \
+    shipit build --clean        # Clean and rebuild\n  \
+    shipit build --docker       # Use Docker backend\n  \
+    shipit build --wasmer       # Use Wasmer")]
 pub struct BuildCommand {
-    /// Path to Shipit file
-    #[arg(default_value = "Shipit")]
-    pub shipit_path: PathBuf,
+    /// Path to project directory
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+
+    /// Path to Shipit file (defaults to Shipit in the project path)
+    #[arg(long)]
+    pub shipit_path: Option<PathBuf>,
+
+    /// JSON configuration content to override provider config
+    #[arg(long)]
+    pub config: Option<String>,
+
+    /// Override the start command
+    #[arg(long)]
+    pub start_command: Option<String>,
+
+    /// Override the install command
+    #[arg(long)]
+    pub install_command: Option<String>,
+
+    /// Override the build command
+    #[arg(long)]
+    pub build_command: Option<String>,
+
+    /// Use Wasmer to build and serve the project
+    #[arg(long, overrides_with = "no_wasmer")]
+    pub wasmer: bool,
+
+    /// Do not use Wasmer
+    #[arg(long = "no-wasmer", overrides_with = "wasmer")]
+    pub no_wasmer: bool,
+
+    /// Skip running prepare steps
+    #[arg(long, overrides_with = "no_skip_prepare")]
+    pub skip_prepare: bool,
+
+    /// Do not skip prepare steps
+    #[arg(long = "no-skip-prepare", overrides_with = "skip_prepare")]
+    pub no_skip_prepare: bool,
+
+    /// Path to the Wasmer binary
+    #[arg(long)]
+    pub wasmer_bin: Option<PathBuf>,
+
+    /// Wasmer registry URL
+    #[arg(long)]
+    pub wasmer_registry: Option<String>,
+
+    /// Wasmer token for authentication
+    #[arg(long)]
+    pub wasmer_token: Option<String>,
+
+    /// Use a specific Docker client (such as depot, podman, etc.)
+    #[arg(long)]
+    pub docker_client: Option<String>,
+
+    /// Additional options to pass to the Docker client
+    #[arg(long)]
+    pub docker_opts: Option<String>,
+
+    /// Skip Docker if the build can be done safely locally (only copy commands)
+    #[arg(long, overrides_with = "no_skip_docker_if_safe_build")]
+    pub skip_docker_if_safe_build: bool,
+
+    /// Do not skip Docker even if build is safe
+    #[arg(
+        long = "no-skip-docker-if-safe-build",
+        overrides_with = "skip_docker_if_safe_build"
+    )]
+    pub no_skip_docker_if_safe_build: bool,
+
+    /// Environment name to use (defaults to `.env`, will use `.env.<env_name>` if provided)
+    #[arg(long)]
+    pub env_name: Option<String>,
+
+    /// Port to use for serving (defaults to 8080)
+    #[arg(long)]
+    pub serve_port: Option<u16>,
+
+    /// Override detected provider
+    #[arg(long)]
+    pub provider: Option<String>,
 
     #[command(flatten)]
     pub build_args: BuildArgs,
 }
 
 impl BuildCommand {
+    /// Get the effective value of wasmer flag
+    pub fn should_use_wasmer(&self) -> bool {
+        self.wasmer && !self.no_wasmer
+    }
+
+    /// Get the effective value of skip_prepare flag
+    pub fn should_skip_prepare(&self) -> bool {
+        self.skip_prepare && !self.no_skip_prepare
+    }
+
+    /// Get the effective value of skip_docker_if_safe_build flag (defaults to true)
+    pub fn should_skip_docker_if_safe(&self) -> bool {
+        if self.no_skip_docker_if_safe_build {
+            false
+        } else {
+            // Default to true if neither flag is set, or if skip flag is set
+            !self.skip_docker_if_safe_build || self.skip_docker_if_safe_build
+        }
+    }
+
     /// Execute the build command
     pub fn execute(&self, output: &Output) -> Result<()> {
         let start = std::time::Instant::now();
+        let shipit_path = crate::utils::path::resolve_shipit_path_with_override(
+            &self.path,
+            self.shipit_path.as_deref(),
+        );
 
         output.step("📋", "Loading build plan...");
 
         // Check if file exists
-        if !self.shipit_path.exists() {
-            anyhow::bail!("Shipit file not found at {}", self.shipit_path.display());
+        if !shipit_path.exists() {
+            anyhow::bail!("Shipit file not found at {}", shipit_path.display());
         }
 
+        // Detect provider config from project directory
+        let project_dir = shipit_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let registry = crate::providers::ProviderRegistry::with_defaults();
+        let provider_config = registry.detect_config(project_dir).unwrap_or_default();
+
         // Evaluate Shipit file
-        let (ctx, serve) = crate::starlark::evaluate_shipit_file(&self.shipit_path)
-            .with_context(|| format!("Failed to evaluate {}", self.shipit_path.display()))?;
+        let (ctx, mut serve) = crate::starlark::evaluate_shipit_file(&shipit_path, provider_config)
+            .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
+
+        // Load environment variables from .env files
+        let env_path = project_dir.join(".env");
+        if let Ok(env_vars) = crate::config::load_env_to_map(&env_path) {
+            serve.env.extend(env_vars);
+        }
+
+        if let Some(ref env_name) = self.env_name {
+            let env_path = project_dir.join(format!(".env.{}", env_name));
+            if let Ok(env_vars) = crate::config::load_env_to_map(&env_path) {
+                serve.env.extend(env_vars);
+            }
+        }
 
         output.success("Plan loaded");
 
@@ -40,8 +169,7 @@ impl BuildCommand {
             output.blank();
             output.step("🧹", "Cleaning build directory...");
 
-            let src_dir = self
-                .shipit_path
+            let src_dir = shipit_path
                 .parent()
                 .unwrap_or_else(|| std::path::Path::new("."))
                 .canonicalize()
@@ -80,8 +208,7 @@ impl BuildCommand {
         output.blank();
         output.step("🔨", "Building project...");
 
-        let src_dir = self
-            .shipit_path
+        let src_dir = shipit_path
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."));
 
@@ -132,7 +259,15 @@ impl BuildCommand {
         let _mounts = _mounts?;
 
         // Execute build
-        let mut env = serve.env.clone();
+        // Initialize environment like Python CLI - start with minimal vars
+        // Command::new() inherits parent environment, these just set defaults
+        let mut env = std::collections::HashMap::new();
+        env.insert("PATH".to_string(), String::new());
+        env.insert("COLORTERM".to_string(), std::env::var("COLORTERM").unwrap_or_default());
+        env.insert("LSCOLORS".to_string(), std::env::var("LSCOLORS").unwrap_or_else(|_| "0".to_string()));
+        env.insert("LS_COLORS".to_string(), std::env::var("LS_COLORS").unwrap_or_else(|_| "0".to_string()));
+        env.insert("CLICOLOR".to_string(), std::env::var("CLICOLOR").unwrap_or_else(|_| "0".to_string()));
+
         let total_steps = steps.len();
         let pb = output.progress_bar(total_steps as u64, "Building...");
 

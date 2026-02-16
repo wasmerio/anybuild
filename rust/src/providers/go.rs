@@ -2,6 +2,7 @@
 
 use crate::providers::base::Provider;
 use crate::providers::specs::{DependencySpec, DetectResult, ProviderPlan};
+use crate::starlark::config::ShipitConfig;
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
@@ -39,6 +40,56 @@ impl GoProvider {
             }
         }
         ".".to_string()
+    }
+
+    /// Detect the Go build file (main.go, server.go, etc.).
+    fn detect_build_file(path: &Path) -> Option<String> {
+        let candidates = [
+            "main.go",
+            "server.go",
+            "serve.go",
+            "api.go",
+            "web.go",
+        ];
+        for name in &candidates {
+            if path.join(name).exists() {
+                return Some(name.to_string());
+            }
+            let src_path = format!("src/{}", name);
+            if path.join(&src_path).exists() {
+                return Some(src_path);
+            }
+        }
+        // Try one-level subdirectory globs
+        for name in &candidates {
+            for entry in fs::read_dir(path).into_iter().flatten().flatten()
+            {
+                let entry_path = entry.path();
+                if entry_path.is_dir() {
+                    let child = entry_path.join(name);
+                    if child.exists() {
+                        if let Ok(rel) =
+                            child.strip_prefix(path)
+                        {
+                            return Some(
+                                rel.to_string_lossy().to_string(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Derive the serve binary name from the build file path.
+    fn derive_serve_binary(build_file: &str) -> String {
+        build_file
+            .replace('/', "_")
+            .to_lowercase()
+            .trim_start_matches('_')
+            .replace(".go", "")
+            .to_string()
     }
 }
 
@@ -87,6 +138,33 @@ impl Provider for GoProvider {
         plan.commands.insert("web".to_string(), "./app".to_string());
 
         Ok(plan)
+    }
+
+    fn provider_config(
+        &self,
+        project_path: &Path,
+    ) -> Result<ShipitConfig> {
+        let mut config = ShipitConfig::new();
+
+        // Go version from go.mod or default
+        let go_version = Self::parse_go_version(project_path)
+            .unwrap_or_else(|| "1.25.5".to_string());
+        config.set("go_version", go_version);
+
+        // Build file detection
+        let build_file = Self::detect_build_file(project_path);
+        if let Some(ref bf) = build_file {
+            config.set("go_build_file", bf.clone());
+            config.set(
+                "serve_binary",
+                Self::derive_serve_binary(bf),
+            );
+        } else {
+            config.set("go_build_file", ".");
+            config.set("serve_binary", "app");
+        }
+
+        Ok(config)
     }
 }
 

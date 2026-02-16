@@ -7,32 +7,99 @@ use std::path::PathBuf;
 
 /// Serve the built project
 #[derive(Args, Debug)]
+#[command(after_help = "EXAMPLES:\n  \
+    shipit serve                    # Serve current directory\n  \
+    shipit serve my-app             # Serve 'my-app' directory\n  \
+    shipit serve --wasmer           # Use Wasmer runner\n  \
+    shipit serve --start            # Run start command\n  \
+    shipit serve --wasmer-deploy    # Deploy to Wasmer Edge")]
 pub struct ServeCommand {
-    /// Path to Shipit file
-    #[arg(default_value = "Shipit")]
-    pub shipit_path: PathBuf,
+    /// Path to project directory
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+
+    /// Path to Shipit file (defaults to Shipit in the project path)
+    #[arg(long)]
+    pub shipit_path: Option<PathBuf>,
 
     /// Use Docker backend for artifacts
     #[arg(long)]
     pub docker: bool,
+
+    /// Path to the Wasmer binary
+    #[arg(long)]
+    pub wasmer_bin: Option<PathBuf>,
+
+    /// Use a specific Docker client (such as depot, podman, etc.)
+    #[arg(long)]
+    pub docker_client: Option<String>,
+
+    /// Additional options to pass to the Docker client
+    #[arg(long)]
+    pub docker_opts: Option<String>,
+
+    /// Deploy the project to Wasmer
+    #[arg(long, overrides_with = "no_wasmer_deploy")]
+    pub wasmer_deploy: bool,
+
+    /// Do not deploy to Wasmer
+    #[arg(long = "no-wasmer-deploy", overrides_with = "wasmer_deploy")]
+    pub no_wasmer_deploy: bool,
+
+    /// Wasmer token for authentication
+    #[arg(long)]
+    pub wasmer_token: Option<String>,
+
+    /// Wasmer registry URL
+    #[arg(long)]
+    pub wasmer_registry: Option<String>,
+
+    /// Owner of the Wasmer app
+    #[arg(long)]
+    pub wasmer_app_owner: Option<String>,
+
+    /// Name of the Wasmer app
+    #[arg(long)]
+    pub wasmer_app_name: Option<String>,
+
+    /// Save the Wasmer build output to a JSON file
+    #[arg(long)]
+    pub wasmer_deploy_config: Option<PathBuf>,
 
     #[command(flatten)]
     pub serve_args: ServeArgs,
 }
 
 impl ServeCommand {
+    /// Get the effective value of wasmer_deploy flag
+    pub fn should_wasmer_deploy(&self) -> bool {
+        self.wasmer_deploy && !self.no_wasmer_deploy
+    }
+
     /// Execute the serve command
     pub async fn execute(&self, output: &Output) -> Result<()> {
         output.step("📋", "Loading serve configuration...");
 
+        let shipit_path = crate::utils::path::resolve_shipit_path_with_override(
+            &self.path,
+            self.shipit_path.as_deref(),
+        );
+
         // Check if file exists
-        if !self.shipit_path.exists() {
-            anyhow::bail!("Shipit file not found at {}", self.shipit_path.display());
+        if !shipit_path.exists() {
+            anyhow::bail!("Shipit file not found at {}", shipit_path.display());
         }
 
+        // Detect provider config from project directory
+        let project_dir = shipit_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let registry = crate::providers::ProviderRegistry::with_defaults();
+        let provider_config = registry.detect_config(project_dir).unwrap_or_default();
+
         // Evaluate Shipit file
-        let (ctx, serve_ctx) = crate::starlark::evaluate_shipit_file(&self.shipit_path)
-            .with_context(|| format!("Failed to evaluate {}", self.shipit_path.display()))?;
+        let (ctx, serve_ctx) = crate::starlark::evaluate_shipit_file(&shipit_path, provider_config)
+            .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
 
         output.success("Configuration loaded");
 
@@ -43,8 +110,7 @@ impl ServeCommand {
             .context("Failed to convert serve configuration")?;
 
         // Create backend
-        let src_dir = self
-            .shipit_path
+        let src_dir = shipit_path
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."));
 
@@ -133,6 +199,21 @@ impl ServeCommand {
                 );
             }
             cmd.as_str()
+        } else if self.serve_args.start {
+            if !serve.commands.contains_key("start") {
+                anyhow::bail!(
+                    "Command 'start' not found. Available: {}",
+                    serve
+                        .commands
+                        .keys()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            "start"
+        } else if serve.commands.contains_key("start") {
+            "start"
         } else {
             serve
                 .commands

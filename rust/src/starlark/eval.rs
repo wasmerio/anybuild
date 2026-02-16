@@ -4,6 +4,7 @@
 //! executes a Shipit file, returning the accumulated context and serve
 //! configuration.
 
+use crate::starlark::config::ShipitConfig;
 use crate::starlark::ctx::{Ctx, Serve};
 use crate::starlark::functions::shipit_functions;
 use anyhow::{anyhow, Context, Result};
@@ -56,20 +57,47 @@ fn clear_ctx() {
 /// This function:
 /// 1. Reads the Shipit file from disk
 /// 2. Creates a Starlark module with Shipit functions
-/// 3. Evaluates the file
-/// 4. Extracts the serve configuration result
-/// 5. Returns both the accumulated context and serve config
-pub fn evaluate_shipit_file(path: &Path) -> Result<(Ctx, Serve)> {
+/// 3. Injects `config` and `PORT` globals
+/// 4. Evaluates the file
+/// 5. Extracts the serve configuration result
+/// 6. Returns both the accumulated context and serve config
+///
+/// The `provider_config` is exposed as the `config` variable inside
+/// the Starlark file, allowing Shipit scripts to reference values
+/// like `config.php_version`, `config.python_version`, etc.
+pub fn evaluate_shipit_file(
+    path: &Path,
+    provider_config: ShipitConfig,
+) -> Result<(Ctx, Serve)> {
     // Read the Shipit file
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read Shipit file: {:?}", path))?;
 
-    // Parse the Starlark code
-    let ast = AstModule::parse(&path.display().to_string(), content, &Dialect::Standard)
+    // Parse the Starlark code — use a dialect that supports
+    // keyword-only arguments and f-strings, matching the Python
+    // evaluator behaviour.
+    let dialect = Dialect {
+        enable_keyword_only_arguments: true,
+        enable_f_strings: true,
+        ..Dialect::Standard
+    };
+    let ast = AstModule::parse(&path.display().to_string(), content, &dialect)
         .map_err(|e| anyhow!("Failed to parse Shipit file: {}", e))?;
 
     // Create the module to store globals
     let module = Module::new();
+
+    // Inject the `config` variable so Shipit files can read
+    // provider-detected values (versions, paths, flags, etc.).
+    let config_val = module.heap().alloc(provider_config);
+    module.set("config", config_val);
+
+    // Inject the `PORT` variable (default 8080, matching the Python
+    // evaluator).
+    let port_val = module
+        .heap()
+        .alloc(std::env::var("PORT").unwrap_or_else(|_| "8080".to_string()));
+    module.set("PORT", port_val);
 
     // Create a context to accumulate state
     let ctx = Rc::new(RefCell::new(Ctx::new()));
@@ -118,10 +146,30 @@ pub fn evaluate_shipit_file(path: &Path) -> Result<(Ctx, Serve)> {
 
 /// Evaluate Starlark code directly (for testing).
 pub fn evaluate_code(code: &str) -> Result<(Ctx, String)> {
-    let ast = AstModule::parse("test.star", code.to_string(), &Dialect::Standard)
+    evaluate_code_with_config(code, ShipitConfig::new())
+}
+
+/// Evaluate Starlark code with a specific config (for testing).
+pub fn evaluate_code_with_config(
+    code: &str,
+    provider_config: ShipitConfig,
+) -> Result<(Ctx, String)> {
+    let dialect = Dialect {
+        enable_keyword_only_arguments: true,
+        enable_f_strings: true,
+        ..Dialect::Standard
+    };
+    let ast = AstModule::parse("test.star", code.to_string(), &dialect)
         .map_err(|e| anyhow!("Failed to parse code: {}", e))?;
 
     let module = Module::new();
+
+    // Inject config and PORT
+    let config_val = module.heap().alloc(provider_config);
+    module.set("config", config_val);
+    let port_val = module.heap().alloc("8080");
+    module.set("PORT", port_val);
+
     let ctx = Rc::new(RefCell::new(Ctx::new()));
 
     // Set the context for this thread
@@ -191,7 +239,10 @@ serve("app", "python", [], [python], {{"web": "python app.py"}})
         )
         .unwrap();
 
-        let result = evaluate_shipit_file(file.path());
+        let result = evaluate_shipit_file(
+            file.path(),
+            ShipitConfig::new(),
+        );
         if let Err(e) = &result {
             eprintln!("Error: {}", e);
         }
@@ -374,10 +425,23 @@ serve(
         // Create a Starlark module and evaluator
         let globals = GlobalsBuilder::new().with(shipit_functions).build();
         let module = Module::new();
+
+        // Inject config and PORT for tests
+        let config_val =
+            module.heap().alloc(ShipitConfig::new());
+        module.set("config", config_val);
+        let port_val = module.heap().alloc("8080");
+        module.set("PORT", port_val);
+
         let mut eval = Evaluator::new(&module);
 
         // Parse and execute the code
-        let ast = AstModule::parse("test.star", code.to_owned(), &Dialect::Standard)
+        let dialect = Dialect {
+            enable_keyword_only_arguments: true,
+            enable_f_strings: true,
+            ..Dialect::Standard
+        };
+        let ast = AstModule::parse("test.star", code.to_owned(), &dialect)
             .map_err(|e| anyhow!("Failed to parse Starlark code: {}", e))?;
         let result_value = eval
             .eval_module(ast, &globals)

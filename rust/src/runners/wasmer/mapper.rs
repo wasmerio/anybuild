@@ -66,11 +66,10 @@ pub static PACKAGE_MAPPER: Lazy<HashMap<&'static str, MapperItem>> = Lazy::new(|
     php_arch_deps.insert(
         "32bit".to_string(),
         [
-            ("8.3".to_string(), "php/php@8.3.11-linux-i386".to_string()),
-            ("8.2".to_string(), "php/php@8.2.23-linux-i386".to_string()),
-            ("8.1".to_string(), "php/php@8.1.29-linux-i386".to_string()),
-            ("8.0".to_string(), "php/php@8.0.30-linux-i386".to_string()),
-            ("7.4".to_string(), "php/php@7.4.33-linux-i386".to_string()),
+            ("8.3".to_string(), "php/php-32@8.3.2104".to_string()),
+            ("8.2".to_string(), "php/php-32@8.2.2801".to_string()),
+            ("8.1".to_string(), "php/php-32@8.1.3201".to_string()),
+            ("7.4".to_string(), "php/php-32@7.4.3301".to_string()),
         ]
         .iter()
         .cloned()
@@ -79,11 +78,10 @@ pub static PACKAGE_MAPPER: Lazy<HashMap<&'static str, MapperItem>> = Lazy::new(|
     php_arch_deps.insert(
         "64bit".to_string(),
         [
-            ("8.3".to_string(), "php/php@8.3.11-linux-x64".to_string()),
-            ("8.2".to_string(), "php/php@8.2.23-linux-x64".to_string()),
-            ("8.1".to_string(), "php/php@8.1.29-linux-x64".to_string()),
-            ("8.0".to_string(), "php/php@8.0.30-linux-x64".to_string()),
-            ("7.4".to_string(), "php/php@7.4.33-linux-x64".to_string()),
+            ("8.3".to_string(), "php/php-64@8.3.2104".to_string()),
+            ("8.2".to_string(), "php/php-64@8.2.2801".to_string()),
+            ("8.1".to_string(), "php/php-64@8.1.3201".to_string()),
+            ("7.4".to_string(), "php/php-64@7.4.3301".to_string()),
         ]
         .iter()
         .cloned()
@@ -234,15 +232,13 @@ mod tests {
     #[test]
     fn test_get_dependency_version_php_64bit() {
         let result = get_dependency_version("php", Some("8.3"), Some("64bit")).unwrap();
-        assert!(result.contains("php/php@8.3"));
-        assert!(result.contains("x64"));
+        assert!(result.contains("php/php-64@8.3"));
     }
 
     #[test]
     fn test_get_dependency_version_php_32bit() {
         let result = get_dependency_version("php", Some("8.3"), Some("32bit")).unwrap();
-        assert!(result.contains("php/php@8.3"));
-        assert!(result.contains("i386"));
+        assert!(result.contains("php/php-32@8.3"));
     }
 
     #[test]

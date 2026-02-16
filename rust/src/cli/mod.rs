@@ -10,8 +10,10 @@ use std::path::PathBuf;
 /// Shipit CLI - Build and serve projects anywhere
 #[derive(Parser, Debug)]
 #[command(name = "shipit")]
-#[command(version, about, long_about = None)]
-#[command(arg_required_else_help = true)]
+#[command(version, about)]
+#[command(long_about = "Shipit CLI - Build and serve projects anywhere\n\n\
+                         By default, runs 'auto' command to detect, generate, build, and serve your project.\n\
+                         Run 'shipit <path>' to get started, or use specific commands for more control.")]
 pub struct Cli {
     /// Enable verbose logging
     #[arg(short, long, global = true)]
@@ -26,11 +28,11 @@ pub struct Cli {
     pub no_color: bool,
 
     /// Path to configuration file
-    #[arg(short, long, global = true)]
-    pub config: Option<PathBuf>,
+    #[arg(long = "config-file", global = true)]
+    pub config_file: Option<PathBuf>,
 
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 /// Available CLI commands

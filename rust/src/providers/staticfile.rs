@@ -1,6 +1,7 @@
 //! Staticfile provider - fallback for serving static files
 
 use crate::providers::{base, DetectResult, Provider, ProviderPlan};
+use crate::starlark::config::ShipitConfig;
 use anyhow::Result;
 use std::path::Path;
 
@@ -65,6 +66,15 @@ impl Provider for StaticfileProvider {
 
     fn priority(&self) -> i32 {
         -100 // Very low priority - used as fallback
+    }
+
+    fn provider_config(
+        &self,
+        _project_path: &Path,
+    ) -> Result<ShipitConfig> {
+        let mut config = ShipitConfig::new();
+        config.set("sws_version", "2.38.0");
+        Ok(config)
     }
 }
 

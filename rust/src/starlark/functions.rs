@@ -16,7 +16,10 @@ use starlark::environment::GlobalsBuilder;
 use starlark::eval::Evaluator;
 use starlark::starlark_module;
 use starlark::starlark_simple_value;
+use starlark::values::dict::DictRef;
 use starlark::values::starlark_value;
+use starlark::values::tuple::UnpackTuple;
+use starlark::values::none::NoneOr;
 use starlark::values::{Heap, NoSerialize, ProvidesStaticType, StarlarkValue, Value, ValueLike};
 use std::collections::HashMap;
 use std::fmt;
@@ -108,6 +111,9 @@ impl<'v> StarlarkValue<'v> for CtxVolume {
 }
 
 /// Helper to extract a list of strings from a Starlark Value.
+/// Skips `None` items, matching the Python evaluator which uses
+/// `filter(None, ...)` and `if index is not None` patterns to
+/// handle conditional expressions like `run(...) if cond else None`.
 fn value_to_string_list<'v>(value: Value<'v>, heap: &'v Heap) -> anyhow::Result<Vec<String>> {
     let mut result = Vec::new();
 
@@ -115,7 +121,10 @@ fn value_to_string_list<'v>(value: Value<'v>, heap: &'v Heap) -> anyhow::Result<
     match value.iterate(heap) {
         Ok(iter) => {
             for item in iter {
-                if let Some(s) = item.unpack_str() {
+                if item.is_none() {
+                    // Skip None items (from conditional expressions)
+                    continue;
+                } else if let Some(s) = item.unpack_str() {
                     result.push(s.to_string());
                 } else if let Some(mount) = item.downcast_ref::<CtxMount>() {
                     // Handle mount objects - use their reference string
@@ -133,6 +142,22 @@ fn value_to_string_list<'v>(value: Value<'v>, heap: &'v Heap) -> anyhow::Result<
             Ok(result)
         }
         Err(e) => Err(anyhow!("Expected a list: {}", e)),
+    }
+}
+
+/// Helper to extract a single string-like reference from a Starlark value.
+fn value_to_string<'v>(value: Value<'v>) -> anyhow::Result<String> {
+    if let Some(s) = value.unpack_str() {
+        Ok(s.to_string())
+    } else if let Some(mount) = value.downcast_ref::<CtxMount>() {
+        Ok(mount.reference.clone())
+    } else if let Some(volume) = value.downcast_ref::<CtxVolume>() {
+        Ok(volume.reference.clone())
+    } else {
+        Err(anyhow!(
+            "Expected a string, Mount, or Volume, got {:?}",
+            value
+        ))
     }
 }
 
@@ -181,10 +206,19 @@ pub fn shipit_functions(builder: &mut GlobalsBuilder) {
     /// Reference string to the package
     fn dep(
         name: String,
-        version: Option<String>,
-        architecture: Option<String>,
+        #[starlark(default = NoneOr::None)] version: NoneOr<String>,
+        #[starlark(default = NoneOr::None)] architecture: NoneOr<String>,
         _eval: &mut Evaluator,
     ) -> anyhow::Result<String> {
+        let version = match version {
+            NoneOr::Other(v) => Some(v),
+            NoneOr::None => None,
+        };
+        let architecture = match architecture {
+            NoneOr::Other(a) => Some(a),
+            NoneOr::None => None,
+        };
+
         // Parse architecture
         let arch = architecture
             .map(|a| {
@@ -318,6 +352,7 @@ pub fn shipit_functions(builder: &mut GlobalsBuilder) {
         source: String,
         target: Option<String>,
         ignore: Option<Value<'v>>,
+        base: Option<String>,
         eval: &mut Evaluator<'v, '_>,
     ) -> anyhow::Result<String> {
         let target = target.unwrap_or_else(|| source.clone());
@@ -333,12 +368,23 @@ pub fn shipit_functions(builder: &mut GlobalsBuilder) {
             None
         };
 
+        let copy_base = match base.as_deref() {
+            Some("assets") => CopyBase::Assets,
+            Some("source") | None => CopyBase::Source,
+            Some(other) => {
+                return Err(anyhow!(
+                    "Invalid copy base '{}'. Expected 'source' or 'assets'",
+                    other
+                ))
+            }
+        };
+
         with_ctx(|ctx| {
             let step = Step::Copy(CopyStep {
                 source,
                 target,
                 ignore: ignore_vec,
-                base: CopyBase::Source,
+                base: copy_base,
             });
             Ok(ctx.add_step(step))
         })
@@ -351,8 +397,25 @@ pub fn shipit_functions(builder: &mut GlobalsBuilder) {
     ///
     /// # Returns
     /// Reference string to the step
-    fn env<'v>(kwargs: Value<'v>) -> anyhow::Result<String> {
-        let variables = value_to_string_dict(kwargs)?;
+    fn env<'v>(
+        vars: Option<Value<'v>>,
+        #[starlark(kwargs)] kwargs: DictRef<'v>,
+    ) -> anyhow::Result<String> {
+        let mut variables = HashMap::new();
+
+        if let Some(value) = vars {
+            variables.extend(value_to_string_dict(value)?);
+        }
+
+        for (key, value) in kwargs.iter() {
+            let key_str = key
+                .unpack_str()
+                .ok_or_else(|| anyhow!("Environment variable name must be a string"))?;
+            let value_str = value
+                .unpack_str()
+                .ok_or_else(|| anyhow!("Environment variable value must be a string"))?;
+            variables.insert(key_str.to_string(), value_str.to_string());
+        }
 
         with_ctx(|ctx| {
             let step = Step::Env(EnvStep { variables });
@@ -381,8 +444,22 @@ pub fn shipit_functions(builder: &mut GlobalsBuilder) {
     ///
     /// # Returns
     /// Reference string to the step
-    fn r#use<'v>(deps: Value<'v>, eval: &mut Evaluator<'v, '_>) -> anyhow::Result<String> {
-        let dependencies = value_to_string_list(deps, eval.heap())?;
+    fn r#use<'v>(
+        #[starlark(args)] deps: UnpackTuple<Value<'v>>,
+        eval: &mut Evaluator<'v, '_>,
+    ) -> anyhow::Result<String> {
+        let dependencies = if deps.items.len() == 1 {
+            let first = deps.items[0];
+            match value_to_string_list(first, eval.heap()) {
+                Ok(list) => list,
+                Err(_) => vec![value_to_string(first)?],
+            }
+        } else {
+            deps.items
+                .iter()
+                .map(|value| value_to_string(*value))
+                .collect::<anyhow::Result<Vec<_>>>()?
+        };
 
         with_ctx(|ctx| {
             let step = Step::Use(UseStep { dependencies });
@@ -401,11 +478,17 @@ pub fn shipit_functions(builder: &mut GlobalsBuilder) {
         use crate::types::Mount;
         use std::path::PathBuf;
 
+        let (build_path, serve_path) = if name == "app" {
+            ("/build/app".to_string(), "/app".to_string())
+        } else {
+            (format!("/build/opt/{}", name), format!("/opt/{}", name))
+        };
+
         let reference = with_ctx(|ctx| {
             let mount = Mount {
                 name: name.clone(),
-                build_path: PathBuf::from(format!("/build/{}", name)),
-                serve_path: PathBuf::from(format!("/app/{}", name)),
+                build_path: PathBuf::from(build_path.clone()),
+                serve_path: PathBuf::from(serve_path.clone()),
             };
             Ok(ctx.add_mount(mount))
         })?;
@@ -413,8 +496,8 @@ pub fn shipit_functions(builder: &mut GlobalsBuilder) {
         let ctx_mount = CtxMount {
             reference: reference.clone(),
             name: name.clone(),
-            build_path: format!("/build/{}", name),
-            serve_path: format!("/app/{}", name),
+            build_path,
+            serve_path,
         };
 
         Ok(eval.heap().alloc(ctx_mount))

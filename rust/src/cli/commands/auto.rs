@@ -7,6 +7,12 @@ use std::path::PathBuf;
 
 /// Detect, generate, build, and serve in one command
 #[derive(Args, Debug)]
+#[command(after_help = "EXAMPLES:\n  \
+    shipit                    # Auto-detect and serve current directory\n  \
+    shipit my-app             # Auto-detect and serve 'my-app' directory\n  \
+    shipit --skip-build       # Skip build step and just serve\n  \
+    shipit --wasmer           # Use Wasmer runner instead of local\n  \
+    shipit --provider nodejs  # Force specific provider")]
 pub struct AutoCommand {
     /// Path to project directory
     #[arg(default_value = ".")]
@@ -24,11 +30,149 @@ pub struct AutoCommand {
     #[arg(long)]
     pub wasmer: bool,
 
+    /// Run the start command
+    #[arg(long)]
+    pub start: bool,
+
+    /// JSON configuration content to override provider config
+    #[arg(long)]
+    pub config: Option<String>,
+
+    /// Path to Shipit file (defaults to Shipit in the project path)
+    #[arg(long)]
+    pub shipit_path: Option<PathBuf>,
+
+    /// Regenerate the Shipit file
+    #[arg(long, overrides_with = "no_regenerate")]
+    pub regenerate: bool,
+
+    /// Do not regenerate the Shipit file
+    #[arg(long = "no-regenerate", overrides_with = "regenerate")]
+    pub no_regenerate: bool,
+
+    /// Use a temporary Shipit file in the system temporary directory
+    #[arg(long, overrides_with = "no_temp_shipit")]
+    pub temp_shipit: bool,
+
+    /// Do not use a temporary Shipit file
+    #[arg(long = "no-temp-shipit", overrides_with = "temp_shipit")]
+    pub no_temp_shipit: bool,
+
+    /// Path to the Wasmer binary
+    #[arg(long)]
+    pub wasmer_bin: Option<PathBuf>,
+
+    /// Wasmer token for authentication
+    #[arg(long)]
+    pub wasmer_token: Option<String>,
+
+    /// Wasmer registry URL
+    #[arg(long)]
+    pub wasmer_registry: Option<String>,
+
+    /// Deploy the project to Wasmer
+    #[arg(long, overrides_with = "no_wasmer_deploy")]
+    pub wasmer_deploy: bool,
+
+    /// Do not deploy to Wasmer
+    #[arg(long = "no-wasmer-deploy", overrides_with = "wasmer_deploy")]
+    pub no_wasmer_deploy: bool,
+
+    /// Save the Wasmer build output to a JSON file
+    #[arg(long)]
+    pub wasmer_deploy_config: Option<PathBuf>,
+
+    /// Owner of the Wasmer app
+    #[arg(long)]
+    pub wasmer_app_owner: Option<String>,
+
+    /// Name of the Wasmer app
+    #[arg(long)]
+    pub wasmer_app_name: Option<String>,
+
+    /// Use a specific Docker client (such as depot, podman, etc.)
+    #[arg(long)]
+    pub docker_client: Option<String>,
+
+    /// Additional options to pass to the Docker client
+    #[arg(long)]
+    pub docker_opts: Option<String>,
+
+    /// Skip Docker if the build can be done safely locally (only copy commands)
+    #[arg(long, overrides_with = "no_skip_docker_if_safe_build")]
+    pub skip_docker_if_safe_build: bool,
+
+    /// Do not skip Docker even if build is safe
+    #[arg(long = "no-skip-docker-if-safe-build", overrides_with = "skip_docker_if_safe_build")]
+    pub no_skip_docker_if_safe_build: bool,
+
+    /// Skip running prepare steps
+    #[arg(long, overrides_with = "no_skip_prepare")]
+    pub skip_prepare: bool,
+
+    /// Do not skip prepare steps
+    #[arg(long = "no-skip-prepare", overrides_with = "skip_prepare")]
+    pub no_skip_prepare: bool,
+
+    /// Override the install command
+    #[arg(long)]
+    pub install_command: Option<String>,
+
+    /// Override the build command
+    #[arg(long)]
+    pub build_command: Option<String>,
+
+    /// Override the start command
+    #[arg(long)]
+    pub start_command: Option<String>,
+
+    /// Environment name to use (defaults to `.env`, will use `.env.<env_name>` if provided)
+    #[arg(long)]
+    pub env_name: Option<String>,
+
+    /// Override detected provider
+    #[arg(long)]
+    pub provider: Option<String>,
+
+    /// Port to use for serving (defaults to 8080)
+    #[arg(long)]
+    pub serve_port: Option<u16>,
+
     #[command(flatten)]
     pub build_args: BuildArgs,
 }
 
 impl AutoCommand {
+    /// Get the effective value of regenerate flag
+    pub fn should_regenerate(&self) -> bool {
+        self.regenerate && !self.no_regenerate
+    }
+
+    /// Get the effective value of temp_shipit flag
+    pub fn should_use_temp_shipit(&self) -> bool {
+        self.temp_shipit && !self.no_temp_shipit
+    }
+
+    /// Get the effective value of wasmer_deploy flag
+    pub fn should_wasmer_deploy(&self) -> bool {
+        self.wasmer_deploy && !self.no_wasmer_deploy
+    }
+
+    /// Get the effective value of skip_docker_if_safe_build flag (defaults to true)
+    pub fn should_skip_docker_if_safe(&self) -> bool {
+        if self.no_skip_docker_if_safe_build {
+            false
+        } else {
+            // Default to true if neither flag is set, or if skip flag is set
+            !self.skip_docker_if_safe_build || self.skip_docker_if_safe_build
+        }
+    }
+
+    /// Get the effective value of skip_prepare flag
+    pub fn should_skip_prepare(&self) -> bool {
+        self.skip_prepare && !self.no_skip_prepare
+    }
+
     /// Execute the auto command
     pub async fn execute(&self, output: &Output) -> Result<()> {
         use std::time::Instant;
@@ -71,8 +215,28 @@ impl AutoCommand {
             output.blank();
             output.step("🔨", "Building project...");
 
-            let (ctx, serve_ctx) = crate::starlark::evaluate_shipit_file(&shipit_path)
+            let provider_config = provider
+                .provider_config(&self.path)
+                .unwrap_or_default();
+
+            let (ctx, mut serve_ctx) = crate::starlark::evaluate_shipit_file(
+                &shipit_path,
+                provider_config,
+            )
                 .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
+
+            // Load environment variables from .env files
+            let env_path = self.path.join(".env");
+            if let Ok(env_vars) = crate::config::load_env_to_map(&env_path) {
+                serve_ctx.env.extend(env_vars);
+            }
+
+            if let Some(ref env_name) = self.env_name {
+                let env_path = self.path.join(format!(".env.{}", env_name));
+                if let Ok(env_vars) = crate::config::load_env_to_map(&env_path) {
+                    serve_ctx.env.extend(env_vars);
+                }
+            }
 
             // Resolve build steps
             let mut steps = Vec::new();
@@ -108,7 +272,15 @@ impl AutoCommand {
                     ))
                 };
 
-                let mut env = serve_ctx.env.clone();
+                // Initialize environment like Python CLI - start with minimal vars
+                // Command::new() inherits parent environment, these just set defaults
+                let mut env = std::collections::HashMap::new();
+                env.insert("PATH".to_string(), String::new());
+                env.insert("COLORTERM".to_string(), std::env::var("COLORTERM").unwrap_or_default());
+                env.insert("LSCOLORS".to_string(), std::env::var("LSCOLORS").unwrap_or_else(|_| "0".to_string()));
+                env.insert("LS_COLORS".to_string(), std::env::var("LS_COLORS").unwrap_or_else(|_| "0".to_string()));
+                env.insert("CLICOLOR".to_string(), std::env::var("CLICOLOR").unwrap_or_else(|_| "0".to_string()));
+
                 let pb = output.progress_bar(steps.len() as u64, "Building...");
                 for (i, step) in steps.iter().enumerate() {
                     pb.set_position(i as u64);
@@ -129,8 +301,28 @@ impl AutoCommand {
             output.step("🚀", "Starting server...");
 
             // Re-evaluate to get fresh context
-            let (ctx, serve_ctx) = crate::starlark::evaluate_shipit_file(&shipit_path)
+            let provider_config = provider
+                .provider_config(&self.path)
+                .unwrap_or_default();
+
+            let (ctx, mut serve_ctx) = crate::starlark::evaluate_shipit_file(
+                &shipit_path,
+                provider_config,
+            )
                 .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
+
+            // Load environment variables from .env files
+            let env_path = self.path.join(".env");
+            if let Ok(env_vars) = crate::config::load_env_to_map(&env_path) {
+                serve_ctx.env.extend(env_vars);
+            }
+
+            if let Some(ref env_name) = self.env_name {
+                let env_path = self.path.join(format!(".env.{}", env_name));
+                if let Ok(env_vars) = crate::config::load_env_to_map(&env_path) {
+                    serve_ctx.env.extend(env_vars);
+                }
+            }
 
             // Convert serve configuration
             let serve = self
@@ -177,12 +369,27 @@ impl AutoCommand {
             runner.build(&serve).context("Failed to build runner")?;
 
             // Determine command
-            let command_name = serve
-                .commands
-                .keys()
-                .next()
-                .context("No commands defined")?
-                .as_str();
+            let command_name = if self.start || serve.commands.contains_key("start") {
+                if !serve.commands.contains_key("start") {
+                    anyhow::bail!(
+                        "Command 'start' not found. Available: {}",
+                        serve
+                            .commands
+                            .keys()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                "start"
+            } else {
+                serve
+                    .commands
+                    .keys()
+                    .next()
+                    .context("No commands defined")?
+                    .as_str()
+            };
 
             output.blank();
             output.success(format!("✓ Ready in {:.2}s", start.elapsed().as_secs_f64()));

@@ -7,6 +7,14 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+fn parse_dependency_ref(dep_ref: &str) -> (String, String) {
+    if let Some((name, version)) = dep_ref.split_once('@') {
+        (name.to_string(), version.to_string())
+    } else {
+        (dep_ref.to_string(), "*".to_string())
+    }
+}
+
 /// Check if a file is a WebAssembly module.
 pub fn is_wasm_file(path: &Path) -> bool {
     if let Ok(mut file) = std::fs::File::open(path) {
@@ -52,13 +60,13 @@ pub fn generate_manifest(serve: &Serve, backend: &dyn BuildBackend) -> Result<St
     ];
 
     // Map dependencies
-    let mut binaries: HashMap<String, (Vec<String>, HashMap<String, String>)> = HashMap::new();
+    let mut binaries: HashMap<String, (String, HashMap<String, String>)> = HashMap::new();
     let mut deps_lines = vec!["[dependencies]".to_string()];
 
     // Add bash if prepare steps exist
     let mut has_bash = false;
     if serve.prepare.is_some() {
-        deps_lines.push("bash = \"wasmer/bash@=1.0.24\"".to_string());
+        deps_lines.push("\"wasmer/bash\" = \"=1.0.24\"".to_string());
         has_bash = true;
     }
 
@@ -67,22 +75,34 @@ pub fn generate_manifest(serve: &Serve, backend: &dyn BuildBackend) -> Result<St
         // Get the package name and version
         let name = &pkg.name;
         let version = pkg.version.as_deref();
+        let architecture = pkg.architecture.map(|arch| match arch {
+            crate::types::package::Architecture::Bit64 => "64bit",
+            crate::types::package::Architecture::Bit32 => "32bit",
+        });
 
         if let Some(mapper_item) = get_mapper_item(name) {
             // Get dependency string
-            let dep_str = get_dependency_version(name, version, None)
+            let dep_str = get_dependency_version(name, version, architecture)
                 .with_context(|| format!("Failed to resolve dependency: {}", name))?;
 
+            let (dep_name, dep_version) = parse_dependency_ref(&dep_str);
+
             // Add to dependencies
-            let dep_key = name.replace('-', "_");
-            deps_lines.push(format!("{} = \"{}\"", dep_key, dep_str));
+            deps_lines.push(format!("\"{}\" = \"{}\"", dep_name, dep_version));
 
             // Track binaries
             if !mapper_item.scripts.is_empty() {
-                binaries.insert(
-                    dep_key.clone(),
-                    (mapper_item.scripts.clone(), mapper_item.env.clone()),
-                );
+                for script in &mapper_item.scripts {
+                    let module = format!("{}:{}", dep_name, script);
+                    binaries.insert(script.clone(), (module, mapper_item.env.clone()));
+                }
+            }
+
+            if !mapper_item.aliases.is_empty() {
+                for (alias, script) in &mapper_item.aliases {
+                    let module = format!("{}:{}", dep_name, script);
+                    binaries.insert(alias.clone(), (module, mapper_item.env.clone()));
+                }
             }
         }
     }
@@ -143,14 +163,10 @@ pub fn generate_manifest(serve: &Serve, backend: &dyn BuildBackend) -> Result<St
         }
 
         // Determine module
-        let module_name = if let Some((scripts, bin_env)) = binaries.get(&program) {
+        let module_name = if let Some((dependency_module, bin_env)) = binaries.get(&program) {
             // Binary from dependency
             env.extend(bin_env.clone());
-            if scripts.contains(&program) {
-                program.clone()
-            } else {
-                scripts.first().cloned().unwrap_or(program.clone())
-            }
+            dependency_module.clone()
         } else if program.starts_with('/') {
             // Absolute path - check if it's a wasm module
             if let Some(file_path) = find_file_in_mounts(serve, backend, &program) {
@@ -192,13 +208,10 @@ pub fn generate_manifest(serve: &Serve, backend: &dyn BuildBackend) -> Result<St
         }
 
         if !env.is_empty() {
-            let env_items: Vec<String> = env
-                .iter()
-                .map(|(k, v)| format!("  {} = \"{}\"", k, v))
-                .collect();
-            lines.push("env = {".to_string());
-            lines.extend(env_items);
-            lines.push("}".to_string());
+            let mut env_items: Vec<String> =
+                env.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+            env_items.sort();
+            lines.push(format!("env = {:?}", env_items));
         }
 
         lines.push("".to_string());

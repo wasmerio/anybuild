@@ -2,6 +2,7 @@
 
 use crate::providers::base::Provider;
 use crate::providers::specs::{DependencySpec, DetectResult, ProviderPlan};
+use crate::starlark::config::ShipitConfig;
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::HashSet;
@@ -158,6 +159,37 @@ impl Provider for LaravelProvider {
         );
 
         Ok(plan)
+    }
+
+    fn provider_config(
+        &self,
+        project_path: &Path,
+    ) -> Result<ShipitConfig> {
+        let mut config = ShipitConfig::new();
+
+        // PHP version
+        let php_version =
+            Self::parse_composer_json(project_path)
+                .and_then(|json| Self::detect_php_version(&json))
+                .unwrap_or_else(|| "8.3".to_string());
+        config.set("php_version", php_version);
+        config.set("php_architecture", "64-bit");
+
+        // Node version
+        let node_version =
+            Self::parse_package_json(project_path)
+                .and_then(|pkg| {
+                    crate::providers::node::NodeStaticProvider
+                        ::detect_node_version_from_pkg(&pkg)
+                })
+                .unwrap_or_else(|| "22".to_string());
+        config.set("node_version", node_version);
+        config.set_option("npm_version", None::<String>);
+
+        // sws version for static serving
+        config.set("sws_version", "2.38.0");
+
+        Ok(config)
     }
 }
 

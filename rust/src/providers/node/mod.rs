@@ -7,7 +7,10 @@ mod frameworks;
 mod package_manager;
 
 use crate::providers::base::Provider;
-use crate::providers::specs::{DependencySpec, DetectResult, MountSpec, ProviderPlan};
+use crate::providers::specs::{
+    DependencySpec, DetectResult, MountSpec, ProviderPlan,
+};
+use crate::starlark::config::ShipitConfig;
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -57,6 +60,14 @@ impl NodeStaticProvider {
 
     /// Detect Node.js version from engines field.
     fn detect_node_version(pkg: &Value) -> Option<String> {
+        Self::detect_node_version_from_pkg(pkg)
+    }
+
+    /// Public helper to detect Node.js version from a package.json
+    /// Value. Used by other providers (e.g. Laravel).
+    pub fn detect_node_version_from_pkg(
+        pkg: &Value,
+    ) -> Option<String> {
         pkg.get("engines")
             .and_then(|e| e.get("node"))
             .and_then(|n| n.as_str())
@@ -194,6 +205,40 @@ impl Provider for NodeStaticProvider {
         plan.mounts.push(MountSpec::new(output_dir));
 
         Ok(plan)
+    }
+
+    fn provider_config(
+        &self,
+        project_path: &Path,
+    ) -> Result<ShipitConfig> {
+        let mut config = ShipitConfig::new();
+
+        // Node version from package.json engines or default
+        let node_version = Self::parse_package_json(project_path)
+            .ok()
+            .and_then(|pkg| Self::detect_node_version(&pkg))
+            .unwrap_or_else(|| "22".to_string());
+        config.set("node_version", node_version);
+
+        // npm version
+        config.set_option("npm_version", None::<String>);
+
+        // sws version for serving
+        config.set("sws_version", "2.38.0");
+
+        // static_dir from generator detection
+        let generators = Self::parse_package_json(project_path)
+            .ok()
+            .map(|pkg| {
+                let all_deps = Self::get_all_dependencies(&pkg);
+                frameworks::detect_from_dependencies(&all_deps)
+            })
+            .unwrap_or_default();
+        let static_dir =
+            Self::detect_output_dir(project_path, &generators);
+        config.set("static_dir", static_dir);
+
+        Ok(config)
     }
 }
 

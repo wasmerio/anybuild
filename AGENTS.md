@@ -44,7 +44,7 @@ for popular frameworks.
 - Use type hints where reasonable.
 - Stick to the repo’s current Python baseline (3.13) and avoid shims for older
   versions; if a feature exists in 3.13, just use it without compatibility code.
-- Avoid comments that simply restate code; explain *why*, not *what*.
+- Avoid comments that simply restate code; explain _why_, not _what_.
 - Keep imports grouped and sorted.
 - Lines should be kept to 80 characters where possible.
 
@@ -57,3 +57,16 @@ for popular frameworks.
 ## File conventions
 
 - Markdown files should wrap lines at 80 characters.
+
+## Agent instructions
+
+NEVER BE LAZY OR SLOPPY WHEN DEVELOPING!
+IMPLEMENT TO THE BEST OF YOUR ABILITY, considering aspects not explicitly mentioned
+in the instructions, such as performance, security, and maintainability, Rust best practices,
+... OR ELSE YOU MIGHT BE REPLACED BY A BETTER AGENT!
+
+Make sure you understand the context, potentially by reading related files.
+
+Always be thorough and diligent when making changes to the codebase.
+Make sure you understand the context, potentially by reading related files.
+Make sure to handle all edge cases and ensure that the code is robust and well-tested.

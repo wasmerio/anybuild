@@ -9,7 +9,7 @@ pub mod commands;
 pub mod env;
 
 pub use commands::CustomCommands;
-pub use env::{expand_env_vars, load_env};
+pub use env::{expand_env_vars, load_env, load_env_to_map};
 
 /// Main configuration struct
 #[derive(Debug, Clone, Serialize, Deserialize)]

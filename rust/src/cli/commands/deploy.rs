@@ -8,9 +8,13 @@ use std::path::PathBuf;
 /// Deploy to Wasmer Edge
 #[derive(Args, Debug)]
 pub struct DeployCommand {
-    /// Path to Shipit file
-    #[arg(default_value = "Shipit")]
-    pub shipit_path: PathBuf,
+    /// Path to project directory
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+
+    /// Path to Shipit file (defaults to Shipit in the project path)
+    #[arg(long)]
+    pub shipit_path: Option<PathBuf>,
 
     #[command(flatten)]
     pub deploy_args: DeployArgs,
@@ -20,15 +24,32 @@ impl DeployCommand {
     /// Execute the deploy command
     pub async fn execute(&self, output: &Output) -> Result<()> {
         output.step("🚀", "Deploying to Wasmer Edge...");
+        let shipit_path = crate::utils::path::resolve_shipit_path_with_override(
+            &self.path,
+            self.shipit_path.as_deref(),
+        );
 
         // Check if file exists
-        if !self.shipit_path.exists() {
-            anyhow::bail!("Shipit file not found at {}", self.shipit_path.display());
+        if !shipit_path.exists() {
+            anyhow::bail!("Shipit file not found at {}", shipit_path.display());
         }
 
+        // Detect provider config from project directory
+        let project_dir = shipit_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let registry =
+            crate::providers::ProviderRegistry::with_defaults();
+        let provider_config = registry
+            .detect_config(project_dir)
+            .unwrap_or_default();
+
         // Evaluate Shipit file
-        let (ctx, serve_ctx) = crate::starlark::evaluate_shipit_file(&self.shipit_path)
-            .with_context(|| format!("Failed to evaluate {}", self.shipit_path.display()))?;
+        let (ctx, serve_ctx) = crate::starlark::evaluate_shipit_file(
+            &shipit_path,
+            provider_config,
+        )
+        .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
 
         output.success("Configuration loaded");
 
@@ -38,8 +59,7 @@ impl DeployCommand {
             .context("Failed to convert serve configuration")?;
 
         // Create backend
-        let src_dir = self
-            .shipit_path
+        let src_dir = shipit_path
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."));
 

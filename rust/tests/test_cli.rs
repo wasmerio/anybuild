@@ -73,7 +73,8 @@ fn test_serve_help() {
         .success()
         .stdout(predicate::str::contains("Serve"))
         .stdout(predicate::str::contains("--port"))
-        .stdout(predicate::str::contains("--wasmer"));
+        .stdout(predicate::str::contains("--wasmer"))
+        .stdout(predicate::str::contains("--start"));
 }
 
 #[test]
@@ -96,7 +97,8 @@ fn test_auto_help() {
         .success()
         .stdout(predicate::str::contains("Detect, generate, build"))
         .stdout(predicate::str::contains("--skip-build"))
-        .stdout(predicate::str::contains("--skip-serve"));
+        .stdout(predicate::str::contains("--skip-serve"))
+        .stdout(predicate::str::contains("--start"));
 }
 
 #[test]
@@ -123,11 +125,13 @@ fn test_config_help() {
 
 #[test]
 fn test_invalid_command() {
+    // With default routing to auto, unknown subcommands are treated as paths
+    // This will now route to auto and attempt to process the path
     shipit_cmd()
         .arg("invalid-command")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unrecognized subcommand"));
+        .stderr(predicate::str::contains("No such file or directory"));
 }
 
 #[test]
@@ -246,17 +250,39 @@ fn test_plan_nonexistent_shipit() {
 }
 
 #[test]
+fn test_plan_directory_path_resolves_to_shipit() {
+    let temp_dir = TempDir::new().unwrap();
+
+    shipit_cmd()
+        .arg("plan")
+        .arg(temp_dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Shipit file not found"))
+        .stderr(predicate::str::contains("Shipit"));
+}
+
+#[test]
 fn test_plan_json_format() {
-    // Use an existing example that has a Shipit file
-    if common::example_exists("static-nobuild") {
-        shipit_cmd()
-            .arg("plan")
-            .arg("--format")
-            .arg("json")
-            .arg(common::example_path("static-nobuild").join("Shipit"))
-            .assert()
-            .failure(); // Will fail due to Starlark issues, but that's expected
-    }
+    let temp_dir = TempDir::new().unwrap();
+    let shipit_path = temp_dir.path().join("Shipit");
+
+    fs::write(
+        &shipit_path,
+        r#"python = dep("python", "3.11")
+serve("app", "python", [], [python], {"start": "python app.py"})
+"#,
+    )
+    .unwrap();
+
+    shipit_cmd()
+        .arg("plan")
+        .arg("--format")
+        .arg("json")
+        .arg(&shipit_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"serve\""));
 }
 
 #[test]
@@ -272,6 +298,34 @@ fn test_build_nonexistent_shipit() {
 }
 
 #[test]
+fn test_build_directory_path_resolves_to_shipit() {
+    let temp_dir = TempDir::new().unwrap();
+
+    shipit_cmd()
+        .arg("build")
+        .arg(temp_dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Shipit file not found"))
+        .stderr(predicate::str::contains("Shipit"));
+}
+
+#[test]
+fn test_deploy_directory_path_resolves_to_shipit() {
+    let temp_dir = TempDir::new().unwrap();
+
+    shipit_cmd()
+        .arg("deploy")
+        .arg(temp_dir.path())
+        .arg("--app")
+        .arg("test-app")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Shipit file not found"))
+        .stderr(predicate::str::contains("Shipit"));
+}
+
+#[test]
 fn test_serve_nonexistent_shipit() {
     let temp_dir = TempDir::new().unwrap();
 
@@ -281,4 +335,42 @@ fn test_serve_nonexistent_shipit() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("not found"));
+}
+
+#[test]
+fn test_serve_directory_path_resolves_to_shipit() {
+    let temp_dir = TempDir::new().unwrap();
+
+    shipit_cmd()
+        .arg("serve")
+        .arg(temp_dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Shipit file not found"))
+        .stderr(predicate::str::contains("Shipit"));
+}
+
+#[test]
+fn test_serve_start_flag_is_accepted() {
+    let temp_dir = TempDir::new().unwrap();
+
+    shipit_cmd()
+        .arg("serve")
+        .arg(temp_dir.path().join("Shipit"))
+        .arg("--start")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Shipit file not found"));
+}
+
+#[test]
+fn test_auto_start_flag_is_accepted() {
+    shipit_cmd()
+        .arg("auto")
+        .arg("/nonexistent/path/that/does/not/exist")
+        .arg("--wasmer")
+        .arg("--start")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument").not());
 }

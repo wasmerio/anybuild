@@ -1,7 +1,10 @@
 //! MkDocs provider for building MkDocs documentation sites.
 
 use crate::providers::base::Provider;
-use crate::providers::specs::{DependencySpec, DetectResult, MountSpec, ProviderPlan};
+use crate::providers::specs::{
+    DependencySpec, DetectResult, MountSpec, ProviderPlan,
+};
+use crate::starlark::config::ShipitConfig;
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
@@ -94,6 +97,26 @@ impl Provider for MkDocsProvider {
         plan.mounts.push(MountSpec::new("site"));
 
         Ok(plan)
+    }
+
+    fn provider_config(
+        &self,
+        _project_path: &Path,
+    ) -> Result<ShipitConfig> {
+        let mut config = ShipitConfig::new();
+
+        // MkDocs inherits Python config fields
+        config.set("python_version", "3.13");
+        config.set("uv_version", "0.8.15");
+        config.set_option(
+            "cross_platform",
+            None::<String>,
+        );
+
+        // sws version for serving
+        config.set("sws_version", "2.38.0");
+
+        Ok(config)
     }
 }
 

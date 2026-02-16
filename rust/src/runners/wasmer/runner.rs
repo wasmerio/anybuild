@@ -183,8 +183,8 @@ impl Runner for WasmerRunner {
         let mut cmd = std::process::Command::new(&self.bin);
         cmd.arg("run")
             .arg("bash")
-            .arg("--mapdir")
-            .arg(format!("/prepare:{}", prepare_dir.display()))
+            .arg("--volume")
+            .arg(format!("{}:{}", prepare_dir.display(), "/prepare"))
             .arg("--")
             .arg("/prepare/prepare.sh")
             .current_dir(&self.src_dir);
@@ -210,14 +210,19 @@ impl Runner for WasmerRunner {
             anyhow::bail!("wasmer.toml not found. Run build first.");
         }
 
+        if command != "start" {
+            anyhow::bail!(
+                "Wasmer runner currently supports only the 'start' command, got '{}'",
+                command
+            );
+        }
+
         println!("🚀 Running command with Wasmer: {}", command);
 
         let status = std::process::Command::new(&self.bin)
             .arg("run")
-            .arg("--manifest")
-            .arg(&manifest_path)
-            .arg("--command")
-            .arg(command)
+            .arg("--net")
+            .arg(&self.wasmer_dir_path)
             .current_dir(&self.src_dir)
             .status()
             .with_context(|| format!("Failed to execute wasmer run: {}", command))?;

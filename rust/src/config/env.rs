@@ -18,6 +18,29 @@ pub fn load_env(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Load environment variables from a .env file into a HashMap
+///
+/// Does not modify the process environment. Returns an empty HashMap if the
+/// file doesn't exist.
+pub fn load_env_to_map(path: &Path) -> Result<std::collections::HashMap<String, String>> {
+    use std::collections::HashMap;
+
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+
+    let iter = dotenvy::from_path_iter(path)
+        .with_context(|| format!("Failed to load .env file from {}", path.display()))?;
+
+    let mut map = HashMap::new();
+    for item in iter {
+        let (key, value) = item.with_context(|| "Failed to parse .env entry")?;
+        map.insert(key, value);
+    }
+
+    Ok(map)
+}
+
 /// Get an environment variable
 pub fn get_env(key: &str) -> Option<String> {
     std::env::var(key).ok()
@@ -171,5 +194,31 @@ mod tests {
 
         // Note: dotenvy doesn't load into std::env in tests reliably
         // so we can't test the actual values here without more setup
+    }
+
+    #[test]
+    fn test_load_env_to_map_missing_file() {
+        let path = Path::new("/nonexistent/.env");
+        let result = load_env_to_map(path);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_load_env_to_map() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "TEST_KEY=test_value").unwrap();
+        writeln!(file, "TEST_NUM=42").unwrap();
+        writeln!(file, "TEST_BOOL=true").unwrap();
+        file.flush().unwrap();
+
+        let result = load_env_to_map(file.path());
+        assert!(result.is_ok());
+
+        let map = result.unwrap();
+        assert_eq!(map.len(), 3);
+        assert_eq!(map.get("TEST_KEY"), Some(&"test_value".to_string()));
+        assert_eq!(map.get("TEST_NUM"), Some(&"42".to_string()));
+        assert_eq!(map.get("TEST_BOOL"), Some(&"true".to_string()));
     }
 }

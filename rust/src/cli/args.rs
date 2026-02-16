@@ -57,6 +57,10 @@ pub struct ServeArgs {
     #[arg(long)]
     pub wasmer: bool,
 
+    /// Run the start command
+    #[arg(long, conflicts_with = "command")]
+    pub start: bool,
+
     /// Specify command to run (e.g., web, worker)
     #[arg(long)]
     pub command: Option<String>,

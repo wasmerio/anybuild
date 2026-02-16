@@ -8,6 +8,12 @@ use std::path::PathBuf;
 
 /// Generate a Shipit file for the project
 #[derive(Args, Debug)]
+#[command(after_help = "EXAMPLES:\n  \
+    shipit generate                    # Generate Shipit for current directory\n  \
+    shipit generate my-app             # Generate Shipit for 'my-app' directory\n  \
+    shipit generate -o custom.Shipit   # Output to custom file\n  \
+    shipit generate --provider nodejs  # Force specific provider\n  \
+    shipit generate --dry-run          # Preview without writing")]
 pub struct GenerateCommand {
     /// Path to project directory
     #[arg(default_value = ".")]
@@ -22,8 +28,24 @@ pub struct GenerateCommand {
     pub force: bool,
 
     /// Output path for Shipit file
-    #[arg(long, short)]
+    #[arg(long, short, visible_alias = "shipit-path", alias = "out")]
     pub output: Option<PathBuf>,
+
+    /// JSON configuration content to override provider config
+    #[arg(long)]
+    pub config: Option<String>,
+
+    /// Override the install command
+    #[arg(long)]
+    pub install_command: Option<String>,
+
+    /// Override the build command
+    #[arg(long)]
+    pub build_command: Option<String>,
+
+    /// Override the start command
+    #[arg(long)]
+    pub start_command: Option<String>,
 
     /// Show generated file without writing
     #[arg(long)]

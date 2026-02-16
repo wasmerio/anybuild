@@ -2,6 +2,7 @@
 
 use crate::providers::base::Provider;
 use crate::providers::specs::{DependencySpec, DetectResult, ProviderPlan};
+use crate::starlark::config::ShipitConfig;
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::HashSet;
@@ -57,16 +58,25 @@ impl PhpProvider {
         let require = composer_json.get("require")?.as_object()?;
         let php_version = require.get("php")?.as_str()?;
 
-        // Parse version constraint like "^8.1" or ">=8.0"
+        // Parse version constraint like "^8.1", ">=8.0", or ">= 8.2"
         let version = php_version
             .trim_start_matches('^')
             .trim_start_matches('~')
             .trim_start_matches(">=")
             .trim_start_matches('>')
+            .trim()
             .split(['|', ' '])
-            .next()?;
+            .find(|s| !s.is_empty())?;
 
-        Some(version.to_string())
+        // Normalise to major.minor (e.g. "8.2.1" → "8.2")
+        let parts: Vec<&str> = version.split('.').collect();
+        let normalised = if parts.len() >= 2 {
+            format!("{}.{}", parts[0], parts[1])
+        } else {
+            version.to_string()
+        };
+
+        Some(normalised)
     }
 }
 
@@ -136,6 +146,23 @@ impl Provider for PhpProvider {
         );
 
         Ok(plan)
+    }
+
+    fn provider_config(
+        &self,
+        project_path: &Path,
+    ) -> Result<ShipitConfig> {
+        let mut config = ShipitConfig::new();
+
+        // PHP version from composer.json or default "8.3"
+        let php_version =
+            Self::parse_composer_json(project_path)
+                .and_then(|json| Self::detect_php_version(&json))
+                .unwrap_or_else(|| "8.3".to_string());
+        config.set("php_version", php_version);
+        config.set("php_architecture", "64-bit");
+
+        Ok(config)
     }
 }
 

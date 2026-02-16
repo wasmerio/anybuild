@@ -1,6 +1,7 @@
 //! Provider trait and base utilities
 
 use crate::providers::{DetectResult, ProviderPlan};
+use crate::starlark::config::ShipitConfig;
 use anyhow::{Context, Result};
 use serde::de::DeserializeOwned;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,16 @@ pub trait Provider: Send + Sync {
     /// Default priority is 0. Use negative values for fallback providers.
     fn priority(&self) -> i32 {
         0
+    }
+
+    /// Generate provider-specific configuration that will be
+    /// available to Starlark Shipit files as the `config` variable.
+    ///
+    /// Each provider populates the config with its own fields
+    /// (version numbers, paths, flags, etc.) based on project
+    /// detection.
+    fn provider_config(&self, _project_path: &Path) -> Result<ShipitConfig> {
+        Ok(ShipitConfig::new())
     }
 }
 

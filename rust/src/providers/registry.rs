@@ -9,6 +9,7 @@ use crate::providers::php::PhpProvider;
 use crate::providers::python::PythonProvider;
 use crate::providers::staticfile::StaticfileProvider;
 use crate::providers::{DetectResult, Provider};
+use crate::starlark::config::ShipitConfig;
 use anyhow::Result;
 use std::path::Path;
 use std::sync::Arc;
@@ -116,6 +117,19 @@ impl ProviderRegistry {
             .into_iter()
             .filter(|(_, result)| result.confidence >= min_confidence)
             .collect())
+    }
+
+    /// Detect the best provider for a project and return its config.
+    ///
+    /// Returns an empty `ShipitConfig` if no provider matches.
+    pub fn detect_config(
+        &self,
+        project_path: &Path,
+    ) -> Result<ShipitConfig> {
+        match self.detect_best(project_path)? {
+            Some((provider, _)) => provider.provider_config(project_path),
+            None => Ok(ShipitConfig::new()),
+        }
     }
 
     /// Get the number of registered providers

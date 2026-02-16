@@ -1,8 +1,12 @@
 //! Hugo provider for building Hugo static sites.
 
 use crate::providers::base::Provider;
-use crate::providers::specs::{DependencySpec, DetectResult, MountSpec, ProviderPlan};
+use crate::providers::specs::{
+    DependencySpec, DetectResult, MountSpec, ProviderPlan,
+};
+use crate::starlark::config::ShipitConfig;
 use anyhow::Result;
+use std::fs;
 use std::path::Path;
 
 /// Provider for Hugo static site generator.
@@ -53,6 +57,116 @@ impl Provider for HugoProvider {
         plan.mounts.push(MountSpec::new("public"));
 
         Ok(plan)
+    }
+
+    fn provider_config(
+        &self,
+        project_path: &Path,
+    ) -> Result<ShipitConfig> {
+        let mut config = ShipitConfig::new();
+
+        // Detect Hugo version: look for old Hugo syntax
+        let is_old_hugo = Self::detect_old_hugo(project_path);
+        let hugo_version = if is_old_hugo {
+            "0.139.0".to_string()
+        } else {
+            "0.153.2".to_string()
+        };
+        config.set("hugo_version", hugo_version);
+
+        // Static output directory
+        let static_dir =
+            Self::detect_publish_dir(project_path)
+                .unwrap_or_else(|| "public".to_string());
+        config.set("static_dir", static_dir);
+
+        // sws version
+        config.set("sws_version", "2.38.0");
+
+        Ok(config)
+    }
+}
+
+impl HugoProvider {
+    /// Detect the publish directory from Hugo config.
+    fn detect_publish_dir(path: &Path) -> Option<String> {
+        let config_files = [
+            "hugo.toml",
+            "hugo.yaml",
+            "hugo.yml",
+            "config.toml",
+            "config.yaml",
+            "config.yml",
+        ];
+        for name in &config_files {
+            let file_path = path.join(name);
+            if !file_path.exists() {
+                continue;
+            }
+            if let Ok(content) = fs::read_to_string(&file_path) {
+                // TOML: publishDir = "..."
+                if name.ends_with(".toml") {
+                    for line in content.lines() {
+                        let line = line.trim();
+                        if let Some(rest) =
+                            line.strip_prefix("publishDir")
+                        {
+                            let rest = rest.trim();
+                            if let Some(rest) =
+                                rest.strip_prefix('=')
+                            {
+                                let val = rest
+                                    .trim()
+                                    .trim_matches('"')
+                                    .trim_matches('\'');
+                                if !val.is_empty() {
+                                    return Some(
+                                        val.to_string(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // YAML: publishDir: ...
+                    for line in content.lines() {
+                        let line = line.trim();
+                        if let Some(rest) =
+                            line.strip_prefix("publishDir:")
+                        {
+                            let val = rest
+                                .trim()
+                                .trim_matches('"')
+                                .trim_matches('\'');
+                            if !val.is_empty() {
+                                return Some(val.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Detect whether the project uses old Hugo syntax.
+    fn detect_old_hugo(path: &Path) -> bool {
+        // Check for resources.ToCSS usage in layouts
+        let layouts = path.join("layouts");
+        if layouts.exists() {
+            if let Ok(entries) = fs::read_dir(&layouts) {
+                for entry in entries.flatten() {
+                    if let Ok(content) =
+                        fs::read_to_string(entry.path())
+                    {
+                        if content.contains("resources.ToCSS") {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 }
 

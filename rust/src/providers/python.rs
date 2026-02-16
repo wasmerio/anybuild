@@ -5,6 +5,7 @@
 
 use crate::providers::base::Provider;
 use crate::providers::specs::{DependencySpec, DetectResult, ProviderPlan};
+use crate::starlark::config::ShipitConfig;
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::fs;
@@ -222,6 +223,47 @@ impl Provider for PythonProvider {
         }
 
         Ok(plan)
+    }
+
+    fn provider_config(
+        &self,
+        project_path: &Path,
+    ) -> Result<ShipitConfig> {
+        let mut config = ShipitConfig::new();
+
+        // Python version
+        let python_version =
+            Self::detect_python_version(project_path)
+                .unwrap_or_else(|| "3.13".to_string());
+        config.set("python_version", &python_version);
+        config.set("uv_version", "0.8.15");
+        config.set_bool("precompile_python", true);
+        config.set_option(
+            "cross_platform",
+            None::<String>,
+        );
+        config.set_option(
+            "python_extra_index_url",
+            None::<String>,
+        );
+
+        // Extra tool versions
+        let deps = Self::parse_requirements(project_path)
+            .unwrap_or_default();
+        if deps.contains("ffmpeg") || deps.contains("ffmpeg-python") {
+            config.set_option(
+                "ffmpeg_version",
+                None::<String>,
+            );
+        }
+        if deps.contains("pandoc") || deps.contains("pypandoc") {
+            config.set_option(
+                "pandoc_version",
+                None::<String>,
+            );
+        }
+
+        Ok(config)
     }
 }
 

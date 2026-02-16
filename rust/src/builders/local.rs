@@ -1,9 +1,11 @@
 //! Local build backend that executes steps directly on the host.
 
 use crate::builders::base::{copy_with_ignore, ensure_dir, extend_path, BuildBackend};
+use crate::types::steps::CopyBase;
 use crate::types::{Mount, Step};
 use anyhow::{Context, Result};
 use std::collections::HashMap;
+use std::path::Path;
 use std::path::PathBuf;
 
 /// Local build backend.
@@ -12,6 +14,8 @@ pub struct LocalBuildBackend {
     src_dir: PathBuf,
     /// Build directory (.shipit/local/build)
     build_path: PathBuf,
+    /// Assets directory (.shipit/assets)
+    assets_path: PathBuf,
     /// Current working directory
     workdir: PathBuf,
     /// Runtime PATH after build
@@ -20,7 +24,7 @@ pub struct LocalBuildBackend {
 
 impl LocalBuildBackend {
     /// Create a new local build backend.
-    pub fn new(src_dir: PathBuf, _assets_path: PathBuf) -> Self {
+    pub fn new(src_dir: PathBuf, assets_path: PathBuf) -> Self {
         let local_path = src_dir.join(".shipit").join("local");
         let build_path = local_path.join("build");
         let workdir = build_path.join("app");
@@ -28,9 +32,22 @@ impl LocalBuildBackend {
         Self {
             src_dir,
             build_path: build_path.clone(),
+            assets_path,
             workdir,
             runtime_path: None,
         }
+    }
+
+    /// Resolve a path from Shipit mount-style paths to local filesystem paths.
+    fn resolve_runtime_path(&self, value: &str) -> PathBuf {
+        let path = Path::new(value);
+        if path.is_absolute() {
+            if let Ok(relative) = path.strip_prefix("/build") {
+                return self.build_path.join(relative);
+            }
+        }
+
+        self.workdir.join(path)
     }
 
     /// Get the path for a named mount.
@@ -82,11 +99,30 @@ impl LocalBuildBackend {
             "-c"
         };
 
-        let status = std::process::Command::new(shell)
-            .arg(shell_flag)
-            .arg(run)
-            .current_dir(&self.workdir)
-            .envs(env)
+        // Inherit the parent environment and extend/override with custom variables
+        let mut cmd = std::process::Command::new(shell);
+        cmd.arg(shell_flag).arg(run).current_dir(&self.workdir);
+
+        // Add/override environment variables from the env map
+        // Special handling for PATH: extend the system PATH instead of replacing it
+        for (key, value) in env {
+            if key == "PATH" {
+                // Extend system PATH with our custom paths
+                let system_path = std::env::var("PATH").unwrap_or_default();
+                let extended_path = if value.is_empty() {
+                    system_path
+                } else if system_path.is_empty() {
+                    value.clone()
+                } else {
+                    format!("{}:{}", value, system_path)
+                };
+                cmd.env(key, extended_path);
+            } else {
+                cmd.env(key, value);
+            }
+        }
+
+        let status = cmd
             .status()
             .with_context(|| format!("Failed to execute: {}", run))?;
 
@@ -98,8 +134,8 @@ impl LocalBuildBackend {
     }
 
     /// Execute a Copy step.
-    fn execute_copy_step(&self, source: &str, dest: &str) -> Result<()> {
-        let dest_path = self.workdir.join(dest);
+    fn execute_copy_step(&self, source: &str, dest: &str, base: CopyBase) -> Result<()> {
+        let dest_path = self.resolve_runtime_path(dest);
 
         if source.starts_with("http://") || source.starts_with("https://") {
             // Download from URL
@@ -126,7 +162,19 @@ impl LocalBuildBackend {
             // Copy local file/directory
             println!("📋 Copying: {} -> {}", source, dest);
 
-            let src_path = self.src_dir.join(source);
+            let src_path = match base {
+                CopyBase::Source => self.src_dir.join(source),
+                CopyBase::Assets => {
+                    let primary = self.assets_path.join(source);
+                    if primary.exists() {
+                        primary
+                    } else {
+                        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                            .join("../src/shipit/assets")
+                            .join(source)
+                    }
+                }
+            };
 
             if !src_path.exists() {
                 anyhow::bail!("Source does not exist: {}", source);
@@ -172,7 +220,7 @@ impl BuildBackend for LocalBuildBackend {
                 Ok(())
             }
             Step::Workdir(workdir_step) => {
-                let new_dir = self.build_path.join(&workdir_step.path);
+                let new_dir = self.resolve_runtime_path(&workdir_step.path.to_string_lossy());
                 ensure_dir(&new_dir)?;
                 self.workdir = new_dir;
                 println!("📂 Changed workdir to: {}", workdir_step.path.display());
@@ -182,7 +230,9 @@ impl BuildBackend for LocalBuildBackend {
                 let inputs = run_step.inputs.as_deref().unwrap_or(&[]);
                 self.execute_run_step(&run_step.command, inputs, env)
             }
-            Step::Copy(copy_step) => self.execute_copy_step(&copy_step.source, &copy_step.target),
+            Step::Copy(copy_step) => {
+                self.execute_copy_step(&copy_step.source, &copy_step.target, copy_step.base)
+            }
             Step::Env(env_step) => {
                 for (key, value) in &env_step.variables {
                     env.insert(key.clone(), value.clone());
@@ -192,7 +242,11 @@ impl BuildBackend for LocalBuildBackend {
             }
             Step::Path(path_step) => {
                 let current = env.get("PATH").map(|s| s.as_str());
-                let new_path = extend_path(current, &path_step.path);
+                let mapped_path = self
+                    .resolve_runtime_path(&path_step.path)
+                    .to_string_lossy()
+                    .to_string();
+                let new_path = extend_path(current, &mapped_path);
                 env.insert("PATH".to_string(), new_path);
                 println!("🛤️  Extended PATH with: {}", path_step.path);
                 Ok(())
