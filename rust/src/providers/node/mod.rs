@@ -7,9 +7,7 @@ mod frameworks;
 mod package_manager;
 
 use crate::providers::base::Provider;
-use crate::providers::specs::{
-    DependencySpec, DetectResult, MountSpec, ProviderPlan,
-};
+use crate::providers::specs::{DependencySpec, DetectResult, MountSpec, ProviderPlan};
 use crate::starlark::config::ShipitConfig;
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -65,9 +63,7 @@ impl NodeStaticProvider {
 
     /// Public helper to detect Node.js version from a package.json
     /// Value. Used by other providers (e.g. Laravel).
-    pub fn detect_node_version_from_pkg(
-        pkg: &Value,
-    ) -> Option<String> {
+    pub fn detect_node_version_from_pkg(pkg: &Value) -> Option<String> {
         pkg.get("engines")
             .and_then(|e| e.get("node"))
             .and_then(|n| n.as_str())
@@ -207,10 +203,7 @@ impl Provider for NodeStaticProvider {
         Ok(plan)
     }
 
-    fn provider_config(
-        &self,
-        project_path: &Path,
-    ) -> Result<ShipitConfig> {
+    fn provider_config(&self, project_path: &Path) -> Result<ShipitConfig> {
         let mut config = ShipitConfig::new();
 
         // Node version from package.json engines or default
@@ -234,8 +227,7 @@ impl Provider for NodeStaticProvider {
                 frameworks::detect_from_dependencies(&all_deps)
             })
             .unwrap_or_default();
-        let static_dir =
-            Self::detect_output_dir(project_path, &generators);
+        let static_dir = Self::detect_output_dir(project_path, &generators);
         config.set("static_dir", static_dir);
 
         Ok(config)

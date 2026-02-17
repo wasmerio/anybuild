@@ -164,6 +164,9 @@ mod tests {
         let project_path = Path::new("/home/user/project");
         let override_path = Path::new("config/Shipit.custom");
         let resolved = resolve_shipit_path_with_override(project_path, Some(override_path));
-        assert_eq!(resolved, PathBuf::from("/home/user/project/config/Shipit.custom"));
+        assert_eq!(
+            resolved,
+            PathBuf::from("/home/user/project/config/Shipit.custom")
+        );
     }
 }

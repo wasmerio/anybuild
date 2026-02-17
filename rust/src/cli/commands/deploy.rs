@@ -38,18 +38,12 @@ impl DeployCommand {
         let project_dir = shipit_path
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."));
-        let registry =
-            crate::providers::ProviderRegistry::with_defaults();
-        let provider_config = registry
-            .detect_config(project_dir)
-            .unwrap_or_default();
+        let registry = crate::providers::ProviderRegistry::with_defaults();
+        let provider_config = registry.detect_config(project_dir).unwrap_or_default();
 
         // Evaluate Shipit file
-        let (ctx, serve_ctx) = crate::starlark::evaluate_shipit_file(
-            &shipit_path,
-            provider_config,
-        )
-        .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
+        let (ctx, serve_ctx) = crate::starlark::evaluate_shipit_file(&shipit_path, provider_config)
+            .with_context(|| format!("Failed to evaluate {}", shipit_path.display()))?;
 
         output.success("Configuration loaded");
 

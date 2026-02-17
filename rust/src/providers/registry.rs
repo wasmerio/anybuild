@@ -122,10 +122,7 @@ impl ProviderRegistry {
     /// Detect the best provider for a project and return its config.
     ///
     /// Returns an empty `ShipitConfig` if no provider matches.
-    pub fn detect_config(
-        &self,
-        project_path: &Path,
-    ) -> Result<ShipitConfig> {
+    pub fn detect_config(&self, project_path: &Path) -> Result<ShipitConfig> {
         match self.detect_best(project_path)? {
             Some((provider, _)) => provider.provider_config(project_path),
             None => Ok(ShipitConfig::new()),

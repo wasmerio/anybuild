@@ -1,9 +1,7 @@
 //! Hugo provider for building Hugo static sites.
 
 use crate::providers::base::Provider;
-use crate::providers::specs::{
-    DependencySpec, DetectResult, MountSpec, ProviderPlan,
-};
+use crate::providers::specs::{DependencySpec, DetectResult, MountSpec, ProviderPlan};
 use crate::starlark::config::ShipitConfig;
 use anyhow::Result;
 use std::fs;
@@ -59,10 +57,7 @@ impl Provider for HugoProvider {
         Ok(plan)
     }
 
-    fn provider_config(
-        &self,
-        project_path: &Path,
-    ) -> Result<ShipitConfig> {
+    fn provider_config(&self, project_path: &Path) -> Result<ShipitConfig> {
         let mut config = ShipitConfig::new();
 
         // Detect Hugo version: look for old Hugo syntax
@@ -76,8 +71,7 @@ impl Provider for HugoProvider {
 
         // Static output directory
         let static_dir =
-            Self::detect_publish_dir(project_path)
-                .unwrap_or_else(|| "public".to_string());
+            Self::detect_publish_dir(project_path).unwrap_or_else(|| "public".to_string());
         config.set("static_dir", static_dir);
 
         // sws version
@@ -108,21 +102,12 @@ impl HugoProvider {
                 if name.ends_with(".toml") {
                     for line in content.lines() {
                         let line = line.trim();
-                        if let Some(rest) =
-                            line.strip_prefix("publishDir")
-                        {
+                        if let Some(rest) = line.strip_prefix("publishDir") {
                             let rest = rest.trim();
-                            if let Some(rest) =
-                                rest.strip_prefix('=')
-                            {
-                                let val = rest
-                                    .trim()
-                                    .trim_matches('"')
-                                    .trim_matches('\'');
+                            if let Some(rest) = rest.strip_prefix('=') {
+                                let val = rest.trim().trim_matches('"').trim_matches('\'');
                                 if !val.is_empty() {
-                                    return Some(
-                                        val.to_string(),
-                                    );
+                                    return Some(val.to_string());
                                 }
                             }
                         }
@@ -131,13 +116,8 @@ impl HugoProvider {
                     // YAML: publishDir: ...
                     for line in content.lines() {
                         let line = line.trim();
-                        if let Some(rest) =
-                            line.strip_prefix("publishDir:")
-                        {
-                            let val = rest
-                                .trim()
-                                .trim_matches('"')
-                                .trim_matches('\'');
+                        if let Some(rest) = line.strip_prefix("publishDir:") {
+                            let val = rest.trim().trim_matches('"').trim_matches('\'');
                             if !val.is_empty() {
                                 return Some(val.to_string());
                             }
@@ -156,9 +136,7 @@ impl HugoProvider {
         if layouts.exists() {
             if let Ok(entries) = fs::read_dir(&layouts) {
                 for entry in entries.flatten() {
-                    if let Ok(content) =
-                        fs::read_to_string(entry.path())
-                    {
+                    if let Ok(content) = fs::read_to_string(entry.path()) {
                         if content.contains("resources.ToCSS") {
                             return true;
                         }

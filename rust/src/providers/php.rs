@@ -148,17 +148,13 @@ impl Provider for PhpProvider {
         Ok(plan)
     }
 
-    fn provider_config(
-        &self,
-        project_path: &Path,
-    ) -> Result<ShipitConfig> {
+    fn provider_config(&self, project_path: &Path) -> Result<ShipitConfig> {
         let mut config = ShipitConfig::new();
 
         // PHP version from composer.json or default "8.3"
-        let php_version =
-            Self::parse_composer_json(project_path)
-                .and_then(|json| Self::detect_php_version(&json))
-                .unwrap_or_else(|| "8.3".to_string());
+        let php_version = Self::parse_composer_json(project_path)
+            .and_then(|json| Self::detect_php_version(&json))
+            .unwrap_or_else(|| "8.3".to_string());
         config.set("php_version", php_version);
         config.set("php_architecture", "64-bit");
 

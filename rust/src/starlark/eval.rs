@@ -65,10 +65,7 @@ fn clear_ctx() {
 /// The `provider_config` is exposed as the `config` variable inside
 /// the Starlark file, allowing Shipit scripts to reference values
 /// like `config.php_version`, `config.python_version`, etc.
-pub fn evaluate_shipit_file(
-    path: &Path,
-    provider_config: ShipitConfig,
-) -> Result<(Ctx, Serve)> {
+pub fn evaluate_shipit_file(path: &Path, provider_config: ShipitConfig) -> Result<(Ctx, Serve)> {
     // Read the Shipit file
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read Shipit file: {:?}", path))?;
@@ -239,10 +236,7 @@ serve("app", "python", [], [python], {{"web": "python app.py"}})
         )
         .unwrap();
 
-        let result = evaluate_shipit_file(
-            file.path(),
-            ShipitConfig::new(),
-        );
+        let result = evaluate_shipit_file(file.path(), ShipitConfig::new());
         if let Err(e) = &result {
             eprintln!("Error: {}", e);
         }
@@ -427,8 +421,7 @@ serve(
         let module = Module::new();
 
         // Inject config and PORT for tests
-        let config_val =
-            module.heap().alloc(ShipitConfig::new());
+        let config_val = module.heap().alloc(ShipitConfig::new());
         module.set("config", config_val);
         let port_val = module.heap().alloc("8080");
         module.set("PORT", port_val);

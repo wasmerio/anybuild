@@ -68,10 +68,7 @@ impl Provider for StaticfileProvider {
         -100 // Very low priority - used as fallback
     }
 
-    fn provider_config(
-        &self,
-        _project_path: &Path,
-    ) -> Result<ShipitConfig> {
+    fn provider_config(&self, _project_path: &Path) -> Result<ShipitConfig> {
         let mut config = ShipitConfig::new();
         config.set("sws_version", "2.38.0");
         Ok(config)
