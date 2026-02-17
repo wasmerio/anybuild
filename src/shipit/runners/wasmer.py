@@ -103,6 +103,34 @@ class WasmerRunner:
             "aliases": {},
             "env": {},
         },
+        "phpix": {
+            "dependencies": {
+                "latest": "wasmer/phpix@0.1.8032101",
+                "8.3": "wasmer/phpix@0.1.8032101",
+                "8.2": "wasmer/phpix@0.1.8032101",
+                "8.1": "wasmer/phpix@0.1.8032101",
+                "7.4": "wasmer/phpix@0.1.8032101",
+            },
+            "architecture_dependencies": {
+                "64-bit": {
+                    "latest": "wasmer/phpix@0.1.8032101",
+                    "8.3": "wasmer/phpix@0.1.8032101",
+                    "8.2": "wasmer/phpix@0.1.8032101",
+                    "8.1": "wasmer/phpix@0.1.8032101",
+                    "7.4": "wasmer/phpix@0.1.8032101",
+                },
+                "32-bit": {
+                    "latest": "wasmer/phpix@0.1.8032101",
+                    "8.3": "wasmer/phpix@0.1.8032101",
+                    "8.2": "wasmer/phpix@0.1.8032101",
+                    "8.1": "wasmer/phpix@0.1.8032101",
+                    "7.4": "wasmer/phpix@0.1.8032101",
+                },
+            },
+            "scripts": {"php", "phpix"},
+            "aliases": {},
+            "env": {},
+        },
         "bash": {
             "dependencies": {
                 "latest": "wasmer/bash@=1.0.24",
@@ -452,6 +480,7 @@ class WasmerRunner:
         )
         is_built_with_go = any(dep.name in ["go", "go-wasix"] for dep in build_deps)
 
+        # Note: phpix is multi-threaded, so this is only needed for raw php server and go.
         if has_php or is_built_with_go:
             scaling = yaml_config.get("scaling", {})
             scaling["mode"] = "single_concurrency"
