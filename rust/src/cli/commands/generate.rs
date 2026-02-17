@@ -55,6 +55,16 @@ pub struct GenerateCommand {
 impl GenerateCommand {
     /// Execute the generate command
     pub fn execute(&self, output: &Output) -> Result<()> {
+        // Validate that the path exists
+        if !self.path.exists() {
+            anyhow::bail!("Path does not exist: {}", self.path.display());
+        }
+
+        // Generate command requires a directory
+        if !self.path.is_dir() {
+            anyhow::bail!("Path must be a directory: {}", self.path.display());
+        }
+
         output.step("🔍", "Detecting project type...");
 
         // Load configuration

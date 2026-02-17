@@ -126,12 +126,12 @@ fn test_config_help() {
 #[test]
 fn test_invalid_command() {
     // With default routing to auto, unknown subcommands are treated as paths
-    // This will now route to auto and attempt to process the path
+    // This will now route to auto and validate that the path exists
     shipit_cmd()
         .arg("invalid-command")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("No such file or directory"));
+        .stderr(predicate::str::contains("Path does not exist"));
 }
 
 #[test]
@@ -246,7 +246,7 @@ fn test_plan_nonexistent_shipit() {
         .arg(temp_dir.path().join("Shipit"))
         .assert()
         .failure()
-        .stderr(predicate::str::contains("not found"));
+        .stderr(predicate::str::contains("Path does not exist"));
 }
 
 #[test]
@@ -294,7 +294,7 @@ fn test_build_nonexistent_shipit() {
         .arg(temp_dir.path().join("Shipit"))
         .assert()
         .failure()
-        .stderr(predicate::str::contains("not found"));
+        .stderr(predicate::str::contains("Path does not exist"));
 }
 
 #[test]
@@ -334,7 +334,7 @@ fn test_serve_nonexistent_shipit() {
         .arg(temp_dir.path().join("Shipit"))
         .assert()
         .failure()
-        .stderr(predicate::str::contains("not found"));
+        .stderr(predicate::str::contains("Path does not exist"));
 }
 
 #[test]
@@ -360,7 +360,7 @@ fn test_serve_start_flag_is_accepted() {
         .arg("--start")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Shipit file not found"));
+        .stderr(predicate::str::contains("Path does not exist"));
 }
 
 #[test]

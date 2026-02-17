@@ -176,6 +176,16 @@ impl AutoCommand {
         use std::time::Instant;
         let start = Instant::now();
 
+        // Validate that the path exists
+        if !self.path.exists() {
+            anyhow::bail!("Path does not exist: {}", self.path.display());
+        }
+
+        // Auto command requires a directory
+        if !self.path.is_dir() {
+            anyhow::bail!("Path must be a directory: {}", self.path.display());
+        }
+
         output.step("🔍", "Auto-detecting project type...");
 
         // Load configuration

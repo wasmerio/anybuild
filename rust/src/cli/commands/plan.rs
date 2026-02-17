@@ -138,6 +138,11 @@ impl PlanCommand {
 
     /// Execute the plan command
     pub fn execute(&self, output: &Output) -> Result<()> {
+        // Validate that the path exists
+        if !self.path.exists() {
+            anyhow::bail!("Path does not exist: {}", self.path.display());
+        }
+
         output.step("📋", "Loading plan...");
         let shipit_path = crate::utils::path::resolve_shipit_path_with_override(
             &self.path,

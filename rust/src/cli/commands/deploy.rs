@@ -23,6 +23,11 @@ pub struct DeployCommand {
 impl DeployCommand {
     /// Execute the deploy command
     pub async fn execute(&self, output: &Output) -> Result<()> {
+        // Validate that the path exists
+        if !self.path.exists() {
+            anyhow::bail!("Path does not exist: {}", self.path.display());
+        }
+
         output.step("🚀", "Deploying to Wasmer Edge...");
         let shipit_path = crate::utils::path::resolve_shipit_path_with_override(
             &self.path,
