@@ -102,6 +102,33 @@ class WasmerRunner:
             "scripts": {"php"},
             "aliases": {},
             "env": {},
+        } if not os.environ.get("SHIPIT_PHPIX") else { # If SHIPIT_PHPIX is set, we will rewrite php to use wasmer/phpix instead
+            "dependencies": {
+                "latest": "wasmer/phpix@0.1.8032101",
+                "8.3": "wasmer/phpix@0.1.8032101",
+                "8.2": "wasmer/phpix@0.1.8032101",
+                "8.1": "wasmer/phpix@0.1.8032101",
+                "7.4": "wasmer/phpix@0.1.8032101",
+            },
+            "architecture_dependencies": {
+                "64-bit": {
+                    "latest": "wasmer/phpix@0.1.8032101",
+                    "8.3": "wasmer/phpix@0.1.8032101",
+                    "8.2": "wasmer/phpix@0.1.8032101",
+                    "8.1": "wasmer/phpix@0.1.8032101",
+                    "7.4": "wasmer/phpix@0.1.8032101",
+                },
+                "32-bit": {
+                    "latest": "wasmer/phpix@0.1.8032101",
+                    "8.3": "wasmer/phpix@0.1.8032101",
+                    "8.2": "wasmer/phpix@0.1.8032101",
+                    "8.1": "wasmer/phpix@0.1.8032101",
+                    "7.4": "wasmer/phpix@0.1.8032101",
+                },
+            },
+            "scripts": {"php"},
+            "aliases": {},
+            "env": {},
         },
         "bash": {
             "dependencies": {
