@@ -89,7 +89,7 @@ class LaravelProvider(PhpProvider):
 
     def commands(self) -> Dict[str, str]:
         return {
-            "start": 'f"php -S localhost:{PORT} -t public"',
+            "start": 'f"php -S 127.0.0.1:{PORT} -t public"',
             "after_deploy": '"php artisan migrate"',
         }
 

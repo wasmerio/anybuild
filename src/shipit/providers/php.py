@@ -142,16 +142,16 @@ class PhpProvider:
     def base_commands(self) -> Dict[str, str]:
         if _exists(self.path, "public/index.php"):
             return {
-                "start": '"php -S localhost:{} -t {}/public".format(PORT, app.serve_path)'
+                "start": '"php -S 127.0.0.1:{} -t {}/public".format(PORT, app.serve_path)'
             }
         elif _exists(self.path, "app/index.php"):
             return {
-                "start": '"php -S localhost:{} -t {}/app".format(PORT, app.serve_path)'
+                "start": '"php -S 127.0.0.1:{} -t {}/app".format(PORT, app.serve_path)'
             }
         elif _exists(self.path, "index.php"):
-            return {"start": '"php -S localhost:{} -t {}".format(PORT, app.serve_path)'}
+            return {"start": '"php -S 127.0.0.1:{} -t {}".format(PORT, app.serve_path)'}
         return {
-            "start": '"php -S localhost:{} -t {}".format(PORT, app.serve_path)',
+            "start": '"php -S 127.0.0.1:{} -t {}".format(PORT, app.serve_path)',
         }
 
     def mounts(self) -> list[MountSpec]:
