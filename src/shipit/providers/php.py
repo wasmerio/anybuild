@@ -28,7 +28,7 @@ class PhpConfig(Config):
     use_composer: bool = False
     composer_build_script: Optional[str] = None
     php_version: Optional[str] = "8.3"
-    php_architecture: Optional[Literal["64-bit", "32-bit"]] = "64-bit"
+    php_architecture: Optional[Literal["64-bit", "32-bit"]] = None
 
 
 class PhpProvider:
