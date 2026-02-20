@@ -38,8 +38,8 @@ packages = ["src/shipit"]
 [tool.hatch.build.targets.sdist]
 only-include = ["src/shipit", "tests"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "aiohttp>=3.12.15",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.2.0",
@@ -49,6 +49,9 @@ dev-dependencies = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "e2e: end-to-end tests that require external runtimes and network access",
+]
 
 [tool.uv.workspace]
 exclude = ["examples/*"]
