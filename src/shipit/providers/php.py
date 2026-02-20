@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Dict, Optional, Literal
 
@@ -38,6 +39,11 @@ class PhpProvider:
 
     @classmethod
     def load_config(cls, path: Path, base_config: Config) -> PhpConfig:
+        phpix_env = os.environ.get("SHIPIT_PHPIX")
+        phpix = None
+        if phpix_env is not None:
+            phpix = phpix_env.strip().lower() in {"1", "true"}
+
         use_composer = (
             _exists(path, "composer.json", "composer.lock")
             or (
@@ -54,7 +60,12 @@ class PhpProvider:
                 composer_build_script = "post-update-cmd" if "post-update-cmd" in composer_config["scripts"] else None
                 if not composer_build_script and "post-install-cmd" in composer_config["scripts"]:
                     composer_build_script = "post-install-cmd"
-        config = PhpConfig(use_composer=use_composer, composer_build_script=composer_build_script, **base_config.model_dump())
+        config = PhpConfig(
+            use_composer=use_composer,
+            composer_build_script=composer_build_script,
+            phpix=phpix if phpix is not None else False,
+            **base_config.model_dump(),
+        )
         if not config.framework:
             if _exists(path, "symfony.lock"):
                 config.framework = PhpFramework.Symfony
@@ -141,19 +152,18 @@ class PhpProvider:
         return self.base_commands()
 
     def base_commands(self) -> Dict[str, str]:
-        php_script = "php" if not self.config.phpix else "phpix"
         if _exists(self.path, "public/index.php"):
             return {
-                "start": f'"{php_script} -S localhost:{{}} -t {{}}/public".format(PORT, app.serve_path)'
+                "start": '"php -S localhost:{} -t {}/public".format(PORT, app.serve_path)'
             }
         elif _exists(self.path, "app/index.php"):
             return {
-                "start": f'"{php_script} -S localhost:{{}} -t {{}}/app".format(PORT, app.serve_path)'
+                "start": '"php -S localhost:{} -t {}/app".format(PORT, app.serve_path)'
             }
         elif _exists(self.path, "index.php"):
-            return {"start": f'"{php_script} -S localhost:{{}} -t {{}}".format(PORT, app.serve_path)'}
+            return {"start": '"php -S localhost:{} -t {}".format(PORT, app.serve_path)'}
         return {
-            "start": f'"{php_script} -S localhost:{{}} -t {{}}".format(PORT, app.serve_path)',
+            "start": '"php -S localhost:{} -t {}".format(PORT, app.serve_path)',
         }
 
     def mounts(self) -> list[MountSpec]:
