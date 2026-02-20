@@ -275,21 +275,21 @@ class PythonProvider:
 
     @classmethod
     def check_deps(cls, path: Path, *deps: str) -> Set[str]:
-        deps = set([dep.lower() for dep in deps])
-        initial_deps = set(deps)
+        pending_deps = {dep.lower() for dep in deps}
+        initial_deps = set(pending_deps)
         for file in ["requirements.txt", "pyproject.toml"]:
             if _exists(path, file):
                 for line in (path / file).read_text().splitlines():
-                    for dep in set(deps):
+                    for dep in set(pending_deps):
                         if dep in line.lower():
-                            deps.remove(dep)
-                            if not deps:
+                            pending_deps.remove(dep)
+                            if not pending_deps:
                                 break
-                    if not deps:
+                    if not pending_deps:
                         break
-            if not deps:
+            if not pending_deps:
                 break
-        return initial_deps - deps
+        return initial_deps - pending_deps
 
     @classmethod
     def name(cls) -> str:
