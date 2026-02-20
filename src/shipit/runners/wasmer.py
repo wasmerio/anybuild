@@ -242,7 +242,7 @@ class WasmerRunner:
                 commands.append(step.command)
 
         body = "\n".join(filter(None, [env_lines, *commands]))
-        content = f"#!/bin/bash\n\n{body}"
+        content = f"#!/usr/bin/env bash\n\n{body}"
         console.print(
             f"\n[bold]Created prepare.sh script to run before packaging ✅[/bold]"
         )

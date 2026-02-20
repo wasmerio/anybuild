@@ -47,7 +47,7 @@ class LocalRunner:
         if serve.prepare:
             for step in serve.prepare:
                 commands.append(step.command)
-        content = "#!/bin/bash\n{body}".format(body="\n".join(commands))
+        content = "#!/usr/bin/env bash\n{body}".format(body="\n".join(commands))
         console.print(
             f"\n[bold]Created prepare.sh script to run before packaging ✅[/bold]"
         )
@@ -80,7 +80,7 @@ class LocalRunner:
             env_vars = ""
             if serve.env:
                 env_vars = " ".join([f"{k}={v}" for k, v in serve.env.items()])
-            lines = ["#!/bin/bash"]
+            lines = ["#!/usr/bin/env bash"]
             if serve.cwd:
                 lines.append(f"cd {serve.cwd}")
             cmd_body = f"{path_prefix}{env_vars} {serve.commands[command]}".strip()
