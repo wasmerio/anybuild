@@ -46,6 +46,9 @@ jobs:
       - name: Bytecode compile check
         run: uv run python -m compileall -q src tests
 
+      - name: Run mypy
+        run: uv run mypy
+
       - name: Run tests (excluding e2e)
         run: uv run pytest -m "not e2e" -q
 
