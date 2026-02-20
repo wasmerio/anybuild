@@ -276,7 +276,7 @@ class WasmerRunner:
 
     def find_file_in_mounts(self, serve: Serve, program: str) -> Optional[Path]:
         program_path = Path(program)
-        for mount in serve.mounts:
+        for mount in serve.mounts or []:
             if program.startswith(str(mount.serve_path.absolute())):
                 module_path = program_path.relative_to(mount.serve_path).as_posix()
                 full_module_path = (

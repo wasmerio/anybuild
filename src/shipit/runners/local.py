@@ -2,7 +2,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, TYPE_CHECKING
 
-import sh  # type: ignore[import-untyped]
+import sh
 from rich import box
 from rich.panel import Panel
 from rich.syntax import Syntax
