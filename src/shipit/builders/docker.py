@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import sh  # type: ignore[import-untyped]
+import sh
 from rich import box
 from rich.panel import Panel
 from rich.rule import Rule
