@@ -1,5 +1,6 @@
 from shipit.providers.base import Config
 from shipit.providers.php import PhpProvider
+import pytest
 
 
 def test_php_provider_defaults_to_php_binary(tmp_path) -> None:
@@ -13,11 +14,12 @@ def test_php_provider_defaults_to_php_binary(tmp_path) -> None:
     assert provider.commands()["start"].startswith('"php -S localhost:')
 
 
+@pytest.mark.parametrize("value", ["true", "1"])
 def test_php_provider_uses_phpix_dependency_when_env_enabled(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, value: str
 ) -> None:
     (tmp_path / "index.php").write_text("<?php echo 'ok';")
-    monkeypatch.setenv("SHIPIT_PHPIX", "true")
+    monkeypatch.setenv("SHIPIT_PHPIX", value)
 
     config = PhpProvider.load_config(tmp_path, Config())
     provider = PhpProvider(tmp_path, config)

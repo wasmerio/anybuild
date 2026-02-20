@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 from typing import Dict, Optional, Literal
 
@@ -39,11 +38,6 @@ class PhpProvider:
 
     @classmethod
     def load_config(cls, path: Path, base_config: Config) -> PhpConfig:
-        phpix_env = os.environ.get("SHIPIT_PHPIX")
-        phpix = None
-        if phpix_env is not None:
-            phpix = phpix_env.strip().lower() in {"1", "true"}
-
         use_composer = (
             _exists(path, "composer.json", "composer.lock")
             or (
@@ -63,7 +57,6 @@ class PhpProvider:
         config = PhpConfig(
             use_composer=use_composer,
             composer_build_script=composer_build_script,
-            phpix=phpix if phpix is not None else False,
             **base_config.model_dump(),
         )
         if not config.framework:
