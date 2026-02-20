@@ -65,9 +65,19 @@ class WordPressProvider(PhpProvider):
             'copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets.path))',
             'copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets.path), base="assets")',
         ]
+        if self.config.phpix:
+            # We create the start script that creates the .htaccess symlink
+            # since phpix now supports .htaccess files.
+            steps.append(
+                'copy("wordpress/start.sh", "{}/start-wp.sh".format(assets.path), base="assets")'
+            )
         if not _exists(self.path, "wp-config.php"):
             steps.append(
                 'copy("wordpress/wp-config.php", "{}/wp-config.php".format(app.path), base="assets")'
+            )
+        if not _exists(self.path, ".htaccess"):
+            steps.append(
+                'copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets")'
             )
         return steps + super().build_steps()
 
@@ -76,6 +86,9 @@ class WordPressProvider(PhpProvider):
 
     def commands(self) -> Dict[str, str]:
         commands = super().commands()
+        if self.config.phpix:
+            if "start" in commands:
+                commands["start"] = '"bash {}/start-wp.sh -S localhost:{} -t {}".format(assets.serve_path, PORT, app.serve_path)'
         return {
             # "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path)',
             "after_deploy": '"bash {}/setup-wp.sh".format(assets.serve_path)',

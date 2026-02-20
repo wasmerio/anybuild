@@ -24,6 +24,7 @@ serve(
     copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets.path)),
     copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets.path), base="assets"),
     copy("wordpress/wp-config.php", "{}/wp-config.php".format(app.path), base="assets"),
+    copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets"),
     workdir(app.path),
     copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
     copy(".", ".", ignore=[".git"])
@@ -35,7 +36,7 @@ serve(
   },
   commands = {
     "after_deploy": "bash {}/setup-wp.sh".format(assets.serve_path),
-    "start": "php -S 127.0.0.1:{} -t {}".format(PORT, app.serve_path)
+    "start": "php -S localhost:{} -t {}".format(PORT, app.serve_path)
   },
   services=[
     database,

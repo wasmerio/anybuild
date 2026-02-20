@@ -24,10 +24,11 @@ class PhpConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     framework: Optional[PhpFramework] = None
+    phpix: bool = False
     use_composer: bool = False
     composer_build_script: Optional[str] = None
     php_version: Optional[str] = "8.3"
-    php_architecture: Optional[Literal["64-bit", "32-bit"]] = "64-bit"
+    php_architecture: Optional[Literal["64-bit", "32-bit"]] = None
 
 
 class PhpProvider:
@@ -87,7 +88,7 @@ class PhpProvider:
     def dependencies(self) -> list[DependencySpec]:
         deps = [
             DependencySpec(
-                "php",
+                "php" if not self.config.phpix else "phpix",
                 var_name="config.php_version",
                 architecture_var_name="config.php_architecture",
                 use_in_build=True,
@@ -140,18 +141,19 @@ class PhpProvider:
         return self.base_commands()
 
     def base_commands(self) -> Dict[str, str]:
+        php_script = "php" if not self.config.phpix else "phpix"
         if _exists(self.path, "public/index.php"):
             return {
-                "start": '"php -S 127.0.0.1:{} -t {}/public".format(PORT, app.serve_path)'
+                "start": f'"{php_script} -S localhost:{{}} -t {{}}/public".format(PORT, app.serve_path)'
             }
         elif _exists(self.path, "app/index.php"):
             return {
-                "start": '"php -S 127.0.0.1:{} -t {}/app".format(PORT, app.serve_path)'
+                "start": f'"{php_script} -S localhost:{{}} -t {{}}/app".format(PORT, app.serve_path)'
             }
         elif _exists(self.path, "index.php"):
-            return {"start": '"php -S 127.0.0.1:{} -t {}".format(PORT, app.serve_path)'}
+            return {"start": f'"{php_script} -S localhost:{{}} -t {{}}".format(PORT, app.serve_path)'}
         return {
-            "start": '"php -S 127.0.0.1:{} -t {}".format(PORT, app.serve_path)',
+            "start": f'"{php_script} -S localhost:{{}} -t {{}}".format(PORT, app.serve_path)',
         }
 
     def mounts(self) -> list[MountSpec]:

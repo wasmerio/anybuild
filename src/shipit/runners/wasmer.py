@@ -102,31 +102,32 @@ class WasmerRunner:
             "scripts": {"php"},
             "aliases": {},
             "env": {},
-        } if not os.environ.get("SHIPIT_PHPIX") else { # If SHIPIT_PHPIX is set, we will rewrite php to use wasmer/phpix instead
+        },
+        "phpix": {
             "dependencies": {
-                "latest": "wasmer/phpix-32@0.1.1080321-alpha.1",
-                "8.3": "wasmer/phpix-32@0.1.108032101-alpha.1",
-                "8.2": "wasmer/phpix-32@0.1.108032101-alpha.1",
-                "8.1": "wasmer/phpix-32@0.1.108032101-alpha.1",
-                "7.4": "wasmer/phpix-32@0.1.108032101-alpha.1",
+                "latest": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                "8.3": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                "8.2": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                "8.1": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                "7.4": "wasmer/phpix-32@=0.1.1080321-alpha.4",
             },
             "architecture_dependencies": {
                 "64-bit": {
-                    "latest": "wasmer/phpix-64@0.1.1080321-alpha.1",
-                    "8.3": "wasmer/phpix-64@0.1.1080321-alpha.1",
-                    "8.2": "wasmer/phpix-64@0.1.1080321-alpha.1",
-                    "8.1": "wasmer/phpix-64@0.1.1080321-alpha.1",
-                    "7.4": "wasmer/phpix-64@0.1.1080321-alpha.1",
+                    "latest": "wasmer/phpix-64@=0.1.1080321-alpha.4",
+                    "8.3": "wasmer/phpix-64@=0.1.1080321-alpha.4",
+                    "8.2": "wasmer/phpix-64@=0.1.1080321-alpha.4",
+                    "8.1": "wasmer/phpix-64@=0.1.1080321-alpha.4",
+                    "7.4": "wasmer/phpix-64@=0.1.1080321-alpha.4",
                 },
                 "32-bit": {
-                    "latest": "wasmer/phpix-32@0.1.1080321-alpha.1",
-                    "8.3": "wasmer/phpix-32@0.1.1080321-alpha.1",
-                    "8.2": "wasmer/phpix-32@0.1.1080321-alpha.1",
-                    "8.1": "wasmer/phpix-32@0.1.1080321-alpha.1",
-                    "7.4": "wasmer/phpix-32@0.1.1080321-alpha.1",
+                    "latest": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                    "8.3": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                    "8.2": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                    "8.1": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                    "7.4": "wasmer/phpix-32@=0.1.1080321-alpha.4",
                 },
             },
-            "scripts": {"phpix"},
+            "scripts": {"php", "phpix"},
             "aliases": {},
             "env": {},
         },
@@ -363,8 +364,6 @@ class WasmerRunner:
                 program = parts[0]
                 command_env = {}
                 command_module = None
-                if program == "php" and os.environ.get("SHIPIT_PHPIX") is not None:
-                    program = "phpix"
                 if program in self.rewrite_binaries:
                     rewritten_program = shlex.split(self.rewrite_binaries[program])
                     program = rewritten_program[0]
@@ -481,6 +480,7 @@ class WasmerRunner:
         )
         is_built_with_go = any(dep.name in ["go", "go-wasix"] for dep in build_deps)
 
+        # Note: phpix is multi-threaded, so this is only needed for raw php server and go.
         if has_php or is_built_with_go:
             scaling = yaml_config.get("scaling", {})
             scaling["mode"] = "single_concurrency"
@@ -488,6 +488,8 @@ class WasmerRunner:
 
         if "after_deploy" in serve.commands:
             jobs = yaml_config.get("jobs", [])
+            # Filter out any existing after_deploy job
+            jobs = [job for job in jobs if job.get("name") != "after_deploy"]
             jobs.append(
                 {
                     "name": "after_deploy",
