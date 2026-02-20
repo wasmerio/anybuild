@@ -20,4 +20,4 @@ if [[ ! -e "$APP_HTACCESS" ]]; then
   fi
 fi
 
-phpix "$@"
+php "$@"

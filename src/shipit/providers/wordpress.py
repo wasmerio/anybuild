@@ -88,7 +88,7 @@ class WordPressProvider(PhpProvider):
         commands = super().commands()
         if self.config.phpix:
             if "start" in commands:
-                commands["start"] = '"bash {}/start-wp.sh -S localhost:{} -t {}".format(assets.serve_path, PORT, app.serve_path)'
+                commands["start"] = '"bash {}/start-wp.sh -S 127.0.0.1:{} -t {}".format(assets.serve_path, PORT, app.serve_path)'
         return {
             # "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path)',
             "after_deploy": '"bash {}/setup-wp.sh".format(assets.serve_path)',

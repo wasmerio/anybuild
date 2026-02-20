@@ -35,12 +35,17 @@ class E2ECase(NamedTuple):
     serve_pattern: str
     http: List[HTTPRequest]
     use_random_port: bool = True
+    env: dict[str, str] | None = None
 
     def __str__(self):
         return self.path
 
     def __repr__(self):
         return self.path
+
+
+PHP_DEV_SERVER_HOST_RE = r"(?:localhost|127\.0\.0\.1)"
+PHP_DEV_SERVER_VERSION_RE = r"8\.[0-9]+\.[0-9]+"
 
 
 @pytest.mark.e2e
@@ -58,26 +63,29 @@ class E2ECase(NamedTuple):
         E2ECase(
             path="examples/php-nobuild",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                rf"PHP {PHP_DEV_SERVER_VERSION_RE} Development Server \(http://{PHP_DEV_SERVER_HOST_RE}:[\d]+\) started"
             ),
-            http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
+            http=[HTTPRequest(path="/", body_match=rf"PHP Version {PHP_DEV_SERVER_VERSION_RE}")],
         ),
         # Simple PHP site that calls phpinfo() with no port
         E2ECase(
             path="examples/php-nobuild",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                rf"PHP {PHP_DEV_SERVER_VERSION_RE} Development Server \(http://{PHP_DEV_SERVER_HOST_RE}:[\d]+\) started"
             ),
-            http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
+            http=[HTTPRequest(path="/", body_match=rf"PHP Version {PHP_DEV_SERVER_VERSION_RE}")],
         ),
         # PHP API example with JSON at / and greeting endpoint
         E2ECase(
             path="examples/php-api",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                rf"PHP {PHP_DEV_SERVER_VERSION_RE} Development Server \(http://{PHP_DEV_SERVER_HOST_RE}:[\d]+\) started"
             ),
             http=[
-                HTTPRequest(path="/", body_match=r"\"version\"\s*:\s*\"8\.3\.[0-9]+\""),
+                HTTPRequest(
+                    path="/",
+                    body_match=rf"\"version\"\s*:\s*\"{PHP_DEV_SERVER_VERSION_RE}\"",
+                ),
                 HTTPRequest(path="/api/greet/Alice", body_match=r"Hello, Alice!"),
             ],
         ),
@@ -85,9 +93,18 @@ class E2ECase(NamedTuple):
         E2ECase(
             path="examples/php-wordpress",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                rf"PHP {PHP_DEV_SERVER_VERSION_RE} Development Server \(http://{PHP_DEV_SERVER_HOST_RE}:[\d]+\) started"
             ),
             http=[HTTPRequest(path="/", body_match=r"WordPress")],
+        ),
+        # WordPress skeleton running with phpix
+        E2ECase(
+            path="examples/php-wordpress-phpix",
+            serve_pattern=(
+                rf"PHP {PHP_DEV_SERVER_VERSION_RE} Development Server \(http://{PHP_DEV_SERVER_HOST_RE}:[\d]+\) started"
+            ),
+            http=[HTTPRequest(path="/", body_match=r"WordPress")],
+            env={"SHIPIT_PHPIX": "true"},
         ),
         # Static site copied as-is (no build step beyond copy)
         E2ECase(
@@ -217,6 +234,8 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
 
     env = os.environ.copy()
+    if case.env:
+        env.update(case.env)
     if case.use_random_port:
         port = get_free_port()
     else:

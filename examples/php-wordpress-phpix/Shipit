@@ -1,4 +1,4 @@
-php = dep("php", config.php_version, architecture=config.php_architecture)
+phpix = dep("phpix", config.php_version, architecture=config.php_architecture)
 bash = dep("bash")
 
 app = mount("app")
@@ -16,27 +16,28 @@ wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_
 
 
 serve(
-  name="php-wordpress",
+  name="php-wordpress-phpix",
   provider="wordpress",
   cwd=app.serve_path,
   build=[
-    use(php),
+    use(phpix),
     copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets.path)),
     copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets.path), base="assets"),
+    copy("wordpress/start.sh", "{}/start-wp.sh".format(assets.path), base="assets"),
     copy("wordpress/wp-config.php", "{}/wp-config.php".format(app.path), base="assets"),
     copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets"),
     workdir(app.path),
     copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
     copy(".", ".", ignore=[".git"])
   ],
-  deps=[php, bash],
+  deps=[phpix, bash],
   env = {
     "PAGER": "cat",
     "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path)
   },
   commands = {
     "after_deploy": "bash {}/setup-wp.sh".format(assets.serve_path),
-    "start": "php -S 127.0.0.1:{} -t {}".format(PORT, app.serve_path)
+    "start": "bash {}/start-wp.sh -S 127.0.0.1:{} -t {}".format(assets.serve_path, PORT, app.serve_path)
   },
   services=[
     database,
