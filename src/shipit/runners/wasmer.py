@@ -456,6 +456,7 @@ class WasmerRunner:
         yaml_config["package"] = "."
         if serve.services:
             capabilities = yaml_config.get("capabilities", {})
+            assert isinstance(capabilities, dict), "capabilities must be a dictionary"
             has_mysql = any(service.provider == "mysql" for service in serve.services)
             if has_mysql:
                 capabilities["database"] = {"engine": "mysql"}
@@ -463,6 +464,7 @@ class WasmerRunner:
 
         if serve.volumes:
             volumes_yaml = yaml_config.get("volumes", [])
+            assert isinstance(volumes_yaml, list), "volumes must be a list"
             for vol in serve.volumes:
                 volumes_yaml.append(
                     {
@@ -473,6 +475,7 @@ class WasmerRunner:
             yaml_config["volumes"] = volumes_yaml
 
         has_php = any(dep.name == "php" for dep in serve.deps)
+        has_phpix = any(dep.name == "phpix" for dep in serve.deps)
         build_deps = reduce(
             lambda acc, dep: acc + dep.dependencies,
             [step for step in serve.build if isinstance(step, UseStep)],
@@ -483,8 +486,17 @@ class WasmerRunner:
         # Note: phpix is multi-threaded, so this is only needed for raw php server and go.
         if has_php or is_built_with_go:
             scaling = yaml_config.get("scaling", {})
+            assert isinstance(scaling, dict), "scaling must be a dictionary"
             scaling["mode"] = "single_concurrency"
             yaml_config["scaling"] = scaling
+        
+        if has_phpix:
+            capabilities = yaml_config.get("capabilities", {})
+            assert isinstance(capabilities, dict), "capabilities must be a dictionary"
+            memory = capabilities.get("memory", {})
+            assert isinstance(memory, dict), "memory must be a dictionary"
+            memory["limit"] = "2G"
+            yaml_config["capabilities"] = capabilities
 
         if "after_deploy" in serve.commands:
             jobs = yaml_config.get("jobs", [])

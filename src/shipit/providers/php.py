@@ -29,6 +29,7 @@ class PhpConfig(Config):
     composer_build_script: Optional[str] = None
     php_version: Optional[str] = "8.3"
     php_architecture: Optional[Literal["64-bit", "32-bit"]] = None
+    phpix_worker_threads: Optional[int] = 4
 
 
 class PhpProvider:
@@ -141,7 +142,13 @@ class PhpProvider:
         return self.base_commands()
 
     def base_commands(self) -> Dict[str, str]:
-        php_script = "php" if not self.config.phpix else "phpix"
+        if self.config.phpix:
+            php_script = "phpix"
+            if self.config.phpix_worker_threads:
+                php_script += f" --php-threads={self.config.phpix_worker_threads}"
+        else:
+            php_script = "php"
+
         if _exists(self.path, "public/index.php"):
             return {
                 "start": f'"{php_script} -S localhost:{{}} -t {{}}/public".format(PORT, app.serve_path)'
