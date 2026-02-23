@@ -30,6 +30,12 @@ class PhpConfig(Config):
     php_version: Optional[str] = "8.3"
     php_architecture: Optional[Literal["64-bit", "32-bit"]] = None
 
+    def app_yaml(self, config: "PhpConfig") -> Dict[str, object]:
+        if config.phpix:
+            return {"memory": {"limit": "2G"}}
+        # php-cli's built-in server is single-threaded.
+        return {"scaling": {"mode": "single_concurrency"}}
+
 
 class PhpProvider:
     def __init__(self, path: Path, config: PhpConfig):
@@ -141,7 +147,7 @@ class PhpProvider:
         return self.base_commands()
 
     def base_commands(self) -> Dict[str, str]:
-        php_script = "php" if not self.config.phpix else "phpix"
+        php_script = "phpix --php-threads=4" if self.config.phpix else "php"
         if _exists(self.path, "public/index.php"):
             return {
                 "start": f'"{php_script} -S localhost:{{}} -t {{}}/public".format(PORT, app.serve_path)'

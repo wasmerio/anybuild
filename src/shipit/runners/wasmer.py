@@ -1,4 +1,3 @@
-from functools import reduce
 from shipit.shipit_types import EnvStep
 from shipit.shipit_types import UseStep
 import hashlib
@@ -166,6 +165,7 @@ class WasmerRunner:
         self.wasmer_registry = registry
         self.wasmer_token = token
         self.bin = bin or "wasmer"
+        self.provider_app_yaml_entries: Dict[str, Any] = {}
 
     def get_serve_mount_path(self, name: str) -> Path:
         if name == "app":
@@ -176,6 +176,13 @@ class WasmerRunner:
     def prepare_config(self, provider_config: Any) -> Any:
         from shipit.providers.python import PythonConfig
 
+        self.provider_app_yaml_entries = {}
+        provider_app_yaml_fn = getattr(provider_config, "app_yaml", None)
+        if callable(provider_app_yaml_fn):
+            provider_app_yaml_entries = provider_app_yaml_fn(provider_config)
+            if isinstance(provider_app_yaml_entries, dict):
+                self.provider_app_yaml_entries = provider_app_yaml_entries
+
         if isinstance(provider_config, PythonConfig):
             provider_config.python_extra_index_url = (
                 "https://pythonindex.wasix.org/simple"
@@ -183,6 +190,22 @@ class WasmerRunner:
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
         return provider_config
+
+    def _merge_app_yaml_entries(
+        self,
+        base_config: Dict[str, Any],
+        custom_entries: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        merged_config = dict(base_config)
+        for key, value in custom_entries.items():
+            existing_value = merged_config.get(key)
+            if isinstance(existing_value, dict) and isinstance(value, dict):
+                merged_config[key] = self._merge_app_yaml_entries(
+                    existing_value, value
+                )
+            else:
+                merged_config[key] = value
+        return merged_config
 
     def prepare_build_steps(self, build_steps: List["Step"]) -> List["Step"]:
         new_build_steps: List["Step"] = []
@@ -453,6 +476,11 @@ class WasmerRunner:
             yaml_config = {
                 "kind": "wasmer.io/App.v0",
             }
+        if not isinstance(yaml_config, dict):
+            yaml_config = {"kind": "wasmer.io/App.v0"}
+        yaml_config = self._merge_app_yaml_entries(
+            yaml_config, self.provider_app_yaml_entries
+        )
         yaml_config["package"] = "."
         if serve.services:
             capabilities = yaml_config.get("capabilities", {})
@@ -471,20 +499,6 @@ class WasmerRunner:
                     }
                 )
             yaml_config["volumes"] = volumes_yaml
-
-        has_php = any(dep.name == "php" for dep in serve.deps)
-        build_deps = reduce(
-            lambda acc, dep: acc + dep.dependencies,
-            [step for step in serve.build if isinstance(step, UseStep)],
-            [],
-        )
-        is_built_with_go = any(dep.name in ["go", "go-wasix"] for dep in build_deps)
-
-        # Note: phpix is multi-threaded, so this is only needed for raw php server and go.
-        if has_php or is_built_with_go:
-            scaling = yaml_config.get("scaling", {})
-            scaling["mode"] = "single_concurrency"
-            yaml_config["scaling"] = scaling
 
         if "after_deploy" in serve.commands:
             jobs = yaml_config.get("jobs", [])

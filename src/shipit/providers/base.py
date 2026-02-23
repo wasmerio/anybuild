@@ -52,6 +52,9 @@ class Config(BaseSettings):
     port: Optional[int] = 8080
     commands: CustomCommands = Field(default_factory=CustomCommands)
 
+    def app_yaml(self, config: "Config") -> Dict[str, Any]:
+        return {}
+
     def __getattr__(self, name: str) -> Any:
         return getattr(self.commands, name, None)
 

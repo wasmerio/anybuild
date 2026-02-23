@@ -22,6 +22,9 @@ class GoConfig(Config):
     go_build_file: Optional[str] = None
     serve_binary: Optional[str] = None
 
+    def app_yaml(self, config: "GoConfig") -> Dict[str, object]:
+        return {"scaling": {"mode": "single_concurrency"}}
+
 
 class GoProvider(Provider):
     def __init__(self, path: Path, config: GoConfig):
