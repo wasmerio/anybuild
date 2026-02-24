@@ -209,6 +209,16 @@ function wpdefine_load_env_defines(string $prefix = 'WPDEFINE_'): void {
 
 wpdefine_load_env_defines();
 
+if ( PHP_SAPI === 'phpix' ) {
+    add_filter('got_rewrite', '__return_true');
+}
+
+$_wp_content_config = __DIR__ . '/wp-content/wp-config.php';
+if ( file_exists( $_wp_content_config ) ) {
+    require_once $_wp_content_config;
+}
+unset( $_wp_content_config );
+
 /* That's all, stop editing! Happy publishing. */
 
 /** Sets up WordPress vars and included files. */
