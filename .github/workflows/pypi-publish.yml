@@ -88,6 +88,9 @@ jobs:
     timeout-minutes: 15
     needs:
       - test_and_e2e
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
