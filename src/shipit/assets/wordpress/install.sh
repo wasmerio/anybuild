@@ -100,4 +100,11 @@ if [ -n "${WP_LOCALE:-}" ]; then
   wp site switch-language "$WP_LOCALE"
 fi
 
+cat > /app/wp-content/wp-config.php <<EOF
+<?php
+// If you need to set custom configuration, you can place it here.
+// This file will be included by the main wp-config.php after
+// loading environment variables.
+EOF
+
 echo "✅ WordPress Installation complete"
