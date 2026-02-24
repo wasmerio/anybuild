@@ -13,16 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test_and_e2e:
-    name: Test + E2E
-    uses: ./.github/workflows/reusable-test-e2e.yml
-
-  publish:
-    name: Build and publish package
+  validate_version:
+    name: Validate tag and package versions
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs:
-      - test_and_e2e
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -81,6 +75,33 @@ jobs:
             echo "Version mismatch: src/shipit/version.py has '$SOURCE_VERSION' but tag is '$GIT_TAG' (expected '$TAG_VERSION')."
             exit 1
           fi
+
+  test_and_e2e:
+    name: Test + E2E
+    uses: ./.github/workflows/reusable-test-e2e.yml
+    needs:
+      - validate_version
+
+  publish:
+    name: Build and publish package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - test_and_e2e
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       - name: Build distribution
         run: uv build
