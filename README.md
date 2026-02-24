@@ -110,3 +110,20 @@ The e2e tests will:
 * Build the project (locally, or with docker)
 * Run the project (locally or with Wasmer)
 * Test that the project output (via http requests) is the correct one
+
+### Automatic PyPI Publish
+
+Publishing to PyPI is automated with GitHub Actions on version tags.
+
+Requirements:
+
+* Add a repository secret named `PYPI_API_TOKEN` with a PyPI API token.
+* Push tags using the `vX.Y.Z` format (for example: `v0.17.5`).
+
+On each `v*` tag push, the workflow:
+
+* Runs regular test and e2e workflows.
+* Validates that the tag version without the leading `v` matches:
+  * `project.version` in `pyproject.toml`
+  * `version` in `src/shipit/version.py`
+* Builds the package and publishes to PyPI only if all checks pass.

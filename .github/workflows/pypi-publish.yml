@@ -1,0 +1,91 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test_and_e2e:
+    name: Test + E2E
+    uses: ./.github/workflows/reusable-test-e2e.yml
+
+  publish:
+    name: Build and publish package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - test_and_e2e
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validate tag matches package versions
+        env:
+          GIT_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GIT_TAG" != v* ]]; then
+            echo "Tag '$GIT_TAG' does not start with 'v'."
+            exit 1
+          fi
+
+          TAG_VERSION="${GIT_TAG#v}"
+
+          PYPROJECT_VERSION=$(uv run python - <<'PY'
+          import pathlib
+          import tomllib
+
+          data = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          print(data["project"]["version"])
+          PY
+          )
+
+          SOURCE_VERSION=$(uv run python - <<'PY'
+          import pathlib
+          import re
+
+          content = pathlib.Path("src/shipit/version.py").read_text()
+          match = re.search(r'^version\\s*=\\s*["\']([^"\']+)["\']', content, re.MULTILINE)
+          if not match:
+              raise SystemExit("Could not find version in src/shipit/version.py")
+          print(match.group(1))
+          PY
+          )
+
+          if [[ "$PYPROJECT_VERSION" != "$TAG_VERSION" ]]; then
+            echo "Version mismatch: pyproject.toml has '$PYPROJECT_VERSION' but tag is '$GIT_TAG' (expected '$TAG_VERSION')."
+            exit 1
+          fi
+
+          if [[ "$SOURCE_VERSION" != "$TAG_VERSION" ]]; then
+            echo "Version mismatch: src/shipit/version.py has '$SOURCE_VERSION' but tag is '$GIT_TAG' (expected '$TAG_VERSION')."
+            exit 1
+          fi
+
+      - name: Build distribution
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
