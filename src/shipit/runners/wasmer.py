@@ -105,26 +105,26 @@ class WasmerRunner:
         },
         "phpix": {
             "dependencies": {
-                "latest": "wasmer/phpix-32@=0.1.1080321-alpha.4",
-                "8.3": "wasmer/phpix-32@=0.1.1080321-alpha.4",
-                "8.2": "wasmer/phpix-32@=0.1.1080321-alpha.4",
-                "8.1": "wasmer/phpix-32@=0.1.1080321-alpha.4",
-                "7.4": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                "latest": "wasmer/phpix-32@=0.1.1080321-alpha.6",
+                "8.3": "wasmer/phpix-32@=0.1.1080321-alpha.6",
+                "8.2": "wasmer/phpix-32@=0.1.1080321-alpha.6",
+                "8.1": "wasmer/phpix-32@=0.1.1080321-alpha.6",
+                "7.4": "wasmer/phpix-32@=0.1.1080321-alpha.6",
             },
             "architecture_dependencies": {
                 "64-bit": {
-                    "latest": "wasmer/phpix-64@=0.1.1080321-alpha.4",
-                    "8.3": "wasmer/phpix-64@=0.1.1080321-alpha.4",
-                    "8.2": "wasmer/phpix-64@=0.1.1080321-alpha.4",
-                    "8.1": "wasmer/phpix-64@=0.1.1080321-alpha.4",
-                    "7.4": "wasmer/phpix-64@=0.1.1080321-alpha.4",
+                    "latest": "wasmer/phpix-64@=0.1.1080321-alpha.6",
+                    "8.3": "wasmer/phpix-64@=0.1.1080321-alpha.6",
+                    "8.2": "wasmer/phpix-64@=0.1.1080321-alpha.6",
+                    "8.1": "wasmer/phpix-64@=0.1.1080321-alpha.6",
+                    "7.4": "wasmer/phpix-64@=0.1.1080321-alpha.6",
                 },
                 "32-bit": {
-                    "latest": "wasmer/phpix-32@=0.1.1080321-alpha.4",
-                    "8.3": "wasmer/phpix-32@=0.1.1080321-alpha.4",
-                    "8.2": "wasmer/phpix-32@=0.1.1080321-alpha.4",
-                    "8.1": "wasmer/phpix-32@=0.1.1080321-alpha.4",
-                    "7.4": "wasmer/phpix-32@=0.1.1080321-alpha.4",
+                    "latest": "wasmer/phpix-32@=0.1.1080321-alpha.6",
+                    "8.3": "wasmer/phpix-32@=0.1.1080321-alpha.6",
+                    "8.2": "wasmer/phpix-32@=0.1.1080321-alpha.6",
+                    "8.1": "wasmer/phpix-32@=0.1.1080321-alpha.6",
+                    "7.4": "wasmer/phpix-32@=0.1.1080321-alpha.6",
                 },
             },
             "scripts": {"php", "phpix"},
@@ -484,18 +484,18 @@ class WasmerRunner:
         is_built_with_go = any(dep.name in ["go", "go-wasix"] for dep in build_deps)
 
         # Note: phpix is multi-threaded, so this is only needed for raw php server and go.
-        if has_php or is_built_with_go:
+        if (has_php and not has_phpix) or is_built_with_go:
             scaling = yaml_config.get("scaling", {})
             assert isinstance(scaling, dict), "scaling must be a dictionary"
             scaling["mode"] = "single_concurrency"
             yaml_config["scaling"] = scaling
-        
+
         if has_phpix:
             capabilities = yaml_config.get("capabilities", {})
             assert isinstance(capabilities, dict), "capabilities must be a dictionary"
             memory = capabilities.get("memory", {})
             assert isinstance(memory, dict), "memory must be a dictionary"
-            memory["limit"] = "2G"
+            memory["limit"] = "2Gb"
             yaml_config["capabilities"] = capabilities
 
         if "after_deploy" in serve.commands:
