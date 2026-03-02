@@ -133,8 +133,8 @@ class WasmerRunner:
         },
         "bash": {
             "dependencies": {
-                "latest": "wasmer/bash@=1.0.24",
-                "8.3": "wasmer/bash@=1.0.24",
+                "latest": "wasmer/bash@1",
+                "8.3": "wasmer/bash@1",
             },
             "scripts": {"bash", "sh"},
             "aliases": {},
