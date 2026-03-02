@@ -496,6 +496,7 @@ class WasmerRunner:
             memory = capabilities.get("memory", {})
             assert isinstance(memory, dict), "memory must be a dictionary"
             memory["limit"] = "2Gb"
+            capabilities["memory"] = memory
             yaml_config["capabilities"] = capabilities
 
         if "after_deploy" in serve.commands:
