@@ -14,6 +14,7 @@ import shlex
 import shutil
 import contextlib
 import aiohttp
+import yaml
 from enum import Enum
 
 
@@ -35,6 +36,9 @@ class E2ECase(NamedTuple):
     serve_pattern: str
     http: List[HTTPRequest]
     use_random_port: bool = True
+    extra_env: dict[str, str] | None = None
+    expected_memory_limit: str | None = None
+    expect_no_memory_limit: bool = False
 
     def __str__(self):
         return self.path
@@ -88,6 +92,26 @@ class E2ECase(NamedTuple):
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
             ),
             http=[HTTPRequest(path="/", body_match=r"WordPress")],
+        ),
+        # WordPress skeleton in phpix mode (Wasmer only), validate memory cap.
+        E2ECase(
+            path="examples/php-wordpress",
+            serve_pattern=(
+                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+            ),
+            http=[HTTPRequest(path="/", body_match=r"WordPress")],
+            extra_env={"SHIPIT_PHPIX": "true"},
+            expected_memory_limit="2Gb",
+        ),
+        # Non-WordPress phpix mode should not force a memory capability.
+        E2ECase(
+            path="examples/php-nobuild",
+            serve_pattern=(
+                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+            ),
+            http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
+            extra_env={"SHIPIT_PHPIX": "true"},
+            expect_no_memory_limit=True,
         ),
         # Static site copied as-is (no build step beyond copy)
         E2ECase(
@@ -184,6 +208,10 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     # Skip if `uv` is not available in PATH
     if not shutil.which("uv"):
         pytest.skip("`uv` is not available in PATH")
+    if (case.expected_memory_limit or case.expect_no_memory_limit) and (
+        build_mode != BuildMode.Wasmer
+    ):
+        pytest.skip("phpix memory-cap checks run in Wasmer mode only")
 
     repo_root = Path(__file__).resolve().parents[1]
 
@@ -217,6 +245,8 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
 
     env = os.environ.copy()
+    if case.extra_env:
+        env.update(case.extra_env)
     if case.use_random_port:
         port = get_free_port()
     else:
@@ -267,6 +297,43 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
         # If we saw the serve banner, exercise the HTTP endpoint before shutting
         # down to ensure it actually serves content.
         if found_serve.is_set():
+            if case.expected_memory_limit or case.expect_no_memory_limit:
+                app_yaml_path = (
+                    repo_root / case.path / ".shipit" / "wasmer" / "app.yaml"
+                )
+                if not app_yaml_path.is_file():
+                    full_output = "".join(output_lines)
+                    pytest.fail(
+                        "Expected generated app.yaml for Wasmer run, but it "
+                        "was not found.\n\n"
+                        f"Path: {app_yaml_path}\n\n"
+                        f"--- Captured output start ---\n{full_output}\n"
+                        "--- Captured output end ---"
+                    )
+                app_yaml = yaml.safe_load(app_yaml_path.read_text()) or {}
+                capabilities = app_yaml.get("capabilities", {})
+                memory = capabilities.get("memory", {})
+                limit = memory.get("limit")
+                if case.expected_memory_limit and limit != case.expected_memory_limit:
+                    full_output = "".join(output_lines)
+                    pytest.fail(
+                        "Generated app.yaml has wrong phpix memory limit.\n\n"
+                        f"Expected: {case.expected_memory_limit}\n"
+                        f"Actual: {limit}\n"
+                        f"Path: {app_yaml_path}\n\n"
+                        f"--- Captured output start ---\n{full_output}\n"
+                        "--- Captured output end ---"
+                    )
+                if case.expect_no_memory_limit and limit is not None:
+                    full_output = "".join(output_lines)
+                    pytest.fail(
+                        "Generated app.yaml unexpectedly sets phpix memory limit"
+                        " for non-WordPress app.\n\n"
+                        f"Actual: {limit}\n"
+                        f"Path: {app_yaml_path}\n\n"
+                        f"--- Captured output start ---\n{full_output}\n"
+                        "--- Captured output end ---"
+                    )
             for req in case.http:
                 ok = await _wait_for_http_contains(
                     host="localhost",
