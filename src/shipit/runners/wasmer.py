@@ -490,7 +490,7 @@ class WasmerRunner:
             scaling["mode"] = "single_concurrency"
             yaml_config["scaling"] = scaling
 
-        if has_phpix:
+        if has_phpix and serve.provider == "wordpress":
             capabilities = yaml_config.get("capabilities", {})
             assert isinstance(capabilities, dict), "capabilities must be a dictionary"
             memory = capabilities.get("memory", {})
