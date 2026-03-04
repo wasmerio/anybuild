@@ -142,12 +142,7 @@ class PhpProvider:
         return self.base_commands()
 
     def base_commands(self) -> Dict[str, str]:
-        if self.config.phpix:
-            php_script = "phpix"
-            if self.config.phpix_worker_threads:
-                php_script += f" --php-threads={self.config.phpix_worker_threads}"
-        else:
-            php_script = "php"
+        php_script = "phpix" if self.config.phpix else "php"
 
         if _exists(self.path, "public/index.php"):
             return {
@@ -173,9 +168,12 @@ class PhpProvider:
         return []
 
     def env(self) -> Optional[Dict[str, str]]:
-        return {
+        env = {
             "PHP_INI_SCAN_DIR": '"{}".format(assets.serve_path)',
         }
+        if self.config.phpix and self.config.phpix_worker_threads:
+            env["PHPIX_PHP_THREADS"] = f'"{self.config.phpix_worker_threads}"'
+        return env
 
     def services(self) -> list[ServiceSpec]:
         return []
