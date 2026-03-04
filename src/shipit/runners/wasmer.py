@@ -499,6 +499,12 @@ class WasmerRunner:
             capabilities["memory"] = memory
             yaml_config["capabilities"] = capabilities
 
+        if has_phpix and serve.env and serve.env.get("PHPIX_PHP_THREADS"):
+            app_env = yaml_config.get("env", {})
+            assert isinstance(app_env, dict), "env must be a dictionary"
+            app_env["PHPIX_PHP_THREADS"] = str(serve.env["PHPIX_PHP_THREADS"])
+            yaml_config["env"] = app_env
+
         if "after_deploy" in serve.commands:
             jobs = yaml_config.get("jobs", [])
             # Filter out any existing after_deploy job
