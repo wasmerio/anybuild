@@ -69,7 +69,7 @@ class WordPressProvider(PhpProvider):
             # We create the start script that creates the .htaccess symlink
             # since phpix now supports .htaccess files.
             steps.append(
-                'copy("wordpress/start.sh", "{}/start-wp.sh".format(assets.path), base="assets")'
+                'copy("wordpress/start.php", "{}/start-wp.php".format(assets.path), base="assets")'
             )
         if not _exists(self.path, "wp-config.php"):
             steps.append(
@@ -88,10 +88,10 @@ class WordPressProvider(PhpProvider):
         commands = super().commands()
         if self.config.phpix:
             if "start" in commands:
-                if self.config.phpix_worker_threads:
-                    commands["start"] = f'"bash {{}}/start-wp.sh --php-threads={self.config.phpix_worker_threads} -S localhost:{{}} -t {{}}".format(assets.serve_path, PORT, app.serve_path)'
-                else:
-                    commands["start"] = '"bash {}/start-wp.sh -S localhost:{} -t {}".format(assets.serve_path, PORT, app.serve_path)'
+                commands["start"] = (
+                    '"phpix --startup-script={}/start-wp.php -S localhost:{} '
+                    '-t {}".format(assets.serve_path, PORT, app.serve_path)'
+                )
         return {
             # "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path)',
             "after_deploy": '"bash {}/setup-wp.sh".format(assets.serve_path)',
