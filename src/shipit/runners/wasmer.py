@@ -79,6 +79,7 @@ class WasmerRunner:
             "dependencies": {
                 "latest": "php/php-32@=8.3.2102",
                 "8.3": "php/php-32@=8.3.2102",
+                "8.3.29": "php/php-32@=8.3.2102",
                 "8.2": "php/php-32@=8.2.2801",
                 "8.1": "php/php-32@=8.1.3201",
                 "7.4": "php/php-32@=7.4.3301",
@@ -87,6 +88,7 @@ class WasmerRunner:
                 "64-bit": {
                     "latest": "php/php-64@=8.3.2102",
                     "8.3": "php/php-64@=8.3.2102",
+                    "8.3.29": "php/php-64@=8.3.2102",
                     "8.2": "php/php-64@=8.2.2801",
                     "8.1": "php/php-64@=8.1.3201",
                     "7.4": "php/php-64@=7.4.3301",
@@ -94,6 +96,7 @@ class WasmerRunner:
                 "32-bit": {
                     "latest": "php/php-32@=8.3.2102",
                     "8.3": "php/php-32@=8.3.2102",
+                    "8.3.29": "php/php-32@=8.3.2102",
                     "8.2": "php/php-32@=8.2.2801",
                     "8.1": "php/php-32@=8.1.3201",
                     "7.4": "php/php-32@=7.4.3301",
@@ -107,6 +110,7 @@ class WasmerRunner:
             "dependencies": {
                 "latest": "wasmer/phpix-32@=0.1.12803",
                 "8.3": "wasmer/phpix-32@=0.1.12803",
+                "8.3.29": "wasmer/phpix-32@=0.1.12803",
                 "8.2": "wasmer/phpix-32@=0.1.12803",
                 "8.1": "wasmer/phpix-32@=0.1.12803",
                 "7.4": "wasmer/phpix-32@=0.1.12803",
@@ -115,6 +119,7 @@ class WasmerRunner:
                 "64-bit": {
                     "latest": "wasmer/phpix-64@=0.1.12803",
                     "8.3": "wasmer/phpix-64@=0.1.12803",
+                    "8.3.29": "wasmer/phpix-64@=0.1.12803",
                     "8.2": "wasmer/phpix-64@=0.1.12803",
                     "8.1": "wasmer/phpix-64@=0.1.12803",
                     "7.4": "wasmer/phpix-64@=0.1.12803",
@@ -122,6 +127,7 @@ class WasmerRunner:
                 "32-bit": {
                     "latest": "wasmer/phpix-32@=0.1.12803",
                     "8.3": "wasmer/phpix-32@=0.1.12803",
+                    "8.3.29": "wasmer/phpix-32@=0.1.12803",
                     "8.2": "wasmer/phpix-32@=0.1.12803",
                     "8.1": "wasmer/phpix-32@=0.1.12803",
                     "7.4": "wasmer/phpix-32@=0.1.12803",
