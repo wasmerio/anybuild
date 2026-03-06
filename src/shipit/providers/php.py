@@ -27,7 +27,7 @@ class PhpConfig(Config):
     phpix: bool = False
     use_composer: bool = False
     composer_build_script: Optional[str] = None
-    php_version: Optional[str] = "8.3"
+    php_version: Optional[str] = "8.3.29"
     php_architecture: Optional[Literal["64-bit", "32-bit"]] = None
     phpix_worker_threads: Optional[int] = 4
 
