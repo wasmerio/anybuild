@@ -55,9 +55,10 @@ class LaravelProvider(PhpProvider):
         return None
 
     def dependencies(self) -> list[DependencySpec]:
+        php_dependency = "phpix" if self.config.phpix else "php"
         return [
             DependencySpec(
-                "php",
+                php_dependency,
                 var_name="config.php_version",
                 use_in_build=True,
                 use_in_serve=True,
@@ -78,19 +79,21 @@ class LaravelProvider(PhpProvider):
         ]
 
     def prepare_steps(self) -> Optional[list[str]]:
+        php_script = "phpix" if self.config.phpix else "php"
         return [
             'workdir(app.serve_path)',
             'run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache")',
-            'run("php artisan config:cache")',
-            'run("php artisan event:cache")',
-            'run("php artisan route:cache")',
-            'run("php artisan view:cache")',
+            f'run("{php_script} artisan config:cache")',
+            f'run("{php_script} artisan event:cache")',
+            f'run("{php_script} artisan route:cache")',
+            f'run("{php_script} artisan view:cache")',
         ]
 
     def commands(self) -> Dict[str, str]:
+        php_script = "phpix" if self.config.phpix else "php"
         return {
-            "start": 'f"php -S localhost:{PORT} -t public"',
-            "after_deploy": '"php artisan migrate"',
+            "start": f'f"{php_script} -S localhost:{{PORT}} -t public"',
+            "after_deploy": f'"{php_script} artisan migrate"',
         }
 
     def mounts(self) -> list[MountSpec]:
@@ -100,6 +103,10 @@ class LaravelProvider(PhpProvider):
         return []
 
     def env(self) -> Optional[Dict[str, str]]:
+        if self.config.phpix and self.config.phpix_worker_threads:
+            return {
+                "PHPIX_PHP_THREADS": f'"{self.config.phpix_worker_threads}"',
+            }
         return None
 
     def services(self) -> list[ServiceSpec]:
