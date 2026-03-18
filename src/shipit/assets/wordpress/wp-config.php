@@ -213,3 +213,7 @@ wpdefine_load_env_defines();
 
 /** Sets up WordPress vars and included files. */
 require_once ABSPATH . 'wp-settings.php';
+
+if ( PHP_SAPI === 'phpix' ) {
+    add_filter( 'got_rewrite', '__return_true' );
+}
