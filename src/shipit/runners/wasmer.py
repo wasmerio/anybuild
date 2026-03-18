@@ -227,7 +227,7 @@ class WasmerRunner:
             return
         prepare_dir = self.wasmer_dir_path / "prepare"
         prepare_dir.mkdir(parents=True, exist_ok=True)
-        env = serve.env or {}
+        env = dict(serve.env or {})
         for dep in serve.deps:
             if dep.name in self.mapper:
                 dep_env = self.mapper[dep.name].get("env")
@@ -560,14 +560,61 @@ class WasmerRunner:
                 f"--command={command}",
                 *extra_args,
             ],
+            env=os.environ,
         )
 
     def run_command(
-        self, command: str, extra_args: Optional[List[str]] | None = None
+        self,
+        command: str,
+        extra_args: Optional[List[str]] | None = None,
+        env: Optional[Dict[str, str]] = None,
     ) -> Any:
         sh.Command(command)(
-            *(extra_args or []), _out=write_stdout, _err=write_stderr, _env=os.environ
+            *(extra_args or []),
+            _out=write_stdout,
+            _err=write_stderr,
+            _env=env or os.environ,
         )
+
+    def _update_app_yaml(
+        self, app_owner: Optional[str] = None, app_name: Optional[str] = None
+    ) -> None:
+        if not app_owner and not app_name:
+            return
+        app_yaml_path = self.wasmer_dir_path / "app.yaml"
+        if not app_yaml_path.exists():
+            return
+        yaml_config = yaml.safe_load(app_yaml_path.read_text()) or {}
+        changed = False
+        if app_owner and yaml_config.get("owner") != app_owner:
+            yaml_config["owner"] = app_owner
+            changed = True
+        if app_name and yaml_config.get("name") != app_name:
+            yaml_config["name"] = app_name
+            changed = True
+        if changed:
+            app_yaml_path.write_text(yaml.dump(yaml_config))
+
+    def _deploy_args(
+        self, app_owner: Optional[str] = None, app_name: Optional[str] = None
+    ) -> List[str]:
+        extra_args: List[str] = []
+        if self.wasmer_registry:
+            extra_args += ["--registry", self.wasmer_registry]
+        if self.wasmer_token:
+            extra_args += ["--token", self.wasmer_token]
+        if app_owner:
+            extra_args += ["--owner", app_owner]
+        if app_name:
+            extra_args += ["--app-name", app_name]
+        return [
+            "deploy",
+            "--publish-package",
+            "--dir",
+            self.wasmer_dir_path,
+            "--non-interactive",
+            *extra_args,
+        ]
 
     def deploy_config(self, config_path: Path) -> None:
         package_webc_path = self.wasmer_dir_path / "package.webc"
@@ -594,23 +641,5 @@ class WasmerRunner:
     def deploy(
         self, app_owner: Optional[str] = None, app_name: Optional[str] = None
     ) -> None:
-        extra_args: List[str] = []
-        if self.wasmer_registry:
-            extra_args += ["--registry", self.wasmer_registry]
-        if self.wasmer_token:
-            extra_args += ["--token", self.wasmer_token]
-        if app_owner:
-            extra_args += ["--owner", app_owner]
-        if app_name:
-            extra_args += ["--app-name", app_name]
-        self.run_command(
-            self.bin,
-            [
-                "deploy",
-                "--publish-package",
-                "--dir",
-                self.wasmer_dir_path,
-                "--non-interactive",
-                *extra_args,
-            ],
-        )
+        self._update_app_yaml(app_owner, app_name)
+        self.run_command(self.bin, self._deploy_args(app_owner=app_owner, app_name=app_name))
