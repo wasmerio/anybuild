@@ -83,4 +83,5 @@ def test_wasmer_app_yaml_sets_memory_limit_for_wordpress_phpix(
 
     assert app_yaml["capabilities"]["database"]["engine"] == "mysql"
     assert app_yaml["capabilities"]["memory"]["limit"] == "2Gb"
+    assert app_yaml["enable_email"] is True
     assert app_yaml["env"]["PHPIX_PHP_THREADS"] == "4"
