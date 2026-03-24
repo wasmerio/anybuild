@@ -504,6 +504,7 @@ class WasmerRunner:
             memory["limit"] = "2Gb"
             capabilities["memory"] = memory
             yaml_config["capabilities"] = capabilities
+            yaml_config["enable_email"] = True
 
         if has_phpix and serve.env and serve.env.get("PHPIX_PHP_THREADS"):
             app_env = yaml_config.get("env", {})
