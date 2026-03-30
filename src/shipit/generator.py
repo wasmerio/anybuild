@@ -109,7 +109,7 @@ def generate_shipit(path: Path, provider: Provider) -> str:
 
     # Collect parts
     plan = ProviderPlan(
-        serve_name=provider.serve_name() or default_serve_name,
+        serve_name=default_serve_name,
         provider=provider.name(),
         mounts=provider.mounts(),
         volumes=provider.volumes(),

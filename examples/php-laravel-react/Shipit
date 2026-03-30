@@ -1,11 +1,11 @@
-php = dep("php", config.php_version)
+php = dep("php", config.php_version, architecture=config.php_architecture)
 composer = dep("composer")
+bash = dep("bash")
 node = dep("node", config.node_version)
 npm = dep("npm", config.npm_version)
-staticwebserver = dep("static-web-server", config.sws_version)
-bash = dep("bash")
 
 app = mount("app")
+assets = mount("assets")
 
 serve(
   name="php-laravel-react",
@@ -13,16 +13,18 @@ serve(
   cwd=app.serve_path,
   build=[
     use(php, composer, node, npm),
-    env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER="1"),
     workdir(app.path),
-    run("composer install --optimize-autoloader --no-scripts --no-interaction", inputs=["composer.json", "composer.lock", "artisan"], outputs=["."], group="install"),
+    copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
+    env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER="1"),
+    run("composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install"),
     copy("package-lock.json"),
     env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
     run("npm ci", inputs=["package.json"], group="install"),
-    copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
+    copy(".", ignore=[".git", "node_modules", "vendor"]),
+    run("composer run-script post-update-cmd", outputs=["."], group="build"),
     run("npm run build", group="build")
   ],
-  deps=[php, staticwebserver, bash],
+  deps=[php, bash],
   prepare=[
     workdir(app.serve_path),
     run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache"),
@@ -31,11 +33,15 @@ serve(
     run("php artisan route:cache"),
     run("php artisan view:cache")
   ],
+  env = {
+    "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path)
+  },
   commands = {
     "start": f"php -S localhost:{PORT} -t public",
     "after_deploy": "php artisan migrate"
   },
   mounts=[
-    app
+    app,
+    assets
   ],
 )

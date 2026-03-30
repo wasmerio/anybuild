@@ -134,7 +134,7 @@ class WasmerRunner:
                 },
             },
             "scripts": {"php", "phpix"},
-            "aliases": {},
+            "aliases": {"php": "phpix"},
             "env": {},
         },
         "bash": {

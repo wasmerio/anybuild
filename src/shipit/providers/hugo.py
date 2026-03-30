@@ -98,9 +98,6 @@ class HugoProvider(StaticFileProvider):
             return DetectResult(cls.name(), 80)
         return None
 
-    def serve_name(self) -> Optional[str]:
-        return None
-
     def dependencies(self) -> list[DependencySpec]:
         return [
             DependencySpec(
