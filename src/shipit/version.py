@@ -1,5 +1,5 @@
 __all__ = ["version", "version_info"]
 
 
-version = "0.17.13"
-version_info = (0, 17, 13, "final", 0)
+version = "0.18.0"
+version_info = (0, 18, 0, "final", 0)
