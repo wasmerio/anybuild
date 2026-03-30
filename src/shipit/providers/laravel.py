@@ -61,7 +61,7 @@ class LaravelProvider(PhpProvider):
     def build_steps(self) -> list[str]:
         node_install = list(self.node_provider.build_steps_install())
         node_build = list(self.node_provider.build_steps_build())
-        return super().build_steps(
+        return super().build_steps_with_options(
             extra_ignore=["node_modules"],
             after_install=node_install,
             after_build=node_build

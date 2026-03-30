@@ -101,7 +101,7 @@ class PhpProvider:
     def declarations(self) -> Optional[str]:
         return None
 
-    def build_steps(self, extra_ignore: Optional[list[str]] = None, after_install: Optional[list] = None, after_build: Optional[list] = None) -> list[str]:
+    def build_steps_with_options(self, extra_ignore: Optional[list[str]] = None, after_install: Optional[list[str]] = None, after_build: Optional[list] = None) -> list[str]:
         steps = [
             'workdir(app.path)',
         ]
@@ -143,6 +143,13 @@ class PhpProvider:
             steps = steps + after_build
 
         return steps
+
+    def build_steps(self) -> list[str]:
+        return self.build_steps_with_options(
+            extra_ignore=None,
+            after_install=None,
+            after_build=None
+        )
 
     def prepare_steps(self) -> Optional[list[str]]:
         return None
