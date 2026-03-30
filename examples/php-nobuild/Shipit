@@ -11,7 +11,7 @@ serve(
     use(php),
     workdir(app.path),
     copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
-    copy(".", ".", ignore=[".git"])
+    copy(".", ignore=[".git"])
   ],
   deps=[php],
   env = {

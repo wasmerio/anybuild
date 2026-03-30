@@ -68,9 +68,6 @@ class JekyllProvider(StaticFileProvider):
             return DetectResult(cls.name(), 85)
         return None
 
-    def serve_name(self) -> Optional[str]:
-        return None
-
     def dependencies(self) -> list[DependencySpec]:
         return [
             DependencySpec(

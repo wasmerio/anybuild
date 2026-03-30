@@ -349,9 +349,6 @@ class NodeStaticProvider(StaticFileProvider):
             return DetectResult(cls.name(), 40)
         return None
 
-    def serve_name(self) -> Optional[str]:
-        return None
-
     def dependencies(self) -> list[DependencySpec]:
         package_manager_dep = self.config.package_manager.as_dependency(self.path)
         package_manager_dep.use_in_build = True
@@ -362,7 +359,7 @@ class NodeStaticProvider(StaticFileProvider):
                 use_in_build=True,
             ),
             package_manager_dep,
-            *super().dependencies(),
+            *(super().dependencies() if not self.only_build else []),
         ]
 
     @classmethod
@@ -383,6 +380,37 @@ class NodeStaticProvider(StaticFileProvider):
         command = static_generator.build_command()
         return package_manager.run_execute_command(command)
 
+    def build_steps_install(self) -> list[str]:
+        lockfile = self.config.package_manager.lockfile()
+        has_lockfile = (self.path / lockfile).exists()
+        install_command = self.config.package_manager.install_command(
+            has_lockfile=has_lockfile
+        )
+        return filter(
+            None,
+            [
+                f'copy("{lockfile}")' if has_lockfile else None,
+                'env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false")'
+                if self.config.package_manager == PackageManager.NPM
+                else None,
+                # 'run("npx corepack enable", inputs=["package.json"], group="install")',
+                f'run("{install_command}", inputs=["package.json"], group="install")',
+            ],
+        )
+    
+    def build_steps_build(self) -> list[str]:
+        return filter(
+            None,
+            [
+                f'run("{self.config.build_command}", outputs=[config.static_dir], group="build")'
+                if not self.only_build
+                else None,
+                f'run("{self.config.build_command}", group="build")'
+                if self.only_build
+                else None,
+            ]
+        )
+
     def build_steps(self) -> list[str]:
         lockfile = self.config.package_manager.lockfile()
         has_lockfile = (self.path / lockfile).exists()
@@ -398,19 +426,9 @@ class NodeStaticProvider(StaticFileProvider):
             None,
             [
                 'workdir(temp.path)' if not self.only_build else None,
-                f'copy("{lockfile}")' if has_lockfile else None,
-                'env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false")'
-                if self.config.package_manager == PackageManager.NPM
-                else None,
-                # 'run("npx corepack enable", inputs=["package.json"], group="install")',
-                f'run("{install_command}", inputs=["package.json"], group="install")',
+                *self.build_steps_install(),
                 f'copy(".", ignore=[{all_ignored_files}])',
-                f'run("{self.config.build_command}", outputs=[config.static_dir], group="build")'
-                if not self.only_build
-                else None,
-                f'run("{self.config.build_command}", group="build")'
-                if self.only_build
-                else None,
+                *self.build_steps_build(),
                 'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
                 if not self.only_build
                 else None,

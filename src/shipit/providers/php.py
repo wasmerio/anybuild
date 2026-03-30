@@ -83,9 +83,6 @@ class PhpProvider:
             return DetectResult(cls.name(), 30)
         return None
 
-    def serve_name(self) -> Optional[str]:
-        return None
-
     def dependencies(self) -> list[DependencySpec]:
         deps = [
             DependencySpec(
@@ -104,7 +101,7 @@ class PhpProvider:
     def declarations(self) -> Optional[str]:
         return None
 
-    def build_steps(self) -> list[str]:
+    def build_steps(self, extra_ignore: Optional[list[str]] = None, after_install: Optional[list] = None, after_build: Optional[list] = None) -> list[str]:
         steps = [
             'workdir(app.path)',
         ]
@@ -121,17 +118,29 @@ class PhpProvider:
                 'run("composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install")'
             )
 
-        dirs_to_ignore = [".git"]   
+        if after_install:
+            assert isinstance(after_install, list), "after_install must be a list if provided"
+            steps = steps + after_install
+
+        dirs_to_ignore = [".git"]
+        if extra_ignore:
+            assert isinstance(extra_ignore, list), "extra_ignore must be a list if provided"
+            dirs_to_ignore += extra_ignore
+
         if self.config.use_composer:
             dirs_to_ignore.append("vendor")
         if self.config.framework == PhpFramework.Symfony:
             dirs_to_ignore.append("var")
 
-        steps.append('copy(".", ".", ignore={})'.format(json.dumps(dirs_to_ignore)))
+        steps.append('copy(".", ignore={})'.format(json.dumps(dirs_to_ignore)))
 
         # Since we don't run the scripts during the install step, we need to run them after the build step
         if self.config.use_composer and self.config.composer_build_script:
             steps.append(f'run("composer run-script {self.config.composer_build_script}", outputs=["."], group="build")')
+
+        if after_build:
+            assert isinstance(after_build, list), "after_build must be a list if provided"
+            steps = steps + after_build
 
         return steps
 
