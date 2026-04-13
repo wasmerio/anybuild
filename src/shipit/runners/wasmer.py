@@ -1,6 +1,5 @@
+from enum import Enum
 from functools import reduce
-from shipit.shipit_types import EnvStep
-from shipit.shipit_types import UseStep
 import hashlib
 import json
 import os
@@ -17,12 +16,52 @@ from tomlkit import array, aot, comment, document, nl, string, table
 
 from shipit.builders.base import BuildBackend
 from shipit.runners.base import Runner
-from shipit.shipit_types import Package, PrepareStep, Serve
+from shipit.shipit_types import EnvStep, Package, PrepareStep, Serve, UseStep
 from shipit.ui import console, write_stderr, write_stdout
 from shipit.version import version as shipit_version
 
 if TYPE_CHECKING:
     from shipit.shipit_types import Step
+
+
+SHIPIT_CONFIG_ANNOTATION = "shipitcli.com/config"
+SHIPIT_PROVIDER_ANNOTATION = "shipitcli.com/provider"
+SHIPIT_VERSION_ANNOTATION = "shipitcli.com/version"
+WASMER_APP_KIND_ANNOTATION = "wasmer.io/app-kind"
+
+
+def serialize_provider_config(provider_config: Any) -> Dict[str, Any]:
+    if provider_config is None:
+        return {}
+    if hasattr(provider_config, "model_dump"):
+        return provider_config.model_dump(mode="json", exclude_defaults=True)
+    if isinstance(provider_config, dict):
+        return provider_config
+    return {}
+
+
+def resolve_app_kind(provider: str, framework: Any = None) -> Optional[str]:
+    if provider == "wordpress":
+        return "wordpress"
+
+    if isinstance(framework, Enum):
+        framework = framework.value
+    if framework is None:
+        return None
+
+    provider_name = {
+        "node": "javascript",
+        "node-static": "javascript",
+    }.get(provider, provider)
+    framework_name = str(framework).lower()
+    app_kinds = {
+        "python": {"django", "mcp"},
+        "php": {"moodle", "drupal"},
+        "javascript": {"ghost", "strapi"},
+    }
+    if framework_name in app_kinds.get(provider_name, set()):
+        return framework_name
+    return None
 
 
 class MapperItem(TypedDict, total=False):
@@ -172,6 +211,7 @@ class WasmerRunner:
         self.wasmer_registry = registry
         self.wasmer_token = token
         self.bin = bin or "wasmer"
+        self.provider_config: Any = None
 
     def get_serve_mount_path(self, name: str) -> Path:
         if name == "app":
@@ -188,6 +228,7 @@ class WasmerRunner:
             )
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
+        self.provider_config = provider_config
         return provider_config
 
     def prepare_build_steps(self, build_steps: List["Step"]) -> List["Step"]:
@@ -524,6 +565,21 @@ class WasmerRunner:
                 }
             )
             yaml_config["jobs"] = jobs
+
+        annotations = yaml_config.get("annotations", {})
+        assert isinstance(annotations, dict), "annotations must be a dictionary"
+        annotations[SHIPIT_CONFIG_ANNOTATION] = serialize_provider_config(
+            self.provider_config
+        )
+        annotations[SHIPIT_VERSION_ANNOTATION] = shipit_version
+        annotations[SHIPIT_PROVIDER_ANNOTATION] = serve.provider
+        app_kind = resolve_app_kind(
+            serve.provider,
+            getattr(self.provider_config, "framework", None),
+        )
+        if app_kind:
+            annotations[WASMER_APP_KIND_ANNOTATION] = app_kind
+        yaml_config["annotations"] = annotations
 
         app_yaml = yaml.dump(yaml_config)
 

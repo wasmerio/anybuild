@@ -7,6 +7,7 @@ from shipit.providers.base import Config
 from shipit.providers.wordpress import WordPressProvider
 from shipit.runners.wasmer import WasmerRunner
 from shipit.shipit_types import Mount, Package, Serve, Service
+from shipit.version import version as shipit_version
 
 
 class DummyBuildBackend:
@@ -59,6 +60,13 @@ def test_wasmer_app_yaml_sets_memory_limit_for_wordpress_phpix(
     src_dir.mkdir()
 
     runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
+    provider_config = load_provider_config(
+        WordPressProvider,
+        src_dir,
+        Config(),
+        {"phpix": True},
+    )
+    runner.prepare_config(provider_config)
     serve = Serve(
         name="wordpress",
         provider="wordpress",
@@ -85,3 +93,7 @@ def test_wasmer_app_yaml_sets_memory_limit_for_wordpress_phpix(
     assert app_yaml["capabilities"]["memory"]["limit"] == "2Gb"
     assert app_yaml["enable_email"] is True
     assert app_yaml["env"]["PHPIX_PHP_THREADS"] == "4"
+    assert app_yaml["annotations"]["shipitcli.com/config"]["phpix"] is True
+    assert app_yaml["annotations"]["shipitcli.com/provider"] == "wordpress"
+    assert app_yaml["annotations"]["shipitcli.com/version"] == shipit_version
+    assert app_yaml["annotations"]["wasmer.io/app-kind"] == "wordpress"

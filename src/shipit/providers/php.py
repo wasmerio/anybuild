@@ -17,7 +17,9 @@ from pydantic_settings import SettingsConfigDict
 
 class PhpFramework(Enum):
     Laravel = "laravel"
+    Moodle = "moodle"
     Symfony = "symfony"
+    Drupal = "drupal"
 
 
 class PhpConfig(Config):
