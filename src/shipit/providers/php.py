@@ -1,6 +1,7 @@
 import json
+from enum import Enum
 from pathlib import Path
-from typing import Dict, Optional, Literal
+from typing import Any, Dict, Literal, Optional
 
 from .base import (
     DetectResult,
@@ -12,8 +13,8 @@ from .base import (
     VolumeSpec,
     Config,
 )
-from enum import Enum
 from pydantic_settings import SettingsConfigDict
+
 
 class PhpFramework(Enum):
     Laravel = "laravel"
@@ -39,8 +40,83 @@ class PhpProvider:
         self.path = path
         self.config = config
 
+    @staticmethod
+    def load_composer_config(path: Path) -> dict[str, Any] | None:
+        composer_path = path / "composer.json"
+        if not composer_path.exists():
+            return None
+        try:
+            composer_config = json.loads(composer_path.read_text())
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(composer_config, dict):
+            return None
+        return composer_config
+
+    @staticmethod
+    def composer_packages(composer_config: dict[str, Any] | None) -> set[str]:
+        if not composer_config:
+            return set()
+
+        packages: set[str] = set()
+        for section in ("require", "require-dev"):
+            deps = composer_config.get(section)
+            if isinstance(deps, dict):
+                packages.update(str(name).lower() for name in deps)
+
+        package_name = composer_config.get("name")
+        if isinstance(package_name, str):
+            packages.add(package_name.lower())
+        return packages
+
+    @classmethod
+    def detect_framework(
+        cls,
+        path: Path,
+        composer_config: dict[str, Any] | None = None,
+    ) -> PhpFramework | None:
+        composer_config = composer_config or cls.load_composer_config(path)
+        composer_packages = cls.composer_packages(composer_config)
+
+        has_moodle_layout = (
+            (path / "version.php").exists()
+            and (path / "lib" / "setup.php").exists()
+            and (
+                (path / "admin" / "cli" / "install.php").exists()
+                or (path / "mod").is_dir()
+                or (path / "theme").is_dir()
+            )
+        )
+        if has_moodle_layout:
+            return PhpFramework.Moodle
+
+        drupal_packages = {
+            "drupal/core",
+            "drupal/core-composer-scaffold",
+            "drupal/core-recommended",
+            "drupal/drupal",
+            "drupal/recommended-project",
+        }
+        has_drupal_layout = (
+            (path / "core" / "lib" / "Drupal.php").exists()
+            or (path / "web" / "core" / "lib" / "Drupal.php").exists()
+        )
+        if has_drupal_layout or composer_packages & drupal_packages:
+            return PhpFramework.Drupal
+
+        if (path / "artisan").exists() and (path / "composer.json").exists():
+            return PhpFramework.Laravel
+
+        if (path / "symfony.lock").exists() or any(
+            package.startswith("symfony/") for package in composer_packages
+        ):
+            return PhpFramework.Symfony
+
+        return None
+
     @classmethod
     def load_config(cls, path: Path, base_config: Config) -> PhpConfig:
+        composer_config = cls.load_composer_config(path)
         use_composer = (
             _exists(path, "composer.json", "composer.lock")
             or (
@@ -50,17 +126,21 @@ class PhpProvider:
             or False
         )
         composer_build_script = None
-        if use_composer:
-            composer_config = json.load(open(path / "composer.json"))
-            if "scripts" in composer_config:
-                assert isinstance(composer_config["scripts"], dict), "Scripts must be a dictionary"
-                composer_build_script = "post-update-cmd" if "post-update-cmd" in composer_config["scripts"] else None
-                if not composer_build_script and "post-install-cmd" in composer_config["scripts"]:
+        if composer_config:
+            scripts = composer_config.get("scripts")
+            if isinstance(scripts, dict):
+                composer_build_script = (
+                    "post-update-cmd" if "post-update-cmd" in scripts else None
+                )
+                if not composer_build_script and "post-install-cmd" in scripts:
                     composer_build_script = "post-install-cmd"
-        config = PhpConfig(use_composer=use_composer, composer_build_script=composer_build_script, **base_config.model_dump())
+        config = PhpConfig(
+            use_composer=use_composer,
+            composer_build_script=composer_build_script,
+            **base_config.model_dump(),
+        )
         if not config.framework:
-            if _exists(path, "symfony.lock"):
-                config.framework = PhpFramework.Symfony
+            config.framework = cls.detect_framework(path, composer_config)
         return config
 
     @classmethod
@@ -71,11 +151,23 @@ class PhpProvider:
     def detect(
         cls, path: Path, config: Config
     ) -> Optional[DetectResult]:
-        if _exists(path, "composer.json") and _exists(path, "public/index.php"):
+        framework = cls.detect_framework(path)
+        if framework == PhpFramework.Drupal and (path / "web" / "index.php").exists():
+            return DetectResult(cls.name(), 70)
+        if framework in {
+            PhpFramework.Drupal,
+            PhpFramework.Moodle,
+            PhpFramework.Symfony,
+        } and _exists(path, "index.php", "public/index.php", "web/index.php"):
+            return DetectResult(cls.name(), 65)
+        if (path / "composer.json").exists() and _exists(
+            path, "public/index.php", "web/index.php"
+        ):
             return DetectResult(cls.name(), 60)
         if (
             _exists(path, "index.php")
             or _exists(path, "public/index.php")
+            or _exists(path, "web/index.php")
             or _exists(path, "app/index.php")
         ):
             return DetectResult(cls.name(), 10)
@@ -162,6 +254,16 @@ class PhpProvider:
     def base_commands(self) -> Dict[str, str]:
         php_script = "phpix" if self.config.phpix else "php"
 
+        if (
+            self.config.framework == PhpFramework.Drupal
+            and _exists(self.path, "web/index.php")
+        ):
+            return {
+                "start": (
+                    f'"{php_script} -S localhost:{{}} -t '
+                    '{}/web".format(PORT, app.serve_path)'
+                )
+            }
         if _exists(self.path, "public/index.php"):
             return {
                 "start": f'"{php_script} -S localhost:{{}} -t {{}}/public".format(PORT, app.serve_path)'
