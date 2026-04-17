@@ -11,10 +11,6 @@ WP_LOCALE=${WP_LOCALE:-"en_US"}
 WP_SITEURL=${WP_SITEURL:-"http://localhost"}
 WP_SITE_TITLE=${WP_SITE_TITLE:-"WordPress"}
 
-wp() {
-  php /opt/assets/wp-cli.phar --allow-root --path=/app "$@"
-}
-
 echo "🚀 Starting WordPress setup..."
 
 echo "Creating required directories..."

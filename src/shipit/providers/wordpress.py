@@ -90,7 +90,7 @@ class WordPressProvider(PhpProvider):
                     '-t {}".format(assets.serve_path, PORT, app.serve_path)'
                 )
         return {
-            # "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path)',
+            "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path)',
             "after_deploy": '"bash {}/setup-wp.sh".format(assets.serve_path)',
             **commands,
         }
