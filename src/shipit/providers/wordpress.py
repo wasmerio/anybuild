@@ -76,7 +76,11 @@ class WordPressProvider(PhpProvider):
             steps.append(
                 'copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets")'
             )
-        return steps + super().build_steps()
+        return steps + super().build_steps_with_options(
+            extra_ignore=["wp-content"],
+            after_install=None,
+            after_build=None
+        )
 
     def prepare_steps(self) -> Optional[list[str]]:
         return super().prepare_steps()

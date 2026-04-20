@@ -27,7 +27,7 @@ serve(
     copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets"),
     workdir(app.path),
     copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
-    copy(".", ignore=[".git"])
+    copy(".", ignore=[".git", "wp-content"])
   ],
   deps=[php, bash],
   env = {
@@ -35,6 +35,7 @@ serve(
     "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path)
   },
   commands = {
+    "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path),
     "after_deploy": "bash {}/setup-wp.sh".format(assets.serve_path),
     "start": "php -S localhost:{} -t {}".format(PORT, app.serve_path)
   },
