@@ -18,6 +18,10 @@ echo "Creating required directories..."
 mkdir -p wp-content/plugins
 mkdir -p wp-content/upgrade
 
+if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
+  cp -R "${WPCONTENT_BASE_PATH}/." /app/wp-content/
+fi
+
 echo "Installing WordPress core"
 
 wp core install \
@@ -27,7 +31,6 @@ wp core install \
   --admin_password="$WP_ADMIN_PASSWORD" \
   --admin_email="$WP_ADMIN_EMAIL" \
   --locale="$WP_LOCALE"
-
 
 if [ "${WP_UPDATE_DB:-false}" = "true" ]; then
     echo "Updating database..."
@@ -96,11 +99,13 @@ if [ -n "${WP_LOCALE:-}" ]; then
   wp site switch-language "$WP_LOCALE"
 fi
 
-cat > /app/wp-content/wp-config.php <<EOF
+if [ ! -f "/app/wp-content/wp-config.php" ]; then
+  cat > /app/wp-content/wp-config.php <<EOF
 <?php
 // If you need to set custom configuration, you can place it here.
 // This file will be included by the main wp-config.php after
 // loading environment variables.
 EOF
+fi
 
 echo "✅ WordPress Installation complete"

@@ -80,7 +80,7 @@ class WordPressProvider(PhpProvider):
             extra_ignore=["wp-content"],
             after_install=None,
             after_build=None
-        )
+        ) + ['copy("wp-content", "{}".format(wpcontent_base.path))']
 
     def prepare_steps(self) -> Optional[list[str]]:
         return super().prepare_steps()
@@ -100,7 +100,7 @@ class WordPressProvider(PhpProvider):
         }
 
     def mounts(self) -> list[MountSpec]:
-        return super().mounts()
+        return super().mounts() + [MountSpec("wpcontent_base")]
 
     def volumes(self) -> list[VolumeSpec]:
         return [
@@ -114,6 +114,7 @@ class WordPressProvider(PhpProvider):
     def env(self) -> Optional[Dict[str, str]]:
         return {
             "PAGER": '"cat"',
+            "WPCONTENT_BASE_PATH": '"{}".format(wpcontent_base.serve_path)',
             **(super().env() or {}),
         }
 
