@@ -216,12 +216,18 @@ class Ctx:
         return f"ref:volume:{len(self.volumes) - 1}"
 
     def volume(self, name: str, serve: str) -> Optional[str]:
-        volume = Volume(name=name, serve_path=Path(serve))
+        volume = Volume(
+            name=name,
+            path=self.build_backend.get_volume_path(name),
+            serve_path=Path(serve),
+        )
         ref = self.add_volume(volume)
         return {
             "ref": ref,
             "name": name,
+            "path": str(volume.path.absolute()),
             "serve": str(volume.serve_path),
+            "serve_path": str(volume.serve_path),
         }
 
 

@@ -44,6 +44,9 @@ class LocalBuildBackend:
     def get_artifact_mount_path(self, name: str) -> Path:
         return self.get_mount_path(name)
 
+    def get_volume_path(self, name: str) -> Path:
+        return self.src_dir / ".shipit" / "volumes" / name
+
     def execute_step(self, step: Step, env: Dict[str, str]) -> None:
         build_path = self.workdir
         if isinstance(step, UseStep):
