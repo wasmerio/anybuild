@@ -369,6 +369,10 @@ def auto(
         False,
         help="Run the start command after building.",
     ),
+    after_deploy: bool = typer.Option(
+        False,
+        help="Run the after_deploy command right before start, if available.",
+    ),
     regenerate: bool = typer.Option(
         None,
         help="Regenerate the Shipit file.",
@@ -493,6 +497,7 @@ def auto(
             docker=docker,
             docker_client=docker_client,
             start=start,
+            after_deploy=after_deploy,
             wasmer_token=wasmer_token,
             wasmer_registry=wasmer_registry,
             wasmer_deploy=wasmer_deploy,
@@ -629,6 +634,10 @@ def serve(
         True,
         help="Run the start command after building.",
     ),
+    after_deploy: bool = typer.Option(
+        False,
+        help="Run the after_deploy command right before start, if available.",
+    ),
     wasmer_deploy: Optional[bool] = typer.Option(
         False,
         help="Deploy the project to Wasmer.",
@@ -686,8 +695,12 @@ def serve(
         if not isinstance(runner, WasmerRunner):
             raise RuntimeError("--wasmer-deploy requires the Wasmer runner")
         runner.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
-    elif start:
-        runner.run_serve_command("start")
+    else:
+        if after_deploy and runner.has_serve_command("after_deploy"):
+            runner.run_serve_command("after_deploy")
+
+        if start and runner.has_serve_command("start"):
+            runner.run_serve_command("start")
 
 
 @app.command(name="plan")

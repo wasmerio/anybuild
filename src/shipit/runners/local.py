@@ -130,6 +130,9 @@ class LocalRunner:
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         sh.Command(str(self.prepare_bash_script))(_out=write_stdout, _err=write_stderr)
 
+    def has_serve_command(self, command: str) -> bool:
+        return (self.serve_bin_path / command).is_file()
+
     def run_serve_command(self, command: str) -> None:
         console.print(f"\n[bold]Running {command} command[/bold]")
         command_path = self.serve_bin_path / command

@@ -5,6 +5,7 @@ import json
 import os
 import shlex
 from pathlib import Path
+import tomllib
 from typing import Any, Dict, List, Optional, Set, TypedDict, TYPE_CHECKING
 
 import sh  # type: ignore[import-untyped]
@@ -638,6 +639,21 @@ class WasmerRunner:
                 *extra_args,
             ],
             env=os.environ,
+        )
+
+    def has_serve_command(self, command: str) -> bool:
+        wasmer_toml_path = self.wasmer_dir_path / "wasmer.toml"
+        if not wasmer_toml_path.exists():
+            return False
+
+        manifest = tomllib.loads(wasmer_toml_path.read_text())
+        commands = manifest.get("command", [])
+        if not isinstance(commands, list):
+            return False
+
+        return any(
+            isinstance(item, dict) and item.get("name") == command
+            for item in commands
         )
 
     def run_command(
