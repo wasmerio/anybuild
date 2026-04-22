@@ -432,7 +432,7 @@ class NodeStaticProvider(StaticFileProvider):
                 'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
                 if not self.only_build
                 else None,
-            ],
+            ] + self.build_steps_redirects(),
         )
 
     def prepare_steps(self) -> Optional[list[str]]:

@@ -108,22 +108,24 @@ class StaticFileProvider:
             )
         ]
 
+    def build_steps_redirects(self) -> list[str]:
+        if not self.config.convert_redirects:
+            return []
+        return [
+            'write("{}/%s".format(static_config.path), %s)'
+            % (
+                self.REDIRECTS_CONFIG_FILE,
+                json.dumps(self.redirects_config),
+            )
+        ]
+
     def build_steps(self) -> list[str]:
-        steps = [
+        return [
             'workdir(static_app.path)',
             'copy({}, ".", ignore=[".git"])'.format(
                 json.dumps(self.config.static_dir or ".")
             ),
-        ]
-        if self.redirects_config:
-            steps.append(
-                'write("{}/%s".format(static_config.path), %s)'
-                % (
-                    self.REDIRECTS_CONFIG_FILE,
-                    json.dumps(self.redirects_config),
-                )
-            )
-        return steps
+        ] + self.build_steps_redirects()
 
     def prepare_steps(self) -> Optional[list[str]]:
         return None
@@ -161,7 +163,7 @@ class StaticFileProvider:
         if not self.config.convert_redirects:
             return None
 
-        redirects_path = self.path / self.REDIRECTS_SOURCE
+        redirects_path = self._resolve_redirects_path()
         if not redirects_path.is_file():
             return None
 
@@ -182,6 +184,15 @@ class StaticFileProvider:
         advanced.add("redirects", redirects)
         doc.add("advanced", advanced)
         return doc.as_string()
+
+    def _resolve_redirects_path(self) -> Path:
+        if self.config.static_dir:
+            static_dir_redirects = (
+                self.path / self.config.static_dir / self.REDIRECTS_SOURCE
+            )
+            if static_dir_redirects.is_file():
+                return static_dir_redirects
+        return self.path / self.REDIRECTS_SOURCE
 
     @classmethod
     def _load_redirect_rules(cls, redirects_path: Path) -> list[RedirectRule]:
