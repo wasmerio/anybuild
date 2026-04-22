@@ -93,7 +93,21 @@ class PathStep:
     path: str
 
 
-Step = Union[RunStep, CopyStep, EnvStep, PathStep, UseStep, WorkdirStep]
+@dataclass
+class WriteFileStep:
+    path: str
+    content: str
+
+
+Step = Union[
+    RunStep,
+    CopyStep,
+    EnvStep,
+    PathStep,
+    UseStep,
+    WorkdirStep,
+    WriteFileStep,
+]
 PrepareStep = Union[RunStep]
 
 

@@ -21,6 +21,7 @@ from shipit.shipit_types import (
     RunStep,
     Step,
     UseStep,
+    WriteFileStep,
     WorkdirStep,
 )
 from shipit.ui import console, write_stderr, write_stdout
@@ -210,6 +211,15 @@ RUN curl https://mise.run | sh
             elif isinstance(step, PathStep):
                 docker_file_contents += f"ENV PATH={step.path}:$PATH\n"
                 env["PATH"] = f"{step.path}{os.pathsep}{env.get('PATH', '')}"
+            elif isinstance(step, WriteFileStep):
+                content_base64 = base64.b64encode(
+                    step.content.encode("utf-8")
+                ).decode("utf-8")
+                target_path = Path(step.path)
+                docker_file_contents += (
+                    f"RUN mkdir -p {target_path.parent} "
+                    f"&& echo '{content_base64}' | base64 -d > {target_path}\n"
+                )
             elif isinstance(step, UseStep):
                 for dependency in step.dependencies:
                     if dependency.name == "pie":

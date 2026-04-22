@@ -31,6 +31,7 @@ from shipit.shipit_types import (
     Step,
     UseStep,
     Volume,
+    WriteFileStep,
     WorkdirStep,
 )
 from shipit.ui import console
@@ -195,6 +196,10 @@ class Ctx:
         step = EnvStep(env_vars)
         return self.add_step(step)
 
+    def write(self, path: str, content: str) -> Optional[str]:
+        step = WriteFileStep(path, content)
+        return self.add_step(step)
+
     def add_mount(self, mount: Mount) -> Optional[str]:
         self.mounts.append(mount)
         return f"ref:mount:{len(self.mounts) - 1}"
@@ -245,6 +250,7 @@ def evaluate_shipit(
     glb.set("volume", ctx.volume)
     glb.set("workdir", ctx.workdir)
     glb.set("copy", ctx.copy)
+    glb.set("write", ctx.write)
     glb.set("path", ctx.path)
     glb.set("env", ctx.env)
     glb.set("use", ctx.use)
