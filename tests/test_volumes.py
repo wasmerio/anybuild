@@ -7,6 +7,7 @@ from shipit.cli import Ctx
 from shipit.runners.local import LocalRunner
 from shipit.runners.wasmer import WasmerRunner
 from shipit.shipit_types import Package, Serve, Volume
+from shipit.volumes import build_volumes, load_volume_mappings
 
 
 class DummyBuildBackend:
@@ -47,13 +48,12 @@ def test_ctx_volume_uses_shipit_volume_directory(tmp_path: Path) -> None:
     assert not volume.path.exists()
 
 
-def test_local_runner_links_runtime_volume_to_host_directory(
+def test_build_volumes_links_runtime_volume_to_host_directory(
     tmp_path: Path,
 ) -> None:
     assets_path = tmp_path / "assets"
     assets_path.mkdir()
     build_backend = LocalBuildBackend(tmp_path, assets_path)
-    runner = LocalRunner(build_backend, tmp_path)
 
     target = build_backend.get_artifact_mount_path("app") / "wp-content"
     target.mkdir(parents=True, exist_ok=True)
@@ -73,12 +73,14 @@ def test_local_runner_links_runtime_volume_to_host_directory(
         volumes=[volume],
     )
 
-    runner.build_serve(serve)
+    mappings = build_volumes(tmp_path, serve)
 
     assert volume.path.is_dir()
     assert (volume.path / "seed.txt").read_text() == "hello"
     assert target.is_symlink()
     assert target.resolve(strict=False) == volume.path.resolve()
+    assert mappings == {"wp-content": str(target)}
+    assert load_volume_mappings(tmp_path) == {"wp-content": str(target)}
 
 
 def test_wasmer_runner_mounts_volume_paths_into_wasmer_run(
@@ -105,8 +107,6 @@ def test_wasmer_runner_mounts_volume_paths_into_wasmer_run(
         ],
     )
 
-    runner.build_serve(serve)
-
     captured: dict[str, object] = {}
 
     def fake_run_command(
@@ -120,7 +120,11 @@ def test_wasmer_runner_mounts_volume_paths_into_wasmer_run(
 
     monkeypatch.setattr(runner, "run_command", fake_run_command)
 
-    runner.run_serve_command("start")
+    build_volumes(src_dir, serve)
+    runner.run_serve_command(
+        "start",
+        volume_mappings=load_volume_mappings(src_dir),
+    )
 
     assert volume_path.is_dir()
     assert captured["command"] == "wasmer"

@@ -1,6 +1,6 @@
 import shutil
 from pathlib import Path
-from typing import Dict, List, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 import sh
 from rich import box
@@ -37,30 +37,6 @@ class LocalRunner:
         self.build_prepare(serve)
         self.build_serve(serve)
 
-    def _prepare_volumes(self, serve: Serve) -> None:
-        for volume in serve.volumes or []:
-            source = volume.path.absolute()
-            target = volume.serve_path
-
-            source.mkdir(parents=True, exist_ok=True)
-
-            if target.is_symlink():
-                if target.resolve(strict=False) == source.resolve():
-                    continue
-                target.unlink()
-            elif target.exists():
-                if target.is_dir():
-                    if not any(source.iterdir()):
-                        shutil.copytree(target, source, dirs_exist_ok=True)
-                    shutil.rmtree(target)
-                else:
-                    if not any(source.iterdir()):
-                        shutil.copy2(target, source / target.name)
-                    target.unlink()
-
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.symlink_to(source, target_is_directory=True)
-
     def build_prepare(self, serve: Serve) -> None:
         if not serve.prepare:
             return
@@ -93,7 +69,6 @@ class LocalRunner:
 
     def build_serve(self, serve: Serve) -> None:
         console.print("\n[bold]Building serve[/bold]")
-        self._prepare_volumes(serve)
         shutil.rmtree(self.serve_bin_path.parent, ignore_errors=True)
         self.serve_bin_path.mkdir(parents=True, exist_ok=True)
         runtime_path = self.build_backend.get_runtime_path() or ""
@@ -133,7 +108,11 @@ class LocalRunner:
     def has_serve_command(self, command: str) -> bool:
         return (self.serve_bin_path / command).is_file()
 
-    def run_serve_command(self, command: str) -> None:
+    def run_serve_command(
+        self,
+        command: str,
+        volume_mappings: Optional[Dict[str, str]] = None,
+    ) -> None:
         console.print(f"\n[bold]Running {command} command[/bold]")
         command_path = self.serve_bin_path / command
         sh.Command(str(command_path))(_out=write_stdout, _err=write_stderr)

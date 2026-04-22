@@ -36,6 +36,7 @@ from shipit.shipit_types import (
 )
 from shipit.ui import console
 from shipit.version import version as shipit_version
+from shipit.volumes import build_volumes, load_volume_mappings
 
 app = typer.Typer(invoke_without_command=True)
 
@@ -720,7 +721,7 @@ def serve(
             raise RuntimeError("--wasmer-deploy requires the Wasmer runner")
         runner.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
     elif commands_to_run:
-        run_serve_commands(runner, commands_to_run)
+        run_serve_commands(path, runner, commands_to_run)
 
 
 @app.command(name="plan")
@@ -1073,6 +1074,7 @@ def build(
 
     # Build and serve
     build_backend.build(serve.name, env, serve.mounts or [], build_steps)
+    build_volumes(path, serve)
     runner.build(serve)
     if serve.prepare and not skip_prepare:
         runner.prepare(env, serve.prepare)
@@ -1105,11 +1107,12 @@ def resolve_run_commands(
     return commands
 
 
-def run_serve_commands(runner: Runner, commands: List[str]) -> None:
+def run_serve_commands(path: Path, runner: Runner, commands: List[str]) -> None:
+    volume_mappings = load_volume_mappings(path)
     for command in commands:
         if command in OPTIONAL_RUN_COMMANDS and not runner.has_serve_command(command):
             continue
-        runner.run_serve_command(command)
+        runner.run_serve_command(command, volume_mappings=volume_mappings)
 
 
 def main() -> None:

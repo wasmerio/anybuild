@@ -19,7 +19,9 @@ mkdir -p wp-content/plugins
 mkdir -p wp-content/upgrade
 
 if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
-  cp -R "${WPCONTENT_BASE_PATH}/." /app/wp-content/
+  shopt -s dotglob nullglob
+  cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content
+  shopt -u dotglob nullglob
 fi
 
 echo "Installing WordPress core"

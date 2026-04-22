@@ -20,6 +20,7 @@ from shipit.runners.base import Runner
 from shipit.shipit_types import EnvStep, Package, PrepareStep, Serve, UseStep
 from shipit.ui import console
 from shipit.version import version as shipit_version
+from shipit.volumes import load_volume_mappings, volume_mapdir_args
 
 if TYPE_CHECKING:
     from shipit.shipit_types import Step
@@ -213,7 +214,6 @@ class WasmerRunner:
         self.wasmer_token = token
         self.bin = bin or "wasmer"
         self.provider_config: Any = None
-        self.current_serve: Optional[Serve] = None
 
     def get_serve_mount_path(self, name: str) -> Path:
         if name == "app":
@@ -262,24 +262,8 @@ class WasmerRunner:
         return new_build_steps
 
     def build(self, serve: Serve) -> None:
-        self.current_serve = serve
-        self._ensure_volume_directories(serve)
         self.build_prepare(serve)
         self.build_serve(serve)
-
-    def _ensure_volume_directories(self, serve: Serve) -> None:
-        for volume in serve.volumes or []:
-            volume.path.mkdir(parents=True, exist_ok=True)
-
-    def _volume_mapdir_args(self) -> List[str]:
-        if not self.current_serve:
-            return []
-
-        self._ensure_volume_directories(self.current_serve)
-        return [
-            f"--mapdir={volume.serve_path}:{volume.path.absolute()}"
-            for volume in self.current_serve.volumes or []
-        ]
 
     def build_prepare(self, serve: Serve) -> None:
         if not serve.prepare:
@@ -332,6 +316,7 @@ class WasmerRunner:
         prepare_dir = self.wasmer_dir_path / "prepare"
         self.run_serve_command(
             "bash",
+            volume_mappings=load_volume_mappings(self.src_dir),
             extra_args=[
                 f"--mapdir=/prepare:{prepare_dir}",
                 "--",
@@ -351,8 +336,6 @@ class WasmerRunner:
         return None
 
     def build_serve(self, serve: Serve) -> None:
-        self.current_serve = serve
-        self._ensure_volume_directories(serve)
         doc = document()
         doc.add(comment(f"Wasmer manifest generated with Shipit v{shipit_version}"))
         package = table()
@@ -620,7 +603,10 @@ class WasmerRunner:
         (self.wasmer_dir_path / "app.yaml").write_text(app_yaml)
 
     def run_serve_command(
-        self, command: str, extra_args: Optional[List[str]] = None
+        self,
+        command: str,
+        volume_mappings: Optional[Dict[str, str]] = None,
+        extra_args: Optional[List[str]] = None,
     ) -> None:
         console.print(f"\n[bold]Serving site[/bold]: running {command} command")
         extra_args = extra_args or []
@@ -635,7 +621,10 @@ class WasmerRunner:
                 "--net",
                 "--forward-host-env",
                 f"--command={command}",
-                *self._volume_mapdir_args(),
+                *volume_mapdir_args(
+                    self.build_backend,
+                    volume_mappings or {},
+                ),
                 *extra_args,
             ],
             env=os.environ,
