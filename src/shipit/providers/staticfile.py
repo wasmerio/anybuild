@@ -109,13 +109,14 @@ class StaticFileProvider:
         ]
 
     def build_steps_redirects(self) -> list[str]:
-        if not self.config.convert_redirects:
+        redirects_config = self.redirects_config
+        if not redirects_config:
             return []
         return [
             'write("{}/%s".format(static_config.path), %s)'
             % (
                 self.REDIRECTS_CONFIG_FILE,
-                json.dumps(self.redirects_config),
+                json.dumps(redirects_config),
             )
         ]
 
