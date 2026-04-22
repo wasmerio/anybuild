@@ -4,11 +4,11 @@ import hashlib
 import json
 import os
 import shlex
+import subprocess
 from pathlib import Path
 import tomllib
 from typing import Any, Dict, List, Optional, Set, TypedDict, TYPE_CHECKING
 
-import sh  # type: ignore[import-untyped]
 import yaml
 from rich import box
 from rich.panel import Panel
@@ -18,7 +18,7 @@ from tomlkit import array, aot, comment, document, nl, string, table
 from shipit.builders.base import BuildBackend
 from shipit.runners.base import Runner
 from shipit.shipit_types import EnvStep, Package, PrepareStep, Serve, UseStep
-from shipit.ui import console, write_stderr, write_stdout
+from shipit.ui import console
 from shipit.version import version as shipit_version
 
 if TYPE_CHECKING:
@@ -662,11 +662,10 @@ class WasmerRunner:
         extra_args: Optional[List[str]] | None = None,
         env: Optional[Dict[str, str]] = None,
     ) -> Any:
-        sh.Command(command)(
-            *(extra_args or []),
-            _out=write_stdout,
-            _err=write_stderr,
-            _env=env or os.environ,
+        return subprocess.run(
+            [command, *(extra_args or [])],
+            check=True,
+            env=env or os.environ,
         )
 
     def _update_app_yaml(
