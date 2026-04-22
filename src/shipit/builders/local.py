@@ -17,6 +17,7 @@ from shipit.shipit_types import (
     RunStep,
     Step,
     UseStep,
+    WriteFileStep,
     WorkdirStep,
 )
 from shipit.ui import console, write_stderr, write_stdout
@@ -135,6 +136,13 @@ class LocalBuildBackend:
             console.print(f"[bold]Add {step.path}[/bold] to PATH")
             fullpath = step.path
             env["PATH"] = f"{fullpath}{os.pathsep}{env['PATH']}"
+        elif isinstance(step, WriteFileStep):
+            target = Path(step.path)
+            if not target.is_absolute():
+                target = build_path / target
+            console.print(f"[bold]Write file {target}[/bold]")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(step.content)
         else:
             raise Exception(f"Unknown step type: {type(step)}")
 

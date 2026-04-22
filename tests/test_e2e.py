@@ -27,8 +27,11 @@ class BuildMode(Enum):
 @dataclass(frozen=True)
 class HTTPRequest:
     path: str
-    body_match: str
+    body_match: str | None = None
     method: str = "GET"
+    expected_status: int | None = None
+    location_match: str | None = None
+    follow_redirects: bool = True
 
 
 class E2ECase(NamedTuple):
@@ -39,6 +42,7 @@ class E2ECase(NamedTuple):
     extra_env: dict[str, str] | None = None
     expected_memory_limit: str | None = None
     expect_no_memory_limit: bool = False
+    build_modes: tuple[BuildMode, ...] | None = None
 
     def __str__(self):
         return self.path
@@ -126,6 +130,24 @@ class E2ECase(NamedTuple):
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Hello from static site!")],
         ),
+        # Staticfile provider redirect support via _redirects (Wasmer only).
+        E2ECase(
+            path="examples/staticfile-redirects",
+            serve_pattern=r"server is listening on",
+            http=[
+                HTTPRequest(
+                    path="/docs/getting-started",
+                    expected_status=301,
+                    location_match=r"^/guides/getting-started/$",
+                    follow_redirects=False,
+                ),
+                HTTPRequest(
+                    path="/guides/getting-started/",
+                    body_match=r"Redirect target page",
+                ),
+            ],
+            build_modes=(BuildMode.Wasmer,),
+        ),
         # Hugo static site (built via Hugo, served with static-web-server)
         E2ECase(
             path="examples/hugo",
@@ -212,6 +234,8 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
         build_mode != BuildMode.Wasmer
     ):
         pytest.skip("phpix memory-cap checks run in Wasmer mode only")
+    if case.build_modes and build_mode not in case.build_modes:
+        pytest.skip("case is not enabled for this build mode")
 
     repo_root = Path(__file__).resolve().parents[1]
 
@@ -335,19 +359,20 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
                         "--- Captured output end ---"
                     )
             for req in case.http:
-                ok = await _wait_for_http_contains(
+                ok = await _wait_for_http_response(
                     host="localhost",
                     port=port,
-                    method=req.method,
-                    path=req.path,
-                    pattern=req.body_match,
+                    request=req,
                     timeout=20.0,
                 )
                 if not ok:
                     full_output = "".join(output_lines)
                     pytest.fail(
                         "Server did not return expected HTTP content.\n\n"
-                        f"Expected body regex: '{req.body_match}' at path '{req.path}'\n\n"
+                        f"Request path: '{req.path}'\n"
+                        f"Expected status: {req.expected_status}\n"
+                        f"Expected location regex: {req.location_match!r}\n"
+                        f"Expected body regex: {req.body_match!r}\n\n"
                         f"--- Captured output start ---\n{full_output}\n"
                         "--- Captured output end ---"
                     )
@@ -395,15 +420,10 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     assert serve_re.search(full_output), "Serve banner regex not found in output"
 
 
-async def _wait_for_http_contains(
-    host: str,
-    port: int,
-    method: str = "GET",
-    path: str = "/",
-    pattern: str = "",
-    timeout: float = 15.0,
+async def _wait_for_http_response(
+    host: str, port: int, request: HTTPRequest, timeout: float = 15.0
 ) -> bool:
-    url = f"http://{host}:{port}{path}"
+    url = f"http://{host}:{port}{request.path}"
     loop = asyncio.get_running_loop()
     end = loop.time() + timeout
     async with aiohttp.ClientSession(
@@ -411,9 +431,31 @@ async def _wait_for_http_contains(
     ) as session:
         while loop.time() < end:
             try:
-                async with session.request(method, url) as resp:
+                async with session.request(
+                    request.method,
+                    url,
+                    allow_redirects=request.follow_redirects,
+                ) as resp:
                     text = await resp.text()
-                    if re.search(pattern, text):
+                    if request.expected_status is not None:
+                        if resp.status != request.expected_status:
+                            await asyncio.sleep(0.2)
+                            continue
+                    if request.location_match is not None:
+                        location = resp.headers.get("Location", "")
+                        if not re.search(request.location_match, location):
+                            await asyncio.sleep(0.2)
+                            continue
+                    if request.body_match is not None and not re.search(
+                        request.body_match, text
+                    ):
+                        await asyncio.sleep(0.2)
+                        continue
+                    if (
+                        request.expected_status is not None
+                        or request.location_match is not None
+                        or request.body_match is not None
+                    ):
                         return True
             except Exception:
                 # Not ready yet; retry shortly.

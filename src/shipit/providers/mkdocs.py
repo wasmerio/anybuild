@@ -25,7 +25,7 @@ class MkdocsConfig(PythonConfig, StaticFileConfig):
 
 class MkdocsProvider(StaticFileProvider):
     def __init__(self, path: Path, config: MkdocsConfig):
-        self.path = path
+        super().__init__(path, config)
         self.python_provider = PythonProvider(path, config, only_build=True)
 
     @classmethod
