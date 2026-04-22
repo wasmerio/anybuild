@@ -72,10 +72,6 @@ function get_env_var(string $name, string $default = '')
         return env_var_deserialize($value);
     }
 
-    if ($default === '') {
-        error_log("Warning: env var " . $name . " was not provided.");
-    }
-
     return $default;
 }
 

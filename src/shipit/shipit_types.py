@@ -13,6 +13,7 @@ class Mount:
 @dataclass
 class Volume:
     name: str
+    path: Path
     serve_path: Path
 
 

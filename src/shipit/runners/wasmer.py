@@ -4,10 +4,11 @@ import hashlib
 import json
 import os
 import shlex
+import subprocess
 from pathlib import Path
+import tomllib
 from typing import Any, Dict, List, Optional, Set, TypedDict, TYPE_CHECKING
 
-import sh  # type: ignore[import-untyped]
 import yaml
 from rich import box
 from rich.panel import Panel
@@ -17,7 +18,7 @@ from tomlkit import array, aot, comment, document, nl, string, table
 from shipit.builders.base import BuildBackend
 from shipit.runners.base import Runner
 from shipit.shipit_types import EnvStep, Package, PrepareStep, Serve, UseStep
-from shipit.ui import console, write_stderr, write_stdout
+from shipit.ui import console
 from shipit.version import version as shipit_version
 
 if TYPE_CHECKING:
@@ -147,28 +148,28 @@ class WasmerRunner:
         },
         "phpix": {
             "dependencies": {
-                "latest": "wasmer/phpix-32@=0.1.13803",
-                "8.3": "wasmer/phpix-32@=0.1.13803",
-                "8.3.29": "wasmer/phpix-32@=0.1.13803",
-                "8.2": "wasmer/phpix-32@=0.1.13803",
-                "8.1": "wasmer/phpix-32@=0.1.13803",
+                "latest": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
+                "8.3": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
+                "8.3.29": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
+                "8.2": "phpix/phpix-82-32bit@=0.2.0-alpha.3",
+                "8.1": "phpix/phpix-81-32bit@=0.2.0-alpha.3",
                 "7.4": "wasmer/phpix-32@=0.1.13803",
             },
             "architecture_dependencies": {
                 "64-bit": {
-                    "latest": "wasmer/phpix-64@=0.1.13803",
-                    "8.3": "wasmer/phpix-64@=0.1.13803",
-                    "8.3.29": "wasmer/phpix-64@=0.1.13803",
-                    "8.2": "wasmer/phpix-64@=0.1.13803",
-                    "8.1": "wasmer/phpix-64@=0.1.13803",
+                    "latest": "phpix/phpix-83-64bit@=0.2.0-alpha.3",
+                    "8.3": "phpix/phpix-83-64bit@=0.2.0-alpha.3",
+                    "8.3.29": "phpix/phpix-83-64bit@=0.2.0-alpha.3",
+                    "8.2": "phpix/phpix-82-64bit@=0.2.0-alpha.3",
+                    "8.1": "phpix/phpix-81-64bit@=0.2.0-alpha.3",
                     "7.4": "wasmer/phpix-64@=0.1.13803",
                 },
                 "32-bit": {
-                    "latest": "wasmer/phpix-32@=0.1.13803",
-                    "8.3": "wasmer/phpix-32@=0.1.13803",
-                    "8.3.29": "wasmer/phpix-32@=0.1.13803",
-                    "8.2": "wasmer/phpix-32@=0.1.13803",
-                    "8.1": "wasmer/phpix-32@=0.1.13803",
+                    "latest": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
+                    "8.3": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
+                    "8.3.29": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
+                    "8.2": "phpix/phpix-82-32bit@=0.2.0-alpha.3",
+                    "8.1": "phpix/phpix-81-32bit@=0.2.0-alpha.3",
                     "7.4": "wasmer/phpix-32@=0.1.13803",
                 },
             },
@@ -212,6 +213,7 @@ class WasmerRunner:
         self.wasmer_token = token
         self.bin = bin or "wasmer"
         self.provider_config: Any = None
+        self.current_serve: Optional[Serve] = None
 
     def get_serve_mount_path(self, name: str) -> Path:
         if name == "app":
@@ -260,8 +262,24 @@ class WasmerRunner:
         return new_build_steps
 
     def build(self, serve: Serve) -> None:
+        self.current_serve = serve
+        self._ensure_volume_directories(serve)
         self.build_prepare(serve)
         self.build_serve(serve)
+
+    def _ensure_volume_directories(self, serve: Serve) -> None:
+        for volume in serve.volumes or []:
+            volume.path.mkdir(parents=True, exist_ok=True)
+
+    def _volume_mapdir_args(self) -> List[str]:
+        if not self.current_serve:
+            return []
+
+        self._ensure_volume_directories(self.current_serve)
+        return [
+            f"--mapdir={volume.serve_path}:{volume.path.absolute()}"
+            for volume in self.current_serve.volumes or []
+        ]
 
     def build_prepare(self, serve: Serve) -> None:
         if not serve.prepare:
@@ -333,6 +351,8 @@ class WasmerRunner:
         return None
 
     def build_serve(self, serve: Serve) -> None:
+        self.current_serve = serve
+        self._ensure_volume_directories(serve)
         doc = document()
         doc.add(comment(f"Wasmer manifest generated with Shipit v{shipit_version}"))
         package = table()
@@ -615,9 +635,25 @@ class WasmerRunner:
                 "--net",
                 "--forward-host-env",
                 f"--command={command}",
+                *self._volume_mapdir_args(),
                 *extra_args,
             ],
             env=os.environ,
+        )
+
+    def has_serve_command(self, command: str) -> bool:
+        wasmer_toml_path = self.wasmer_dir_path / "wasmer.toml"
+        if not wasmer_toml_path.exists():
+            return False
+
+        manifest = tomllib.loads(wasmer_toml_path.read_text())
+        commands = manifest.get("command", [])
+        if not isinstance(commands, list):
+            return False
+
+        return any(
+            isinstance(item, dict) and item.get("name") == command
+            for item in commands
         )
 
     def run_command(
@@ -626,11 +662,10 @@ class WasmerRunner:
         extra_args: Optional[List[str]] | None = None,
         env: Optional[Dict[str, str]] = None,
     ) -> Any:
-        sh.Command(command)(
-            *(extra_args or []),
-            _out=write_stdout,
-            _err=write_stderr,
-            _env=env or os.environ,
+        return subprocess.run(
+            [command, *(extra_args or [])],
+            check=True,
+            env=env or os.environ,
         )
 
     def _update_app_yaml(

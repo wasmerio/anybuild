@@ -40,6 +40,7 @@ app = typer.Typer(invoke_without_command=True)
 
 DIR_PATH = Path(__file__).resolve().parent
 ASSETS_PATH = DIR_PATH / "assets"
+OPTIONAL_RUN_COMMANDS = {"start", "after_deploy"}
 
 
 @dataclass
@@ -216,12 +217,18 @@ class Ctx:
         return f"ref:volume:{len(self.volumes) - 1}"
 
     def volume(self, name: str, serve: str) -> Optional[str]:
-        volume = Volume(name=name, serve_path=Path(serve))
+        volume = Volume(
+            name=name,
+            path=self.build_backend.get_volume_path(name),
+            serve_path=Path(serve),
+        )
         ref = self.add_volume(volume)
         return {
             "ref": ref,
             "name": name,
+            "path": str(volume.path.absolute()),
             "serve": str(volume.serve_path),
+            "serve_path": str(volume.serve_path),
         }
 
 
@@ -359,9 +366,18 @@ def auto(
         False,
         help="Run the prepare command after building (defaults to True).",
     ),
+    run_commands: Optional[List[str]] = typer.Option(
+        None,
+        "--run",
+        help="Run one or more serve commands after building. Can be passed multiple times.",
+    ),
     start: bool = typer.Option(
         False,
-        help="Run the start command after building.",
+        help="Equivalent to `--run=start`.",
+    ),
+    after_deploy: bool = typer.Option(
+        False,
+        help="Equivalent to `--run=after_deploy`.",
     ),
     regenerate: bool = typer.Option(
         None,
@@ -479,14 +495,16 @@ def auto(
         provider=provider,
         config=config,
     )
-    if start or wasmer_deploy or wasmer_deploy_config:
+    if run_commands or start or after_deploy or wasmer_deploy or wasmer_deploy_config:
         serve(
             path,
             wasmer=wasmer,
             wasmer_bin=wasmer_bin,
             docker=docker,
             docker_client=docker_client,
+            run_commands=run_commands,
             start=start,
+            after_deploy=after_deploy,
             wasmer_token=wasmer_token,
             wasmer_registry=wasmer_registry,
             wasmer_deploy=wasmer_deploy,
@@ -619,9 +637,18 @@ def serve(
         None,
         help="Additional options to pass to the Docker client.",
     ),
+    run_commands: Optional[List[str]] = typer.Option(
+        None,
+        "--run",
+        help="Run one or more serve commands. Can be passed multiple times.",
+    ),
     start: Optional[bool] = typer.Option(
         True,
-        help="Run the start command after building.",
+        help="Equivalent to `--run=start`.",
+    ),
+    after_deploy: bool = typer.Option(
+        False,
+        help="Equivalent to `--run=after_deploy`.",
     ),
     wasmer_deploy: Optional[bool] = typer.Option(
         False,
@@ -672,6 +699,12 @@ def serve(
     else:
         runner = LocalRunner(build_backend, path)
 
+    commands_to_run = resolve_run_commands(
+        run_commands=run_commands,
+        start=bool(start),
+        after_deploy=after_deploy,
+    )
+
     if wasmer_deploy_config:
         if not isinstance(runner, WasmerRunner):
             raise RuntimeError("--wasmer-deploy-config requires the Wasmer runner")
@@ -680,8 +713,8 @@ def serve(
         if not isinstance(runner, WasmerRunner):
             raise RuntimeError("--wasmer-deploy requires the Wasmer runner")
         runner.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
-    elif start:
-        runner.run_serve_command("start")
+    elif commands_to_run:
+        run_serve_commands(runner, commands_to_run)
 
 
 @app.command(name="plan")
@@ -1051,6 +1084,26 @@ def get_shipit_path(path: Path, shipit_path: Optional[Path] = None) -> Path:
             f"Shipit file not found at {shipit_path}. Run `shipit generate {path} -o {shipit_path}` to create it."
         )
     return shipit_path
+
+
+def resolve_run_commands(
+    run_commands: Optional[List[str]],
+    start: bool,
+    after_deploy: bool,
+) -> List[str]:
+    commands = list(run_commands or [])
+    if after_deploy and "after_deploy" not in commands:
+        commands.append("after_deploy")
+    if start and "start" not in commands:
+        commands.append("start")
+    return commands
+
+
+def run_serve_commands(runner: Runner, commands: List[str]) -> None:
+    for command in commands:
+        if command in OPTIONAL_RUN_COMMANDS and not runner.has_serve_command(command):
+            continue
+        runner.run_serve_command(command)
 
 
 def main() -> None:

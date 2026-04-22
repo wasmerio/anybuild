@@ -3,6 +3,7 @@ bash = dep("bash")
 
 app = mount("app")
 assets = mount("assets")
+wpcontent_base = mount("wpcontent_base")
 
 wp_content = volume("wp-content", "{}/wp-content/".format(app.serve_path))
 
@@ -27,11 +28,13 @@ serve(
     copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets"),
     workdir(app.path),
     copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
-    copy(".", ignore=[".git", "wp-content"])
+    copy(".", ignore=[".git", "wp-content"]),
+    copy("wp-content", "{}".format(wpcontent_base.path))
   ],
   deps=[php, bash],
   env = {
     "PAGER": "cat",
+    "WPCONTENT_BASE_PATH": "{}".format(wpcontent_base.serve_path),
     "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path)
   },
   commands = {
@@ -44,7 +47,8 @@ serve(
   ],
   mounts=[
     app,
-    assets
+    assets,
+    wpcontent_base
   ],
   volumes=[
     wp_content

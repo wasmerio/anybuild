@@ -75,6 +75,9 @@ class DockerBuildBackend:
     def get_artifact_mount_path(self, name: str) -> Path:
         return self.docker_out_path / self.get_mount_path(name)
 
+    def get_volume_path(self, name: str) -> Path:
+        return self.src_dir / ".shipit" / "volumes" / name
+
     @property
     def is_depot(self) -> bool:
         return self.docker_client == "depot"

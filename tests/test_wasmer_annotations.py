@@ -91,3 +91,28 @@ def test_wasmer_app_yaml_adds_python_annotations(tmp_path: Path) -> None:
         annotations["shipitcli.com/config"]["python_extra_index_url"]
         == "https://pythonindex.wasix.org/simple"
     )
+
+
+def test_wasmer_run_command_inherits_stdio(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir, bin="wasmer")
+
+    captured: dict[str, object] = {}
+
+    def fake_run(*args, **kwargs) -> None:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr("shipit.runners.wasmer.subprocess.run", fake_run)
+
+    runner.run_command("wasmer", ["run", "."], env={"SHIPIT": "1"})
+
+    assert captured["args"] == (["wasmer", "run", "."],)
+    assert captured["kwargs"] == {
+        "check": True,
+        "env": {"SHIPIT": "1"},
+    }
