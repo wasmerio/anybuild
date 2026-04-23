@@ -27,7 +27,7 @@ class PhpConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     framework: Optional[PhpFramework] = None
-    phpix: bool = False
+    phpix: bool = True
     use_composer: bool = False
     composer_build_script: Optional[str] = None
     php_version: Optional[str] = "8.3.29"
