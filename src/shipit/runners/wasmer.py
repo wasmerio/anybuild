@@ -223,6 +223,7 @@ class WasmerRunner:
 
     def prepare_config(self, provider_config: Any) -> Any:
         from shipit.providers.python import PythonConfig
+        from shipit.providers.php import PhpConfig
 
         if isinstance(provider_config, PythonConfig):
             provider_config.python_extra_index_url = (
@@ -230,6 +231,8 @@ class WasmerRunner:
             )
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
+        elif isinstance(provider_config, PhpConfig):
+            provider_config.phpix = True
         self.provider_config = provider_config
         return provider_config
 

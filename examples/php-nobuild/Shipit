@@ -1,4 +1,4 @@
-phpix = dep("phpix", config.php_version, architecture=config.php_architecture)
+php = dep("php", config.php_version, architecture=config.php_architecture)
 
 app = mount("app")
 assets = mount("assets")
@@ -8,18 +8,17 @@ serve(
   provider="php",
   cwd=app.serve_path,
   build=[
-    use(phpix),
+    use(php),
     workdir(app.path),
     copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
     copy(".", ignore=[".git"])
   ],
-  deps=[phpix],
+  deps=[php],
   env = {
-    "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path),
-    "PHPIX_PHP_THREADS": "4"
+    "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path)
   },
   commands = {
-    "start": "phpix -S localhost:{} -t {}".format(PORT, app.serve_path)
+    "start": "php -S localhost:{} -t {}".format(PORT, app.serve_path)
   },
   mounts=[
     app,
