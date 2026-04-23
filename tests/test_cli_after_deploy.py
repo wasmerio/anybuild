@@ -113,6 +113,22 @@ def test_run_runs_custom_commands_without_existence_checks(
     assert FakeRunner.instances[-1].volume_mappings == [{}, {}]
 
 
+def test_run_without_commands_prints_to_stderr(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    FakeRunner.instances.clear()
+    monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
+    monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
+
+    result = runner.invoke(cli.app, ["run", str(tmp_path), "--no-start"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == ""
+    assert "No commands specified" in result.stderr
+    assert not FakeRunner.instances[-1].calls
+
+
 def test_run_loads_volume_mappings_from_json(
     tmp_path: Path,
     monkeypatch,

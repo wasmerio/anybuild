@@ -1,7 +1,7 @@
 import sys
 from rich.console import Console
 
-console = Console()
+console = Console(stderr=True)
 
 
 def write_stdout(line: str) -> None:
