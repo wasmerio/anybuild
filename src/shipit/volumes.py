@@ -49,6 +49,21 @@ def load_volume_mappings(src_dir: Path) -> Dict[str, str]:
     }
 
 
+def parse_cli_volume_mappings(volume_specs: list[str] | None) -> Dict[str, str]:
+    mappings: Dict[str, str] = {}
+    for spec in volume_specs or []:
+        name, guest_path = _parse_volume_spec(spec)
+        mappings[name] = guest_path
+    return mappings
+
+
+def merge_volume_mappings(*mapping_sets: Dict[str, str]) -> Dict[str, str]:
+    merged: Dict[str, str] = {}
+    for mappings in mapping_sets:
+        merged.update(mappings)
+    return merged
+
+
 def volume_mapdir_args(
     build_backend: BuildBackend,
     volume_mappings: Dict[str, str],
@@ -59,6 +74,28 @@ def volume_mapdir_args(
         host_path.mkdir(parents=True, exist_ok=True)
         args.append(f"--volume={host_path}:{guest_path}")
     return args
+
+
+def _parse_volume_spec(spec: str) -> tuple[str, str]:
+    if ":" not in spec:
+        raise ValueError(
+            f"Invalid volume mapping '{spec}'. Expected NAME:/guest/path"
+        )
+
+    name, guest_path = spec.split(":", 1)
+    if not name:
+        raise ValueError(
+            f"Invalid volume mapping '{spec}'. Volume name cannot be empty"
+        )
+    if not guest_path:
+        raise ValueError(
+            f"Invalid volume mapping '{spec}'. Guest path cannot be empty"
+        )
+    if not Path(guest_path).is_absolute():
+        raise ValueError(
+            f"Invalid volume mapping '{spec}'. Guest path must be absolute"
+        )
+    return name, guest_path
 
 
 def _should_link_local_volume(src_dir: Path, volume: Volume) -> bool:

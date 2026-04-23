@@ -113,6 +113,42 @@ def test_serve_loads_volume_mappings_from_json(
     ]
 
 
+def test_serve_merges_cli_volume_mappings(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    FakeRunner.instances.clear()
+    FakeRunner.available_commands = {"start"}
+    mappings_dir = tmp_path / ".shipit" / "volumes"
+    mappings_dir.mkdir(parents=True)
+    (mappings_dir / "mappings.json").write_text(
+        '{\n  "wp-content": "/app/wp-content"\n}\n'
+    )
+    monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
+    monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "serve",
+            str(tmp_path),
+            "--volume",
+            "uploads:/app/uploads",
+            "--volume",
+            "wp-content:/app/override",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert FakeRunner.instances[-1].calls == ["start"]
+    assert FakeRunner.instances[-1].volume_mappings == [
+        {
+            "wp-content": "/app/override",
+            "uploads": "/app/uploads",
+        }
+    ]
+
+
 def test_auto_passes_after_deploy_to_serve(
     tmp_path: Path,
     monkeypatch,
@@ -157,3 +193,37 @@ def test_auto_passes_run_commands_to_serve(
     assert result.exit_code == 0, result.output
     assert calls
     assert calls[0]["run_commands"] == ["prepare-db", "warm-cache"]
+
+
+def test_auto_passes_volume_specs_to_serve(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+    (tmp_path / "Shipit").write_text("")
+
+    monkeypatch.setattr(cli, "build", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        cli,
+        "serve",
+        lambda *args, **kwargs: calls.append(kwargs),
+    )
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "auto",
+            str(tmp_path),
+            "--volume",
+            "uploads:/app/uploads",
+            "--volume",
+            "cache:/app/cache",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls
+    assert calls[0]["volume_specs"] == [
+        "uploads:/app/uploads",
+        "cache:/app/cache",
+    ]

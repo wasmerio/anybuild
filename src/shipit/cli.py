@@ -36,7 +36,12 @@ from shipit.shipit_types import (
 )
 from shipit.ui import console
 from shipit.version import version as shipit_version
-from shipit.volumes import build_volumes, load_volume_mappings
+from shipit.volumes import (
+    build_volumes,
+    load_volume_mappings,
+    merge_volume_mappings,
+    parse_cli_volume_mappings,
+)
 
 app = typer.Typer(invoke_without_command=True)
 
@@ -378,6 +383,11 @@ def auto(
         "--run",
         help="Run one or more serve commands after building. Can be passed multiple times.",
     ),
+    volume_specs: Optional[List[str]] = typer.Option(
+        None,
+        "--volume",
+        help="Attach one or more volumes as NAME:/guest/path. Can be passed multiple times.",
+    ),
     start: bool = typer.Option(
         False,
         help="Equivalent to `--run=start`.",
@@ -502,7 +512,14 @@ def auto(
         provider=provider,
         config=config,
     )
-    if run_commands or start or after_deploy or wasmer_deploy or wasmer_deploy_config:
+    if (
+        run_commands
+        or volume_specs
+        or start
+        or after_deploy
+        or wasmer_deploy
+        or wasmer_deploy_config
+    ):
         serve(
             path,
             wasmer=wasmer,
@@ -510,6 +527,7 @@ def auto(
             docker=docker,
             docker_client=docker_client,
             run_commands=run_commands,
+            volume_specs=volume_specs,
             start=start,
             after_deploy=after_deploy,
             wasmer_token=wasmer_token,
@@ -649,6 +667,11 @@ def serve(
         "--run",
         help="Run one or more serve commands. Can be passed multiple times.",
     ),
+    volume_specs: Optional[List[str]] = typer.Option(
+        None,
+        "--volume",
+        help="Attach one or more volumes as NAME:/guest/path. Can be passed multiple times.",
+    ),
     start: Optional[bool] = typer.Option(
         True,
         help="Equivalent to `--run=start`.",
@@ -721,7 +744,7 @@ def serve(
             raise RuntimeError("--wasmer-deploy requires the Wasmer runner")
         runner.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
     elif commands_to_run:
-        run_serve_commands(path, runner, commands_to_run)
+        run_serve_commands(path, runner, commands_to_run, volume_specs=volume_specs)
 
 
 @app.command(name="plan")
@@ -1108,8 +1131,16 @@ def resolve_run_commands(
     return commands
 
 
-def run_serve_commands(path: Path, runner: Runner, commands: List[str]) -> None:
-    volume_mappings = load_volume_mappings(path)
+def run_serve_commands(
+    path: Path,
+    runner: Runner,
+    commands: List[str],
+    volume_specs: Optional[List[str]] = None,
+) -> None:
+    volume_mappings = merge_volume_mappings(
+        load_volume_mappings(path),
+        parse_cli_volume_mappings(volume_specs),
+    )
     for command in commands:
         if command in OPTIONAL_RUN_COMMANDS and not runner.has_serve_command(command):
             continue
