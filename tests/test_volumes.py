@@ -83,7 +83,7 @@ def test_build_volumes_links_runtime_volume_to_host_directory(
     assert load_volume_mappings(tmp_path) == {"wp-content": str(target)}
 
 
-def test_wasmer_runner_mounts_volume_paths_into_wasmer_run(
+def test_wasmer_runner_passes_volume_paths_into_wasmer_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -129,6 +129,6 @@ def test_wasmer_runner_mounts_volume_paths_into_wasmer_run(
     assert volume_path.is_dir()
     assert captured["command"] == "wasmer"
     assert (
-        f"--mapdir=/app/wp-content:{volume_path.absolute()}"
+        f"--volume={volume_path.absolute()}:/app/wp-content"
         in captured["extra_args"]
     )
