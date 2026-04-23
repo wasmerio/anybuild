@@ -36,7 +36,7 @@ def serialize_provider_config(provider_config: Any) -> Dict[str, Any]:
     if provider_config is None:
         return {}
     if hasattr(provider_config, "model_dump"):
-        return provider_config.model_dump(mode="json", exclude_defaults=True)
+        return provider_config.model_dump(mode="json", exclude_none=True)
     if isinstance(provider_config, dict):
         return provider_config
     return {}

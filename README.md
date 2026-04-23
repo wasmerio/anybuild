@@ -70,8 +70,9 @@ Wasmer, `--docker` to use Docker builds.
 uvx shipit-cli run
 ```
 
-Execute the start command for the project. Combine with `--wasmer` for
-WebAssembly execution.
+Run explicit commands for the project. Use `--start` to run the start
+command, or pass one or more `--command` values. Combine with `--wasmer`
+for WebAssembly execution.
 
 ### `deploy`
 

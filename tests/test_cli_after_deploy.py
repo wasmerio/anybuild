@@ -61,7 +61,10 @@ def test_run_runs_after_deploy_before_start(
     monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
     monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
 
-    result = runner.invoke(cli.app, ["run", str(tmp_path), "--after-deploy"])
+    result = runner.invoke(
+        cli.app,
+        ["run", str(tmp_path), "--start", "--after-deploy"],
+    )
 
     assert result.exit_code == 0, result.output
     assert FakeRunner.instances[-1].calls == ["after_deploy", "start"]
@@ -78,7 +81,10 @@ def test_run_skips_after_deploy_when_missing(
     monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
     monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
 
-    result = runner.invoke(cli.app, ["run", str(tmp_path), "--after-deploy"])
+    result = runner.invoke(
+        cli.app,
+        ["run", str(tmp_path), "--start", "--after-deploy"],
+    )
 
     assert result.exit_code == 0, result.output
     assert FakeRunner.instances[-1].calls == ["start"]
@@ -121,7 +127,7 @@ def test_run_without_commands_prints_to_stderr(
     monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
     monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
 
-    result = runner.invoke(cli.app, ["run", str(tmp_path), "--no-start"])
+    result = runner.invoke(cli.app, ["run", str(tmp_path)])
 
     assert result.exit_code == 0, result.output
     assert result.stdout == ""
@@ -143,7 +149,7 @@ def test_run_loads_volume_mappings_from_json(
     monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
     monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
 
-    result = runner.invoke(cli.app, ["run", str(tmp_path)])
+    result = runner.invoke(cli.app, ["run", str(tmp_path), "--start"])
 
     assert result.exit_code == 0, result.output
     assert FakeRunner.instances[-1].calls == ["start"]
@@ -171,6 +177,7 @@ def test_run_merges_cli_volume_mappings(
         [
             "run",
             str(tmp_path),
+            "--start",
             "--volume",
             "uploads:/app/uploads",
             "--volume",
@@ -202,6 +209,7 @@ def test_run_passes_wasmer_registry_to_runner(
         [
             "run",
             str(tmp_path),
+            "--start",
             "--wasmer",
             "--wasmer-registry",
             "wasmer.io",

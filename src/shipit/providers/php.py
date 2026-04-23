@@ -141,6 +141,10 @@ class PhpProvider:
         )
         if not config.framework:
             config.framework = cls.detect_framework(path, composer_config)
+        if config.framework == PhpFramework.Drupal:
+            # Drupal relies on Apache-style rewrite behavior that the built-in
+            # php server handles more predictably than phpix by default.
+            config.phpix = False
         return config
 
     @classmethod
