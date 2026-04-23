@@ -1077,6 +1077,7 @@ def build(
     build_volumes(path, serve)
     runner.build(serve)
     if serve.prepare and not skip_prepare:
+        console.print("\n[bold]Running prepare step[/bold]")
         runner.prepare(env, serve.prepare)
 
 
@@ -1112,8 +1113,8 @@ def run_serve_commands(path: Path, runner: Runner, commands: List[str]) -> None:
     for command in commands:
         if command in OPTIONAL_RUN_COMMANDS and not runner.has_serve_command(command):
             continue
+        console.print(f"\nRunning command [bold]{command}[/bold]")
         runner.run_serve_command(command, volume_mappings=volume_mappings)
-
 
 def main() -> None:
     args = sys.argv[1:]

@@ -113,6 +113,5 @@ class LocalRunner:
         command: str,
         volume_mappings: Optional[Dict[str, str]] = None,
     ) -> None:
-        console.print(f"\n[bold]Running {command} command[/bold]")
         command_path = self.serve_bin_path / command
         sh.Command(str(command_path))(_out=write_stdout, _err=write_stderr)

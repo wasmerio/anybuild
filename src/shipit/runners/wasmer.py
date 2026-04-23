@@ -315,13 +315,11 @@ class WasmerRunner:
     def prepare(self, env: Dict[str, str], prepare: List[PrepareStep]) -> None:
         prepare_dir = self.wasmer_dir_path / "prepare"
         self.run_serve_command(
-            "bash",
-            volume_mappings=load_volume_mappings(self.src_dir),
-            extra_args=[
-                f"--mapdir=/prepare:{prepare_dir}",
-                "--",
-                "/prepare/prepare.sh",
-            ],
+            "bash /prepare/prepare.sh",
+            volume_mappings={
+                **load_volume_mappings(self.src_dir),
+                "/prepare": prepare_dir,
+            },
         )
 
     def find_file_in_mounts(self, serve: Serve, program: str) -> Optional[Path]:
@@ -606,10 +604,14 @@ class WasmerRunner:
         self,
         command: str,
         volume_mappings: Optional[Dict[str, str]] = None,
-        extra_args: Optional[List[str]] = None,
     ) -> None:
-        console.print(f"\n[bold]Serving site[/bold]: running {command} command")
-        extra_args = extra_args or []
+        parsed_command = shlex.split(command)
+        if not parsed_command:
+            raise ValueError("Serve command cannot be empty")
+
+        command_name = parsed_command[0]
+        command_args = parsed_command[1:]
+        extra_args = []
 
         if self.wasmer_registry:
             extra_args = [f"--registry={self.wasmer_registry}"] + extra_args
@@ -620,12 +622,13 @@ class WasmerRunner:
                 str(self.wasmer_dir_path.absolute()),
                 "--net",
                 "--forward-host-env",
-                f"--command={command}",
+                f"--command={command_name}",
                 *volume_mapdir_args(
                     self.build_backend,
                     volume_mappings or {},
                 ),
                 *extra_args,
+                *(["--", *command_args] if command_args else []),
             ],
             env=os.environ,
         )
