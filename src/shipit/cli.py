@@ -411,9 +411,29 @@ def auto(
         False,
         help="Use a temporary Shipit file in the system temporary directory.",
     ),
+    wasmer_deploy: Optional[bool] = typer.Option(
+        False,
+        help="Deploy the project to Wasmer.",
+    ),
+    wasmer_deploy_config: Optional[Path] = typer.Option(
+        None,
+        help="Save the output of the Wasmer build to a json file",
+    ),
+    wasmer_token: Optional[str] = typer.Option(
+        None,
+        help="Wasmer token.",
+    ),
     wasmer_registry: Optional[str] = typer.Option(
         None,
         help="Wasmer registry.",
+    ),
+    wasmer_app_owner: Optional[str] = typer.Option(
+        None,
+        help="Owner of the Wasmer app.",
+    ),
+    wasmer_app_name: Optional[str] = typer.Option(
+        None,
+        help="Name of the Wasmer app.",
     ),
     install_command: Optional[str] = typer.Option(
         None,
@@ -444,6 +464,9 @@ def auto(
         help="The port to use (defaults to 8080).",
     ),
 ):
+    # We assume wasmer as an active flag if we pass wasmer deploy or wasmer deploy config
+    wasmer = wasmer or wasmer_deploy or (wasmer_deploy_config is not None)
+
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
@@ -509,6 +532,18 @@ def auto(
             start=start,
             after_deploy=after_deploy,
             wasmer_registry=wasmer_registry,
+        )
+    
+    if wasmer_deploy or wasmer_deploy_config:
+        deploy(
+            path,
+            wasmer_deploy=wasmer_deploy,
+            wasmer_deploy_config=wasmer_deploy_config,
+            wasmer_bin=wasmer_bin,
+            wasmer_token=wasmer_token,
+            wasmer_registry=wasmer_registry,
+            wasmer_app_owner=wasmer_app_owner,
+            wasmer_app_name=wasmer_app_name,
         )
 
 
@@ -646,9 +681,7 @@ def deploy(
 
     if wasmer_deploy_config:
         runner.deploy_config(wasmer_deploy_config)
-        return
-
-    if wasmer_deploy:
+    elif wasmer_deploy:
         runner.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
 
 
