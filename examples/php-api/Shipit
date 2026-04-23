@@ -1,4 +1,4 @@
-php = dep("php", config.php_version, architecture=config.php_architecture)
+phpix = dep("phpix", config.php_version, architecture=config.php_architecture)
 composer = dep("composer")
 bash = dep("bash")
 
@@ -10,19 +10,20 @@ serve(
   provider="php",
   cwd=app.serve_path,
   build=[
-    use(php, composer),
+    use(phpix, composer),
     workdir(app.path),
     copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
     env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER="1"),
     run("composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install"),
     copy(".", ignore=[".git", "vendor"])
   ],
-  deps=[php, bash],
+  deps=[phpix, bash],
   env = {
-    "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path)
+    "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path),
+    "PHPIX_PHP_THREADS": "4"
   },
   commands = {
-    "start": "php -S localhost:{} -t {}/public".format(PORT, app.serve_path)
+    "start": "phpix -S localhost:{} -t {}/public".format(PORT, app.serve_path)
   },
   mounts=[
     app,
