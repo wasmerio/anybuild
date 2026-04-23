@@ -391,10 +391,12 @@ def auto(
     ),
     start: bool = typer.Option(
         False,
+        "--start/--no-start",
         help="Equivalent to `--command=start`.",
     ),
     after_deploy: bool = typer.Option(
         False,
+        "--after-deploy/--no-after-deploy",
         help="Equivalent to `--command=after_deploy`.",
     ),
     regenerate: bool = typer.Option(
@@ -491,6 +493,7 @@ def auto(
     )
     if (
         command_names
+        or volume_specs
         or start
         or after_deploy
     ):
@@ -687,12 +690,14 @@ def run(
         "--volume",
         help="Attach one or more volumes as NAME:/guest/path. Can be passed multiple times.",
     ),
-    start: Optional[bool] = typer.Option(
+    start: bool = typer.Option(
         False,
+        "--start/--no-start",
         help="Equivalent to `--command=start`.",
     ),
     after_deploy: bool = typer.Option(
         False,
+        "--after-deploy/--no-after-deploy",
         help="Equivalent to `--command=after_deploy`.",
     ),
     wasmer_registry: Optional[str] = typer.Option(
@@ -722,7 +727,7 @@ def run(
 
     commands_to_run = resolve_run_commands(
         command_names=command_names,
-        start=bool(start),
+        start=start,
         after_deploy=after_deploy,
     )
 
