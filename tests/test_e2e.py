@@ -252,10 +252,10 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     ]
     if build_mode == BuildMode.Wasmer:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.io")
+        cmd.append("--wasmer-registry=wasmer.wtf")
     elif build_mode == BuildMode.WasmerAndDocker:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.io")
+        cmd.append("--wasmer-registry=wasmer.wtf")
         cmd.append("--docker")
     elif build_mode == BuildMode.Local:
         # The default

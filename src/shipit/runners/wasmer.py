@@ -36,7 +36,7 @@ def serialize_provider_config(provider_config: Any) -> Dict[str, Any]:
     if provider_config is None:
         return {}
     if hasattr(provider_config, "model_dump"):
-        return provider_config.model_dump(mode="json", exclude_defaults=True)
+        return provider_config.model_dump(mode="json", exclude_none=True)
     if isinstance(provider_config, dict):
         return provider_config
     return {}
@@ -149,29 +149,29 @@ class WasmerRunner:
         },
         "phpix": {
             "dependencies": {
-                "latest": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
-                "8.3": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
-                "8.3.29": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
-                "8.2": "phpix/phpix-82-32bit@=0.2.0-alpha.3",
-                "8.1": "phpix/phpix-81-32bit@=0.2.0-alpha.3",
-                "7.4": "wasmer/phpix-32@=0.1.13803",
+                "latest": "phpix/phpix-83-32bit@=0.2.0-alpha.4",
+                "8.3": "phpix/phpix-83-32bit@=0.2.0-alpha.4",
+                "8.3.29": "phpix/phpix-83-32bit@=0.2.0-alpha.4",
+                "8.2": "phpix/phpix-82-32bit@=0.2.0-alpha.4",
+                "8.1": "phpix/phpix-81-32bit@=0.2.0-alpha.4",
+                "7.4": "php/php-32@=7.4.3301", # Note, we don't have PHPix + PHP 7.4 yet
             },
             "architecture_dependencies": {
                 "64-bit": {
-                    "latest": "phpix/phpix-83-64bit@=0.2.0-alpha.3",
-                    "8.3": "phpix/phpix-83-64bit@=0.2.0-alpha.3",
-                    "8.3.29": "phpix/phpix-83-64bit@=0.2.0-alpha.3",
-                    "8.2": "phpix/phpix-82-64bit@=0.2.0-alpha.3",
-                    "8.1": "phpix/phpix-81-64bit@=0.2.0-alpha.3",
-                    "7.4": "wasmer/phpix-64@=0.1.13803",
+                    "latest": "phpix/phpix-83-64bit@=0.2.0-alpha.4",
+                    "8.3": "phpix/phpix-83-64bit@=0.2.0-alpha.4",
+                    "8.3.29": "phpix/phpix-83-64bit@=0.2.0-alpha.4",
+                    "8.2": "phpix/phpix-82-64bit@=0.2.0-alpha.4",
+                    "8.1": "phpix/phpix-81-64bit@=0.2.0-alpha.4",
+                    "7.4": "php/php-64@=7.4.3301",
                 },
                 "32-bit": {
-                    "latest": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
-                    "8.3": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
-                    "8.3.29": "phpix/phpix-83-32bit@=0.2.0-alpha.3",
-                    "8.2": "phpix/phpix-82-32bit@=0.2.0-alpha.3",
-                    "8.1": "phpix/phpix-81-32bit@=0.2.0-alpha.3",
-                    "7.4": "wasmer/phpix-32@=0.1.13803",
+                    "latest": "phpix/phpix-83-32bit@=0.2.0-alpha.4",
+                    "8.3": "phpix/phpix-83-32bit@=0.2.0-alpha.4",
+                    "8.3.29": "phpix/phpix-83-32bit@=0.2.0-alpha.4",
+                    "8.2": "phpix/phpix-82-32bit@=0.2.0-alpha.4",
+                    "8.1": "phpix/phpix-81-32bit@=0.2.0-alpha.4",
+                    "7.4": "php/php-32@=7.4.3301",
                 },
             },
             "scripts": {"php", "phpix"},
@@ -223,6 +223,7 @@ class WasmerRunner:
 
     def prepare_config(self, provider_config: Any) -> Any:
         from shipit.providers.python import PythonConfig
+        from shipit.providers.php import PhpConfig
 
         if isinstance(provider_config, PythonConfig):
             provider_config.python_extra_index_url = (
@@ -230,6 +231,8 @@ class WasmerRunner:
             )
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
+        elif isinstance(provider_config, PhpConfig):
+            provider_config.phpix = True
         self.provider_config = provider_config
         return provider_config
 

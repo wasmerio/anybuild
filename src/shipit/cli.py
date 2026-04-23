@@ -36,7 +36,12 @@ from shipit.shipit_types import (
 )
 from shipit.ui import console
 from shipit.version import version as shipit_version
-from shipit.volumes import build_volumes, load_volume_mappings
+from shipit.volumes import (
+    build_volumes,
+    load_volume_mappings,
+    merge_volume_mappings,
+    parse_cli_volume_mappings,
+)
 
 app = typer.Typer(invoke_without_command=True)
 
@@ -347,7 +352,7 @@ def auto(
     ),
     wasmer: bool = typer.Option(
         False,
-        help="Use Wasmer to build and serve the project.",
+        help="Use Wasmer to build and run the project.",
     ),
     wasmer_bin: Optional[str] = typer.Option(
         None,
@@ -373,18 +378,26 @@ def auto(
         False,
         help="Run the prepare command after building (defaults to True).",
     ),
-    run_commands: Optional[List[str]] = typer.Option(
+    command_names: Optional[List[str]] = typer.Option(
         None,
-        "--run",
-        help="Run one or more serve commands after building. Can be passed multiple times.",
+        "-c",
+        "--command",
+        help="Run one or more commands after building. Can be passed multiple times.",
+    ),
+    volume_specs: Optional[List[str]] = typer.Option(
+        None,
+        "--volume",
+        help="Attach one or more volumes as NAME:/guest/path. Can be passed multiple times.",
     ),
     start: bool = typer.Option(
         False,
-        help="Equivalent to `--run=start`.",
+        "--start/--no-start",
+        help="Equivalent to `--command=start`.",
     ),
     after_deploy: bool = typer.Option(
         False,
-        help="Equivalent to `--run=after_deploy`.",
+        "--after-deploy/--no-after-deploy",
+        help="Equivalent to `--command=after_deploy`.",
     ),
     regenerate: bool = typer.Option(
         None,
@@ -398,29 +411,9 @@ def auto(
         False,
         help="Use a temporary Shipit file in the system temporary directory.",
     ),
-    wasmer_deploy: Optional[bool] = typer.Option(
-        False,
-        help="Deploy the project to Wasmer.",
-    ),
-    wasmer_deploy_config: Optional[Path] = typer.Option(
-        None,
-        help="Save the output of the Wasmer build to a json file",
-    ),
-    wasmer_token: Optional[str] = typer.Option(
-        None,
-        help="Wasmer token.",
-    ),
     wasmer_registry: Optional[str] = typer.Option(
         None,
         help="Wasmer registry.",
-    ),
-    wasmer_app_owner: Optional[str] = typer.Option(
-        None,
-        help="Owner of the Wasmer app.",
-    ),
-    wasmer_app_name: Optional[str] = typer.Option(
-        None,
-        help="Name of the Wasmer app.",
     ),
     install_command: Optional[str] = typer.Option(
         None,
@@ -451,9 +444,6 @@ def auto(
         help="The port to use (defaults to 8080).",
     ),
 ):
-    # We assume wasmer as an active flag if we pass wasmer deploy or wasmer deploy config
-    wasmer = wasmer or wasmer_deploy or (wasmer_deploy_config is not None)
-
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
@@ -494,7 +484,6 @@ def auto(
         docker_opts=docker_opts,
         skip_docker_if_safe_build=skip_docker_if_safe_build,
         wasmer_registry=wasmer_registry,
-        wasmer_token=wasmer_token,
         wasmer_bin=wasmer_bin,
         skip_prepare=skip_prepare,
         env_name=env_name,
@@ -502,24 +491,25 @@ def auto(
         provider=provider,
         config=config,
     )
-    if run_commands or start or after_deploy or wasmer_deploy or wasmer_deploy_config:
-        serve(
+    if (
+        command_names
+        or volume_specs
+        or start
+        or after_deploy
+    ):
+        run(
             path,
             wasmer=wasmer,
             wasmer_bin=wasmer_bin,
             docker=docker,
             docker_client=docker_client,
-            run_commands=run_commands,
+            docker_opts=docker_opts,
+            command_names=command_names,
+            volume_specs=volume_specs,
             start=start,
             after_deploy=after_deploy,
-            wasmer_token=wasmer_token,
             wasmer_registry=wasmer_registry,
-            wasmer_deploy=wasmer_deploy,
-            wasmer_app_owner=wasmer_app_owner,
-            wasmer_app_name=wasmer_app_name,
-            wasmer_deploy_config=wasmer_deploy_config,
         )
-    # deploy(path)
 
 
 @app.command(name="generate")
@@ -602,7 +592,7 @@ def generate(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
 def _default(ctx: typer.Context) -> None:
-    if ctx.invoked_subcommand in ["auto", "generate", "build", "serve", "deploy", None]:
+    if ctx.invoked_subcommand in ["auto", "generate", "build", "run", "deploy", None]:
         print_help()
 
 
@@ -613,53 +603,13 @@ def deploy(
         help="Project path (defaults to current directory).",
         show_default=False,
     ),
-) -> None:
-    pass
-
-
-@app.command(name="serve")
-def serve(
-    path: Path = typer.Argument(
-        Path("."),
-        help="Project path (defaults to current directory).",
-        show_default=False,
-    ),
-    wasmer: bool = typer.Option(
-        False,
-        help="Use Wasmer to build and serve the project.",
+    wasmer_deploy: bool = typer.Option(
+        True,
+        help="Deploy the project to Wasmer.",
     ),
     wasmer_bin: Optional[str] = typer.Option(
         None,
         help="The path to the Wasmer binary.",
-    ),
-    docker: bool = typer.Option(
-        False,
-        help="Use Docker to build the project.",
-    ),
-    docker_client: Optional[str] = typer.Option(
-        None,
-        help="Use a specific Docker client (such as depot, podman, etc.)",
-    ),
-    docker_opts: Optional[str] = typer.Option(
-        None,
-        help="Additional options to pass to the Docker client.",
-    ),
-    run_commands: Optional[List[str]] = typer.Option(
-        None,
-        "--run",
-        help="Run one or more serve commands. Can be passed multiple times.",
-    ),
-    start: Optional[bool] = typer.Option(
-        True,
-        help="Equivalent to `--run=start`.",
-    ),
-    after_deploy: bool = typer.Option(
-        False,
-        help="Equivalent to `--run=after_deploy`.",
-    ),
-    wasmer_deploy: Optional[bool] = typer.Option(
-        False,
-        help="Deploy the project to Wasmer.",
     ),
     wasmer_token: Optional[str] = typer.Option(
         None,
@@ -682,9 +632,79 @@ def serve(
         help="Save the output of the Wasmer build to a json file",
     ),
 ) -> None:
-    # We assume wasmer as an active flag if we pass wasmer deploy or wasmer deploy config
-    wasmer = wasmer or wasmer_deploy or (wasmer_deploy_config is not None)
+    if not path.exists():
+        raise Exception(f"The path {path} does not exist")
 
+    build_backend = LocalBuildBackend(path, ASSETS_PATH)
+    runner = WasmerRunner(
+        build_backend,
+        path,
+        registry=wasmer_registry,
+        token=wasmer_token,
+        bin=wasmer_bin,
+    )
+
+    if wasmer_deploy_config:
+        runner.deploy_config(wasmer_deploy_config)
+        return
+
+    if wasmer_deploy:
+        runner.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
+
+
+@app.command(name="run")
+def run(
+    path: Path = typer.Argument(
+        Path("."),
+        help="Project path (defaults to current directory).",
+        show_default=False,
+    ),
+    wasmer: bool = typer.Option(
+        False,
+        help="Use Wasmer to run the project.",
+    ),
+    wasmer_bin: Optional[str] = typer.Option(
+        None,
+        help="The path to the Wasmer binary.",
+    ),
+    docker: bool = typer.Option(
+        False,
+        help="Use Docker to build the project.",
+    ),
+    docker_client: Optional[str] = typer.Option(
+        None,
+        help="Use a specific Docker client (such as depot, podman, etc.)",
+    ),
+    docker_opts: Optional[str] = typer.Option(
+        None,
+        help="Additional options to pass to the Docker client.",
+    ),
+    command_names: Optional[List[str]] = typer.Option(
+        None,
+        "-c",
+        "--command",
+        help="Run one or more commands. Can be passed multiple times.",
+    ),
+    volume_specs: Optional[List[str]] = typer.Option(
+        None,
+        "--volume",
+        help="Attach one or more volumes as NAME:/guest/path. Can be passed multiple times.",
+    ),
+    start: bool = typer.Option(
+        False,
+        "--start/--no-start",
+        help="Equivalent to `--command=start`.",
+    ),
+    after_deploy: bool = typer.Option(
+        False,
+        "--after-deploy/--no-after-deploy",
+        help="Equivalent to `--command=after_deploy`.",
+    ),
+    wasmer_registry: Optional[str] = typer.Option(
+        None,
+        help="Wasmer registry.",
+    ),
+) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
@@ -700,29 +720,21 @@ def serve(
             build_backend,
             path,
             registry=wasmer_registry,
-            token=wasmer_token,
             bin=wasmer_bin,
         )
     else:
         runner = LocalRunner(build_backend, path)
 
     commands_to_run = resolve_run_commands(
-        run_commands=run_commands,
-        start=bool(start),
+        command_names=command_names,
+        start=start,
         after_deploy=after_deploy,
     )
 
-    if wasmer_deploy_config:
-        if not isinstance(runner, WasmerRunner):
-            raise RuntimeError("--wasmer-deploy-config requires the Wasmer runner")
-        runner.deploy_config(wasmer_deploy_config)
-    elif wasmer_deploy:
-        if not isinstance(runner, WasmerRunner):
-            raise RuntimeError("--wasmer-deploy requires the Wasmer runner")
-        runner.deploy(app_owner=wasmer_app_owner, app_name=wasmer_app_name)
-    elif commands_to_run:
-        run_serve_commands(path, runner, commands_to_run)
-
+    if commands_to_run:
+        run_serve_commands(path, runner, commands_to_run, volume_specs=volume_specs)
+    else:
+        console.print("[bold]No commands specified. Use `--command` to run a command.[/bold]")
 
 @app.command(name="plan")
 def plan(
@@ -928,7 +940,7 @@ def build(
     ),
     wasmer: bool = typer.Option(
         False,
-        help="Use Wasmer to build and serve the project.",
+        help="Use Wasmer to build and package the project.",
     ),
     skip_prepare: bool = typer.Option(
         False,
@@ -1096,11 +1108,11 @@ def get_shipit_path(path: Path, shipit_path: Optional[Path] = None) -> Path:
 
 
 def resolve_run_commands(
-    run_commands: Optional[List[str]],
+    command_names: Optional[List[str]],
     start: bool,
     after_deploy: bool,
 ) -> List[str]:
-    commands = list(run_commands or [])
+    commands = list(command_names or [])
     if after_deploy and "after_deploy" not in commands:
         commands.append("after_deploy")
     if start and "start" not in commands:
@@ -1108,8 +1120,16 @@ def resolve_run_commands(
     return commands
 
 
-def run_serve_commands(path: Path, runner: Runner, commands: List[str]) -> None:
-    volume_mappings = load_volume_mappings(path)
+def run_serve_commands(
+    path: Path,
+    runner: Runner,
+    commands: List[str],
+    volume_specs: Optional[List[str]] = None,
+) -> None:
+    volume_mappings = merge_volume_mappings(
+        load_volume_mappings(path),
+        parse_cli_volume_mappings(volume_specs),
+    )
     for command in commands:
         if command in OPTIONAL_RUN_COMMANDS and not runner.has_serve_command(command):
             continue

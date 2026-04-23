@@ -7,7 +7,12 @@ from shipit.cli import Ctx
 from shipit.runners.local import LocalRunner
 from shipit.runners.wasmer import WasmerRunner
 from shipit.shipit_types import Package, Serve, Volume
-from shipit.volumes import build_volumes, load_volume_mappings
+from shipit.volumes import (
+    build_volumes,
+    load_volume_mappings,
+    merge_volume_mappings,
+    parse_cli_volume_mappings,
+)
 
 
 class DummyBuildBackend:
@@ -132,3 +137,27 @@ def test_wasmer_runner_passes_volume_paths_into_wasmer_run(
         f"--volume={volume_path.absolute()}:/app/wp-content"
         in captured["extra_args"]
     )
+
+
+def test_parse_cli_volume_mappings() -> None:
+    assert parse_cli_volume_mappings(
+        ["uploads:/app/uploads", "cache:/app/cache"]
+    ) == {
+        "uploads": "/app/uploads",
+        "cache": "/app/cache",
+    }
+
+
+def test_merge_volume_mappings_prefers_later_values() -> None:
+    assert merge_volume_mappings(
+        {"wp-content": "/app/wp-content"},
+        {"uploads": "/app/uploads", "wp-content": "/app/override"},
+    ) == {
+        "wp-content": "/app/override",
+        "uploads": "/app/uploads",
+    }
+
+
+def test_parse_cli_volume_mappings_requires_absolute_guest_path() -> None:
+    with pytest.raises(ValueError, match="Guest path must be absolute"):
+        parse_cli_volume_mappings(["uploads:app/uploads"])

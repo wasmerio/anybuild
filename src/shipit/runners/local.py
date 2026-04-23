@@ -21,7 +21,7 @@ class LocalRunner:
         self.build_backend = build_backend
         self.src_dir = src_dir
         self.runner_path = self.src_dir / ".shipit" / "runner" / "local"
-        self.serve_bin_path = self.runner_path / "serve" / "bin"
+        self.serve_bin_path = self.runner_path / "bin"
         self.prepare_bash_script = self.runner_path / "prepare" / "prepare.sh"
 
     def prepare_config(self, provider_config: object) -> object:

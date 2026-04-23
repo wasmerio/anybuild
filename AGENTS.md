@@ -4,14 +4,14 @@ This file provides guidance to AI agents working in this repository.
 
 ## What is Shipit
 
-Shipit is a Python CLI for building and serving projects described with Starlark
-files. It can build locally, in Docker, or using Wasmer, and supports examples
-for popular frameworks.
+Shipit is a Python CLI for building, running, and deploying projects
+described with Starlark files. It can build locally, in Docker, or using
+Wasmer, and supports examples for popular frameworks.
 
 ## Architecture
 
-- **CLI**: `src/shipit/cli.py` implements the Typer commands `build`, `serve`,
-  and `auto`.
+- **CLI**: `src/shipit/cli.py` implements the Typer commands `build`, `run`,
+  `deploy`, and `auto`.
 - **Build backends**: `LocalBuildBackend` runs steps on the host while
   `DockerBuildBackend` produces artifacts inside a container and exports them.
 - **Runners**: `LocalRunner` executes the generated commands locally, and
@@ -23,10 +23,11 @@ for popular frameworks.
 
 ## Bash commands
 
-- `uv run shipit` – Generate the Shipit, build and serve the project.
+- `uv run shipit` – Generate the Shipit, build, and run the project.
 - `uv run shipit generate` – Generate the `Shipit` file.
 - `uv run shipit build` – Build the project defined by the `Shipit` file.
-- `uv run shipit serve` – Serve the built project.
+- `uv run shipit run` – Run the built project.
+- `uv run shipit deploy` – Deploy the built Wasmer project.
 - `uv run python` – Run Python (always prefer this over calling `python`
   directly).
 - `uv run pytest` – Run the test suite (if tests exist).

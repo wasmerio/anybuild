@@ -14,9 +14,12 @@ class FakeRunner:
     available_commands = {"start", "after_deploy"}
 
     def __init__(self, *args, **kwargs) -> None:
+        self.init_kwargs = kwargs
         self.calls: list[str] = []
         self.checked: list[str] = []
         self.volume_mappings: list[dict[str, str] | None] = []
+        self.deploy_calls: list[dict[str, str | None]] = []
+        self.deploy_config_calls: list[Path] = []
         self.available_commands = set(type(self).available_commands)
         type(self).instances.append(self)
 
@@ -32,11 +35,24 @@ class FakeRunner:
         self.calls.append(command)
         self.volume_mappings.append(volume_mappings)
 
+    def deploy(
+        self, app_owner: str | None = None, app_name: str | None = None
+    ) -> None:
+        self.deploy_calls.append(
+            {
+                "app_owner": app_owner,
+                "app_name": app_name,
+            }
+        )
+
+    def deploy_config(self, config_path: Path) -> None:
+        self.deploy_config_calls.append(config_path)
+
 
 runner = CliRunner()
 
 
-def test_serve_runs_after_deploy_before_start(
+def test_run_runs_after_deploy_before_start(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -45,7 +61,10 @@ def test_serve_runs_after_deploy_before_start(
     monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
     monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
 
-    result = runner.invoke(cli.app, ["serve", str(tmp_path), "--after-deploy"])
+    result = runner.invoke(
+        cli.app,
+        ["run", str(tmp_path), "--start", "--after-deploy"],
+    )
 
     assert result.exit_code == 0, result.output
     assert FakeRunner.instances[-1].calls == ["after_deploy", "start"]
@@ -53,7 +72,7 @@ def test_serve_runs_after_deploy_before_start(
     assert FakeRunner.instances[-1].volume_mappings == [{}, {}]
 
 
-def test_serve_skips_after_deploy_when_missing(
+def test_run_skips_after_deploy_when_missing(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -62,7 +81,10 @@ def test_serve_skips_after_deploy_when_missing(
     monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
     monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
 
-    result = runner.invoke(cli.app, ["serve", str(tmp_path), "--after-deploy"])
+    result = runner.invoke(
+        cli.app,
+        ["run", str(tmp_path), "--start", "--after-deploy"],
+    )
 
     assert result.exit_code == 0, result.output
     assert FakeRunner.instances[-1].calls == ["start"]
@@ -70,7 +92,7 @@ def test_serve_skips_after_deploy_when_missing(
     assert FakeRunner.instances[-1].volume_mappings == [{}]
 
 
-def test_serve_runs_custom_commands_without_existence_checks(
+def test_run_runs_custom_commands_without_existence_checks(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -81,7 +103,14 @@ def test_serve_runs_custom_commands_without_existence_checks(
 
     result = runner.invoke(
         cli.app,
-        ["serve", str(tmp_path), "--no-start", "--run=prepare-db", "--run=warm-cache"],
+        [
+            "run",
+            str(tmp_path),
+            "--no-start",
+            "--command=prepare-db",
+            "-c",
+            "warm-cache",
+        ],
     )
 
     assert result.exit_code == 0, result.output
@@ -90,7 +119,23 @@ def test_serve_runs_custom_commands_without_existence_checks(
     assert FakeRunner.instances[-1].volume_mappings == [{}, {}]
 
 
-def test_serve_loads_volume_mappings_from_json(
+def test_run_without_commands_prints_to_stderr(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    FakeRunner.instances.clear()
+    monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
+    monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
+
+    result = runner.invoke(cli.app, ["run", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == ""
+    assert "No commands specified" in result.stderr
+    assert not FakeRunner.instances[-1].calls
+
+
+def test_run_loads_volume_mappings_from_json(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -104,7 +149,7 @@ def test_serve_loads_volume_mappings_from_json(
     monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
     monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
 
-    result = runner.invoke(cli.app, ["serve", str(tmp_path)])
+    result = runner.invoke(cli.app, ["run", str(tmp_path), "--start"])
 
     assert result.exit_code == 0, result.output
     assert FakeRunner.instances[-1].calls == ["start"]
@@ -113,7 +158,70 @@ def test_serve_loads_volume_mappings_from_json(
     ]
 
 
-def test_auto_passes_after_deploy_to_serve(
+def test_run_merges_cli_volume_mappings(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    FakeRunner.instances.clear()
+    FakeRunner.available_commands = {"start"}
+    mappings_dir = tmp_path / ".shipit" / "volumes"
+    mappings_dir.mkdir(parents=True)
+    (mappings_dir / "mappings.json").write_text(
+        '{\n  "wp-content": "/app/wp-content"\n}\n'
+    )
+    monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
+    monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "run",
+            str(tmp_path),
+            "--start",
+            "--volume",
+            "uploads:/app/uploads",
+            "--volume",
+            "wp-content:/app/override",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert FakeRunner.instances[-1].calls == ["start"]
+    assert FakeRunner.instances[-1].volume_mappings == [
+        {
+            "wp-content": "/app/override",
+            "uploads": "/app/uploads",
+        }
+    ]
+
+
+def test_run_passes_wasmer_registry_to_runner(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    FakeRunner.instances.clear()
+    FakeRunner.available_commands = {"start"}
+    monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
+    monkeypatch.setattr(cli, "WasmerRunner", FakeRunner)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "run",
+            str(tmp_path),
+            "--start",
+            "--wasmer",
+            "--wasmer-registry",
+            "wasmer.io",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert FakeRunner.instances[-1].calls == ["start"]
+    assert FakeRunner.instances[-1].init_kwargs["registry"] == "wasmer.io"
+
+
+def test_auto_passes_after_deploy_to_run(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -123,7 +231,7 @@ def test_auto_passes_after_deploy_to_serve(
     monkeypatch.setattr(cli, "build", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         cli,
-        "serve",
+        "run",
         lambda *args, **kwargs: calls.append(kwargs),
     )
 
@@ -135,7 +243,7 @@ def test_auto_passes_after_deploy_to_serve(
     assert calls[0]["start"] is True
 
 
-def test_auto_passes_run_commands_to_serve(
+def test_auto_passes_commands_to_run(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -145,15 +253,110 @@ def test_auto_passes_run_commands_to_serve(
     monkeypatch.setattr(cli, "build", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         cli,
-        "serve",
+        "run",
         lambda *args, **kwargs: calls.append(kwargs),
     )
 
     result = runner.invoke(
         cli.app,
-        ["auto", str(tmp_path), "--run=prepare-db", "--run=warm-cache"],
+        ["auto", str(tmp_path), "--command=prepare-db", "-c", "warm-cache"],
     )
 
     assert result.exit_code == 0, result.output
     assert calls
-    assert calls[0]["run_commands"] == ["prepare-db", "warm-cache"]
+    assert calls[0]["command_names"] == ["prepare-db", "warm-cache"]
+
+
+def test_auto_passes_volume_specs_to_run(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+    (tmp_path / "Shipit").write_text("")
+
+    monkeypatch.setattr(cli, "build", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda *args, **kwargs: calls.append(kwargs),
+    )
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "auto",
+            str(tmp_path),
+            "--volume",
+            "uploads:/app/uploads",
+            "--volume",
+            "cache:/app/cache",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls
+    assert calls[0]["volume_specs"] == [
+        "uploads:/app/uploads",
+        "cache:/app/cache",
+    ]
+
+
+def test_deploy_calls_wasmer_runner_deploy(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    FakeRunner.instances.clear()
+    monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
+    monkeypatch.setattr(cli, "WasmerRunner", FakeRunner)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "deploy",
+            str(tmp_path),
+            "--wasmer-registry",
+            "wasmer.io",
+            "--wasmer-token",
+            "token",
+            "--wasmer-app-owner",
+            "acme",
+            "--wasmer-app-name",
+            "blog",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert FakeRunner.instances[-1].init_kwargs["registry"] == "wasmer.io"
+    assert FakeRunner.instances[-1].init_kwargs["token"] == "token"
+    assert FakeRunner.instances[-1].deploy_calls == [
+        {
+            "app_owner": "acme",
+            "app_name": "blog",
+        }
+    ]
+    assert FakeRunner.instances[-1].deploy_config_calls == []
+
+
+def test_deploy_calls_wasmer_runner_deploy_config(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    FakeRunner.instances.clear()
+    monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
+    monkeypatch.setattr(cli, "WasmerRunner", FakeRunner)
+    config_path = tmp_path / "deploy.json"
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "deploy",
+            str(tmp_path),
+            "--no-wasmer-deploy",
+            "--wasmer-deploy-config",
+            str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert FakeRunner.instances[-1].deploy_calls == []
+    assert FakeRunner.instances[-1].deploy_config_calls == [config_path]
