@@ -50,6 +50,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs: test
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
       - name: Checkout
@@ -65,8 +78,15 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install MySQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+
       - name: Set up Wasmer
         uses: wasmerio/setup-wasmer@v3.1
+        with:
+          version: v7.2.0-alpha.2
 
       - name: Verify toolchain
         run: |
@@ -81,4 +101,4 @@ jobs:
       - name: Run e2e tests
         run: |
           uv run pytest -m e2e -v tests/test_e2e.py -n 4 \
-            -k "BuildMode.WasmerAndDocker and not cdn and not python-streamlit"
+            -k "(BuildMode.WasmerAndDocker and not cdn and not python-streamlit) or (BuildMode.Wasmer and wordpress-6.9.4)"

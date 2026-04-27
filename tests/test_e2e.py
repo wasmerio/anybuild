@@ -1,21 +1,27 @@
+import asyncio
+import contextlib
 import os
 import random
-import socket
-import signal
-import asyncio
-import subprocess
 import re
-from pathlib import Path
-from typing import List, NamedTuple
-from dataclasses import dataclass
-
-import pytest
 import shlex
 import shutil
-import contextlib
-import aiohttp
-import yaml
+import signal
+import socket
+import subprocess
+import sys
+import tempfile
+import uuid
+import zipfile
+from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
+from typing import List
+from urllib.parse import urlparse
+from urllib.request import urlopen
+
+import aiohttp
+import pytest
+import yaml
 
 
 class BuildMode(Enum):
@@ -34,21 +40,50 @@ class HTTPRequest:
     follow_redirects: bool = True
 
 
-class E2ECase(NamedTuple):
-    path: str
+@dataclass(frozen=True)
+class RunCommand:
+    command: str
+    stdout_match: str | None = None
+    stderr_match: str | None = None
+    expected_returncode: int = 0
+
+
+@dataclass(frozen=True)
+class CompletedCommand:
+    returncode: int | None
+    stdout: str
+    stderr: str
+
+    @property
+    def output(self) -> str:
+        return f"[stdout]\n{self.stdout}\n[stderr]\n{self.stderr}"
+
+
+@dataclass(frozen=True)
+class E2ECase:
     serve_pattern: str
     http: List[HTTPRequest]
+    path: str | None = None
+    download: str | None = None
     use_random_port: bool = True
+    env: dict[str, str] | None = None
     extra_env: dict[str, str] | None = None
+    create_db: bool = False
+    create_wp_content_volume: bool = False
+    run_after_deploy: bool = False
+    commands: list[RunCommand] = field(default_factory=list)
     expected_memory_limit: str | None = None
     expect_no_memory_limit: bool = False
     build_modes: tuple[BuildMode, ...] | None = None
 
     def __str__(self):
-        return self.path
+        if self.path:
+            return self.path
+        assert self.download is not None
+        return Path(urlparse(self.download).path).stem
 
     def __repr__(self):
-        return self.path
+        return str(self)
 
 
 @pytest.mark.e2e
@@ -85,7 +120,10 @@ class E2ECase(NamedTuple):
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
             ),
             http=[
-                HTTPRequest(path="/", body_match=r"\"version\"\s*:\s*\"8\.3\.[0-9]+\""),
+                HTTPRequest(
+                    path="/",
+                    body_match=r"\"version\"\s*:\s*\"8\.3\.[0-9]+\"",
+                ),
                 HTTPRequest(path="/api/greet/Alice", body_match=r"Hello, Alice!"),
             ],
         ),
@@ -96,6 +134,39 @@ class E2ECase(NamedTuple):
                 r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
             ),
             http=[HTTPRequest(path="/", body_match=r"WordPress")],
+        ),
+        # Full WordPress release archive, built and run through Wasmer only.
+        E2ECase(
+            download="https://wordpress.org/wordpress-6.9.4.zip",
+            serve_pattern=(
+                r"listening addr"
+            ),
+            http=[
+                HTTPRequest(
+                    path="/",
+                    expected_status=200,
+                    body_match=r"WordPress",
+                )
+            ],
+            use_random_port=False,
+            env={
+                "DB_NAME": "test",
+                "DB_USERNAME": "root",
+                "DB_HOST": "127.0.0.1",
+                "DB_PORT": "3306",
+                "DB_PASSWORD": "",
+                "SHIPIT_PHPIX": "true",
+            },
+            create_db=True,
+            create_wp_content_volume=True,
+            run_after_deploy=True,
+            commands=[
+                RunCommand(
+                    "wp eval 'echo json_encode([\"status\" => \"ok\"]);'",
+                    stdout_match=r'\{"status":"ok"\}',
+                )
+            ],
+            build_modes=(BuildMode.Wasmer,),
         ),
         # WordPress skeleton in phpix mode (Wasmer only), validate memory cap.
         E2ECase(
@@ -226,7 +297,11 @@ class E2ECase(NamedTuple):
         BuildMode.WasmerAndDocker,
     ],
 )
-async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
+async def test_end_to_end(
+    case: E2ECase,
+    build_mode: BuildMode,
+    tmp_path: Path,
+):
     # Skip if `uv` is not available in PATH
     if not shutil.which("uv"):
         pytest.skip("`uv` is not available in PATH")
@@ -238,29 +313,125 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
         pytest.skip("case is not enabled for this build mode")
 
     repo_root = Path(__file__).resolve().parents[1]
+    project_path = await _materialize_case(case, repo_root, tmp_path)
 
-    cmd = [
-        "uv",
-        "run",
-        "shipit-cli",
-        case.path,
-        "--skip-prepare",
-        "--start",
-        # "--wasmer",
-        # "--docker",
-        "--regenerate",
-    ]
-    if build_mode == BuildMode.Wasmer:
-        cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
-    elif build_mode == BuildMode.WasmerAndDocker:
-        cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
-        cmd.append("--docker")
-    elif build_mode == BuildMode.Local:
-        # The default
-        pass
+    if case.use_random_port:
+        port = get_free_port()
+    else:
+        port = 8080  # This is the default port if not specified
 
+    env = os.environ.copy()
+    if case.env:
+        env.update(case.env)
+    if case.extra_env:
+        env.update(case.extra_env)
+
+    created_db_name = None
+    wp_content_volume_dir = None
+    try:
+        if case.create_db:
+            created_db_name = await _create_mysql_database(env)
+            env["DB_NAME"] = created_db_name
+        volume_specs = None
+        if case.create_wp_content_volume:
+            wp_content_volume_dir = _create_wp_content_volume(project_path)
+            volume_specs = ["wp-content:/app/wp-content"]
+
+        if case.download or case.commands:
+            build_cmd = _shipit_build_command(project_path, build_mode, port)
+            build_result = await _run_completed_command(
+                build_cmd,
+                cwd=repo_root,
+                env=env,
+                timeout=180,
+            )
+            build_output = build_result.output
+            if build_result.returncode != 0 or "Build complete ✅" not in build_output:
+                pytest.fail(
+                    "End-to-end build command failed.\n"
+                    f"command={shlex.join(build_cmd)}\n"
+                    f"returncode={build_result.returncode}\n\n"
+                    f"--- Captured output start ---\n{build_output}\n"
+                    "--- Captured output end ---"
+                )
+
+            run_cmd = _shipit_run_command(
+                project_path,
+                build_mode,
+                run_after_deploy=case.run_after_deploy,
+                start=True,
+                volume_specs=volume_specs,
+            )
+            await _run_server_and_check(
+                case=case,
+                cmd=run_cmd,
+                cwd=repo_root,
+                env=env,
+                project_path=project_path,
+                port=port,
+                expect_build=False,
+            )
+            for command in case.commands:
+                cmd = _shipit_run_command(
+                    project_path,
+                    build_mode,
+                    command=command.command,
+                    volume_specs=volume_specs,
+                )
+                result = await _run_completed_command(
+                    cmd,
+                    cwd=repo_root,
+                    env=env,
+                    timeout=180,
+                )
+                _assert_run_command(command, cmd, result)
+            return
+
+        cmd = _shipit_auto_command(
+            project_path,
+            build_mode,
+            port,
+            run_after_deploy=case.run_after_deploy,
+        )
+        await _run_server_and_check(
+            case=case,
+            cmd=cmd,
+            cwd=repo_root,
+            env=env,
+            project_path=project_path,
+            port=port,
+            expect_build=True,
+        )
+    finally:
+        if created_db_name:
+            drop_result = await _drop_mysql_database(env, created_db_name)
+            if drop_result.returncode != 0:
+                drop_error = (
+                    "Failed to drop temporary MySQL database.\n"
+                    f"database={created_db_name}\n\n"
+                    f"--- Captured output start ---\n{drop_result.output}\n"
+                    "--- Captured output end ---"
+                )
+                if sys.exc_info()[0] is None:
+                    try:
+                        if wp_content_volume_dir:
+                            shutil.rmtree(wp_content_volume_dir, ignore_errors=True)
+                    finally:
+                        pytest.fail(drop_error)
+                print(drop_error)
+        if wp_content_volume_dir:
+            shutil.rmtree(wp_content_volume_dir, ignore_errors=True)
+
+
+async def _run_server_and_check(
+    case: E2ECase,
+    cmd: list[str],
+    cwd: Path,
+    env: dict[str, str],
+    project_path: Path,
+    port: int,
+    expect_build: bool,
+) -> None:
     build_phrase = "Build complete ✅"
     serve_re = re.compile(case.serve_pattern)
 
@@ -268,19 +439,9 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
     start_new_session = os.name != "nt"
     creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
 
-    env = os.environ.copy()
-    if case.extra_env:
-        env.update(case.extra_env)
-    if case.use_random_port:
-        port = get_free_port()
-    else:
-        port = 8080  # This is the default port if not specified
-
-    cmd.append(f"--serve-port={port}")
-
     proc = await asyncio.create_subprocess_exec(
         *cmd,
-        cwd=str(repo_root),
+        cwd=str(cwd),
         env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -290,6 +451,8 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
 
     output_lines: List[str] = []
     found_build = asyncio.Event()
+    if not expect_build:
+        found_build.set()
     found_serve = asyncio.Event()
 
     async def reader(label: str, stream: asyncio.StreamReader) -> None:
@@ -323,7 +486,7 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
         if found_serve.is_set():
             if case.expected_memory_limit or case.expect_no_memory_limit:
                 app_yaml_path = (
-                    repo_root / case.path / ".shipit" / "wasmer" / "app.yaml"
+                    project_path / ".shipit" / "wasmer" / "app.yaml"
                 )
                 if not app_yaml_path.is_file():
                     full_output = "".join(output_lines)
@@ -416,8 +579,320 @@ async def test_end_to_end(case: E2ECase, build_mode: BuildMode):
             f"--- Captured output start ---\n{full_output}\n--- Captured output end ---"
         )
 
-    assert build_phrase in full_output
+    if expect_build:
+        assert build_phrase in full_output
     assert serve_re.search(full_output), "Serve banner regex not found in output"
+
+
+async def _materialize_case(
+    case: E2ECase,
+    repo_root: Path,
+    tmp_path: Path,
+) -> Path:
+    if case.path and case.download:
+        raise ValueError("E2ECase can define either path or download, not both")
+    if case.path:
+        return repo_root / case.path
+    if not case.download:
+        raise ValueError("E2ECase requires either path or download")
+    return await asyncio.to_thread(
+        _download_and_extract_archive,
+        case.download,
+        tmp_path,
+    )
+
+
+def _download_and_extract_archive(url: str, tmp_path: Path) -> Path:
+    download_dir = tmp_path / "download"
+    download_dir.mkdir(parents=True, exist_ok=True)
+    archive_name = Path(urlparse(url).path).name or "download.zip"
+    archive_path = download_dir / archive_name
+
+    with urlopen(url, timeout=120) as response:
+        with archive_path.open("wb") as output:
+            shutil.copyfileobj(response, output)
+
+    extract_dir = tmp_path / "src"
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    if archive_path.suffix == ".zip":
+        _extract_zip(archive_path, extract_dir)
+    else:
+        shutil.unpack_archive(str(archive_path), str(extract_dir))
+
+    children = [path for path in extract_dir.iterdir() if path.name != "__MACOSX"]
+    if len(children) == 1 and children[0].is_dir():
+        return children[0]
+    return extract_dir
+
+
+def _extract_zip(archive_path: Path, extract_dir: Path) -> None:
+    extract_root = extract_dir.resolve()
+    with zipfile.ZipFile(archive_path) as archive:
+        for member in archive.infolist():
+            target = (extract_dir / member.filename).resolve()
+            if not target.is_relative_to(extract_root):
+                raise ValueError(
+                    f"Archive member escapes extract dir: {member.filename}"
+                )
+        archive.extractall(extract_dir)
+
+
+async def _create_mysql_database(env: dict[str, str]) -> str:
+    name = f"shipit_e2e_{uuid.uuid4().hex}"
+    result = await _run_mysql_sql(
+        env,
+        (
+            f"CREATE DATABASE {_quote_mysql_identifier(name)} "
+            "CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"
+        ),
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            "Failed to create temporary MySQL database.\n"
+            f"database={name}\n\n"
+            f"--- Captured output start ---\n{result.output}\n"
+            "--- Captured output end ---"
+        )
+    return name
+
+
+async def _drop_mysql_database(
+    env: dict[str, str],
+    name: str,
+) -> CompletedCommand:
+    return await _run_mysql_sql(
+        env,
+        f"DROP DATABASE IF EXISTS {_quote_mysql_identifier(name)}",
+    )
+
+
+async def _run_mysql_sql(env: dict[str, str], sql: str) -> CompletedCommand:
+    return await _run_completed_command(
+        _mysql_command(env, sql),
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        timeout=30,
+    )
+
+
+def _mysql_command(env: dict[str, str], sql: str) -> list[str]:
+    mysql = shutil.which("mysql")
+    if not mysql:
+        pytest.fail(
+            "`mysql` client is not available; it is required for "
+            "E2ECase(create_db=True)."
+        )
+
+    cmd = [
+        mysql,
+        "--protocol=TCP",
+        "--batch",
+        "--skip-column-names",
+        "--host",
+        env.get("DB_HOST", "127.0.0.1"),
+        "--port",
+        env.get("DB_PORT", "3306"),
+        "--user",
+        env.get("DB_USERNAME", "root"),
+    ]
+    if "DB_PASSWORD" in env:
+        cmd.append(f"--password={env['DB_PASSWORD']}")
+    cmd.extend(["--execute", sql])
+    return cmd
+
+
+def _quote_mysql_identifier(name: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9_]+", name):
+        raise ValueError(f"Invalid MySQL identifier: {name!r}")
+    return f"`{name}`"
+
+
+def _create_wp_content_volume(project_path: Path) -> Path:
+    host_dir = Path(
+        tempfile.mkdtemp(prefix="shipit-e2e-wp-content-", dir="/tmp")
+    )
+    volume_path = project_path / ".shipit" / "volumes" / "wp-content"
+    volume_path.parent.mkdir(parents=True, exist_ok=True)
+    if volume_path.is_symlink() or volume_path.is_file():
+        volume_path.unlink()
+    elif volume_path.is_dir():
+        shutil.rmtree(volume_path)
+    volume_path.symlink_to(host_dir, target_is_directory=True)
+    return host_dir
+
+
+def _shipit_auto_command(
+    project_path: Path,
+    build_mode: BuildMode,
+    port: int,
+    run_after_deploy: bool,
+) -> list[str]:
+    cmd = [
+        "uv",
+        "run",
+        "shipit",
+        str(project_path),
+        "--skip-prepare",
+        "--start",
+        "--regenerate",
+    ]
+    if run_after_deploy:
+        cmd.append("--after-deploy")
+    _append_build_mode_flags(cmd, build_mode)
+    cmd.append(f"--serve-port={port}")
+    return cmd
+
+
+def _shipit_build_command(
+    project_path: Path,
+    build_mode: BuildMode,
+    port: int,
+) -> list[str]:
+    cmd = [
+        "uv",
+        "run",
+        "shipit",
+        str(project_path),
+        "--skip-prepare",
+        "--regenerate",
+    ]
+    _append_build_mode_flags(cmd, build_mode)
+    cmd.append(f"--serve-port={port}")
+    return cmd
+
+
+def _shipit_run_command(
+    project_path: Path,
+    build_mode: BuildMode,
+    *,
+    run_after_deploy: bool = False,
+    start: bool = False,
+    command: str | None = None,
+    volume_specs: list[str] | None = None,
+) -> list[str]:
+    cmd = [
+        "uv",
+        "run",
+        "shipit",
+        "run",
+        str(project_path),
+    ]
+    if run_after_deploy:
+        cmd.append("--after-deploy")
+    if start:
+        cmd.append("--start")
+    if command:
+        cmd.append(f"--command={command}")
+    for spec in volume_specs or []:
+        cmd.extend(["--volume", spec])
+    _append_run_mode_flags(cmd, build_mode)
+    return cmd
+
+
+def _append_build_mode_flags(cmd: list[str], build_mode: BuildMode) -> None:
+    if build_mode == BuildMode.Wasmer:
+        cmd.append("--wasmer")
+        cmd.append("--wasmer-registry=wasmer.wtf")
+    elif build_mode == BuildMode.WasmerAndDocker:
+        cmd.append("--wasmer")
+        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--docker")
+    elif build_mode == BuildMode.Local:
+        pass
+
+
+def _append_run_mode_flags(cmd: list[str], build_mode: BuildMode) -> None:
+    if build_mode == BuildMode.Wasmer:
+        cmd.append("--wasmer")
+        cmd.append("--wasmer-registry=wasmer.wtf")
+    elif build_mode == BuildMode.WasmerAndDocker:
+        cmd.append("--wasmer")
+        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--docker")
+    elif build_mode == BuildMode.Local:
+        pass
+
+
+async def _run_completed_command(
+    cmd: list[str],
+    cwd: Path,
+    env: dict[str, str],
+    timeout: float,
+) -> CompletedCommand:
+    start_new_session = os.name != "nt"
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=str(cwd),
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        start_new_session=start_new_session,
+        creationflags=creationflags,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError:
+        await _stop_process(proc)
+        stdout, stderr = await proc.communicate()
+    return CompletedCommand(
+        returncode=proc.returncode,
+        stdout=stdout.decode("utf-8", errors="replace"),
+        stderr=stderr.decode("utf-8", errors="replace"),
+    )
+
+
+async def _stop_process(proc: asyncio.subprocess.Process) -> None:
+    try:
+        if os.name != "nt":
+            os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+        else:
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+    except Exception:
+        pass
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=2)
+    except asyncio.TimeoutError:
+        if os.name != "nt":
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        else:
+            proc.kill()
+            await proc.wait()
+
+
+def _assert_run_command(
+    command: RunCommand,
+    cmd: list[str],
+    result: CompletedCommand,
+) -> None:
+    if result.returncode != command.expected_returncode:
+        pytest.fail(
+            "Run command exited with unexpected status.\n"
+            f"command={shlex.join(cmd)}\n"
+            f"expected_returncode={command.expected_returncode}\n"
+            f"returncode={result.returncode}\n\n"
+            f"--- Captured output start ---\n{result.output}\n"
+            "--- Captured output end ---"
+        )
+    if command.stdout_match and not re.search(command.stdout_match, result.stdout):
+        pytest.fail(
+            "Run command stdout did not match expected regex.\n"
+            f"command={shlex.join(cmd)}\n"
+            f"stdout_match={command.stdout_match!r}\n\n"
+            f"--- Captured output start ---\n{result.output}\n"
+            "--- Captured output end ---"
+        )
+    if command.stderr_match and not re.search(command.stderr_match, result.stderr):
+        pytest.fail(
+            "Run command stderr did not match expected regex.\n"
+            f"command={shlex.join(cmd)}\n"
+            f"stderr_match={command.stderr_match!r}\n\n"
+            f"--- Captured output start ---\n{result.output}\n"
+            "--- Captured output end ---"
+        )
 
 
 async def _wait_for_http_response(
