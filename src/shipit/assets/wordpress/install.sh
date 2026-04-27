@@ -43,6 +43,9 @@ else
     --admin_password="$WP_ADMIN_PASSWORD" \
     --admin_email="$WP_ADMIN_EMAIL" \
     --locale="$WP_LOCALE"
+
+  echo "🔄 Setting permalinks"
+  wp rewrite structure '/%year%/%monthnum%/%day%/%postname%/'
 fi
 
 # Install plugins from WP_PLUGINS environment variable
@@ -106,6 +109,9 @@ if [ -n "${WP_LOCALE:-}" ]; then
   wp language plugin install --all "$WP_LOCALE"
   wp site switch-language "$WP_LOCALE"
 fi
+
+# echo "✍️ Rewriting permalinks structure"
+# wp rewrite flush --hard || true
 
 # if [ ! -f "/app/wp-content/wp-config.php" ]; then
 #   cat > /app/wp-content/wp-config.php <<EOF
