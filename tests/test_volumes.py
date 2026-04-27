@@ -12,6 +12,7 @@ from shipit.volumes import (
     load_volume_mappings,
     merge_volume_mappings,
     parse_cli_volume_mappings,
+    volume_mapdir_args,
 )
 
 
@@ -137,6 +138,26 @@ def test_wasmer_runner_passes_volume_paths_into_wasmer_run(
         f"--volume={volume_path.absolute()}:/app/wp-content"
         in captured["extra_args"]
     )
+
+
+def test_volume_mapdir_args_resolves_symlinked_volume_paths(
+    tmp_path: Path,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    host_volume = tmp_path / "host-wp-content"
+    host_volume.mkdir()
+    backend = LocalBuildBackend(src_dir, tmp_path / "assets")
+    volume_link = backend.get_volume_path("wp-content")
+    volume_link.parent.mkdir(parents=True)
+    volume_link.symlink_to(host_volume, target_is_directory=True)
+
+    args = volume_mapdir_args(
+        backend,
+        {"wp-content": "/app/wp-content"},
+    )
+
+    assert args == [f"--volume={host_volume.resolve()}:/app/wp-content"]
 
 
 def test_parse_cli_volume_mappings() -> None:

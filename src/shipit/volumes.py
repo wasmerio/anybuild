@@ -72,7 +72,7 @@ def volume_mapdir_args(
     for name, guest_path in volume_mappings.items():
         host_path = build_backend.get_volume_path(name).absolute()
         host_path.mkdir(parents=True, exist_ok=True)
-        args.append(f"--volume={host_path}:{guest_path}")
+        args.append(f"--volume={host_path.resolve()}:{guest_path}")
     return args
 
 
