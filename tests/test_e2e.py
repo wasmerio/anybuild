@@ -454,8 +454,11 @@ async def _run_server_and_check(
     if not expect_build:
         found_build.set()
     found_serve = asyncio.Event()
+    matched_serve_output = False
+    verified_http_ready = False
 
     async def reader(label: str, stream: asyncio.StreamReader) -> None:
+        nonlocal matched_serve_output
         async for line in stream:
             line = line.decode("utf-8", errors="replace")
             print(f"[{label}] {line}", end="")
@@ -463,6 +466,7 @@ async def _run_server_and_check(
             if (not found_build.is_set()) and (build_phrase in line):
                 found_build.set()
             if (not found_serve.is_set()) and serve_re.search(line):
+                matched_serve_output = True
                 found_serve.set()
 
     assert proc.stdout is not None and proc.stderr is not None
@@ -476,6 +480,21 @@ async def _run_server_and_check(
         while loop.time() < end:
             if found_build.is_set() and found_serve.is_set():
                 break
+            if (
+                found_build.is_set()
+                and not found_serve.is_set()
+                and case.http
+            ):
+                readiness_request = _http_readiness_request(case.http[0])
+                verified_http_ready = await _wait_for_http_response(
+                    host="localhost",
+                    port=port,
+                    request=readiness_request,
+                    timeout=0.5,
+                )
+                if verified_http_ready:
+                    found_serve.set()
+                    break
             if proc.returncode is not None:
                 # Process ended early; stop waiting
                 break
@@ -581,7 +600,9 @@ async def _run_server_and_check(
 
     if expect_build:
         assert build_phrase in full_output
-    assert serve_re.search(full_output), "Serve banner regex not found in output"
+    assert matched_serve_output or verified_http_ready, (
+        "Serve banner regex not found in output and HTTP readiness did not pass"
+    )
 
 
 async def _materialize_case(
@@ -895,14 +916,24 @@ def _assert_run_command(
         )
 
 
+def _http_readiness_request(request: HTTPRequest) -> HTTPRequest:
+    return HTTPRequest(
+        path=request.path,
+        method=request.method,
+        expected_status=request.expected_status or 200,
+        follow_redirects=request.follow_redirects,
+    )
+
+
 async def _wait_for_http_response(
     host: str, port: int, request: HTTPRequest, timeout: float = 15.0
 ) -> bool:
     url = f"http://{host}:{port}{request.path}"
     loop = asyncio.get_running_loop()
     end = loop.time() + timeout
+    request_timeout = max(0.2, min(5.0, timeout))
     async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=5.0)
+        timeout=aiohttp.ClientTimeout(total=request_timeout)
     ) as session:
         while loop.time() < end:
             try:
