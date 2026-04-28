@@ -26,11 +26,15 @@ else
   echo "📁 Initializing wp-content..."
 
   mkdir -p wp-content/plugins
+  mkdir -p wp-content/themes
   mkdir -p wp-content/upgrade
 
   if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
     shopt -s dotglob nullglob
-    cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content
+    # Note: change this back to copy all, once using the WP Zip files
+    # cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content
+    cp -R "${WPCONTENT_BASE_PATH}"/plugins/* /app/wp-content/plugins || true
+    cp -R "${WPCONTENT_BASE_PATH}"/themes/twentytwenty* /app/wp-content/themes || true
     shopt -u dotglob nullglob
   fi
 
