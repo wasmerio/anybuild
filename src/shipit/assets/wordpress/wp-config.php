@@ -121,16 +121,11 @@ define('SECURE_AUTH_SALT', get_env_var('SECURE_AUTH_SALT', 'no secret provided')
 define('LOGGED_IN_SALT', get_env_var('LOGGED_IN_SALT', 'no secret provided'));
 define('NONCE_SALT', get_env_var('NONCE_SALT', 'no secret provided'));
 
+$https =
+    (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') ||
+    (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https');
 
-if ( ! isset( $_SERVER['HTTPS'] )
-	&& isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] )
-	&& 'https' === strtolower( $_SERVER['HTTP_X_FORWARDED_PROTO'] )
-) {
-	// We need to actually set it so WP would know it's behind TLS.
-	$_SERVER['HTTPS'] = '1';
-}
-
-$scheme = isset( $_SERVER['HTTPS'] ) && '1' === (string) $_SERVER['HTTPS'] ? "https://" : "http://";
+$scheme = $https ? 'https://' : 'http://';
 
 if (!defined('WP_HOME')) {
     define( 'WP_HOME',  get_env_var('WP_HOME', isset($_SERVER['HTTP_HOST']) ? ($scheme . $_SERVER['HTTP_HOST'] ): "http://localhost"));
