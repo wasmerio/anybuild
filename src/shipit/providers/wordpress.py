@@ -77,10 +77,10 @@ class WordPressProvider(PhpProvider):
                 'copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets")'
             )
         return steps + super().build_steps_with_options(
-            extra_ignore=["wp-content"],
+            extra_ignore=[],
             after_install=None,
             after_build=None
-        ) + ['copy("wp-content", "{}".format(wpcontent_base.path))']
+        ) # + ['copy("wp-content", "{}".format(wpcontent_base.path))']
 
     def prepare_steps(self) -> Optional[list[str]]:
         return super().prepare_steps()
@@ -94,13 +94,13 @@ class WordPressProvider(PhpProvider):
                     '-t {}".format(assets.serve_path, PORT, app.serve_path)'
                 )
         return {
-            "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path)',
+            # "wp": '"php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path)',
             "after_deploy": '"bash {}/setup-wp.sh".format(assets.serve_path)',
             **commands,
         }
 
     def mounts(self) -> list[MountSpec]:
-        return super().mounts() + [MountSpec("wpcontent_base")]
+        return super().mounts() # + [MountSpec("wpcontent_base")]
 
     def volumes(self) -> list[VolumeSpec]:
         return [
@@ -114,7 +114,7 @@ class WordPressProvider(PhpProvider):
     def env(self) -> Optional[Dict[str, str]]:
         return {
             "PAGER": '"cat"',
-            "WPCONTENT_BASE_PATH": '"{}".format(wpcontent_base.serve_path)',
+            # "WPCONTENT_BASE_PATH": '"{}".format(wpcontent_base.serve_path)',
             **(super().env() or {}),
         }
 

@@ -11,6 +11,10 @@ WP_LOCALE=${WP_LOCALE:-"en_US"}
 WP_SITEURL=${WP_SITEURL:-"http://localhost"}
 WP_SITE_TITLE=${WP_SITE_TITLE:-"WordPress"}
 
+wp() {
+  php /opt/assets/wp-cli.phar --allow-root --path=/app "$@"
+}
+
 if wp core is-installed; then
   echo "🚀 Setting up WordPress from an existing installation"
   if [ "${WP_UPDATE_DB:-true}" = "true" ]; then
@@ -26,17 +30,17 @@ else
   echo "📁 Initializing wp-content..."
 
   mkdir -p wp-content/plugins
-  mkdir -p wp-content/themes
+  # mkdir -p wp-content/themes
   mkdir -p wp-content/upgrade
 
-  if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
-    shopt -s dotglob nullglob
-    # Note: change this back to copy all, once using the WP Zip files
-    # cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content
-    cp -R "${WPCONTENT_BASE_PATH}"/plugins/* /app/wp-content/plugins || true
-    cp -R "${WPCONTENT_BASE_PATH}"/themes/twentytwenty* /app/wp-content/themes || true
-    shopt -u dotglob nullglob
-  fi
+  # if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
+  #   shopt -s dotglob nullglob
+  #   # Note: change this back to copy all, once using the WP Zip files
+  #   # cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content
+  #   cp -R "${WPCONTENT_BASE_PATH}"/plugins/* /app/wp-content/plugins || true
+  #   cp -R "${WPCONTENT_BASE_PATH}"/themes/twentytwenty* /app/wp-content/themes || true
+  #   shopt -u dotglob nullglob
+  # fi
 
   echo "⚙️ Installing WordPress core"
 
@@ -48,8 +52,8 @@ else
     --admin_email="$WP_ADMIN_EMAIL" \
     --locale="$WP_LOCALE"
 
-  echo "🔄 Setting permalinks"
-  wp rewrite structure '/%year%/%monthnum%/%day%/%postname%/'
+  # echo "🔄 Setting permalinks"
+  # wp rewrite structure '/%year%/%monthnum%/%day%/%postname%/'
 fi
 
 # Install plugins from WP_PLUGINS environment variable
