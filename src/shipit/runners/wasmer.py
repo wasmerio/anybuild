@@ -231,8 +231,6 @@ class WasmerRunner:
             )
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
-        elif isinstance(provider_config, PhpConfig):
-            provider_config.phpix = True
         self.provider_config = provider_config
         return provider_config
 
