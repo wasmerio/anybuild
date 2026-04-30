@@ -1105,7 +1105,7 @@ wheels = [
 
 [[package]]
 name = "shipit-cli"
-version = "0.19.6.dev0"
+version = "0.19.6.dev1"
 source = { editable = "." }
 dependencies = [
     { name = "dotenv" },
