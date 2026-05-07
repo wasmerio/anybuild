@@ -318,6 +318,11 @@ class NodeStaticProvider(StaticFileProvider):
                 return DetectResult(cls.name(), 40)
 
         if config.commands.build:
+            # Iterate over all the Static generators and check if the build command matches
+            for static_generator in StaticGenerator:
+                if static_generator.build_command() in config.commands.build:
+                    return DetectResult(cls.name(), 60)
+
             if config.commands.build.startswith("npm run "):
                 return DetectResult(cls.name(), 40)
             elif config.commands.build.startswith("pnpm run "):
@@ -334,6 +339,17 @@ class NodeStaticProvider(StaticFileProvider):
         package_json = cls.parse_package_json(path)
         if not package_json:
             return None
+        scripts = package_json.get("scripts", {})
+        build_command = scripts.get("generate") or scripts.get("build") or scripts.get("docs:build")
+        if build_command:
+            for static_generator in StaticGenerator:
+                if static_generator.build_command() in build_command:
+                    return DetectResult(cls.name(), 60)
+
+        pure_static_generators = [
+            "docusaurus",
+            "@docusaurus/core",
+        ]
         static_generators = [
             "astro",
             "vite",
@@ -341,10 +357,10 @@ class NodeStaticProvider(StaticFileProvider):
             "nuxt",
             "gatsby",
             "svelte",
-            "docusaurus",
-            "@docusaurus/core",
             "@remix-run/dev",
         ]
+        if any(cls.has_dependency(package_json, dep) for dep in pure_static_generators):
+            return DetectResult(cls.name(), 60)
         if any(cls.has_dependency(package_json, dep) for dep in static_generators):
             return DetectResult(cls.name(), 40)
         return None
@@ -377,6 +393,9 @@ class NodeStaticProvider(StaticFileProvider):
             build_command = scripts.get("build")
             if build_command:
                 return package_manager.run_command("build")
+            docs_build_command = scripts.get("docs:build")
+            if docs_build_command:
+                return package_manager.run_command("docs:build")
         command = static_generator.build_command()
         return package_manager.run_execute_command(command)
 
