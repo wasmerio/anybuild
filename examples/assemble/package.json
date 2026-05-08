@@ -4,7 +4,7 @@
   "scripts": {
     "build": "grunt assemble"
   },
-  "devDependencies": {
+  "dependencies": {
     "assemble": "^0.24.3",
     "grunt": "^1.6.1",
     "grunt-assemble": "^0.6.3"

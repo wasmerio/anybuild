@@ -4,7 +4,7 @@
   "scripts": {
     "docs:build": "vuepress build docs"
   },
-  "devDependencies": {
+  "dependencies": {
     "vuepress": "^1.9.10"
   }
 }

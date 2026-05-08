@@ -4,7 +4,12 @@
   "scripts": {
     "build": "harp src www"
   },
-  "devDependencies": {
+  "dependencies": {
     "harp": "^0.47.2"
+  },
+  "overrides": {
+    "terraform": {
+      "lru-cache": "6.0.0"
+    }
   }
 }
