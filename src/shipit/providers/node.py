@@ -105,7 +105,7 @@ class NodeConfig(Config):
     package_manager: Optional[PackageManager] = None
     extra_dependencies: Set[str] = Field(default_factory=set)
     build_command: Optional[str] = None
-    node_version: Optional[str] = "22"
+    node_version: Optional[str] = "24"
     npm_version: Optional[str] = None
     pnpm_version: Optional[str] = None
     yarn_version: Optional[str] = None

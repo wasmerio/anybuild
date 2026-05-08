@@ -224,7 +224,7 @@ class E2ECase:
             path="examples/node",
             serve_pattern=r"Node server listening on",
             http=[HTTPRequest(path="/", body_match=r"Hello from Node")],
-            build_modes=(BuildMode.Local,),
+            build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Hugo static site (built via Hugo, served with static-web-server)
         E2ECase(
@@ -869,10 +869,10 @@ def _shipit_run_command(
 def _append_build_mode_flags(cmd: list[str], build_mode: BuildMode) -> None:
     if build_mode == BuildMode.Wasmer:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--wasmer-registry=wasmer.io")
     elif build_mode == BuildMode.WasmerAndDocker:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--wasmer-registry=wasmer.io")
         cmd.append("--docker")
     elif build_mode == BuildMode.Local:
         pass
@@ -881,10 +881,10 @@ def _append_build_mode_flags(cmd: list[str], build_mode: BuildMode) -> None:
 def _append_run_mode_flags(cmd: list[str], build_mode: BuildMode) -> None:
     if build_mode == BuildMode.Wasmer:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--wasmer-registry=wasmer.io")
     elif build_mode == BuildMode.WasmerAndDocker:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--wasmer-registry=wasmer.io")
         cmd.append("--docker")
     elif build_mode == BuildMode.Local:
         pass

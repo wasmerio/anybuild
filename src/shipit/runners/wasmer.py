@@ -87,17 +87,18 @@ class WasmerRunner:
         "streamlit": "python -m streamlit",
         "flask": "python -m flask",
         "mcp": "python -m mcp",
-        "node": "edgejs",
+        "node": "edge",
     }
 
     mapper: Dict[str, MapperItem] = {
         "node": {
             "dependencies": {
-                "latest": "wasmer/edgejs@=0.0.2",
-                "22": "wasmer/edgejs@=0.0.2",
+                "latest": "sadhbh-c0d3/edgejs-quickjs@=0.0.5",
+                "24": "sadhbh-c0d3/edgejs-quickjs@=0.0.5",
+                "22": "sadhbh-c0d3/edgejs-quickjs@=0.0.5",
             },
-            "scripts": {"edgejs"},
-            "aliases": {"node": "edgejs"},
+            "scripts": {"edge"},
+            "aliases": {"node": "edge"},
             "env": {},
         },
         "python": {
@@ -626,8 +627,8 @@ class WasmerRunner:
         extra_args = []
         run_args = ["run"]
 
-        if self.command_uses_edgejs(command_name):
-            run_args.append("--experimental-napi")
+        # if self.command_uses_edgejs(command_name):
+        #     run_args.append("--experimental-napi")
 
         if self.wasmer_registry:
             extra_args = [f"--registry={self.wasmer_registry}"] + extra_args
