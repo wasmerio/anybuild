@@ -237,6 +237,55 @@ class E2ECase:
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Welcome to MkDocs with Plugins")],
         ),
+        # Eleventy / 11ty static site
+        E2ECase(
+            path="examples/eleventy",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Eleventy Example")],
+            build_modes=(BuildMode.Local,),
+        ),
+        # VitePress static documentation site
+        E2ECase(
+            path="examples/vitepress",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"VitePress Example")],
+            build_modes=(BuildMode.Local,),
+        ),
+        # VuePress static documentation site
+        E2ECase(
+            path="examples/vuepress",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"VuePress Example")],
+            build_modes=(BuildMode.Local,),
+        ),
+        # Hexo static blog
+        E2ECase(
+            path="examples/hexo",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hexo Example")],
+            build_modes=(BuildMode.Local,),
+        ),
+        # Metalsmith static site
+        E2ECase(
+            path="examples/metalsmith",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Metalsmith Example")],
+            build_modes=(BuildMode.Local,),
+        ),
+        # Assemble static site
+        E2ECase(
+            path="examples/assemble",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Assemble Example")],
+            build_modes=(BuildMode.Local,),
+        ),
+        # Harp static site
+        E2ECase(
+            path="examples/harp",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Harp Example")],
+            build_modes=(BuildMode.Local,),
+        ),
         # Python FastAPI app on Uvicorn
         E2ECase(
             path="examples/python-fastapi",

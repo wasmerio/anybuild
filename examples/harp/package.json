@@ -1,0 +1,10 @@
+{
+  "name": "shipit-harp-example",
+  "private": true,
+  "scripts": {
+    "build": "harp src www"
+  },
+  "devDependencies": {
+    "harp": "^0.47.2"
+  }
+}

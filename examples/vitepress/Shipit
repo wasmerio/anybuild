@@ -1,0 +1,26 @@
+node = dep("node", config.node_version)
+pnpm = dep("pnpm", config.pnpm_version)
+staticwebserver = dep("static-web-server", config.sws_version)
+
+temp = mount("temp")
+static_app = mount("static_app")
+
+serve(
+  name="vitepress",
+  provider="node-static",
+  build=[
+    use(node, pnpm),
+    workdir(temp.path),
+    run("pnpm install", inputs=["package.json"], group="install"),
+    copy(".", ignore=["node_modules", ".git"]),
+    run("pnpm run docs:build", outputs=[config.static_dir], group="build"),
+    run("cp -R {}/* {}/".format(config.static_dir, static_app.path))
+  ],
+  deps=[staticwebserver],
+  commands = {
+    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app.serve_path, PORT)
+  },
+  mounts=[
+    static_app
+  ],
+)

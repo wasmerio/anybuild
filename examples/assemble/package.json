@@ -1,0 +1,12 @@
+{
+  "name": "shipit-assemble-example",
+  "private": true,
+  "scripts": {
+    "build": "grunt assemble"
+  },
+  "devDependencies": {
+    "assemble": "^0.24.3",
+    "grunt": "^1.6.1",
+    "grunt-assemble": "^0.6.3"
+  }
+}
