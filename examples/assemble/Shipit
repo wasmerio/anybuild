@@ -1,5 +1,5 @@
 node = dep("node", config.node_version)
-pnpm = dep("pnpm", config.pnpm_version)
+npm = dep("npm", config.npm_version)
 staticwebserver = dep("static-web-server", config.sws_version)
 
 temp = mount("temp")
@@ -9,11 +9,13 @@ serve(
   name="assemble",
   provider="node-static",
   build=[
-    use(node, pnpm),
+    use(node, npm),
     workdir(temp.path),
-    run("pnpm install", inputs=["package.json"], group="install"),
-    copy(".", ignore=["node_modules", ".git"]),
-    run("pnpm run build", outputs=[config.static_dir], group="build"),
+    copy("package-lock.json"),
+    env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
+    run("npm ci", inputs=["package.json"], group="install"),
+    copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
+    run("npm run build", outputs=[config.static_dir], group="build"),
     run("cp -R {}/* {}/".format(config.static_dir, static_app.path))
   ],
   deps=[staticwebserver],
