@@ -2,6 +2,7 @@ from .base import Provider
 from .hugo import HugoProvider
 from .laravel import LaravelProvider
 from .mkdocs import MkdocsProvider
+from .node import NodeProvider
 from .node_static import NodeStaticProvider
 from .wordpress import WordPressProvider
 from .php import PhpProvider
@@ -21,6 +22,7 @@ def providers() -> list[type[Provider]]:
         WordPressProvider,
         PhpProvider,
         NodeStaticProvider,
+        NodeProvider,
         JekyllProvider,
         GoProvider,
         StaticFileProvider,

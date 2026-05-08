@@ -3,104 +3,21 @@ import re
 import shlex
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
-import yaml
-from pydantic import Field
 from pydantic_settings import SettingsConfigDict
-from semantic_version import NpmSpec, Version
 
 from .base import (
     Config,
     DetectResult,
     DependencySpec,
     MountSpec,
-    Provider,
     ServiceSpec,
     VolumeSpec,
     _exists,
 )
+from .node import NodeConfig, NodeProvider, PackageManager
 from .staticfile import StaticFileProvider, StaticFileConfig
-
-
-class PackageManager(Enum):
-    NPM = "npm"
-    PNPM = "pnpm"
-    YARN = "yarn"
-    BUN = "bun"
-
-    def as_dependency(self, path) -> DependencySpec:
-        dep_name = {
-            PackageManager.NPM: "npm",
-            PackageManager.PNPM: "pnpm",
-            PackageManager.YARN: "yarn",
-            PackageManager.BUN: "bun",
-        }[self]
-
-        default_version = None
-        if self == PackageManager.PNPM:
-            lockfile = path / self.lockfile()
-            lockfile_version = self.pnpm_lockfile_version(lockfile)
-            if lockfile_version:
-                if lockfile_version.startswith("5."):
-                    default_version = "7"
-                elif lockfile_version.startswith("6."):
-                    default_version = "8"
-
-        return DependencySpec(
-            dep_name,
-            var_name=f"config.{dep_name.lower()}_version",
-            default_version=default_version,
-        )
-
-    def lockfile(self) -> str:
-        return {
-            PackageManager.NPM: "package-lock.json",
-            PackageManager.PNPM: "pnpm-lock.yaml",
-            PackageManager.YARN: "yarn.lock",
-            PackageManager.BUN: "bun.lockb",
-        }[self]
-
-    @classmethod
-    def pnpm_lockfile_version(cls, lockfile: Path) -> Optional[str]:
-        if not lockfile.exists():
-            return None
-        # Read line by line and return the lockfileVersion
-        with open(lockfile, "r") as f:
-            for line in f:
-                if "lockfileVersion" in line:
-                    try:
-                        config = yaml.safe_load(line)
-                        version = config.get("lockfileVersion")
-                        assert isinstance(version, (str, bytes))
-                        return version
-                    except:
-                        pass
-        return None
-
-    def install_command(self, has_lockfile: bool = False) -> str:
-        return {
-            PackageManager.NPM: f"npm {'ci' if has_lockfile else 'install'}",
-            PackageManager.PNPM: "pnpm install",
-            PackageManager.YARN: "yarn install",
-            PackageManager.BUN: f"bun install{' --no-save' if has_lockfile else ''}",
-        }[self]
-
-    def run_command(self, command: str) -> str:
-        return {
-            PackageManager.NPM: f"npm run {command}",
-            PackageManager.PNPM: f"pnpm run {command}",
-            PackageManager.YARN: f"yarn run {command}",
-            PackageManager.BUN: f"bun run {command}",
-        }[self]
-
-    def run_execute_command(self, command: str) -> str:
-        return {
-            PackageManager.NPM: f"npx {command}",
-            PackageManager.PNPM: f"pnpx {command}",
-            PackageManager.YARN: f"ypx {command}",
-            PackageManager.BUN: f"bunx {command}",
-        }[self]
 
 
 class StaticGenerator(Enum):
@@ -231,46 +148,30 @@ class StaticGenerator(Enum):
         }[self]
 
 
-class NodeStaticConfig(StaticFileConfig):
+class NodeStaticConfig(NodeConfig, StaticFileConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
-    package_manager: Optional[PackageManager] = None
-    extra_dependencies: Set[str] = Field(default_factory=set)
     static_generator: Optional[StaticGenerator] = None
-    build_command: Optional[str] = None
-    node_version: Optional[str] = "22"
-    npm_version: Optional[str] = None
-    pnpm_version: Optional[str] = None
-    yarn_version: Optional[str] = None
-    bun_version: Optional[str] = None
 
 
-class NodeStaticProvider(StaticFileProvider):
+class NodeStaticProvider(NodeProvider, StaticFileProvider):
     only_build: bool = False
+    SCRIPT_COMMAND_PREFERENCE = ("generate", "build", "docs:build")
     _ASSEMBLE_DEST_PATTERN = re.compile(r"\bdest\s*:\s*['\"]([^'\"]+)['\"]")
 
     def __init__(
         self, path: Path, config: NodeStaticConfig, only_build: bool = False
     ):
-        super().__init__(path, config)
-        self.only_build = only_build
+        NodeProvider.__init__(self, path, config, only_build=only_build)
 
     @classmethod
     def load_config(
         cls, path: Path, base_config: Config
     ) -> NodeStaticConfig:
-        config = NodeStaticConfig(**base_config.model_dump())
+        static_config = StaticFileProvider.load_config(path, base_config)
+        config = NodeStaticConfig(**static_config.model_dump())
         if not config.package_manager:
-            if (path / "package-lock.json").exists():
-                config.package_manager = PackageManager.NPM
-            elif (path / "pnpm-lock.yaml").exists():
-                config.package_manager = PackageManager.PNPM
-            elif (path / "yarn.lock").exists():
-                config.package_manager = PackageManager.YARN
-            elif (path / "bun.lockb").exists():
-                config.package_manager = PackageManager.BUN
-            else:
-                config.package_manager = PackageManager.PNPM
+            config.package_manager = NodeProvider.detect_package_manager(path)
 
         package_json = cls.parse_package_json(path)
 
@@ -350,20 +251,6 @@ class NodeStaticProvider(StaticFileProvider):
         return config
 
     @classmethod
-    def parse_package_json(cls, path: Path) -> Optional[Dict[str, Any]]:
-        package_json_path = path / "package.json"
-        if not package_json_path.exists():
-            return None
-        try:
-            package_json = json.loads(package_json_path.read_text())
-            assert isinstance(package_json, dict), (
-                "package.json must be a valid JSON object"
-            )
-            return package_json
-        except Exception:
-            return None
-
-    @classmethod
     def get_static_dir(
         cls,
         path: Path,
@@ -398,24 +285,9 @@ class NodeStaticProvider(StaticFileProvider):
     def _script_commands(
         cls, package_json: Optional[Dict[str, Any]]
     ) -> list[str]:
-        if not package_json:
-            return []
-        scripts = package_json.get("scripts", {})
-        if not isinstance(scripts, dict):
-            return []
-
-        preferred = ("generate", "build", "docs:build")
-        commands = [
-            scripts[name]
-            for name in preferred
-            if isinstance(scripts.get(name), str)
-        ]
-        commands.extend(
-            command
-            for name, command in scripts.items()
-            if name not in preferred and isinstance(command, str)
+        return NodeProvider._script_commands(
+            package_json, preferred=cls.SCRIPT_COMMAND_PREFERENCE
         )
-        return commands
 
     @classmethod
     def _args_after_command(cls, command: str, executable: str) -> list[str]:
@@ -513,41 +385,6 @@ class NodeStaticProvider(StaticFileProvider):
         return None
 
     @classmethod
-    def _is_package_manager_build_command(cls, command: str) -> bool:
-        package_manager_prefixes = (
-            "npm run ",
-            "pnpm run ",
-            "pnpm ",
-            "yarn run ",
-            "yarn ",
-            "bun run ",
-            "bun ",
-        )
-        return command.startswith(package_manager_prefixes)
-
-    @classmethod
-    def has_dependency(
-        cls,
-        package_json: Optional[Dict[str, Any]],
-        dep: str,
-        version: Optional[str] = None,
-    ) -> bool:
-        if not package_json:
-            return False
-        for section in ("dependencies", "devDependencies", "peerDependencies"):
-            dep_section = package_json.get(section, {})
-            if dep in dep_section:
-                if version:
-                    try:
-                        constraint = NpmSpec(dep_section[dep])
-                        return Version(version) in constraint
-                    except Exception:
-                        pass
-                else:
-                    return True
-        return False
-
-    @classmethod
     def name(cls) -> str:
         return "node-static"
 
@@ -634,16 +471,10 @@ class NodeStaticProvider(StaticFileProvider):
         return None
 
     def dependencies(self) -> list[DependencySpec]:
-        package_manager_dep = self.config.package_manager.as_dependency(self.path)
-        package_manager_dep.use_in_build = True
+        node_provider = NodeProvider(self.path, self.config, only_build=True)
         return [
-            DependencySpec(
-                "node",
-                var_name="config.node_version",
-                use_in_build=True,
-            ),
-            package_manager_dep,
-            *(super().dependencies() if not self.only_build else []),
+            *node_provider.dependencies(),
+            *(StaticFileProvider.dependencies(self) if not self.only_build else []),
         ]
 
     @classmethod
@@ -677,57 +508,14 @@ class NodeStaticProvider(StaticFileProvider):
         command = static_generator.build_command()
         return package_manager.run_execute_command(command)
 
-    def build_steps_install(self) -> list[str]:
-        lockfile = self.config.package_manager.lockfile()
-        has_lockfile = (self.path / lockfile).exists()
-        install_command = self.config.package_manager.install_command(
-            has_lockfile=has_lockfile
-        )
-        return filter(
-            None,
-            [
-                f'copy("{lockfile}")' if has_lockfile else None,
-                'env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false")'
-                if self.config.package_manager == PackageManager.NPM
-                else None,
-                f'run("{install_command}", inputs=["package.json"], group="install")',
-            ],
-        )
-
-    def build_steps_build(self) -> list[str]:
-        return filter(
-            None,
-            [
-                (
-                    f'run("{self.config.build_command}", '
-                    'outputs=[config.static_dir], group="build")'
-                )
-                if self.config.build_command and not self.only_build
-                else None,
-                f'run("{self.config.build_command}", group="build")'
-                if self.config.build_command and self.only_build
-                else None,
-            ]
-        )
-
     def build_steps(self) -> list[str]:
-        lockfile = self.config.package_manager.lockfile()
-        has_lockfile = (self.path / lockfile).exists()
-        install_command = self.config.package_manager.install_command(
-            has_lockfile=has_lockfile
-        )
-        ignored_files = ["node_modules", ".git"]
-        if has_lockfile:
-            ignored_files.append(lockfile)
-        all_ignored_files = ", ".join([f'"{file}"' for file in ignored_files])
-
         return filter(
             None,
             [
                 'workdir(temp.path)' if not self.only_build else None,
                 *self.build_steps_install(),
-                f'copy(".", ignore=[{all_ignored_files}])',
-                *self.build_steps_build(),
+                self.build_steps_copy(),
+                *self.build_steps_build(output="config.static_dir"),
                 'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
                 if not self.only_build
                 else None,
@@ -740,13 +528,19 @@ class NodeStaticProvider(StaticFileProvider):
     def mounts(self) -> list[MountSpec]:
         if self.only_build:
             return []
-        return [MountSpec("temp", attach_to_serve=False), *super().mounts()]
+        return [
+            MountSpec("temp", attach_to_serve=False),
+            *StaticFileProvider.mounts(self),
+        ]
 
     def volumes(self) -> list[VolumeSpec]:
         return []
 
     def env(self) -> Optional[Dict[str, str]]:
         return None
+
+    def commands(self) -> Dict[str, str]:
+        return StaticFileProvider.commands(self)
 
     def services(self) -> list[ServiceSpec]:
         return []

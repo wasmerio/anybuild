@@ -219,6 +219,13 @@ class E2ECase:
             ],
             build_modes=(BuildMode.Wasmer,),
         ),
+        # Generic Node HTTP server
+        E2ECase(
+            path="examples/node",
+            serve_pattern=r"Node server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Node")],
+            build_modes=(BuildMode.Local,),
+        ),
         # Hugo static site (built via Hugo, served with static-web-server)
         E2ECase(
             path="examples/hugo",

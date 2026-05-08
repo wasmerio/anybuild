@@ -4,36 +4,34 @@ from typing import Dict, Optional
 from .base import (
     DetectResult,
     DependencySpec,
-    Provider,
     _exists,
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    CustomCommands,
     Config,
 )
 from .php import PhpConfig, PhpProvider
-from .node_static import NodeStaticConfig, NodeStaticProvider
+from .node import NodeConfig, NodeProvider
 from pydantic_settings import SettingsConfigDict
 
 
-class LaravelConfig(PhpConfig, NodeStaticConfig):
+class LaravelConfig(PhpConfig, NodeConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
 
 class LaravelProvider(PhpProvider):
     def __init__(self, path: Path, config: LaravelConfig):
         self.path = path
-        self.node_provider = NodeStaticProvider(path, config, only_build=True)
+        self.node_provider = NodeProvider(path, config, only_build=True)
         self.config = config
 
     @classmethod
     def load_config(cls, path: Path, base_config: Config) -> LaravelConfig:
         config = super().load_config(path, base_config)
         config.use_composer = True
-        node_config = NodeStaticProvider.load_config(path, base_config)
-        node_config.static_dir = None
-        node_config.static_generator = None
+        node_config = NodeProvider.load_config(
+            path, base_config, infer_start=False
+        )
         return LaravelConfig(
             **(
                 config.model_dump()
