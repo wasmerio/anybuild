@@ -1,0 +1,10 @@
+{
+  "name": "shipit-eleventy-example",
+  "private": true,
+  "scripts": {
+    "build": "eleventy"
+  },
+  "dependencies": {
+    "@11ty/eleventy": "^3.1.5"
+  }
+}

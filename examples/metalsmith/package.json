@@ -1,0 +1,10 @@
+{
+  "name": "shipit-metalsmith-example",
+  "private": true,
+  "scripts": {
+    "build": "metalsmith"
+  },
+  "dependencies": {
+    "metalsmith": "^2.7.0"
+  }
+}

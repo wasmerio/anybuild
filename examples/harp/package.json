@@ -1,0 +1,15 @@
+{
+  "name": "shipit-harp-example",
+  "private": true,
+  "scripts": {
+    "build": "harp src www"
+  },
+  "dependencies": {
+    "harp": "^0.47.2"
+  },
+  "overrides": {
+    "terraform": {
+      "lru-cache": "6.0.0"
+    }
+  }
+}

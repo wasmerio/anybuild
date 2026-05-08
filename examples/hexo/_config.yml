@@ -1,0 +1,5 @@
+title: Hexo Example
+url: https://example.com
+root: /
+public_dir: public
+theme: landscape
