@@ -67,8 +67,10 @@ class PackageManager(Enum):
                     try:
                         config = yaml.safe_load(line)
                         version = config.get("lockfileVersion")
-                        assert isinstance(version, (str, bytes))
-                        return version
+                        if isinstance(version, bytes):
+                            return version.decode()
+                        if isinstance(version, str):
+                            return version
                     except Exception:
                         pass
         return None
@@ -356,9 +358,12 @@ class NodeProvider:
     def build_steps_install(self) -> list[str]:
         if not (self.path / "package.json").exists():
             return []
-        lockfile = self.config.package_manager.lockfile()
+        package_manager = self.config.package_manager
+        if package_manager is None:
+            package_manager = self.detect_package_manager(self.path)
+        lockfile = package_manager.lockfile()
         has_lockfile = (self.path / lockfile).exists()
-        install_command = self.config.package_manager.install_command(
+        install_command = package_manager.install_command(
             has_lockfile=has_lockfile
         )
         return list(
@@ -370,7 +375,7 @@ class NodeProvider:
                         'env(CI="true", NODE_ENV="production", '
                         'NPM_CONFIG_FUND="false")'
                     )
-                    if self.config.package_manager == PackageManager.NPM
+                    if package_manager == PackageManager.NPM
                     else None,
                     (
                         f'run("{install_command}", inputs=["package.json"], '
