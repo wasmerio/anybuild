@@ -7,11 +7,12 @@ export PAGER="cat"
 WP_ADMIN_EMAIL=${WP_ADMIN_EMAIL:-"admin@example.com"}
 WP_ADMIN_USERNAME=${WP_ADMIN_USERNAME:-"admin"}
 WP_ADMIN_PASSWORD=${WP_ADMIN_PASSWORD:-"admin"}
-WP_LOCALE=${WP_LOCALE:-"en_US"}
+WP_DEFAULT_LOCALE=${WP_DEFAULT_LOCALE:-"en_US"}
+WP_LOCALE=${WP_LOCALE:-"$WP_DEFAULT_LOCALE"}
 WP_SITEURL=${WP_SITEURL:-"http://localhost"}
 WP_SITE_TITLE=${WP_SITE_TITLE:-"WordPress"}
 
-if wp core is-installed; then
+if wp core is-installed && [ "${WP_FORCE_SETUP:-false}" != "true" ]; then
   echo "🚀 Setting up WordPress from an existing installation"
   if [ "${WP_UPDATE_DB:-true}" = "true" ]; then
       echo "🛠️ Activating maintenance mode..."
@@ -31,10 +32,7 @@ else
 
   if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
     shopt -s dotglob nullglob
-    # Note: change this back to copy all, once using the WP Zip files
-    # cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content
-    cp -R "${WPCONTENT_BASE_PATH}"/plugins/* /app/wp-content/plugins || true
-    cp -R "${WPCONTENT_BASE_PATH}"/themes/twentytwenty* /app/wp-content/themes || true
+    cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content || true
     shopt -u dotglob nullglob
   fi
 
@@ -77,6 +75,16 @@ if [ -n "${WP_PLUGINS:-}" ]; then
   done
 fi
 
+if [ -n "${WP_PLUGINS_ACTIVATE:-}" ]; then
+  echo "✨ Activating plugins: $WP_PLUGINS_ACTIVATE"
+  IFS=',' # Split by commas
+  
+  for PLUGIN_ENTRY in $WP_PLUGINS_ACTIVATE; do
+    echo "• Activating plugin: $PLUGIN_ENTRY"
+    wp plugin activate "$PLUGIN_ENTRY"
+  done
+fi
+
 # Install themes from WP_THEMES environment variable
 if [ -n "${WP_THEMES:-}" ]; then
   echo "🎨 Installing themes from WP_THEMES: $WP_THEMES"
@@ -108,14 +116,14 @@ fi
 
 if [ -n "${WP_LOCALE:-}" ]; then
   echo "🌐 Setting locale: $WP_LOCALE"
-  wp language core install "$WP_LOCALE"
-  wp language theme install --all "$WP_LOCALE"
-  wp language plugin install --all "$WP_LOCALE"
+  # wp language core install "$WP_LOCALE"
+  # wp language theme install --all "$WP_LOCALE"
+  # wp language plugin install --all "$WP_LOCALE"
   wp site switch-language "$WP_LOCALE"
 fi
 
-# echo "✍️ Rewriting permalinks structure"
-# wp rewrite flush --hard || true
+echo "✍️ Rewriting permalinks structure"
+wp rewrite flush --hard || true
 
 # if [ ! -f "/app/wp-content/wp-config.php" ]; then
 #   cat > /app/wp-content/wp-config.php <<EOF

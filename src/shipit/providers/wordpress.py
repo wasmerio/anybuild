@@ -18,6 +18,8 @@ from pydantic_settings import SettingsConfigDict
 class WordPressConfig(PhpConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
+    wp_version: Optional[str] = None
+    wp_locale: Optional[str] = None
     wp_cli_version: Optional[str] = None
 
 
@@ -43,6 +45,10 @@ class WordPressProvider(PhpProvider):
             and _exists(path, "wp-load.php")
         ):
             return DetectResult(cls.name(), 80)
+
+        wp_config = cls.load_config(path, config)
+        if wp_config.wp_version:
+            return DetectResult(cls.name(), 80)
         return None
 
     def dependencies(self) -> list[DependencySpec]:
@@ -62,6 +68,15 @@ class WordPressProvider(PhpProvider):
             'copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets.path))',
             'copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets.path), base="assets")',
         ]
+        if self.config.wp_version:
+            version_arg = f"--version={self.config.wp_version}"
+            if self.config.wp_locale:
+                locale_arg = f"--locale={self.config.wp_locale}"
+            else:
+                locale_arg = ""
+            steps.append(
+                f'run("php -d memory_limit=512M {{}}/wp-cli.phar core download --allow-root --path={{}} {version_arg} {locale_arg}".format(assets.path, app.path))'
+            )
         if self.config.phpix:
             # We create the start script that creates the .htaccess symlink
             # since phpix now supports .htaccess files.
@@ -80,7 +95,7 @@ class WordPressProvider(PhpProvider):
             extra_ignore=["wp-content"],
             after_install=None,
             after_build=None
-        ) + ['copy("wp-content", "{}".format(wpcontent_base.path))']
+        ) + ['run("cp -R {}/wp-content/* {}".format(app.path, wpcontent_base.path))']
 
     def prepare_steps(self) -> Optional[list[str]]:
         return super().prepare_steps()
@@ -112,11 +127,14 @@ class WordPressProvider(PhpProvider):
         ]
 
     def env(self) -> Optional[Dict[str, str]]:
-        return {
+        env = {
             "PAGER": '"cat"',
             "WPCONTENT_BASE_PATH": '"{}".format(wpcontent_base.serve_path)',
             **(super().env() or {}),
         }
+        if self.config.wp_locale:
+            env["WP_LOCALE"] = f'"{self.config.wp_locale}"'
+        return env
 
     def services(self) -> list[ServiceSpec]:
         return [ServiceSpec(name="database", provider="mysql")]
