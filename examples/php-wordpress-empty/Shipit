@@ -25,7 +25,7 @@ serve(
     use(php),
     copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets.path)),
     copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets.path), base="assets"),
-    run("php -d memory_limit=512M {}/wp-cli.phar core download --allow-root --path={} --version=latest ".format(assets.path, app.path)),
+    run("php -d memory_limit=512M {}/wp-cli.phar core download --allow-root --path={} --version=latest".format(assets.path, app.path)),
     copy("wordpress/start.php", "{}/start-wp.php".format(assets.path), base="assets"),
     copy("wordpress/wp-config.php", "{}/wp-config.php".format(app.path), base="assets"),
     copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets"),
