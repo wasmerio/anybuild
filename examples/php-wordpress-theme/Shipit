@@ -1,5 +1,4 @@
 php = dep("php", config.php_version, architecture=config.php_architecture)
-phpix = dep("phpix", config.php_version, architecture=config.php_architecture)
 bash = dep("bash")
 
 app = mount("app")
@@ -26,7 +25,6 @@ serve(
     copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets.path)),
     copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets.path), base="assets"),
     run("php -d memory_limit=512M {}/wp-cli.phar core download --allow-root --path={} --version=latest".format(assets.path, app.path)),
-    copy("wordpress/start.php", "{}/start-wp.php".format(assets.path), base="assets"),
     copy("wordpress/wp-config.php", "{}/wp-config.php".format(app.path), base="assets"),
     copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets"),
     workdir(app.path),
@@ -34,18 +32,17 @@ serve(
     run("cp -R {}/wp-content/* {}".format(app.path, wpcontent_base.path)),
     copy(".", "{}/themes/php-wordpress-theme".format(wpcontent_base.path), ignore=[".git", ".source"])
   ],
-  deps=[phpix, bash],
+  deps=[php, bash],
   env = {
     "PAGER": "cat",
     "WPCONTENT_BASE_PATH": "{}".format(wpcontent_base.serve_path),
     "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path),
-    "PHPIX_PHP_THREADS": "4",
     "WP_DEFAULT_THEME": "php-wordpress-theme"
   },
   commands = {
     "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path),
     "after_deploy": "bash {}/setup-wp.sh".format(assets.serve_path),
-    "start": "phpix --startup-script={}/start-wp.php -S localhost:{} -t {}".format(assets.serve_path, PORT, app.serve_path)
+    "start": "php -S localhost:{} -t {}".format(PORT, app.serve_path)
   },
   services=[
     database,
