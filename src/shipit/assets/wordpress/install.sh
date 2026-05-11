@@ -58,7 +58,7 @@ if [ -n "${WP_PLUGINS:-}" ]; then
   for PLUGIN_ENTRY in $WP_PLUGINS; do
     if [[ "$PLUGIN_ENTRY" =~ ^https?:// ]]; then
       echo "• Installing plugin from URL: $PLUGIN_ENTRY"
-      wp plugin install "$PLUGIN_ENTRY" --activate
+      wp plugin install "$PLUGIN_ENTRY" --force --activate
     else
       # Extract name and version using parameter expansion
       PLUGIN_NAME="${PLUGIN_ENTRY%%:*}"
@@ -66,10 +66,10 @@ if [ -n "${WP_PLUGINS:-}" ]; then
 
       if [[ "$PLUGIN_NAME" == "$PLUGIN_VERSION" ]]; then
         echo "• Installing plugin '${PLUGIN_NAME}' (latest version)..."
-        wp plugin install "$PLUGIN_NAME" --activate
+        wp plugin install "$PLUGIN_NAME" --force --activate
       else
         echo "• Installing plugin '${PLUGIN_NAME}' (version: ${PLUGIN_VERSION})..."
-        wp plugin install "$PLUGIN_NAME" --version="$PLUGIN_VERSION" --activate
+        wp plugin install "$PLUGIN_NAME" --force --version="$PLUGIN_VERSION" --activate
       fi
     fi
   done
@@ -93,17 +93,17 @@ if [ -n "${WP_THEMES:-}" ]; then
   for THEME_ENTRY in $WP_THEMES; do
     if [[ "$THEME_ENTRY" =~ ^https?:// ]]; then
       echo "• Installing theme from URL: $THEME_ENTRY"
-      wp theme install "$THEME_ENTRY"
+      wp theme install "$THEME_ENTRY" --force
     else
       THEME_NAME="${THEME_ENTRY%%:*}"
       THEME_VERSION="${THEME_ENTRY#*:}"
 
       if [[ "$THEME_NAME" == "$THEME_VERSION" ]]; then
         echo "• Installing theme '${THEME_NAME}' (latest version)..."
-        wp theme install "$THEME_NAME"
+        wp theme install "$THEME_NAME" --force
       else
         echo "• Installing theme '${THEME_NAME}' (version: ${THEME_VERSION})..."
-        wp theme install "$THEME_NAME" --version="$THEME_VERSION"
+        wp theme install "$THEME_NAME" --force --version="$THEME_VERSION"
       fi
     fi
   done
