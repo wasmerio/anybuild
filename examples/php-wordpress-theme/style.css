@@ -1,0 +1,25 @@
+/*
+Theme Name: Shipit Example Theme
+Theme URI: https://wasmer.io/
+Author: Wasmer
+Description: Demonstrates a WordPress theme deployed by Shipit.
+Version: 1.0.0
+Text Domain: shipit-example-theme
+*/
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  color: #1f2937;
+  background: #f8fafc;
+}
+
+main {
+  max-width: 720px;
+  margin: 12vh auto;
+  padding: 0 24px;
+}
+
+h1 {
+  color: #0f172a;
+}

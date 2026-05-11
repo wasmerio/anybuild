@@ -12,6 +12,17 @@ WP_LOCALE=${WP_LOCALE:-"$WP_DEFAULT_LOCALE"}
 WP_SITEURL=${WP_SITEURL:-"http://localhost"}
 WP_SITE_TITLE=${WP_SITE_TITLE:-"WordPress"}
 
+echo "📁 Initializing wp-content..."
+mkdir -p wp-content/plugins
+mkdir -p wp-content/themes
+mkdir -p wp-content/upgrade
+
+if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
+  shopt -s dotglob nullglob
+  cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content || true
+  shopt -u dotglob nullglob
+fi
+
 if wp core is-installed && [ "${WP_FORCE_SETUP:-false}" != "true" ]; then
   echo "🚀 Setting up WordPress from an existing installation"
   if [ "${WP_UPDATE_DB:-true}" = "true" ]; then
@@ -24,17 +35,6 @@ if wp core is-installed && [ "${WP_FORCE_SETUP:-false}" != "true" ]; then
   fi
 else
   echo "🚀 Setting up WordPress from a fresh install"
-  echo "📁 Initializing wp-content..."
-
-  mkdir -p wp-content/plugins
-  mkdir -p wp-content/themes
-  mkdir -p wp-content/upgrade
-
-  if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
-    shopt -s dotglob nullglob
-    cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content || true
-    shopt -u dotglob nullglob
-  fi
 
   echo "⚙️ Installing WordPress core"
 

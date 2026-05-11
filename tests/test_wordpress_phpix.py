@@ -2,12 +2,43 @@ from pathlib import Path
 
 import yaml
 
-from shipit.generator import generate_shipit, load_provider_config
+from shipit.generator import generate_shipit, load_provider, load_provider_config
 from shipit.providers.base import Config
-from shipit.providers.wordpress import WordPressProvider
+from shipit.providers.wordpress import WordPressConfig, WordPressProvider
 from shipit.runners.wasmer import WasmerRunner
 from shipit.shipit_types import Mount, Package, Serve, Service
 from shipit.version import version as shipit_version
+
+
+def _write_plugin(project_dir: Path, filename: str = "my-plugin.php") -> None:
+    project_dir.mkdir()
+    (project_dir / filename).write_text(
+        """<?php
+/**
+ * Plugin Name: My Plugin
+ */
+"""
+    )
+
+
+def _write_theme(project_dir: Path) -> None:
+    project_dir.mkdir()
+    (project_dir / "style.css").write_text(
+        """/*
+Theme Name: My Theme
+*/
+"""
+    )
+    (project_dir / "index.php").write_text("<?php\n")
+
+
+def _generate_for_path(project_dir: Path) -> tuple[type, WordPressConfig, str]:
+    base_config = Config()
+    base_config.commands.enrich_from_path(project_dir)
+    provider_cls = load_provider(project_dir, base_config)
+    provider_config = load_provider_config(provider_cls, project_dir, base_config)
+    provider = provider_cls(project_dir, provider_config)
+    return provider_cls, provider_config, generate_shipit(project_dir, provider)
 
 
 class DummyBuildBackend:
@@ -27,6 +58,57 @@ class DummyBuildBackend:
 
     def get_runtime_path(self) -> str | None:
         return None
+
+
+def test_wordpress_provider_detects_plugin_and_generates_activation(
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "my-plugin"
+    _write_plugin(project_dir)
+
+    provider_cls, provider_config, generated = _generate_for_path(project_dir)
+
+    assert provider_cls is WordPressProvider
+    assert provider_config.wp_version == "latest"
+    assert "--version=latest" in generated
+    assert (
+        'copy(".", "{}/plugins/my-plugin".format(wpcontent_base.path), '
+        'ignore=[".git", ".source"])'
+    ) in generated
+    assert '"WP_PLUGINS_ACTIVATE": "my-plugin/my-plugin.php"' in generated
+
+
+def test_wordpress_provider_detects_theme_and_generates_activation(
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "my-theme"
+    _write_theme(project_dir)
+
+    provider_cls, provider_config, generated = _generate_for_path(project_dir)
+
+    assert provider_cls is WordPressProvider
+    assert provider_config.wp_version == "latest"
+    assert "--version=latest" in generated
+    assert (
+        'copy(".", "{}/themes/my-theme".format(wpcontent_base.path), '
+        'ignore=[".git", ".source"])'
+    ) in generated
+    assert '"WP_DEFAULT_THEME": "my-theme"' in generated
+
+
+def test_wordpress_extension_keeps_user_wp_version(tmp_path: Path) -> None:
+    project_dir = tmp_path / "my-plugin"
+    _write_plugin(project_dir)
+
+    base_config = Config()
+    provider_config = load_provider_config(
+        WordPressProvider,
+        project_dir,
+        base_config,
+        {"wp_version": "6.8.3"},
+    )
+
+    assert provider_config.wp_version == "6.8.3"
 
 
 def test_generate_shipit_wordpress_phpix_mode() -> None:
