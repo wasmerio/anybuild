@@ -184,13 +184,21 @@ class PhpProvider:
     def dependencies(self) -> list[DependencySpec]:
         deps = [
             DependencySpec(
-                "php" if not self.config.phpix else "phpix",
+                "php",
                 var_name="config.php_version",
                 architecture_var_name="config.php_architecture",
                 use_in_build=True,
-                use_in_serve=True,
+                use_in_serve=not self.config.phpix,
             ),
         ]
+        if self.config.phpix:
+            deps.append(DependencySpec(
+                "phpix",
+                var_name="config.php_version",
+                architecture_var_name="config.php_architecture",
+                use_in_build=False,
+                use_in_serve=True,
+            ))
         if self.config.use_composer:
             deps.append(DependencySpec("composer", use_in_build=True))
             deps.append(DependencySpec("bash", use_in_serve=True))

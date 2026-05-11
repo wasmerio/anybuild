@@ -18,12 +18,19 @@ _EXAMPLE_DIRS = _example_dirs_with_shipit()
 @pytest.mark.parametrize(
     "example_dir", _EXAMPLE_DIRS, ids=[p.name for p in _EXAMPLE_DIRS]
 )
-def test_generate_shipit_matches_example(example_dir: Path) -> None:
+def test_generate_shipit_matches_example(
+    example_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Ensure generated Shipit content matches the checked-in file.
 
     This validates provider detection and the Shipit generator formatting for
     each example that includes a `Shipit` file.
     """
+    if example_dir.name == "php-wordpress-empty":
+        monkeypatch.setenv("SHIPIT_WP_VERSION", "latest")
+        monkeypatch.setenv("SHIPIT_PHPIX", "true")
+
     base_config = Config()
     base_config.commands.enrich_from_path(example_dir)
 

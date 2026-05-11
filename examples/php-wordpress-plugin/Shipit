@@ -1,19 +1,58 @@
-staticwebserver = dep("static-web-server", config.sws_version)
+php = dep("php", config.php_version, architecture=config.php_architecture)
+bash = dep("bash")
 
-static_app = mount("static_app")
+app = mount("app")
+assets = mount("assets")
+wpcontent_base = mount("wpcontent_base")
+
+wp_content = volume("wp-content", "{}/wp-content/".format(app.serve_path))
+
+database = service(
+  name="database",
+  provider="mysql"
+)
+
+wp_cli_version = config.wp_cli_version
+wp_cli_download_url = f"https://github.com/wp-cli/wp-cli/releases/download/v{wp_cli_version}/wp-cli-{wp_cli_version}.phar" if wp_cli_version else "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"
+
 
 serve(
   name="php-wordpress-plugin",
-  provider="staticfile",
+  provider="wordpress",
+  cwd=app.serve_path,
   build=[
-    workdir(static_app.path),
-    copy(".", ".", ignore=[".git"])
+    use(php),
+    copy(wp_cli_download_url, "{}/wp-cli.phar".format(assets.path)),
+    copy("wordpress/install.sh", "{}/setup-wp.sh".format(assets.path), base="assets"),
+    run("php -d memory_limit=512M {}/wp-cli.phar core download --allow-root --path={} --version=latest".format(assets.path, app.path)),
+    copy("wordpress/wp-config.php", "{}/wp-config.php".format(app.path), base="assets"),
+    copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base="assets"),
+    workdir(app.path),
+    copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
+    run("cp -R {}/wp-content/* {}".format(app.path, wpcontent_base.path)),
+    copy(".", "{}/plugins/php-wordpress-plugin".format(wpcontent_base.path), ignore=[".git", ".source"])
   ],
-  deps=[staticwebserver],
-  commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app.serve_path, PORT)
+  deps=[php, bash],
+  env = {
+    "PAGER": "cat",
+    "WPCONTENT_BASE_PATH": "{}".format(wpcontent_base.serve_path),
+    "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path),
+    "WP_PLUGINS_ACTIVATE": "php-wordpress-plugin/shipit-example-plugin.php"
   },
+  commands = {
+    "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path),
+    "after_deploy": "bash {}/setup-wp.sh".format(assets.serve_path),
+    "start": "php -S localhost:{} -t {}".format(PORT, app.serve_path)
+  },
+  services=[
+    database,
+  ],
   mounts=[
-    static_app
+    app,
+    assets,
+    wpcontent_base
+  ],
+  volumes=[
+    wp_content
   ],
 )
