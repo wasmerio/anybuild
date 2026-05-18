@@ -399,7 +399,7 @@ class NodeProvider:
         )
         return f'copy(".", ignore=[{ignored}])'
 
-    def build_steps_build(self, output: Optional[str] = ".") -> list[str]:
+    def build_steps_build(self, output: Optional[str] = "\".\"") -> list[str]:
         if not self.config.build_command:
             return []
         if not self.only_build:

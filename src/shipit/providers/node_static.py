@@ -42,6 +42,20 @@ class StaticGenerator(Enum):
     REMIX_V2 = "remix-v2"
     REMIX_V2_CLASSIC = "remix-v2-classic"
 
+    def is_pure_static(self) -> bool:
+        return self in [
+            StaticGenerator.ELEVENTY,
+            StaticGenerator.VITEPRESS,
+            StaticGenerator.VUEPRESS,
+            StaticGenerator.ASSEMBLE,
+            StaticGenerator.HARP,
+            StaticGenerator.HEXO,
+            StaticGenerator.METALSMITH,
+            StaticGenerator.DOCUSAURUS,
+            StaticGenerator.DOCUSAURUS_OLD,
+            StaticGenerator.SVELTE,
+        ]
+
     def get_output_dir(self) -> str:
         if self == StaticGenerator.NEXT:
             return "out"
@@ -392,24 +406,24 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
     def detect(
         cls, path: Path, config: Config
     ) -> Optional[DetectResult]:
-        if config.commands.install:
-            # Detect this provider from the install command
-            install_commands = [
-                "npm install",
-                "npm ci",
-                "npm i",
-                "pnpm install",
-                "pnpm ci",
-                "pnpm i",
-                "yarn install",
-                "yarn ci",
-                "yarn i",
-                "bun install",
-                "bun ci",
-                "bun i",
-            ]
-            if config.commands.install in install_commands:
-                return DetectResult(cls.name(), 40)
+        # if config.commands.install:
+        #     # Detect this provider from the install command
+        #     install_commands = [
+        #         "npm install",
+        #         "npm ci",
+        #         "npm i",
+        #         "pnpm install",
+        #         "pnpm ci",
+        #         "pnpm i",
+        #         "yarn install",
+        #         "yarn ci",
+        #         "yarn i",
+        #         "bun install",
+        #         "bun ci",
+        #         "bun i",
+        #     ]
+        #     if config.commands.install in install_commands:
+        #         return DetectResult(cls.name(), 40)
 
         has_package_manager_build_command = False
         if config.commands.build:
@@ -429,15 +443,25 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             )
 
         package_json = cls.parse_package_json(path)
-        if not package_json:
-            if has_package_manager_build_command:
-                return DetectResult(cls.name(), 40)
+        # if not package_json:
+        #     if has_package_manager_build_command:
+        #         return DetectResult(cls.name(), 40)
+        #     return None
+
+        dependencies_that_require_full_node = [
+            "@astrojs/node",
+            "@remix-run/node",
+            "@sveltejs/adapter-node",
+        ]
+        if any(cls.has_dependency(package_json, dep) for dep in dependencies_that_require_full_node):
             return None
+
         for build_command in cls._script_commands(package_json):
             for static_generator in StaticGenerator:
                 if static_generator.build_command() in build_command:
                     return DetectResult(cls.name(), 60)
-            if StaticGenerator.detect_generators_from_command(build_command):
+            all_generators = StaticGenerator.detect_generators_from_command(build_command)
+            if all_generators and all(generator.is_pure_static() for generator in all_generators):
                 return DetectResult(cls.name(), 60)
 
         pure_static_generators = [
@@ -465,9 +489,9 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         if any(cls.has_dependency(package_json, dep) for dep in pure_static_generators):
             return DetectResult(cls.name(), 60)
         if any(cls.has_dependency(package_json, dep) for dep in static_generators):
-            return DetectResult(cls.name(), 40)
+            return DetectResult(cls.name(), 20)
         if has_package_manager_build_command:
-            return DetectResult(cls.name(), 40)
+            return DetectResult(cls.name(), 20)
         return None
 
     def dependencies(self) -> list[DependencySpec]:

@@ -85,6 +85,14 @@ class WasmerRunner:
         "hypercorn": "python -m hypercorn",
         "fastapi": "python -m fastapi",
         "streamlit": "python -m streamlit",
+        "next": "node node_modules/.bin/next",
+        "nuxt": "node node_modules/.bin/nuxt",
+        "gatsby": "node node_modules/.bin/gatsby",
+        "svelte": "node node_modules/.bin/svelte",
+        "remix": "node node_modules/.bin/remix",
+        "astro": "node node_modules/.bin/astro",
+        "vite": "node node_modules/.bin/vite",
+        "hexo": "node node_modules/.bin/hexo",
         "flask": "python -m flask",
         "mcp": "python -m mcp",
         "node": "edge",
@@ -93,9 +101,9 @@ class WasmerRunner:
     mapper: Dict[str, MapperItem] = {
         "node": {
             "dependencies": {
-                "latest": "sadhbh-c0d3/edgejs-quickjs@=0.0.5",
-                "24": "sadhbh-c0d3/edgejs-quickjs@=0.0.5",
-                "22": "sadhbh-c0d3/edgejs-quickjs@=0.0.5",
+                "latest": "wasmer/edgejs-quickjs@=0.0.2",
+                "24": "wasmer/edgejs-quickjs@=0.0.2",
+                "22": "wasmer/edgejs-quickjs@=0.0.2",
             },
             "scripts": {"edge"},
             "aliases": {"node": "edge"},
