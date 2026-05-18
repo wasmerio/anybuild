@@ -7,7 +7,7 @@ import yaml
 from shipit.providers.php import PhpFramework
 from shipit.providers.python import PythonConfig, PythonFramework
 from shipit.runners.wasmer import WasmerRunner, resolve_app_kind
-from shipit.shipit_types import Package, Serve
+from shipit.shipit_types import Package, Serve, Volume
 from shipit.version import version as shipit_version
 
 
@@ -93,6 +93,69 @@ def test_wasmer_app_yaml_adds_python_annotations(tmp_path: Path) -> None:
         annotations["shipitcli.com/config"]["python_extra_index_url"]
         == "https://pythonindex.wasix.org/simple"
     )
+
+
+def test_wasmer_app_yaml_updates_existing_volume_with_same_mount(
+    tmp_path: Path,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "app.yaml").write_text(
+        yaml.dump(
+            {
+                "volumes": [
+                    {
+                        "name": "old-wp-content",
+                        "mount": "/app/wp-content",
+                        "retention": "keep",
+                    },
+                    {
+                        "name": "cache",
+                        "mount": "/app/cache",
+                    },
+                ],
+            }
+        )
+    )
+
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
+    serve = Serve(
+        name="wordpress",
+        provider="wordpress",
+        build=[],
+        deps=[Package("php")],
+        commands={"start": "php -S localhost:8080 -t /app"},
+        volumes=[
+            Volume(
+                name="wp-content",
+                path=tmp_path / ".shipit" / "volumes" / "wp-content",
+                serve_path=Path("/app/wp-content"),
+            ),
+            Volume(
+                name="uploads",
+                path=tmp_path / ".shipit" / "volumes" / "uploads",
+                serve_path=Path("/app/uploads"),
+            ),
+        ],
+    )
+
+    runner.build_serve(serve)
+
+    app_yaml = yaml.safe_load((runner.wasmer_dir_path / "app.yaml").read_text())
+    volumes = app_yaml["volumes"]
+
+    wp_content_volumes = [
+        volume for volume in volumes if volume["mount"] == "/app/wp-content"
+    ]
+    assert wp_content_volumes == [
+        {
+            "name": "wp-content",
+            "mount": "/app/wp-content",
+            "retention": "keep",
+        }
+    ]
+    assert {"name": "cache", "mount": "/app/cache"} in volumes
+    assert {"name": "uploads", "mount": "/app/uploads"} in volumes
 
 
 def test_wasmer_run_command_inherits_stdio(
