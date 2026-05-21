@@ -99,12 +99,40 @@ class PackageManager(Enum):
             PackageManager.BUN: f"bunx {command}",
         }[self]
 
+    def dlx_command(self, command: str) -> str:
+        return {
+            PackageManager.NPM: f"npx -y {command}",
+            PackageManager.PNPM: f"pnpm dlx {command}",
+            PackageManager.YARN: f"yarn dlx {command}",
+            PackageManager.BUN: f"bunx {command}",
+        }[self]
+
+
+class NodeFramework(Enum):
+    NEXT = "next"
+
+    def bundle_build_command(
+        self, package_manager: PackageManager, build_command: str
+    ) -> str:
+        if self == NodeFramework.NEXT:
+            quoted_command = shlex.quote(build_command)
+            return package_manager.dlx_command(
+                f"next-bundle --build-command {quoted_command}"
+            )
+        raise NotImplementedError(f"Unsupported Node framework: {self.value}")
+
+    def start_command(self) -> str:
+        if self == NodeFramework.NEXT:
+            return "node .next-bundle/server.mjs"
+        raise NotImplementedError(f"Unsupported Node framework: {self.value}")
+
 
 class NodeConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     use_edgejs: Optional[bool] = False
     package_manager: Optional[PackageManager] = None
+    framework: Optional[NodeFramework] = None
     extra_dependencies: Set[str] = Field(default_factory=set)
     build_command: Optional[str] = None
     node_version: Optional[str] = "24"
@@ -159,13 +187,27 @@ class NodeProvider:
             config.package_manager = cls.detect_package_manager(path)
 
         package_json = cls.parse_package_json(path)
+        if not config.framework:
+            config.framework = cls.detect_framework(package_json)
+
         if not config.build_command:
             config.build_command = cls.get_build_command(
-                package_json, config.package_manager
+                package_json,
+                config.package_manager,
+                config.framework,
+                explicit_build_command=config.commands.build,
             )
 
         if infer_start and not config.commands.start:
-            config.commands.start = cls.infer_start_command(path, package_json)
+            if config.framework:
+                config.commands.start = config.framework.start_command()
+            else:
+                config.commands.start = cls.infer_start_command(
+                    path, package_json
+                )
+
+        if config.framework and config.commands.build and config.build_command:
+            config.commands.build = config.build_command
 
         return config
 
@@ -193,6 +235,10 @@ class NodeProvider:
             }
             if config.commands.install in install_commands:
                 return DetectResult(cls.name(), 30)
+
+        package_json = cls.parse_package_json(path)
+        if cls.detect_framework(package_json):
+            return DetectResult(cls.name(), 45)
 
         if (path / "package.json").is_file():
             return DetectResult(cls.name(), 30)
@@ -243,6 +289,23 @@ class NodeProvider:
             for name, command in scripts.items()
             if isinstance(name, str) and isinstance(command, str)
         }
+
+    @classmethod
+    def detect_framework(
+        cls, package_json: Optional[Dict[str, Any]]
+    ) -> Optional[NodeFramework]:
+        if cls.has_dependency(package_json, "next"):
+            return NodeFramework.NEXT
+
+        for command in cls._script_commands(package_json):
+            try:
+                tokens = shlex.split(command)
+            except ValueError:
+                tokens = command.split()
+            if "next" in tokens:
+                return NodeFramework.NEXT
+
+        return None
 
     @classmethod
     def _script_commands(
@@ -305,11 +368,23 @@ class NodeProvider:
         cls,
         package_json: Optional[Dict[str, Any]],
         package_manager: PackageManager,
+        framework: Optional[NodeFramework] = None,
+        explicit_build_command: Optional[str] = None,
     ) -> Optional[str]:
+        if explicit_build_command:
+            build_command = explicit_build_command
+        else:
+            build_command = None
+
         scripts = cls.package_scripts(package_json)
-        if "build" in scripts:
-            return package_manager.run_command("build")
-        return None
+        if not build_command and "build" in scripts:
+            build_command = package_manager.run_command("build")
+        if not build_command and framework == NodeFramework.NEXT:
+            build_command = package_manager.run_execute_command("next build")
+
+        if build_command and framework:
+            return framework.bundle_build_command(package_manager, build_command)
+        return build_command
 
     @classmethod
     def infer_start_command(
@@ -402,12 +477,13 @@ class NodeProvider:
     def build_steps_build(self, output: Optional[str] = "\".\"") -> list[str]:
         if not self.config.build_command:
             return []
+        command = json.dumps(self.config.build_command)
         if not self.only_build:
             return [
-                f'run("{self.config.build_command}", '
+                f"run({command}, "
                 f"outputs=[{output}], group=\"build\")"
             ]
-        return [f'run("{self.config.build_command}", group="build")']
+        return [f"run({command}, group=\"build\")"]
 
     def build_steps(self) -> list[str]:
         return [

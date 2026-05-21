@@ -5,7 +5,7 @@ import pytest
 from shipit.generator import load_provider
 from shipit.providers.base import Config
 from shipit.providers.laravel import LaravelProvider
-from shipit.providers.node import NodeProvider, PackageManager
+from shipit.providers.node import NodeFramework, NodeProvider, PackageManager
 from shipit.providers.node_static import NodeStaticProvider
 
 
@@ -57,6 +57,117 @@ def test_node_provider_detects_generic_node_example() -> None:
     path = REPO_ROOT / "examples" / "node"
 
     assert load_provider(path, Config()) is NodeProvider
+
+
+def test_node_provider_detects_nextjs_runtime_app(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^14.2.14",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
+"""
+    )
+
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+
+    assert load_provider(tmp_path, Config()) is NodeProvider
+    assert provider_config.framework == NodeFramework.NEXT
+    assert provider_config.build_command == (
+        "npx -y next-bundle --build-command 'npm run build'"
+    )
+    assert provider_config.commands.start == "node .next-bundle/server.mjs"
+
+
+@pytest.mark.parametrize(
+    ("lockfile", "build_command"),
+    [
+        (
+            "package-lock.json",
+            "npx -y next-bundle --build-command 'npm run build'",
+        ),
+        (
+            "pnpm-lock.yaml",
+            "pnpm dlx next-bundle --build-command 'pnpm run build'",
+        ),
+        (
+            "yarn.lock",
+            "yarn dlx next-bundle --build-command 'yarn run build'",
+        ),
+        (
+            "bun.lockb",
+            "bunx next-bundle --build-command 'bun run build'",
+        ),
+    ],
+)
+def test_nextjs_build_command_uses_package_manager(
+    tmp_path: Path, lockfile: str, build_command: str
+) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "^14.2.14"
+  }
+}
+"""
+    )
+    (tmp_path / lockfile).write_text("\n")
+
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+
+    assert provider_config.build_command == build_command
+
+
+def test_nextjs_build_command_wraps_explicit_build_command(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "dependencies": {
+    "next": "^14.2.14"
+  }
+}
+"""
+    )
+    base_config = Config()
+    base_config.commands.build = "next build --debug"
+
+    provider_config = NodeProvider.load_config(tmp_path, base_config)
+
+    assert provider_config.build_command == (
+        "npx -y next-bundle --build-command 'next build --debug'"
+    )
+    assert provider_config.commands.build == provider_config.build_command
+
+
+def test_nextjs_start_command_prefers_explicit_command(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^14.2.14"
+  }
+}
+"""
+    )
+    base_config = Config()
+    base_config.commands.start = "node custom-next-server.js"
+
+    provider_config = NodeProvider.load_config(tmp_path, base_config)
+
+    assert provider_config.commands.start == "node custom-next-server.js"
 
 
 def test_node_script_commands_prefers_build_by_default() -> None:

@@ -226,6 +226,18 @@ class E2ECase:
             http=[HTTPRequest(path="/", body_match=r"Hello from Node")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
+        # Next.js runtime app bundled for Node
+        E2ECase(
+            path="examples/node-nextjs",
+            serve_pattern=r"Next.js|started server|ready",
+            http=[
+                HTTPRequest(
+                    path="/",
+                    body_match=r"Hello from Next\.js on Shipit",
+                )
+            ],
+            build_modes=(BuildMode.Local, BuildMode.Wasmer),
+        ),
         # Hugo static site (built via Hugo, served with static-web-server)
         E2ECase(
             path="examples/hugo",

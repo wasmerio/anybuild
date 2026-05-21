@@ -435,7 +435,7 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             static_generators = StaticGenerator.detect_generators_from_command(
                 config.commands.build
             )
-            if static_generators:
+            if static_generators and StaticGenerator.NEXT not in static_generators:
                 return DetectResult(cls.name(), 60)
 
             has_package_manager_build_command = (

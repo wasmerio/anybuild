@@ -93,6 +93,50 @@ def test_pure_static_dependency_keeps_priority_with_package_script_command() -> 
     assert detect_result.score == 60
 
 
+def test_explicit_next_build_command_uses_node_provider(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "^14.2.14"
+  }
+}
+"""
+    )
+    base_config = Config()
+    base_config.commands.build = "next build"
+
+    detect_result = NodeStaticProvider.detect(tmp_path, base_config)
+
+    assert detect_result is not None
+    assert detect_result.score == 20
+    assert load_provider(tmp_path, base_config) is not NodeStaticProvider
+
+
+def test_explicit_next_export_command_stays_node_static(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "next export"
+  },
+  "dependencies": {
+    "next": "^14.2.14"
+  }
+}
+"""
+    )
+    base_config = Config()
+    base_config.commands.build = "next export"
+
+    detect_result = NodeStaticProvider.detect(tmp_path, base_config)
+
+    assert detect_result is not None
+    assert detect_result.score == 60
+    assert load_provider(tmp_path, base_config) is NodeStaticProvider
+
+
 def test_node_static_defaults_to_npm_without_lockfile(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text(
         """{
