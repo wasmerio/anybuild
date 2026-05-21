@@ -7,11 +7,23 @@ export PAGER="cat"
 WP_ADMIN_EMAIL=${WP_ADMIN_EMAIL:-"admin@example.com"}
 WP_ADMIN_USERNAME=${WP_ADMIN_USERNAME:-"admin"}
 WP_ADMIN_PASSWORD=${WP_ADMIN_PASSWORD:-"admin"}
-WP_LOCALE=${WP_LOCALE:-"en_US"}
+WP_DEFAULT_LOCALE=${WP_DEFAULT_LOCALE:-"en_US"}
+WP_LOCALE=${WP_LOCALE:-"$WP_DEFAULT_LOCALE"}
 WP_SITEURL=${WP_SITEURL:-"http://localhost"}
 WP_SITE_TITLE=${WP_SITE_TITLE:-"WordPress"}
 
-if wp core is-installed; then
+echo "📁 Initializing wp-content..."
+mkdir -p wp-content/plugins
+mkdir -p wp-content/themes
+mkdir -p wp-content/upgrade
+
+if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
+  shopt -s dotglob nullglob
+  cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content || true
+  shopt -u dotglob nullglob
+fi
+
+if wp core is-installed && [ "${WP_FORCE_SETUP:-false}" != "true" ]; then
   echo "🚀 Setting up WordPress from an existing installation"
   if [ "${WP_UPDATE_DB:-true}" = "true" ]; then
       echo "🛠️ Activating maintenance mode..."
@@ -23,20 +35,6 @@ if wp core is-installed; then
   fi
 else
   echo "🚀 Setting up WordPress from a fresh install"
-  echo "📁 Initializing wp-content..."
-
-  mkdir -p wp-content/plugins
-  mkdir -p wp-content/themes
-  mkdir -p wp-content/upgrade
-
-  if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
-    shopt -s dotglob nullglob
-    # Note: change this back to copy all, once using the WP Zip files
-    # cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content
-    cp -R "${WPCONTENT_BASE_PATH}"/plugins/* /app/wp-content/plugins || true
-    cp -R "${WPCONTENT_BASE_PATH}"/themes/twentytwenty* /app/wp-content/themes || true
-    shopt -u dotglob nullglob
-  fi
 
   echo "⚙️ Installing WordPress core"
 
@@ -60,7 +58,7 @@ if [ -n "${WP_PLUGINS:-}" ]; then
   for PLUGIN_ENTRY in $WP_PLUGINS; do
     if [[ "$PLUGIN_ENTRY" =~ ^https?:// ]]; then
       echo "• Installing plugin from URL: $PLUGIN_ENTRY"
-      wp plugin install "$PLUGIN_ENTRY" --activate
+      wp plugin install "$PLUGIN_ENTRY" --force --activate
     else
       # Extract name and version using parameter expansion
       PLUGIN_NAME="${PLUGIN_ENTRY%%:*}"
@@ -68,12 +66,22 @@ if [ -n "${WP_PLUGINS:-}" ]; then
 
       if [[ "$PLUGIN_NAME" == "$PLUGIN_VERSION" ]]; then
         echo "• Installing plugin '${PLUGIN_NAME}' (latest version)..."
-        wp plugin install "$PLUGIN_NAME" --activate
+        wp plugin install "$PLUGIN_NAME" --force --activate
       else
         echo "• Installing plugin '${PLUGIN_NAME}' (version: ${PLUGIN_VERSION})..."
-        wp plugin install "$PLUGIN_NAME" --version="$PLUGIN_VERSION" --activate
+        wp plugin install "$PLUGIN_NAME" --force --version="$PLUGIN_VERSION" --activate
       fi
     fi
+  done
+fi
+
+if [ -n "${WP_PLUGINS_ACTIVATE:-}" ]; then
+  echo "✨ Activating plugins: $WP_PLUGINS_ACTIVATE"
+  IFS=',' # Split by commas
+  
+  for PLUGIN_ENTRY in $WP_PLUGINS_ACTIVATE; do
+    echo "• Activating plugin: $PLUGIN_ENTRY"
+    wp plugin activate "$PLUGIN_ENTRY"
   done
 fi
 
@@ -85,17 +93,17 @@ if [ -n "${WP_THEMES:-}" ]; then
   for THEME_ENTRY in $WP_THEMES; do
     if [[ "$THEME_ENTRY" =~ ^https?:// ]]; then
       echo "• Installing theme from URL: $THEME_ENTRY"
-      wp theme install "$THEME_ENTRY"
+      wp theme install "$THEME_ENTRY" --force
     else
       THEME_NAME="${THEME_ENTRY%%:*}"
       THEME_VERSION="${THEME_ENTRY#*:}"
 
       if [[ "$THEME_NAME" == "$THEME_VERSION" ]]; then
         echo "• Installing theme '${THEME_NAME}' (latest version)..."
-        wp theme install "$THEME_NAME"
+        wp theme install "$THEME_NAME" --force
       else
         echo "• Installing theme '${THEME_NAME}' (version: ${THEME_VERSION})..."
-        wp theme install "$THEME_NAME" --version="$THEME_VERSION"
+        wp theme install "$THEME_NAME" --force --version="$THEME_VERSION"
       fi
     fi
   done
@@ -108,14 +116,14 @@ fi
 
 if [ -n "${WP_LOCALE:-}" ]; then
   echo "🌐 Setting locale: $WP_LOCALE"
-  wp language core install "$WP_LOCALE"
-  wp language theme install --all "$WP_LOCALE"
-  wp language plugin install --all "$WP_LOCALE"
+  # wp language core install "$WP_LOCALE"
+  # wp language theme install --all "$WP_LOCALE"
+  # wp language plugin install --all "$WP_LOCALE"
   wp site switch-language "$WP_LOCALE"
 fi
 
-# echo "✍️ Rewriting permalinks structure"
-# wp rewrite flush --hard || true
+echo "✍️ Rewriting permalinks structure"
+wp rewrite flush --hard || true
 
 # if [ ! -f "/app/wp-content/wp-config.php" ]; then
 #   cat > /app/wp-content/wp-config.php <<EOF

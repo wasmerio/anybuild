@@ -168,6 +168,41 @@ class E2ECase:
             ],
             build_modes=(BuildMode.Wasmer,),
         ),
+        # Full WordPress release archive, built and run through Wasmer only.
+        E2ECase(
+            path="examples/php-wordpress-empty",
+            serve_pattern=(
+                r"listening addr"
+            ),
+            http=[
+                HTTPRequest(
+                    path="/",
+                    expected_status=200,
+                    body_match=r"WordPress",
+                )
+            ],
+            use_random_port=False,
+            env={
+                "DB_NAME": "test",
+                "DB_USERNAME": "root",
+                "DB_HOST": "127.0.0.1",
+                "DB_PORT": "3306",
+                "DB_PASSWORD": "",
+                "SHIPIT_PHPIX": "true",
+                "SHIPIT_WP_VERSION": "latest",
+                # "SHIPIT_WP_LOCALE": "en_US",
+            },
+            create_db=True,
+            create_wp_content_volume=True,
+            run_after_deploy=True,
+            commands=[
+                RunCommand(
+                    "wp eval 'echo json_encode([\"status\" => \"ok\"]);'",
+                    stdout_match=r'\{"status":"ok"\}',
+                )
+            ],
+            build_modes=(BuildMode.Wasmer,),
+        ),
         # WordPress skeleton in phpix mode (Wasmer only), validate memory cap.
         E2ECase(
             path="examples/php-wordpress",
