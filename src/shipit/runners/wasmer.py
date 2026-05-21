@@ -517,12 +517,25 @@ class WasmerRunner:
             volumes_yaml = yaml_config.get("volumes", [])
             assert isinstance(volumes_yaml, list), "volumes must be a list"
             for vol in serve.volumes:
-                volumes_yaml.append(
-                    {
-                        "name": vol.name,
-                        "mount": str(vol.serve_path),
-                    }
+                mount_path = str(vol.serve_path)
+                existing_volume = next(
+                    (
+                        volume_yaml
+                        for volume_yaml in volumes_yaml
+                        if isinstance(volume_yaml, dict)
+                        and volume_yaml.get("mount") == mount_path
+                    ),
+                    None,
                 )
+                if existing_volume is not None:
+                    existing_volume["name"] = vol.name
+                else:
+                    volumes_yaml.append(
+                        {
+                            "name": vol.name,
+                            "mount": mount_path,
+                        }
+                    )
             yaml_config["volumes"] = volumes_yaml
 
         has_php = any(dep.name == "php" for dep in serve.deps)
