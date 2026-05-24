@@ -1,41 +1,52 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
+
+from pydantic_settings import SettingsConfigDict
 
 from .base import (
+    Config,
     DetectResult,
     DependencySpec,
-    _exists,
     MountSpec,
     ServiceSpec,
     VolumeSpec,
-    Config,
+    _exists,
 )
-from .php import PhpConfig, PhpProvider
 from .node import NodeConfig, NodeProvider
-from pydantic_settings import SettingsConfigDict
+from .php import PhpConfig, PhpProvider
 
 
 class LaravelConfig(PhpConfig, NodeConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
+    framework: Optional[Any] = None
 
-class LaravelProvider(PhpProvider):
+
+class LaravelProvider(PhpProvider, NodeProvider):
+    config: LaravelConfig
+
     def __init__(self, path: Path, config: LaravelConfig):
         self.path = path
-        self.node_provider = NodeProvider(path, config, only_build=True)
         self.config = config
+        self.only_build = True
 
     @classmethod
-    def load_config(cls, path: Path, base_config: Config) -> LaravelConfig:
+    def load_config(
+        cls,
+        path: Path,
+        base_config: Config,
+        infer_start: bool = False,
+    ) -> LaravelConfig:
         config = super().load_config(path, base_config)
         config.use_composer = True
         node_config = NodeProvider.load_config(
             path, base_config, infer_start=False
         )
+        node_config_data = node_config.model_dump(exclude={"framework"})
         return LaravelConfig(
             **(
                 config.model_dump()
-                | node_config.model_dump()
+                | node_config_data
                 | base_config.model_dump()
             )
         )
@@ -43,6 +54,10 @@ class LaravelProvider(PhpProvider):
     @classmethod
     def name(cls) -> str:
         return "laravel"
+
+    @classmethod
+    def detect_framework(cls, *args: Any, **kwargs: Any) -> Any:
+        return PhpProvider.detect_framework(*args, **kwargs)
 
     @classmethod
     def detect(cls, path: Path, config: Config) -> Optional[DetectResult]:
@@ -53,12 +68,12 @@ class LaravelProvider(PhpProvider):
     def dependencies(self) -> list[DependencySpec]:
         return [
             *super().dependencies(),
-            *self.node_provider.dependencies()
+            *NodeProvider.dependencies(self),
         ]
 
     def build_steps(self) -> list[str]:
-        node_install = list(self.node_provider.build_steps_install())
-        node_build = list(self.node_provider.build_steps_build())
+        node_install = list(NodeProvider.build_steps_install(self))
+        node_build = list(NodeProvider.build_steps_build(self))
         return super().build_steps_with_options(
             extra_ignore=["node_modules"],
             after_install=node_install,
@@ -82,7 +97,7 @@ class LaravelProvider(PhpProvider):
         }
 
     def mounts(self) -> list[MountSpec]:
-        return [*super().mounts(), *self.node_provider.mounts()]
+        return [*super().mounts(), *NodeProvider.mounts(self)]
 
     def volumes(self) -> list[VolumeSpec]:
         return []

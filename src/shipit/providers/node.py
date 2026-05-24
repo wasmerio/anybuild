@@ -25,6 +25,14 @@ class PackageManager(Enum):
     YARN = "yarn"
     BUN = "bun"
 
+    def prune_command(self) -> str:
+        return {
+            PackageManager.NPM: "npm prune --omit=dev --ignore-scripts",
+            PackageManager.PNPM: "pnpm prune --prod",
+            PackageManager.YARN: "yarn workspaces focus --all --production",
+            PackageManager.BUN: "rm -rf node_modules && bun install --omit=dev --ignore-scripts",
+        }[self]
+
     def as_dependency(self, path: Path) -> DependencySpec:
         dep_name = {
             PackageManager.NPM: "npm",
@@ -77,7 +85,7 @@ class PackageManager(Enum):
 
     def install_command(self, has_lockfile: bool = False) -> str:
         return {
-            PackageManager.NPM: f"npm {'ci' if has_lockfile else 'install'}",
+            PackageManager.NPM: f"npm install",
             PackageManager.PNPM: "pnpm install",
             PackageManager.YARN: "yarn install",
             PackageManager.BUN: f"bun install{' --no-save' if has_lockfile else ''}",
@@ -447,8 +455,7 @@ class NodeProvider:
                 [
                     f'copy("{lockfile}")' if has_lockfile else None,
                     (
-                        'env(CI="true", NODE_ENV="production", '
-                        'NPM_CONFIG_FUND="false")'
+                        'env(CI="true", NPM_CONFIG_FUND="false")'
                     )
                     if package_manager == PackageManager.NPM
                     else None,
@@ -485,12 +492,21 @@ class NodeProvider:
             ]
         return [f"run({command}, group=\"build\")"]
 
+    def build_steps_prune(self) -> list[str]:
+        if not (self.path / "package.json").exists():
+            return []
+        package_manager = self.config.package_manager
+        if package_manager is None:
+            return []
+        return [f"run(\"{package_manager.prune_command()}\", group=\"prune\")"]
+
     def build_steps(self) -> list[str]:
         return [
             "workdir(app.path)",
             *self.build_steps_install(),
             self.build_steps_copy(),
             *self.build_steps_build(),
+            *self.build_steps_prune(),
         ]
 
     def declarations(self) -> Optional[str]:

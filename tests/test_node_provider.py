@@ -7,6 +7,7 @@ from shipit.providers.base import Config
 from shipit.providers.laravel import LaravelProvider
 from shipit.providers.node import NodeFramework, NodeProvider, PackageManager
 from shipit.providers.node_static import NodeStaticProvider
+from shipit.providers.php import PhpFramework
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -227,6 +228,7 @@ def test_laravel_reuses_node_provider_without_static_serving() -> None:
     provider_config = LaravelProvider.load_config(path, Config())
     provider = LaravelProvider(path, provider_config)
 
-    assert isinstance(provider.node_provider, NodeProvider)
+    assert isinstance(provider, NodeProvider)
+    assert provider_config.framework == PhpFramework.Laravel
     assert all("static_app" not in step for step in provider.build_steps())
     assert provider.commands()["start"].startswith('f"php ')

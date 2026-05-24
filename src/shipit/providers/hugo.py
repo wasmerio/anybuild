@@ -17,20 +17,32 @@ from pydantic_settings import SettingsConfigDict
 import toml
 import json
 import yaml
-from pyripgrep import Grep
 
 
-def is_old_hugo(src_dir: Path) -> dict:
-    rg = Grep()
+def _contains_text(src_dir: Path, text: str) -> bool:
+    skipped_dirs = {".git", ".shipit", "node_modules"}
+    for path in src_dir.rglob("*"):
+        if any(part in skipped_dirs for part in path.parts):
+            continue
+        if not path.is_file():
+            continue
+        try:
+            if text in path.read_text(errors="ignore"):
+                return True
+        except OSError:
+            continue
+    return False
 
+
+def is_old_hugo(src_dir: Path) -> bool:
     # Hard-fail signal: old Hugo
-    if rg.search("resources.ToCSS", path=str(src_dir)):
+    if _contains_text(src_dir, "resources.ToCSS"):
         return True
 
     # Modern Hugo signal
-    if rg.search("css.Sass", path=str(src_dir)):
+    if _contains_text(src_dir, "css.Sass"):
         return False
-    
+
     return False
 
 
