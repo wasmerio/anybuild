@@ -1,0 +1,10 @@
+{
+  "name": "shipit-nodestatic-vitepress-example",
+  "private": true,
+  "scripts": {
+    "docs:build": "vitepress build docs"
+  },
+  "dependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

@@ -254,6 +254,46 @@ class E2ECase:
             ],
             build_modes=(BuildMode.Wasmer,),
         ),
+        # Generic Node HTTP server
+        E2ECase(
+            path="examples/node",
+            serve_pattern=r"Node server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Node")],
+            build_modes=(BuildMode.Local, BuildMode.Wasmer),
+        ),
+        # Hono app running on Node
+        E2ECase(
+            path="examples/node-hono",
+            serve_pattern=r"Hono server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Hono on Shipit")],
+            build_modes=(BuildMode.Local, BuildMode.Wasmer),
+        ),
+        # Fastify app running on Node
+        E2ECase(
+            path="examples/node-fastify",
+            serve_pattern=r"Fastify server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Fastify on Shipit")],
+            build_modes=(BuildMode.Local, BuildMode.Wasmer),
+        ),
+        # Next.js runtime app bundled for Node
+        E2ECase(
+            path="examples/node-next",
+            serve_pattern=r"Next.js|started server|ready",
+            http=[
+                HTTPRequest(
+                    path="/",
+                    body_match=r"Hello from Next\.js on Shipit",
+                )
+            ],
+            build_modes=(BuildMode.Local, BuildMode.Wasmer),
+        ),
+        # Astro runtime app served by the Node adapter
+        E2ECase(
+            path="examples/node-astro",
+            serve_pattern=r"Node|Astro|Listening|ready",
+            http=[HTTPRequest(path="/", body_match=r"Astro Node Example")],
+            build_modes=(BuildMode.Local,),
+        ),
         # Hugo static site (built via Hugo, served with static-web-server)
         E2ECase(
             path="examples/hugo",
@@ -272,51 +312,58 @@ class E2ECase:
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Welcome to MkDocs with Plugins")],
         ),
+        # Astro static site
+        E2ECase(
+            path="examples/nodestatic-astro",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Astro Static Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
         # Eleventy / 11ty static site
         E2ECase(
-            path="examples/eleventy",
+            path="examples/nodestatic-eleventy",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Eleventy Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # VitePress static documentation site
         E2ECase(
-            path="examples/vitepress",
+            path="examples/nodestatic-vitepress",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"VitePress Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # VuePress static documentation site
         E2ECase(
-            path="examples/vuepress",
+            path="examples/nodestatic-vuepress",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"VuePress Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Hexo static blog
         E2ECase(
-            path="examples/hexo",
+            path="examples/nodestatic-hexo",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Hexo Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Metalsmith static site
         E2ECase(
-            path="examples/metalsmith",
+            path="examples/nodestatic-metalsmith",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Metalsmith Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Assemble static site
         E2ECase(
-            path="examples/assemble",
+            path="examples/nodestatic-assemble",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Assemble Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Harp static site
         E2ECase(
-            path="examples/harp",
+            path="examples/nodestatic-harp",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Harp Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
@@ -897,10 +944,10 @@ def _shipit_run_command(
 def _append_build_mode_flags(cmd: list[str], build_mode: BuildMode) -> None:
     if build_mode == BuildMode.Wasmer:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--wasmer-registry=wasmer.io")
     elif build_mode == BuildMode.WasmerAndDocker:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--wasmer-registry=wasmer.io")
         cmd.append("--docker")
     elif build_mode == BuildMode.Local:
         pass
@@ -909,10 +956,10 @@ def _append_build_mode_flags(cmd: list[str], build_mode: BuildMode) -> None:
 def _append_run_mode_flags(cmd: list[str], build_mode: BuildMode) -> None:
     if build_mode == BuildMode.Wasmer:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--wasmer-registry=wasmer.io")
     elif build_mode == BuildMode.WasmerAndDocker:
         cmd.append("--wasmer")
-        cmd.append("--wasmer-registry=wasmer.wtf")
+        cmd.append("--wasmer-registry=wasmer.io")
         cmd.append("--docker")
     elif build_mode == BuildMode.Local:
         pass

@@ -13,10 +13,9 @@ import yaml
 from rich import box
 from rich.panel import Panel
 from rich.syntax import Syntax
-from tomlkit import array, aot, comment, document, nl, string, table
+from tomlkit import array, aot, comment, document, string, table
 
 from shipit.builders.base import BuildBackend
-from shipit.runners.base import Runner
 from shipit.shipit_types import EnvStep, Package, PrepareStep, Serve, UseStep
 from shipit.ui import console
 from shipit.version import version as shipit_version
@@ -86,11 +85,30 @@ class WasmerRunner:
         "hypercorn": "python -m hypercorn",
         "fastapi": "python -m fastapi",
         "streamlit": "python -m streamlit",
+        "next": "node node_modules/.bin/next",
+        "nuxt": "node node_modules/.bin/nuxt",
+        "gatsby": "node node_modules/.bin/gatsby",
+        "svelte": "node node_modules/.bin/svelte",
+        "remix": "node node_modules/.bin/remix",
+        "astro": "node node_modules/.bin/astro",
+        "vite": "node node_modules/.bin/vite",
+        "hexo": "node node_modules/.bin/hexo",
         "flask": "python -m flask",
         "mcp": "python -m mcp",
+        "node": "edge",
     }
 
     mapper: Dict[str, MapperItem] = {
+        "node": {
+            "dependencies": {
+                "latest": "wasmer/edgejs-quickjs@=0.0.2",
+                "24": "wasmer/edgejs-quickjs@=0.0.2",
+                "22": "wasmer/edgejs-quickjs@=0.0.2",
+            },
+            "scripts": {"edge"},
+            "aliases": {"node": "edge"},
+            "env": {},
+        },
         "python": {
             "dependencies": {
                 "latest": "python/python@=3.13.5",
@@ -224,6 +242,7 @@ class WasmerRunner:
     def prepare_config(self, provider_config: Any) -> Any:
         from shipit.providers.python import PythonConfig
         from shipit.providers.php import PhpConfig
+        from shipit.providers.node import NodeConfig
 
         if isinstance(provider_config, PythonConfig):
             provider_config.python_extra_index_url = (
@@ -231,8 +250,11 @@ class WasmerRunner:
             )
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
-        elif isinstance(provider_config, PhpConfig):
+        if isinstance(provider_config, PhpConfig):
             provider_config.phpix = True
+        if isinstance(provider_config, NodeConfig):
+            provider_config.use_edgejs = True
+            provider_config.remove_native_binaries = True
         self.provider_config = provider_config
         return provider_config
 
@@ -296,7 +318,7 @@ class WasmerRunner:
         body = "\n".join(filter(None, [env_lines, *commands]))
         content = f"#!/bin/bash\n\n{body}"
         console.print(
-            f"\n[bold]Created prepare.sh script to run before packaging ✅[/bold]"
+            "\n[bold]Created prepare.sh script to run before packaging ✅[/bold]"
         )
         manifest_panel = Panel(
             Syntax(
@@ -352,7 +374,7 @@ class WasmerRunner:
             deps.append(Package("bash"))
 
         if deps:
-            console.print(f"[bold]Mapping dependencies to Wasmer packages:[/bold]")
+            console.print("[bold]Mapping dependencies to Wasmer packages:[/bold]")
         for dep in deps:
             if dep.name in self.mapper:
                 version = dep.version or "latest"
@@ -478,7 +500,7 @@ class WasmerRunner:
         manifest = doc.as_string().replace(
             '[command."annotations.wasi"]', "[command.annotations.wasi]"
         )
-        console.print(f"\n[bold]Created wasmer.toml manifest ✅[/bold]")
+        console.print("\n[bold]Created wasmer.toml manifest ✅[/bold]")
         manifest_panel = Panel(
             Syntax(
                 manifest.strip(),
@@ -497,7 +519,7 @@ class WasmerRunner:
         original_app_yaml_path = self.src_dir / "app.yaml"
         if original_app_yaml_path.exists():
             console.print(
-                f"[bold]Using original app.yaml found in source directory[/bold]"
+                "[bold]Using original app.yaml found in source directory[/bold]"
             )
             yaml_config = yaml.safe_load(original_app_yaml_path.read_text())
         else:
@@ -600,7 +622,7 @@ class WasmerRunner:
 
         app_yaml = yaml.dump(yaml_config)
 
-        console.print(f"\n[bold]Created app.yaml manifest ✅[/bold]")
+        console.print("\n[bold]Created app.yaml manifest ✅[/bold]")
         app_yaml_panel = Panel(
             Syntax(
                 app_yaml.strip(),
@@ -628,13 +650,17 @@ class WasmerRunner:
         command_name = parsed_command[0]
         command_args = parsed_command[1:]
         extra_args = []
+        run_args = ["run"]
+
+        # if self.command_uses_edgejs(command_name):
+        #     run_args.append("--experimental-napi")
 
         if self.wasmer_registry:
             extra_args = [f"--registry={self.wasmer_registry}"] + extra_args
         self.run_command(
             self.bin,
             [
-                "run",
+                *run_args,
                 str(self.wasmer_dir_path.absolute()),
                 "--net",
                 "--forward-host-env",
@@ -648,6 +674,28 @@ class WasmerRunner:
             ],
             env=os.environ,
         )
+
+    def command_uses_edgejs(self, command: str) -> bool:
+        wasmer_toml_path = self.wasmer_dir_path / "wasmer.toml"
+        if not wasmer_toml_path.exists():
+            return False
+
+        manifest = tomllib.loads(wasmer_toml_path.read_text())
+        commands = manifest.get("command", [])
+        if not isinstance(commands, list):
+            return False
+
+        for item in commands:
+            if not isinstance(item, dict) or item.get("name") != command:
+                continue
+            module = str(item.get("module", ""))
+            annotations = item.get("annotations", {})
+            wasi = {}
+            if isinstance(annotations, dict):
+                wasi = annotations.get("wasi", {})
+            atom = wasi.get("atom") if isinstance(wasi, dict) else None
+            return "edgejs" in module or atom == "edgejs"
+        return False
 
     def has_serve_command(self, command: str) -> bool:
         wasmer_toml_path = self.wasmer_dir_path / "wasmer.toml"

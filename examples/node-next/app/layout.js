@@ -1,0 +1,12 @@
+export const metadata = {
+  title: "Shipit Next.js Example",
+  description: "A Next.js runtime app built by Shipit",
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}

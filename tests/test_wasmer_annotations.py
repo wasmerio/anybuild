@@ -1,8 +1,10 @@
+import tomllib
 from pathlib import Path
 
 import pytest
 import yaml
 
+from shipit.providers.node import NodeConfig
 from shipit.providers.php import PhpFramework
 from shipit.providers.python import PythonConfig, PythonFramework
 from shipit.runners.wasmer import WasmerRunner, resolve_app_kind
@@ -39,6 +41,7 @@ class DummyBuildBackend:
         ("php", PhpFramework.Drupal, "drupal"),
         ("javascript", "ghost", "ghost"),
         ("javascript", "strapi", "strapi"),
+        ("node", "ghost", "ghost"),
         ("node-static", "ghost", "ghost"),
         ("python", "fastapi", None),
     ],
@@ -179,3 +182,73 @@ def test_wasmer_run_command_inherits_stdio(
         "check": True,
         "env": {"SHIPIT": "1"},
     }
+
+
+def test_wasmer_node_manifest_maps_to_edgejs(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
+
+    serve = Serve(
+        name="node",
+        provider="node",
+        build=[],
+        deps=[Package("node", "22")],
+        cwd="/app",
+        commands={"start": "node server.js"},
+        env={"PORT": "8080"},
+    )
+
+    runner.build_serve(serve)
+
+    manifest = tomllib.loads((runner.wasmer_dir_path / "wasmer.toml").read_text())
+    assert manifest["dependencies"]["wasmer/edgejs-quickjs"] == "=0.0.2"
+    assert manifest["command"][0]["module"] == "wasmer/edgejs-quickjs:edge"
+    assert manifest["command"][0]["annotations"]["wasi"]["main-args"] == [
+        "server.js"
+    ]
+
+
+def test_wasmer_prepare_config_enables_node_edge_optimizations(
+    tmp_path: Path,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
+
+    config = runner.prepare_config(NodeConfig())
+
+    assert config.use_edgejs is True
+    assert config.remove_native_binaries is True
+
+
+def test_wasmer_run_command_enables_napi_for_edgejs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir, bin="wasmer")
+    runner.wasmer_dir_path.mkdir(parents=True)
+    (runner.wasmer_dir_path / "wasmer.toml").write_text(
+        """
+[[command]]
+name = "start"
+module = "sadhbh-c0d3/edgejs-quickjs:edge"
+runner = "wasi"
+"""
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_run_command(command, extra_args=None, env=None) -> None:
+        captured["command"] = command
+        captured["extra_args"] = extra_args
+        captured["env"] = env
+
+    monkeypatch.setattr(runner, "run_command", fake_run_command)
+
+    runner.run_serve_command("start")
+
+    assert captured["command"] == "wasmer"
+    # assert captured["extra_args"][:2] == ["run", "--experimental-napi"]

@@ -18,8 +18,8 @@ serve(
     env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER="1"),
     run("composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install"),
     copy("package-lock.json"),
-    env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
-    run("npm ci", inputs=["package.json"], group="install"),
+    env(CI="true", NPM_CONFIG_FUND="false"),
+    run("npm install", inputs=["package.json"], group="install"),
     copy(".", ignore=[".git", "node_modules", "vendor"]),
     run("composer run-script post-update-cmd", outputs=["."], group="build"),
     run("npm run build", group="build")

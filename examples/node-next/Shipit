@@ -1,0 +1,32 @@
+node = dep("node", config.node_version)
+npm = dep("npm", config.npm_version)
+
+build = mount("build")
+app = mount("app")
+
+serve(
+  name="node-next",
+  provider="node",
+  cwd=app.serve_path,
+  build=[
+    use(node, npm),
+    workdir(build.path),
+    copy("package-lock.json"),
+    env(CI="true", NPM_CONFIG_FUND="false"),
+    run("npm install", inputs=["package.json"], group="install"),
+    copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
+    run("npx -y next-bundle --build-command 'npm run build'", outputs=["."], group="build"),
+    run("npm prune --omit=dev --ignore-scripts", group="prune"),
+    run("cp -R .next-bundle/* {}".format(app.path))
+  ],
+  deps=[node],
+  env = {
+    "PORT": PORT
+  },
+  commands = {
+    "start": "node server.mjs"
+  },
+  mounts=[
+    app
+  ],
+)
