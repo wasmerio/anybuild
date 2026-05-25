@@ -20,7 +20,7 @@ from .base import (
 
 
 NODE_MODULES_OPTIMIZER_ASSET = "node/optimize-node-modules.sh"
-
+OPTIMIZE_DEPS_VERSION = "0.1.1"
 
 class PackageManager(Enum):
     NPM = "npm"
@@ -473,23 +473,17 @@ class NodeProvider:
         install_command = package_manager.install_command(
             has_lockfile=has_lockfile
         )
-        return list(
-            filter(
-                None,
-                [
-                    f'copy("{lockfile}")' if has_lockfile else None,
-                    (
-                        'env(CI="true", NPM_CONFIG_FUND="false")'
-                    )
-                    if package_manager == PackageManager.NPM
-                    else None,
-                    (
-                        f'run("{install_command}", inputs=["package.json"], '
-                        'group="install")'
-                    ),
-                ],
-            )
-        )
+        steps = []
+        if package_manager == PackageManager.PNPM:
+            steps.append(f'env(pnpm_config_dangerously_allow_all_builds="true")')
+        elif package_manager == PackageManager.NPM:
+            steps.append(f'env(CI="true", NPM_CONFIG_FUND="false")')
+
+        if has_lockfile:
+            steps.append(f'copy("{lockfile}")')
+
+        steps.append(f'run("{install_command}", inputs=["package.json"], group="install")')
+        return steps
 
     def ignored_source_files(self) -> list[str]:
         ignored_files = ["node_modules", ".git"]
@@ -528,8 +522,8 @@ class NodeProvider:
         if self.config.framework and self.config.optimize_node_dependencies:
             node_optimize_deps_paths = self.config.framework.node_optimize_deps_paths()
             if node_optimize_deps_paths:
-                optimize_deps_command = self.config.package_manager.dlx_command(
-                    f"optimize-deps {', '.join(node_optimize_deps_paths)} --replace"
+                optimize_deps_command = package_manager.dlx_command(
+                    f"optimize-deps@{OPTIMIZE_DEPS_VERSION} {', '.join(node_optimize_deps_paths)} --replace"
                 )
                 steps.append(f"run(\"{optimize_deps_command}\")")
         if not self.only_build and self.config.remove_native_binaries:
