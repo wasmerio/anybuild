@@ -62,6 +62,13 @@ def test_node_provider_detects_generic_node_example() -> None:
     assert load_provider(path, Config()) is NodeProvider
 
 
+@pytest.mark.parametrize("example", ["node-fastify", "node-hono"])
+def test_node_provider_detects_node_framework_examples(example: str) -> None:
+    path = REPO_ROOT / "examples" / example
+
+    assert load_provider(path, Config()) is NodeProvider
+
+
 def test_node_provider_detects_astro_runtime_example() -> None:
     path = REPO_ROOT / "examples" / "node-astro"
 

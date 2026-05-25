@@ -261,6 +261,20 @@ class E2ECase:
             http=[HTTPRequest(path="/", body_match=r"Hello from Node")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
+        # Hono app running on Node
+        E2ECase(
+            path="examples/node-hono",
+            serve_pattern=r"Hono server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Hono on Shipit")],
+            build_modes=(BuildMode.Local, BuildMode.Wasmer),
+        ),
+        # Fastify app running on Node
+        E2ECase(
+            path="examples/node-fastify",
+            serve_pattern=r"Fastify server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Fastify on Shipit")],
+            build_modes=(BuildMode.Local, BuildMode.Wasmer),
+        ),
         # Next.js runtime app bundled for Node
         E2ECase(
             path="examples/node-next",
