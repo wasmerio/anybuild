@@ -1,13 +1,14 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from shipit.generator import load_provider
+from shipit.generator import load_provider, load_provider_config
 from shipit.providers.base import Config
+from shipit.providers.node import NodeFramework, PackageManager
 from shipit.providers.node_static import (
+    NodeStaticConfig,
     NodeStaticProvider,
-    PackageManager,
-    StaticGenerator,
 )
 
 
@@ -15,47 +16,47 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.parametrize(
-    ("example", "generator", "static_dir", "build_command"),
+    ("example", "framework", "static_dir", "build_command"),
     [
         (
             "eleventy",
-            StaticGenerator.ELEVENTY,
+            NodeFramework.ELEVENTY,
             "_site",
             "npm run build",
         ),
         (
             "vitepress",
-            StaticGenerator.VITEPRESS,
+            NodeFramework.VITEPRESS,
             "docs/.vitepress/dist",
             "npm run docs:build",
         ),
         (
             "vuepress",
-            StaticGenerator.VUEPRESS,
+            NodeFramework.VUEPRESS,
             "docs/.vuepress/dist",
             "npm run docs:build",
         ),
         (
             "hexo",
-            StaticGenerator.HEXO,
+            NodeFramework.HEXO,
             "public",
             "npm run generate",
         ),
         (
             "metalsmith",
-            StaticGenerator.METALSMITH,
+            NodeFramework.METALSMITH,
             "build",
             "npm run build",
         ),
         (
             "assemble",
-            StaticGenerator.ASSEMBLE,
+            NodeFramework.ASSEMBLE,
             "dist",
             "npm run build",
         ),
         (
             "harp",
-            StaticGenerator.HARP,
+            NodeFramework.HARP,
             "www",
             "npm run build",
         ),
@@ -63,7 +64,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 )
 def test_new_static_builder_examples_are_pure_static(
     example: str,
-    generator: StaticGenerator,
+    framework: NodeFramework,
     static_dir: str,
     build_command: str,
 ) -> None:
@@ -77,7 +78,7 @@ def test_new_static_builder_examples_are_pure_static(
     assert load_provider(path, base_config) is NodeStaticProvider
 
     provider_config = NodeStaticProvider.load_config(path, base_config)
-    assert provider_config.static_generator == generator
+    assert provider_config.framework == framework
     assert provider_config.static_dir == static_dir
     assert provider_config.build_command == build_command
 
@@ -189,18 +190,43 @@ def test_node_static_script_commands_prefers_build_over_fallbacks() -> None:
 
 
 @pytest.mark.parametrize(
-    ("command", "generator"),
+    ("command", "framework"),
     [
-        ("npx @11ty/eleventy", StaticGenerator.ELEVENTY),
-        ("vitepress build docs", StaticGenerator.VITEPRESS),
-        ("vuepress build docs", StaticGenerator.VUEPRESS),
-        ("hexo g", StaticGenerator.HEXO),
-        ("metalsmith", StaticGenerator.METALSMITH),
-        ("grunt assemble", StaticGenerator.ASSEMBLE),
-        ("harp compile src www", StaticGenerator.HARP),
+        ("npx @11ty/eleventy", NodeFramework.ELEVENTY),
+        ("vitepress build docs", NodeFramework.VITEPRESS),
+        ("vuepress build docs", NodeFramework.VUEPRESS),
+        ("hexo g", NodeFramework.HEXO),
+        ("metalsmith", NodeFramework.METALSMITH),
+        ("grunt assemble", NodeFramework.ASSEMBLE),
+        ("harp compile src www", NodeFramework.HARP),
     ],
 )
 def test_new_static_builder_commands_are_detected(
-    command: str, generator: StaticGenerator
+    command: str, framework: NodeFramework
 ) -> None:
-    assert StaticGenerator.detect_generators_from_command(command) == [generator]
+    assert NodeFramework.detect_from_command(command) == [framework]
+
+
+def test_node_framework_static_capability_is_explicit() -> None:
+    assert NodeFramework.NEXT.can_be_static()
+    assert NodeFramework.ELEVENTY.can_be_static()
+    assert not NodeFramework.EXPRESS.can_be_static()
+
+
+def test_node_static_rejects_non_static_framework_config() -> None:
+    with pytest.raises(ValidationError, match="express cannot be generated"):
+        NodeStaticConfig(framework=NodeFramework.EXPRESS)
+
+
+def test_node_static_rejects_non_static_framework_config_override(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text("{}\n")
+
+    with pytest.raises(ValidationError, match="express cannot be generated"):
+        load_provider_config(
+            NodeStaticProvider,
+            tmp_path,
+            Config(),
+            config={"framework": "express"},
+        )

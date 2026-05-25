@@ -122,6 +122,157 @@ class PackageManager(Enum):
 class NodeFramework(Enum):
     NEXT = "next"
     ASTRO = "astro"
+    VITE = "vite"
+    GATSBY = "gatsby"
+    ELEVENTY = "eleventy"
+    VITEPRESS = "vitepress"
+    VUEPRESS = "vuepress"
+    HEXO = "hexo"
+    METALSMITH = "metalsmith"
+    ASSEMBLE = "assemble"
+    HARP = "harp"
+    DOCUSAURUS_OLD = "docusaurus-old"
+    DOCUSAURUS = "docusaurus"
+    SVELTE = "svelte"
+    REMIX = "remix"
+    NUXT_OLD = "nuxt"
+    NUXT_V3 = "nuxt3"
+    REMIX_OLD = "remix-old"
+    REMIX_V2 = "remix-v2"
+    REMIX_V2_CLASSIC = "remix-v2-classic"
+    EXPRESS = "express"
+
+    def can_be_static(self) -> bool:
+        return self in {
+            NodeFramework.ASTRO,
+            NodeFramework.VITE,
+            NodeFramework.NEXT,
+            NodeFramework.GATSBY,
+            NodeFramework.ELEVENTY,
+            NodeFramework.VITEPRESS,
+            NodeFramework.VUEPRESS,
+            NodeFramework.HEXO,
+            NodeFramework.METALSMITH,
+            NodeFramework.ASSEMBLE,
+            NodeFramework.HARP,
+            NodeFramework.DOCUSAURUS_OLD,
+            NodeFramework.DOCUSAURUS,
+            NodeFramework.SVELTE,
+            NodeFramework.REMIX,
+            NodeFramework.NUXT_OLD,
+            NodeFramework.NUXT_V3,
+            NodeFramework.REMIX_OLD,
+            NodeFramework.REMIX_V2,
+            NodeFramework.REMIX_V2_CLASSIC,
+        }
+
+    def is_pure_static(self) -> bool:
+        return self in {
+            NodeFramework.ELEVENTY,
+            NodeFramework.VITEPRESS,
+            NodeFramework.VUEPRESS,
+            NodeFramework.ASSEMBLE,
+            NodeFramework.HARP,
+            NodeFramework.HEXO,
+            NodeFramework.METALSMITH,
+            NodeFramework.DOCUSAURUS,
+            NodeFramework.DOCUSAURUS_OLD,
+            NodeFramework.SVELTE,
+        }
+
+    def get_static_output_dir(self) -> str:
+        output_dirs = {
+            NodeFramework.NEXT: "out",
+            NodeFramework.ELEVENTY: "_site",
+            NodeFramework.NUXT_V3: ".output/public",
+            NodeFramework.ASTRO: "dist",
+            NodeFramework.VITE: "dist",
+            NodeFramework.NUXT_OLD: "dist",
+            NodeFramework.GATSBY: "public",
+            NodeFramework.HEXO: "public",
+            NodeFramework.VITEPRESS: "docs/.vitepress/dist",
+            NodeFramework.VUEPRESS: "docs/.vuepress/dist",
+            NodeFramework.REMIX_OLD: "build/client",
+            NodeFramework.REMIX: "build/client",
+            NodeFramework.REMIX_V2: "build/client",
+            NodeFramework.REMIX_V2_CLASSIC: "public",
+            NodeFramework.ASSEMBLE: "dist",
+            NodeFramework.HARP: "www",
+            NodeFramework.DOCUSAURUS: "build",
+            NodeFramework.DOCUSAURUS_OLD: "build",
+            NodeFramework.SVELTE: "build",
+            NodeFramework.METALSMITH: "build",
+        }
+        if self not in output_dirs:
+            raise ValueError(
+                f"{self.value} cannot be generated as a static Node app"
+            )
+        return output_dirs[self]
+
+    @classmethod
+    def detect_from_command(cls, build_command: str) -> list["NodeFramework"]:
+        commands = {
+            "gatsby": [NodeFramework.GATSBY],
+            "astro": [NodeFramework.ASTRO],
+            "@11ty/eleventy": [NodeFramework.ELEVENTY],
+            "eleventy": [NodeFramework.ELEVENTY],
+            "remix-ssg": [NodeFramework.REMIX_OLD],
+            "remix": [NodeFramework.REMIX_V2_CLASSIC, NodeFramework.REMIX_V2],
+            "vite": [NodeFramework.VITE],
+            "vitepress": [NodeFramework.VITEPRESS],
+            "vuepress": [NodeFramework.VUEPRESS],
+            "hexo": [NodeFramework.HEXO],
+            "metalsmith": [NodeFramework.METALSMITH],
+            "harp": [NodeFramework.HARP],
+            "docusaurus": [
+                NodeFramework.DOCUSAURUS,
+                NodeFramework.DOCUSAURUS_OLD,
+            ],
+            "next": [NodeFramework.NEXT],
+            "nuxi": [NodeFramework.NUXT_V3],
+            "nuxt": [NodeFramework.NUXT_OLD],
+            "svelte-kit": [NodeFramework.SVELTE],
+        }
+        try:
+            tokens = shlex.split(build_command)
+        except ValueError:
+            tokens = build_command.split()
+
+        for index, token in enumerate(tokens):
+            if token == "grunt" and "assemble" in tokens[index + 1 :]:
+                return [NodeFramework.ASSEMBLE]
+            if token in commands:
+                return commands[token]
+        return []
+
+    def build_static_command(self) -> str:
+        build_commands = {
+            NodeFramework.GATSBY: "gatsby build",
+            NodeFramework.ELEVENTY: "@11ty/eleventy",
+            NodeFramework.VITEPRESS: "vitepress build docs",
+            NodeFramework.VUEPRESS: "vuepress build docs",
+            NodeFramework.HEXO: "hexo generate",
+            NodeFramework.METALSMITH: "metalsmith build",
+            NodeFramework.ASSEMBLE: "grunt assemble",
+            NodeFramework.HARP: "harp compile . www",
+            NodeFramework.ASTRO: "astro build",
+            NodeFramework.REMIX_OLD: "remix-ssg build",
+            NodeFramework.REMIX_V2: "vite build",
+            NodeFramework.REMIX_V2_CLASSIC: "remix build",
+            NodeFramework.DOCUSAURUS: "docusaurus build",
+            NodeFramework.DOCUSAURUS_OLD: "docusaurus build",
+            NodeFramework.SVELTE: "svelte-kit build",
+            NodeFramework.VITE: "vite build",
+            NodeFramework.NEXT: "next export",
+            NodeFramework.NUXT_V3: "nuxi generate",
+            NodeFramework.NUXT_OLD: "nuxt generate",
+            NodeFramework.REMIX: "remix build",
+        }
+        if self not in build_commands:
+            raise ValueError(
+                f"{self.value} cannot be generated as a static Node app"
+            )
+        return build_commands[self]
 
     def bundle_build_command(
         self, package_manager: PackageManager, build_command: str

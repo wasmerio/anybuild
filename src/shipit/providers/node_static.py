@@ -1,10 +1,10 @@
 import json
 import re
 import shlex
-from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
+from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 from .base import (
@@ -16,156 +16,21 @@ from .base import (
     VolumeSpec,
     _exists,
 )
-from .node import NodeConfig, NodeProvider, PackageManager
+from .node import NodeConfig, NodeFramework, NodeProvider, PackageManager
 from .staticfile import StaticFileProvider, StaticFileConfig
-
-
-class StaticGenerator(Enum):
-    ASTRO = "astro"
-    VITE = "vite"
-    NEXT = "next"
-    GATSBY = "gatsby"
-    ELEVENTY = "eleventy"
-    VITEPRESS = "vitepress"
-    VUEPRESS = "vuepress"
-    HEXO = "hexo"
-    METALSMITH = "metalsmith"
-    ASSEMBLE = "assemble"
-    HARP = "harp"
-    DOCUSAURUS_OLD = "docusaurus-old"
-    DOCUSAURUS = "docusaurus"
-    SVELTE = "svelte"
-    REMIX = "remix"
-    NUXT_OLD = "nuxt"
-    NUXT_V3 = "nuxt3"
-    REMIX_OLD = "remix-old"
-    REMIX_V2 = "remix-v2"
-    REMIX_V2_CLASSIC = "remix-v2-classic"
-
-    def is_pure_static(self) -> bool:
-        return self in [
-            StaticGenerator.ELEVENTY,
-            StaticGenerator.VITEPRESS,
-            StaticGenerator.VUEPRESS,
-            StaticGenerator.ASSEMBLE,
-            StaticGenerator.HARP,
-            StaticGenerator.HEXO,
-            StaticGenerator.METALSMITH,
-            StaticGenerator.DOCUSAURUS,
-            StaticGenerator.DOCUSAURUS_OLD,
-            StaticGenerator.SVELTE,
-        ]
-
-    def get_output_dir(self) -> str:
-        if self == StaticGenerator.NEXT:
-            return "out"
-        elif self == StaticGenerator.ELEVENTY:
-            return "_site"
-        elif self == StaticGenerator.NUXT_V3:
-            return ".output/public"
-        elif self in [
-            StaticGenerator.ASTRO,
-            StaticGenerator.VITE,
-            StaticGenerator.NUXT_OLD,
-        ]:
-            return "dist"
-        elif self == StaticGenerator.GATSBY:
-            return "public"
-        elif self == StaticGenerator.HEXO:
-            return "public"
-        elif self == StaticGenerator.VITEPRESS:
-            return "docs/.vitepress/dist"
-        elif self == StaticGenerator.VUEPRESS:
-            return "docs/.vuepress/dist"
-        elif self in [
-            StaticGenerator.REMIX_OLD,
-            StaticGenerator.REMIX,
-            StaticGenerator.REMIX_V2,
-        ]:
-            return "build/client"
-        elif self == StaticGenerator.REMIX_V2_CLASSIC:
-            return "public"
-        elif self == StaticGenerator.ASSEMBLE:
-            return "dist"
-        elif self == StaticGenerator.HARP:
-            return "www"
-        elif self in [
-            StaticGenerator.DOCUSAURUS,
-            StaticGenerator.DOCUSAURUS_OLD,
-            StaticGenerator.SVELTE,
-            StaticGenerator.METALSMITH,
-        ]:
-            return "build"
-        else:
-            return "dist"
-
-    @classmethod
-    def detect_generators_from_command(
-        cls, build_command
-    ) -> List["StaticGenerator"]:
-        commands = {
-            "gatsby": [StaticGenerator.GATSBY],
-            "astro": [StaticGenerator.ASTRO],
-            "@11ty/eleventy": [StaticGenerator.ELEVENTY],
-            "eleventy": [StaticGenerator.ELEVENTY],
-            "remix-ssg": [StaticGenerator.REMIX_OLD],
-            "remix": [StaticGenerator.REMIX_V2_CLASSIC, StaticGenerator.REMIX_V2],
-            "vite": [StaticGenerator.VITE],
-            "vitepress": [StaticGenerator.VITEPRESS],
-            "vuepress": [StaticGenerator.VUEPRESS],
-            "hexo": [StaticGenerator.HEXO],
-            "metalsmith": [StaticGenerator.METALSMITH],
-            "harp": [StaticGenerator.HARP],
-            "docusaurus": [
-                StaticGenerator.DOCUSAURUS,
-                StaticGenerator.DOCUSAURUS_OLD,
-            ],
-            "next": [StaticGenerator.NEXT],
-            "nuxi": [StaticGenerator.NUXT_V3],
-            "nuxt": [StaticGenerator.NUXT_OLD],
-            "svelte-kit": [StaticGenerator.SVELTE],
-        }
-        try:
-            tokens = shlex.split(build_command)
-        except ValueError:
-            tokens = build_command.split()
-
-        for index, token in enumerate(tokens):
-            if token == "grunt" and "assemble" in tokens[index + 1 :]:
-                return [StaticGenerator.ASSEMBLE]
-            if token in commands:
-                return commands[token]
-        return []
-
-    def build_command(self) -> str:
-        return {
-            StaticGenerator.GATSBY: "gatsby build",
-            StaticGenerator.ELEVENTY: "@11ty/eleventy",
-            StaticGenerator.VITEPRESS: "vitepress build docs",
-            StaticGenerator.VUEPRESS: "vuepress build docs",
-            StaticGenerator.HEXO: "hexo generate",
-            StaticGenerator.METALSMITH: "metalsmith build",
-            StaticGenerator.ASSEMBLE: "grunt assemble",
-            StaticGenerator.HARP: "harp compile . www",
-            StaticGenerator.ASTRO: "astro build",
-            StaticGenerator.REMIX_OLD: "remix-ssg build",
-            StaticGenerator.REMIX_V2: "vite build",
-            StaticGenerator.REMIX_V2_CLASSIC: "remix build",
-            StaticGenerator.DOCUSAURUS: "docusaurus build",
-            StaticGenerator.DOCUSAURUS_OLD: "docusaurus build",
-            StaticGenerator.SVELTE: "svelte-kit build",
-            StaticGenerator.VITE: "vite build",
-            StaticGenerator.NEXT: "next export",
-            StaticGenerator.NUXT_V3: "nuxi generate",
-            StaticGenerator.NUXT_OLD: "nuxt generate",
-            StaticGenerator.REMIX: "remix build",
-        }[self]
 
 
 class NodeStaticConfig(NodeConfig, StaticFileConfig):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
-    static_generator: Optional[StaticGenerator] = None
+    @model_validator(mode="after")
+    def validate_static_framework(self) -> "NodeStaticConfig":
+        if self.framework and not self.framework.can_be_static():
+            raise ValueError(
+                f"{self.framework.value} cannot be generated as a static "
+                "Node app"
+            )
+        return self
 
 
 class NodeStaticProvider(NodeProvider, StaticFileProvider):
@@ -185,45 +50,46 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         cls, path: Path, base_config: Config
     ) -> NodeStaticConfig:
         static_config = StaticFileProvider.load_config(path, base_config)
-        config = NodeStaticConfig(**static_config.model_dump())
+        config_data = base_config.model_dump() | static_config.model_dump()
+        config = NodeStaticConfig(**config_data)
         if not config.package_manager:
             config.package_manager = NodeProvider.detect_package_manager(path)
 
         package_json = cls.parse_package_json(path)
 
-        if not config.static_generator:
+        if not config.framework:
             if cls.has_dependency(package_json, "@11ty/eleventy"):
-                config.static_generator = StaticGenerator.ELEVENTY
+                config.framework = NodeFramework.ELEVENTY
             elif cls.has_dependency(package_json, "vitepress"):
-                config.static_generator = StaticGenerator.VITEPRESS
+                config.framework = NodeFramework.VITEPRESS
             elif cls.has_dependency(package_json, "vuepress"):
-                config.static_generator = StaticGenerator.VUEPRESS
+                config.framework = NodeFramework.VUEPRESS
             elif cls.has_dependency(package_json, "hexo") or cls.has_dependency(
                 package_json, "hexo-cli"
             ):
-                config.static_generator = StaticGenerator.HEXO
+                config.framework = NodeFramework.HEXO
             elif cls.has_dependency(package_json, "metalsmith"):
-                config.static_generator = StaticGenerator.METALSMITH
+                config.framework = NodeFramework.METALSMITH
             elif cls.has_dependency(package_json, "assemble") or cls.has_dependency(
                 package_json, "grunt-assemble"
             ):
-                config.static_generator = StaticGenerator.ASSEMBLE
+                config.framework = NodeFramework.ASSEMBLE
             elif cls.has_dependency(package_json, "harp"):
-                config.static_generator = StaticGenerator.HARP
+                config.framework = NodeFramework.HARP
             elif cls.has_dependency(package_json, "gatsby"):
-                config.static_generator = StaticGenerator.GATSBY
+                config.framework = NodeFramework.GATSBY
             elif cls.has_dependency(package_json, "astro"):
-                config.static_generator = StaticGenerator.ASTRO
+                config.framework = NodeFramework.ASTRO
             elif cls.has_dependency(package_json, "docusaurus"):
-                config.static_generator = StaticGenerator.DOCUSAURUS_OLD
+                config.framework = NodeFramework.DOCUSAURUS_OLD
             elif cls.has_dependency(package_json, "@docusaurus/core"):
-                config.static_generator = StaticGenerator.DOCUSAURUS
+                config.framework = NodeFramework.DOCUSAURUS
             elif cls.has_dependency(package_json, "svelte"):
-                config.static_generator = StaticGenerator.SVELTE
+                config.framework = NodeFramework.SVELTE
             elif cls.has_dependency(
                 package_json, "@remix-run/dev", "1"
             ) or cls.has_dependency(package_json, "@remix-run/dev", "0"):
-                config.static_generator = StaticGenerator.REMIX_OLD
+                config.framework = NodeFramework.REMIX_OLD
             elif cls.has_dependency(package_json, "@remix-run/dev"):
                 has_vite = (
                     cls.has_dependency(package_json, "@remix-run/vite")
@@ -237,29 +103,29 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
                     )
                 )
                 if has_vite:
-                    config.static_generator = StaticGenerator.REMIX_V2
+                    config.framework = NodeFramework.REMIX_V2
                 else:
-                    config.static_generator = StaticGenerator.REMIX_V2_CLASSIC
+                    config.framework = NodeFramework.REMIX_V2_CLASSIC
             elif cls.has_dependency(package_json, "vite"):
-                config.static_generator = StaticGenerator.VITE
+                config.framework = NodeFramework.VITE
             elif cls.has_dependency(package_json, "next"):
-                config.static_generator = StaticGenerator.NEXT
+                config.framework = NodeFramework.NEXT
             elif cls.has_dependency(package_json, "nuxt", "2") or cls.has_dependency(
                 package_json, "nuxt", "1"
             ):
-                config.static_generator = StaticGenerator.NUXT_OLD
+                config.framework = NodeFramework.NUXT_OLD
             elif cls.has_dependency(package_json, "nuxt"):
-                config.static_generator = StaticGenerator.NUXT_V3
+                config.framework = NodeFramework.NUXT_V3
 
         if not config.build_command:
             config.build_command = cls.get_build_command(
-                package_json, config.package_manager, config.static_generator
+                package_json, config.package_manager, config.framework
             )
 
         if not config.static_dir:
-            if config.static_generator:
+            if config.framework:
                 config.static_dir = cls.get_static_dir(
-                    path, package_json, config.static_generator
+                    path, package_json, config.framework
                 )
             else:
                 config.static_dir = "dist"
@@ -271,31 +137,37 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         cls,
         path: Path,
         package_json: Optional[Dict[str, Any]],
-        static_generator: StaticGenerator,
+        framework: NodeFramework,
     ) -> str:
-        if static_generator == StaticGenerator.VITEPRESS:
+        if framework == NodeFramework.VITEPRESS:
             root = cls._script_build_root(package_json, "vitepress")
             root = root or cls._default_docs_root(path, ".vitepress")
             return cls._rooted_output_dir(root, ".vitepress/dist")
 
-        if static_generator == StaticGenerator.VUEPRESS:
+        if framework == NodeFramework.VUEPRESS:
             root = cls._script_build_root(package_json, "vuepress")
             root = root or cls._default_docs_root(path, ".vuepress")
             return cls._rooted_output_dir(root, ".vuepress/dist")
 
-        if static_generator == StaticGenerator.METALSMITH:
-            return cls._metalsmith_output_dir(path) or static_generator.get_output_dir()
-
-        if static_generator == StaticGenerator.ASSEMBLE:
-            return cls._assemble_output_dir(path) or static_generator.get_output_dir()
-
-        if static_generator == StaticGenerator.HARP:
+        if framework == NodeFramework.METALSMITH:
             return (
-                cls._harp_output_dir(package_json)
-                or static_generator.get_output_dir()
+                cls._metalsmith_output_dir(path)
+                or framework.get_static_output_dir()
             )
 
-        return static_generator.get_output_dir()
+        if framework == NodeFramework.ASSEMBLE:
+            return (
+                cls._assemble_output_dir(path)
+                or framework.get_static_output_dir()
+            )
+
+        if framework == NodeFramework.HARP:
+            return (
+                cls._harp_output_dir(package_json)
+                or framework.get_static_output_dir()
+            )
+
+        return framework.get_static_output_dir()
 
     @classmethod
     def _script_commands(
@@ -436,14 +308,16 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         has_package_manager_build_command = False
         if config.commands.build:
             # Iterate over all generators and check if the build command matches
-            for static_generator in StaticGenerator:
-                if static_generator.build_command() in config.commands.build:
+            for framework in NodeFramework:
+                if not framework.can_be_static():
+                    continue
+                if framework.build_static_command() in config.commands.build:
                     return DetectResult(cls.name(), 60)
 
-            static_generators = StaticGenerator.detect_generators_from_command(
+            frameworks = NodeFramework.detect_from_command(
                 config.commands.build
             )
-            if static_generators and StaticGenerator.NEXT not in static_generators:
+            if frameworks and NodeFramework.NEXT not in frameworks:
                 return DetectResult(cls.name(), 60)
 
             has_package_manager_build_command = (
@@ -465,14 +339,18 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             return None
 
         for build_command in cls._script_commands(package_json):
-            for static_generator in StaticGenerator:
-                if static_generator.build_command() in build_command:
+            for framework in NodeFramework:
+                if not framework.can_be_static():
+                    continue
+                if framework.build_static_command() in build_command:
                     return DetectResult(cls.name(), 60)
-            all_generators = StaticGenerator.detect_generators_from_command(build_command)
-            if all_generators and all(generator.is_pure_static() for generator in all_generators):
+            all_frameworks = NodeFramework.detect_from_command(build_command)
+            if all_frameworks and all(
+                framework.is_pure_static() for framework in all_frameworks
+            ):
                 return DetectResult(cls.name(), 60)
 
-        pure_static_generators = [
+        pure_static_dependencies = [
             "@11ty/eleventy",
             "vitepress",
             "vuepress",
@@ -485,7 +363,7 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             "docusaurus",
             "@docusaurus/core",
         ]
-        static_generators = [
+        static_dependencies = [
             "astro",
             "vite",
             "next",
@@ -494,9 +372,9 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             "svelte",
             "@remix-run/dev",
         ]
-        if any(cls.has_dependency(package_json, dep) for dep in pure_static_generators):
+        if any(cls.has_dependency(package_json, dep) for dep in pure_static_dependencies):
             return DetectResult(cls.name(), 60)
-        if any(cls.has_dependency(package_json, dep) for dep in static_generators):
+        if any(cls.has_dependency(package_json, dep) for dep in static_dependencies):
             return DetectResult(cls.name(), 20)
         if has_package_manager_build_command:
             return DetectResult(cls.name(), 20)
@@ -514,7 +392,7 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         cls,
         package_json: Optional[Dict[str, Any]],
         package_manager: PackageManager,
-        static_generator: Optional[StaticGenerator],
+        framework: Optional[NodeFramework],
     ) -> Optional[str]:
         if package_json:
             scripts = package_json.get("scripts", {})
@@ -522,8 +400,8 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
                 scripts = {}
             docs_build_command = scripts.get("docs:build")
             if (
-                static_generator
-                in [StaticGenerator.VITEPRESS, StaticGenerator.VUEPRESS]
+                framework
+                in [NodeFramework.VITEPRESS, NodeFramework.VUEPRESS]
                 and docs_build_command
             ):
                 return package_manager.run_command("docs:build")
@@ -535,9 +413,9 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
                 return package_manager.run_command("build")
             if docs_build_command:
                 return package_manager.run_command("docs:build")
-        if not static_generator:
+        if not framework:
             return None
-        command = static_generator.build_command()
+        command = framework.build_static_command()
         return package_manager.run_execute_command(command)
 
     def build_steps(self) -> list[str]:
