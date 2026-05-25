@@ -44,7 +44,7 @@ def test_node_package_manager_defaults_to_npm(tmp_path: Path) -> None:
 
 
 def test_node_detection_does_not_beat_node_static() -> None:
-    path = REPO_ROOT / "examples" / "vitepress"
+    path = REPO_ROOT / "examples" / "nodestatic-vitepress"
     base_config = Config()
 
     node_static_result = NodeStaticProvider.detect(path, base_config)

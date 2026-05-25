@@ -263,7 +263,7 @@ class E2ECase:
         ),
         # Next.js runtime app bundled for Node
         E2ECase(
-            path="examples/node-nextjs",
+            path="examples/node-next",
             serve_pattern=r"Next.js|started server|ready",
             http=[
                 HTTPRequest(
@@ -293,49 +293,49 @@ class E2ECase:
         ),
         # Eleventy / 11ty static site
         E2ECase(
-            path="examples/eleventy",
+            path="examples/nodestatic-eleventy",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Eleventy Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # VitePress static documentation site
         E2ECase(
-            path="examples/vitepress",
+            path="examples/nodestatic-vitepress",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"VitePress Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # VuePress static documentation site
         E2ECase(
-            path="examples/vuepress",
+            path="examples/nodestatic-vuepress",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"VuePress Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Hexo static blog
         E2ECase(
-            path="examples/hexo",
+            path="examples/nodestatic-hexo",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Hexo Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Metalsmith static site
         E2ECase(
-            path="examples/metalsmith",
+            path="examples/nodestatic-metalsmith",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Metalsmith Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Assemble static site
         E2ECase(
-            path="examples/assemble",
+            path="examples/nodestatic-assemble",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Assemble Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Harp static site
         E2ECase(
-            path="examples/harp",
+            path="examples/nodestatic-harp",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Harp Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),

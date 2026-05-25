@@ -19,43 +19,43 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
     ("example", "framework", "static_dir", "build_command"),
     [
         (
-            "eleventy",
+            "nodestatic-eleventy",
             NodeFramework.ELEVENTY,
             "_site",
             "npm run build",
         ),
         (
-            "vitepress",
+            "nodestatic-vitepress",
             NodeFramework.VITEPRESS,
             "docs/.vitepress/dist",
             "npm run docs:build",
         ),
         (
-            "vuepress",
+            "nodestatic-vuepress",
             NodeFramework.VUEPRESS,
             "docs/.vuepress/dist",
             "npm run docs:build",
         ),
         (
-            "hexo",
+            "nodestatic-hexo",
             NodeFramework.HEXO,
             "public",
             "npm run generate",
         ),
         (
-            "metalsmith",
+            "nodestatic-metalsmith",
             NodeFramework.METALSMITH,
             "build",
             "npm run build",
         ),
         (
-            "assemble",
+            "nodestatic-assemble",
             NodeFramework.ASSEMBLE,
             "dist",
             "npm run build",
         ),
         (
-            "harp",
+            "nodestatic-harp",
             NodeFramework.HARP,
             "www",
             "npm run build",
@@ -84,7 +84,7 @@ def test_new_static_builder_examples_are_pure_static(
 
 
 def test_pure_static_dependency_keeps_priority_with_package_script_command() -> None:
-    path = REPO_ROOT / "examples" / "vitepress"
+    path = REPO_ROOT / "examples" / "nodestatic-vitepress"
     base_config = Config()
     base_config.commands.build = "npm run docs:build"
 
