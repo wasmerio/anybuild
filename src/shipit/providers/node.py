@@ -121,6 +121,7 @@ class PackageManager(Enum):
 
 class NodeFramework(Enum):
     NEXT = "next"
+    ASTRO = "astro"
 
     def bundle_build_command(
         self, package_manager: PackageManager, build_command: str
@@ -130,17 +131,22 @@ class NodeFramework(Enum):
             return package_manager.dlx_command(
                 f"next-bundle --build-command {quoted_command}"
             )
-        raise NotImplementedError(f"Unsupported Node framework: {self.value}")
+        return build_command
 
-    def start_command(self) -> str:
+    def node_optimize_deps_paths(self) -> list[str]:
+        if self == NodeFramework.ASTRO:
+            return ["dist"]
+        return []
+
+    def start_command(self) -> Optional[str]:
         if self == NodeFramework.NEXT:
             return "node server.mjs"
-        raise NotImplementedError(f"Unsupported Node framework: {self.value}")
+        return None
 
     def folders_to_copy(self) -> list[str]:
         if self == NodeFramework.NEXT:
             return [".next-bundle/*"]
-        raise NotImplementedError(f"Unsupported Node framework: {self.value}")
+        return ["."]
 
 class NodeConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
@@ -155,6 +161,7 @@ class NodeConfig(Config):
     pnpm_version: Optional[str] = None
     yarn_version: Optional[str] = None
     bun_version: Optional[str] = None
+    optimize_node_dependencies: Optional[bool] = True
     # Optimize node_modules size further when targeting Edge by removing
     # executable native binaries that cannot run there anyway.
     remove_native_binaries: Optional[bool] = False
@@ -219,7 +226,7 @@ class NodeProvider:
         if infer_start and not config.commands.start:
             if config.framework:
                 config.commands.start = config.framework.start_command()
-            else:
+            if not config.commands.start:
                 config.commands.start = cls.infer_start_command(
                     path, package_json
                 )
@@ -314,6 +321,9 @@ class NodeProvider:
     ) -> Optional[NodeFramework]:
         if cls.has_dependency(package_json, "next"):
             return NodeFramework.NEXT
+
+        elif cls.has_dependency(package_json, "astro"):
+            return NodeFramework.ASTRO
 
         for command in cls._script_commands(package_json):
             try:
@@ -515,6 +525,13 @@ class NodeProvider:
         steps = [
             f"run(\"{package_manager.prune_command()}\", group=\"prune\")"
         ]
+        if self.config.framework and self.config.optimize_node_dependencies:
+            node_optimize_deps_paths = self.config.framework.node_optimize_deps_paths()
+            if node_optimize_deps_paths:
+                optimize_deps_command = self.config.package_manager.dlx_command(
+                    f"optimize-deps {', '.join(node_optimize_deps_paths)} --replace"
+                )
+                steps.append(f"run(\"{optimize_deps_command}\")")
         if not self.only_build and self.config.remove_native_binaries:
             steps.extend(
                 [
@@ -533,14 +550,16 @@ class NodeProvider:
         return steps
 
     def build_steps(self) -> list[str]:
-        folder_to_copy = ", ".join(self.config.framework.folders_to_copy())
+        folders_to_copy = "."
+        if self.config.framework:
+            folders_to_copy = ", ".join(self.config.framework.folders_to_copy())
         return [
             "workdir(build.path)",
             *self.build_steps_install(),
             self.build_steps_copy(),
             *self.build_steps_build(),
             *self.build_steps_optimize_deps(),
-            f"run(\"cp -R {folder_to_copy} {{}}\".format(app.path))",
+            f"run(\"cp -R {folders_to_copy or "."} {{}}\".format(app.path))",
         ]
 
     def declarations(self) -> Optional[str]:
