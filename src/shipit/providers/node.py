@@ -474,13 +474,14 @@ class NodeProvider:
             has_lockfile=has_lockfile
         )
         steps = []
+
+        if has_lockfile:
+            steps.append(f'copy("{lockfile}")')
+
         if package_manager == PackageManager.PNPM:
             steps.append(f'env(pnpm_config_dangerously_allow_all_builds="true")')
         elif package_manager == PackageManager.NPM:
             steps.append(f'env(CI="true", NPM_CONFIG_FUND="false")')
-
-        if has_lockfile:
-            steps.append(f'copy("{lockfile}")')
 
         steps.append(f'run("{install_command}", inputs=["package.json"], group="install")')
         return steps

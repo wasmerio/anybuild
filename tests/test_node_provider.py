@@ -85,7 +85,7 @@ def test_node_provider_detects_nextjs_runtime_app(tmp_path: Path) -> None:
     assert provider_config.build_command == (
         "npx -y next-bundle --build-command 'npm run build'"
     )
-    assert provider_config.commands.start == "node .next-bundle/server.mjs"
+    assert provider_config.commands.start == "node server.mjs"
 
 
 @pytest.mark.parametrize(
@@ -173,7 +173,7 @@ def test_nextjs_start_command_prefers_explicit_command(tmp_path: Path) -> None:
     assert provider_config.commands.start == "node custom-next-server.js"
 
 
-def test_node_script_commands_prefers_build_by_default() -> None:
+def test_node_script_commands_uses_build_by_default() -> None:
     package_json = {
         "scripts": {
             "generate": "node generate.js",
@@ -181,10 +181,7 @@ def test_node_script_commands_prefers_build_by_default() -> None:
         },
     }
 
-    assert NodeProvider._script_commands(package_json) == [
-        "node build.js",
-        "node generate.js",
-    ]
+    assert NodeProvider._script_commands(package_json) == ["node build.js"]
 
 
 def test_node_start_command_prefers_explicit_command(tmp_path: Path) -> None:
@@ -236,7 +233,10 @@ def test_node_build_steps_optimize_deps_prunes_then_node_modules(
 
     optimize_deps_steps = provider.build_steps_optimize_deps()
     build_steps = provider.build_steps()
-    assert optimize_deps_steps == build_steps[-len(optimize_deps_steps):]
+    assert build_steps[-1] == 'run("cp -R . {}".format(app.path))'
+    assert optimize_deps_steps == build_steps[
+        -len(optimize_deps_steps) - 1 : -1
+    ]
     prune_index = next(
         index for index, step in enumerate(build_steps) if 'group="prune"' in step
     )

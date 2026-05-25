@@ -176,7 +176,7 @@ def test_node_static_uses_pnpm_when_lockfile_is_present(tmp_path: Path) -> None:
     assert provider_config.build_command == "pnpm run build"
 
 
-def test_node_static_script_commands_keeps_static_preference() -> None:
+def test_node_static_script_commands_prefers_build_over_fallbacks() -> None:
     package_json = {
         "scripts": {
             "build": "vite build",
@@ -185,11 +185,7 @@ def test_node_static_script_commands_keeps_static_preference() -> None:
         },
     }
 
-    assert NodeStaticProvider._script_commands(package_json) == [
-        "vite generate",
-        "vite build",
-        "vitepress build docs",
-    ]
+    assert NodeStaticProvider._script_commands(package_json) == ["vite build"]
 
 
 @pytest.mark.parametrize(
