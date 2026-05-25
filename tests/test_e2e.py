@@ -273,6 +273,13 @@ class E2ECase:
             ],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
+        # Astro runtime app served by the Node adapter
+        E2ECase(
+            path="examples/node-astro",
+            serve_pattern=r"Node|Astro|Listening|ready",
+            http=[HTTPRequest(path="/", body_match=r"Astro Node Example")],
+            build_modes=(BuildMode.Local,),
+        ),
         # Hugo static site (built via Hugo, served with static-web-server)
         E2ECase(
             path="examples/hugo",
@@ -290,6 +297,13 @@ class E2ECase:
             path="examples/mkdocs-with-plugins",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Welcome to MkDocs with Plugins")],
+        ),
+        # Astro static site
+        E2ECase(
+            path="examples/nodestatic-astro",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Astro Static Example")],
+            build_modes=(BuildMode.Wasmer,),
         ),
         # Eleventy / 11ty static site
         E2ECase(

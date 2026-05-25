@@ -19,6 +19,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
     ("example", "framework", "static_dir", "build_command"),
     [
         (
+            "nodestatic-astro",
+            NodeFramework.ASTRO,
+            "dist",
+            "npm run build",
+        ),
+        (
             "nodestatic-eleventy",
             NodeFramework.ELEVENTY,
             "_site",

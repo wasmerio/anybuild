@@ -62,6 +62,12 @@ def test_node_provider_detects_generic_node_example() -> None:
     assert load_provider(path, Config()) is NodeProvider
 
 
+def test_node_provider_detects_astro_runtime_example() -> None:
+    path = REPO_ROOT / "examples" / "node-astro"
+
+    assert load_provider(path, Config()) is NodeProvider
+
+
 def test_node_provider_detects_nextjs_runtime_app(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text(
         """{
