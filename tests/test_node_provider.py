@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -221,6 +223,113 @@ def test_node_start_command_uses_common_entry_file(tmp_path: Path) -> None:
     provider_config = NodeProvider.load_config(tmp_path, Config())
 
     assert provider_config.commands.start == "node server.js"
+
+
+def test_node_build_steps_optimize_deps_prunes_then_node_modules(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text("{}\n")
+    (tmp_path / "package-lock.json").write_text("{}\n")
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+    provider_config.remove_native_binaries = True
+    provider = NodeProvider(tmp_path, provider_config)
+
+    optimize_deps_steps = provider.build_steps_optimize_deps()
+    build_steps = provider.build_steps()
+    assert optimize_deps_steps == build_steps[-len(optimize_deps_steps):]
+    prune_index = next(
+        index for index, step in enumerate(build_steps) if 'group="prune"' in step
+    )
+    copy_index = next(
+        index
+        for index, step in enumerate(build_steps)
+        if "optimize-node-modules.sh" in step and "copy(" in step
+    )
+    mkdir_index = next(
+        index
+        for index, step in enumerate(build_steps)
+        if "mkdir -p" in step and 'group="optimize"' in step
+    )
+    optimize_index = next(
+        index
+        for index, step in enumerate(build_steps)
+        if "bash {}/optimize-node-modules.sh" in step
+    )
+
+    assert prune_index < mkdir_index < copy_index < optimize_index
+    assert "assets.path" in build_steps[mkdir_index]
+    assert 'base="assets"' in build_steps[copy_index]
+    assert "bash {}/optimize-node-modules.sh" in build_steps[optimize_index]
+
+
+def test_node_provider_skips_native_binary_optimizer_by_default(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text("{}\n")
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+    provider = NodeProvider(tmp_path, provider_config)
+
+    assert provider_config.remove_native_binaries is False
+    assert all(
+        "optimize-node-modules.sh" not in step
+        for step in provider.build_steps()
+    )
+    assert all(dep.name != "bash" for dep in provider.dependencies())
+    assert all(mount.name != "assets" for mount in provider.mounts())
+
+
+def test_node_provider_uses_build_only_assets_mount(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text("{}\n")
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+    provider_config.remove_native_binaries = True
+    provider = NodeProvider(tmp_path, provider_config)
+
+    assets_mount = next(mount for mount in provider.mounts() if mount.name == "assets")
+
+    assert assets_mount.attach_to_build is True
+    assert assets_mount.attach_to_serve is False
+
+
+def test_node_modules_binary_optimizer_removes_executable_binaries(
+    tmp_path: Path,
+) -> None:
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("optimizer script requires bash")
+
+    package_dir = tmp_path / "node_modules" / "package"
+    package_dir.mkdir(parents=True)
+    executable_script = package_dir / "script"
+    executable_binary = package_dir / "native"
+    executable_wasm = package_dir / "module.wasm"
+    executable_wasm_magic = package_dir / "wasm-runtime"
+    non_executable_binary = package_dir / "native-data"
+
+    executable_script.write_text("#!/bin/sh\necho ok\n")
+    executable_binary.write_bytes(b"\x7fELF\x00binary")
+    executable_wasm.write_bytes(b"\x00asm\x01\x00\x00\x00")
+    executable_wasm_magic.write_bytes(b"\x00asm\x01\x00\x00\x00")
+    non_executable_binary.write_bytes(b"\x7fELF\x00binary")
+
+    for path in (
+        executable_script,
+        executable_binary,
+        executable_wasm,
+        executable_wasm_magic,
+    ):
+        path.chmod(0o755)
+    non_executable_binary.chmod(0o644)
+
+    script = REPO_ROOT / "src" / "shipit" / "assets" / "node"
+    script = script / "optimize-node-modules.sh"
+
+    subprocess.run([bash, str(script), "node_modules"], cwd=tmp_path, check=True)
+
+    assert executable_script.exists()
+    assert not executable_binary.exists()
+    assert executable_wasm.exists()
+    assert executable_wasm_magic.exists()
+    assert non_executable_binary.exists()
 
 
 def test_laravel_reuses_node_provider_without_static_serving() -> None:

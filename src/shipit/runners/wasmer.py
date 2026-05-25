@@ -250,10 +250,11 @@ class WasmerRunner:
             )
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
-        elif isinstance(provider_config, PhpConfig):
+        if isinstance(provider_config, PhpConfig):
             provider_config.phpix = True
-        elif isinstance(provider_config, NodeConfig):
+        if isinstance(provider_config, NodeConfig):
             provider_config.use_edgejs = True
+            provider_config.remove_native_binaries = True
         self.provider_config = provider_config
         return provider_config
 

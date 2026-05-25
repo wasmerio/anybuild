@@ -170,7 +170,9 @@ class NodeStaticConfig(NodeConfig, StaticFileConfig):
 
 class NodeStaticProvider(NodeProvider, StaticFileProvider):
     only_build: bool = False
-    SCRIPT_COMMAND_PREFERENCE = ("generate", "build", "docs:build")
+    SCRIPT_BUILD_COMMAND = ("build",)
+    # Only use this commands if the build command is not found in the package.json
+    SCRIPT_BUILD_COMMAND_FALLBACK = ("generate", "export", "docs:build",)
     _ASSEMBLE_DEST_PATTERN = re.compile(r"\bdest\s*:\s*['\"]([^'\"]+)['\"]")
 
     def __init__(
@@ -299,9 +301,15 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
     def _script_commands(
         cls, package_json: Optional[Dict[str, Any]]
     ) -> list[str]:
-        return NodeProvider._script_commands(
-            package_json, preferred=cls.SCRIPT_COMMAND_PREFERENCE
+        build_script_commands = NodeProvider._script_commands(
+            package_json, preferred=cls.SCRIPT_BUILD_COMMAND
         )
+        if not build_script_commands:
+            # Only use these commands if the build command is not found in the package.json
+            build_script_commands = NodeProvider._script_commands(
+                package_json, preferred=cls.SCRIPT_BUILD_COMMAND_FALLBACK
+            )
+        return build_script_commands
 
     @classmethod
     def _args_after_command(cls, command: str, executable: str) -> list[str]:

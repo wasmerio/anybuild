@@ -11,9 +11,10 @@ serve(
     use(node, npm),
     workdir(app.path),
     copy("package-lock.json"),
-    env(CI="true", NODE_ENV="production", NPM_CONFIG_FUND="false"),
-    run("npm ci", inputs=["package.json"], group="install"),
-    copy(".", ignore=["node_modules", ".git", "package-lock.json"])
+    env(CI="true", NPM_CONFIG_FUND="false"),
+    run("npm install", inputs=["package.json"], group="install"),
+    copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
+    run("npm prune --omit=dev --ignore-scripts", group="prune")
   ],
   deps=[node],
   env = {

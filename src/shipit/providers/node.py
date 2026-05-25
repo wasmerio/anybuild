@@ -19,6 +19,9 @@ from .base import (
 )
 
 
+NODE_MODULES_OPTIMIZER_ASSET = "node/optimize-node-modules.sh"
+
+
 class PackageManager(Enum):
     NPM = "npm"
     PNPM = "pnpm"
@@ -131,9 +134,13 @@ class NodeFramework(Enum):
 
     def start_command(self) -> str:
         if self == NodeFramework.NEXT:
-            return "node .next-bundle/server.mjs"
+            return "node server.mjs"
         raise NotImplementedError(f"Unsupported Node framework: {self.value}")
 
+    def folders_to_copy(self) -> list[str]:
+        if self == NodeFramework.NEXT:
+            return [".next-bundle/*"]
+        raise NotImplementedError(f"Unsupported Node framework: {self.value}")
 
 class NodeConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
@@ -148,6 +155,9 @@ class NodeConfig(Config):
     pnpm_version: Optional[str] = None
     yarn_version: Optional[str] = None
     bun_version: Optional[str] = None
+    # Optimize node_modules size further when targeting Edge by removing
+    # executable native binaries that cannot run there anyway.
+    remove_native_binaries: Optional[bool] = False
 
 
 class NodeProvider:
@@ -323,9 +333,11 @@ class NodeProvider:
     ) -> list[str]:
         scripts = cls.package_scripts(package_json)
         commands = [scripts[name] for name in preferred if name in scripts]
-        commands.extend(
-            command for name, command in scripts.items() if name not in preferred
-        )
+        if not commands:
+            # Try to backfill with commands that start with the preferred commands
+            commands.extend(
+                command for name, command in scripts.items() if name.startswith(preferred)
+            )
         return commands
 
     @classmethod
@@ -432,6 +444,8 @@ class NodeProvider:
             package_manager_dep = self.config.package_manager.as_dependency(self.path)
             package_manager_dep.use_in_build = True
             deps.append(package_manager_dep)
+            if not self.only_build and self.config.remove_native_binaries:
+                deps.append(DependencySpec("bash", use_in_build=True))
 
         for dep in sorted(self.config.extra_dependencies):
             deps.append(DependencySpec(dep, use_in_build=True))
@@ -492,21 +506,41 @@ class NodeProvider:
             ]
         return [f"run({command}, group=\"build\")"]
 
-    def build_steps_prune(self) -> list[str]:
+    def build_steps_optimize_deps(self) -> list[str]:
         if not (self.path / "package.json").exists():
             return []
         package_manager = self.config.package_manager
         if package_manager is None:
             return []
-        return [f"run(\"{package_manager.prune_command()}\", group=\"prune\")"]
+        steps = [
+            f"run(\"{package_manager.prune_command()}\", group=\"prune\")"
+        ]
+        if not self.only_build and self.config.remove_native_binaries:
+            steps.extend(
+                [
+                    'run("mkdir -p {}".format(assets.path), group="optimize")',
+                    (
+                        f'copy("{NODE_MODULES_OPTIMIZER_ASSET}", '
+                        '"{}/optimize-node-modules.sh".format(assets.path), '
+                        'base="assets")'
+                    ),
+                    (
+                        'run("bash {}/optimize-node-modules.sh '
+                        'node_modules".format(assets.path), group="optimize")'
+                    ),
+                ]
+            )
+        return steps
 
     def build_steps(self) -> list[str]:
+        folder_to_copy = ", ".join(self.config.framework.folders_to_copy())
         return [
-            "workdir(app.path)",
+            "workdir(build.path)",
             *self.build_steps_install(),
             self.build_steps_copy(),
             *self.build_steps_build(),
-            *self.build_steps_prune(),
+            *self.build_steps_optimize_deps(),
+            f"run(\"cp -R {folder_to_copy} {{}}\".format(app.path))",
         ]
 
     def declarations(self) -> Optional[str]:
@@ -523,7 +557,10 @@ class NodeProvider:
     def mounts(self) -> list[MountSpec]:
         if self.only_build:
             return []
-        return [MountSpec("app")]
+        mounts = [MountSpec("build", attach_to_serve=False), MountSpec("app")]
+        if self.config.remove_native_binaries:
+            mounts.append(MountSpec("assets", attach_to_serve=False))
+        return mounts
 
     def volumes(self) -> list[VolumeSpec]:
         return []
