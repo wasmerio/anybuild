@@ -7,9 +7,9 @@
     "start": "serve -l 3000 public"
   },
   "dependencies": {
-    "@remix-run/node": "file:vendor/remix-run-node"
+    "@remix-run/node": "2.10.0"
   },
   "devDependencies": {
-    "@remix-run/dev": "file:vendor/remix-run-dev"
+    "@remix-run/dev": "2.10.0"
   }
 }

@@ -61,7 +61,33 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         package_json = cls.parse_package_json(path)
 
         if not config.framework:
-            if cls.has_dependency(package_json, "@11ty/eleventy"):
+            if cls.has_dependency(package_json, "@ionic/angular"):
+                config.framework = NodeFramework.IONIC_ANGULAR
+            elif cls.has_dependency(package_json, "@ionic/react"):
+                config.framework = NodeFramework.IONIC_REACT
+            elif cls.has_dependency(package_json, "@angular/cli"):
+                config.framework = NodeFramework.ANGULAR
+            elif cls.has_dependency(package_json, "react-scripts"):
+                config.framework = NodeFramework.CREATE_REACT_APP
+            elif cls.has_dependency(package_json, "brunch"):
+                config.framework = NodeFramework.BRUNCH
+            elif cls.has_dependency(package_json, "ember-cli") or cls.has_dependency(
+                package_json, "ember-source"
+            ):
+                config.framework = NodeFramework.EMBER
+            elif cls.has_dependency(package_json, "parcel"):
+                config.framework = NodeFramework.PARCEL
+            elif cls.has_dependency(package_json, "polymer-cli"):
+                config.framework = NodeFramework.POLYMER
+            elif cls.has_dependency(package_json, "preact-cli"):
+                config.framework = NodeFramework.PREACT
+            elif cls.has_dependency(package_json, "@stencil/core"):
+                config.framework = NodeFramework.STENCIL
+            elif cls.has_dependency(package_json, "umi"):
+                config.framework = NodeFramework.UMIJS
+            elif cls.has_dependency(package_json, "@vue/cli-service"):
+                config.framework = NodeFramework.VUE
+            elif cls.has_dependency(package_json, "@11ty/eleventy"):
                 config.framework = NodeFramework.ELEVENTY
             elif cls.has_dependency(package_json, "vitepress"):
                 config.framework = NodeFramework.VITEPRESS
@@ -142,6 +168,12 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         package_json: Optional[Dict[str, Any]],
         framework: NodeFramework,
     ) -> str:
+        if framework in (NodeFramework.ANGULAR, NodeFramework.IONIC_ANGULAR):
+            return (
+                cls._angular_output_dir(path)
+                or framework.get_static_output_dir()
+            )
+
         if framework == NodeFramework.VITEPRESS:
             root = cls._script_build_root(package_json, "vitepress")
             root = root or cls._default_docs_root(path, ".vitepress")
@@ -294,6 +326,87 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         return None
 
     @classmethod
+    def _angular_output_dir(cls, path: Path) -> Optional[str]:
+        config_path = path / "angular.json"
+        if not config_path.is_file():
+            return None
+        try:
+            config = json.loads(config_path.read_text())
+        except Exception:
+            return None
+        if not isinstance(config, dict):
+            return None
+
+        projects = config.get("projects")
+        if not isinstance(projects, dict):
+            return None
+
+        project_names = []
+        default_project = config.get("defaultProject")
+        if isinstance(default_project, str) and default_project in projects:
+            project_names.append(default_project)
+        project_names.extend(
+            name for name in projects if isinstance(name, str)
+            and name not in project_names
+        )
+
+        for project_name in project_names:
+            project = projects.get(project_name)
+            if not isinstance(project, dict):
+                continue
+            for target_root in ("architect", "targets"):
+                targets = project.get(target_root)
+                if not isinstance(targets, dict):
+                    continue
+                build_target = targets.get("build")
+                if not isinstance(build_target, dict):
+                    continue
+                options = build_target.get("options")
+                if not isinstance(options, dict):
+                    continue
+                output_dir = cls._angular_output_path(
+                    options.get("outputPath")
+                )
+                if output_dir:
+                    return output_dir
+        return None
+
+    @classmethod
+    def _angular_output_path(cls, output_path: Any) -> Optional[str]:
+        if isinstance(output_path, str) and output_path:
+            return cls._clean_output_dir(output_path)
+        if isinstance(output_path, dict):
+            for key in ("browser", "base"):
+                value = output_path.get(key)
+                if isinstance(value, str) and value:
+                    return cls._clean_output_dir(value)
+        return None
+
+    @classmethod
+    def _has_runtime_dependency(
+        cls, package_json: Optional[Dict[str, Any]]
+    ) -> bool:
+        runtime_dependencies = (
+            "@astrojs/node",
+            "@sveltejs/adapter-node",
+            "@react-router/dev",
+            "@react-router/serve",
+            "@remix-run/serve",
+            "@tanstack/react-start",
+            "@solidjs/start",
+            "solid-start",
+            "nitropack",
+            "@shopify/hydrogen",
+            "@shopify/remix-oxygen",
+            "@redwoodjs/core",
+            "sanity",
+        )
+        return any(
+            cls.has_dependency(package_json, dep)
+            for dep in runtime_dependencies
+        )
+
+    @classmethod
     def _has_next_static_export_config(cls, path: Path) -> bool:
         config_names = (
             "next.config.js",
@@ -355,6 +468,14 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         #     if config.commands.install in install_commands:
         #         return DetectResult(cls.name(), 40)
 
+        package_json = cls.parse_package_json(path)
+        if cls._has_runtime_dependency(package_json):
+            return None
+        if cls.has_dependency(
+            package_json, "@remix-run/node"
+        ) and not cls._has_static_remix_output(path, package_json):
+            return None
+
         has_package_manager_build_command = False
         if config.commands.build:
             # Iterate over all generators and check if the build command matches
@@ -374,21 +495,10 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
                 cls._is_package_manager_build_command(config.commands.build)
             )
 
-        package_json = cls.parse_package_json(path)
         # if not package_json:
         #     if has_package_manager_build_command:
         #         return DetectResult(cls.name(), 40)
         #     return None
-
-        if any(
-            cls.has_dependency(package_json, dep)
-            for dep in ("@astrojs/node", "@sveltejs/adapter-node")
-        ):
-            return None
-        if cls.has_dependency(
-            package_json, "@remix-run/node"
-        ) and not cls._has_static_remix_output(path, package_json):
-            return None
 
         if cls.has_dependency(
             package_json, "next"
@@ -408,7 +518,15 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
                 return DetectResult(cls.name(), 60)
 
         pure_static_dependencies = [
+            "@angular/cli",
             "@11ty/eleventy",
+            "@ionic/angular",
+            "@ionic/react",
+            "@stencil/core",
+            "@vue/cli-service",
+            "brunch",
+            "ember-cli",
+            "ember-source",
             "vitepress",
             "vuepress",
             "hexo",
@@ -417,8 +535,13 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             "assemble",
             "grunt-assemble",
             "harp",
+            "parcel",
+            "polymer-cli",
+            "preact-cli",
             "docusaurus",
             "@docusaurus/core",
+            "react-scripts",
+            "umi",
         ]
         static_dependencies = [
             "astro",

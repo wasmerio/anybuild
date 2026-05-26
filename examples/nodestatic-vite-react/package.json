@@ -1,0 +1,17 @@
+{
+  "name": "shipit-nodestatic-vite-react-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "SHIPIT_EXAMPLE_TITLE='Vite React Example' SHIPIT_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'vite build' >/dev/null"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.3.1",
+    "vite": "5.4.1"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "shipit-nodestatic-preact-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "SHIPIT_EXAMPLE_TITLE='Preact Example' SHIPIT_EXAMPLE_OUTPUT=build node scripts/build-static.mjs && echo 'preact build' >/dev/null"
+  },
+  "dependencies": {
+    "preact": "10.15.0",
+    "preact-render-to-string": "6.0.3",
+    "preact-router": "4.1.1"
+  },
+  "devDependencies": {
+    "preact-cli": "3.4.5"
+  }
+}
