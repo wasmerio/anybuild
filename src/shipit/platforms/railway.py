@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from shipit.platforms.base import (
     PlatformConfig,
@@ -54,8 +55,12 @@ class RailwayPlatformDetector:
             if config_path.suffix == ".json"
             else load_toml(config_path)
         ) or {}
-        build = data.get("build") if isinstance(data.get("build"), dict) else {}
-        deploy = data.get("deploy") if isinstance(data.get("deploy"), dict) else {}
+        raw_build = data.get("build")
+        raw_deploy = data.get("deploy")
+        build: dict[str, Any] = raw_build if isinstance(raw_build, dict) else {}
+        deploy: dict[str, Any] = (
+            raw_deploy if isinstance(raw_deploy, dict) else {}
+        )
         root = config_path.parent.relative_to(base_path)
         root_text = str(root) if str(root) != "." else "."
         name = config_path.parent.name if root_text != "." else "default"
