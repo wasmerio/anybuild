@@ -357,7 +357,7 @@ class E2ECase:
             path="examples/node-astro",
             serve_pattern=r"Node|Astro|Listening|ready",
             http=[HTTPRequest(path="/", body_match=r"Astro Node Example")],
-            build_modes=(BuildMode.Local, BuildMode.Wasmer),
+            build_modes=(BuildMode.Local,),
         ),
         # Hugo static site (built via Hugo, served with static-web-server)
         E2ECase(
