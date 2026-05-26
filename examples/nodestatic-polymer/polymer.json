@@ -1,0 +1,8 @@
+{
+  "entrypoint": "src/index.html",
+  "builds": [
+    {
+      "name": "default"
+    }
+  ]
+}

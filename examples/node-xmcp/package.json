@@ -1,0 +1,12 @@
+{
+  "name": "shipit-node-xmcp-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "xmcp": "0.1.10"
+  }
+}

@@ -1,0 +1,30 @@
+node = dep("node", config.node_version)
+npm = dep("npm", config.npm_version)
+
+build = mount("build")
+app = mount("app")
+
+serve(
+  name="node-express",
+  provider="node",
+  cwd=app.serve_path,
+  build=[
+    use(node, npm),
+    workdir(build.path),
+    env(CI="true", NPM_CONFIG_FUND="false"),
+    run("npm install", inputs=["package.json"], group="install"),
+    copy(".", ignore=["node_modules", ".git"]),
+    run("npm prune --omit=dev --ignore-scripts", group="prune"),
+    run("cp -R . {}".format(app.path))
+  ],
+  deps=[node],
+  env = {
+    "PORT": PORT
+  },
+  commands = {
+    "start": "node server.js"
+  },
+  mounts=[
+    app
+  ],
+)

@@ -1,0 +1,12 @@
+{
+  "name": "shipit-nodestatic-umijs-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "SHIPIT_EXAMPLE_TITLE='UmiJS Example' SHIPIT_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'umi build' >/dev/null"
+  },
+  "dependencies": {
+    "umi": "4.4.4"
+  }
+}

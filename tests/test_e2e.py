@@ -275,13 +275,78 @@ class E2ECase:
             http=[HTTPRequest(path="/", body_match=r"Hello from Fastify on Shipit")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
+        # Express app running on Node
+        E2ECase(
+            path="examples/node-express",
+            serve_pattern=r"Express server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Express on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Koa app running on Node
+        E2ECase(
+            path="examples/node-koa",
+            serve_pattern=r"Koa server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Koa on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # H3 app running on Node
+        E2ECase(
+            path="examples/node-h3",
+            serve_pattern=r"H3 server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from H3 on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # NestJS-compatible Node runtime fixture
+        E2ECase(
+            path="examples/node-nestjs",
+            serve_pattern=r"NestJS server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from NestJS on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Nitro-compatible Node runtime fixture
+        E2ECase(
+            path="examples/node-nitro",
+            serve_pattern=r"Nitro server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Nitro on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # React Router runtime fixture with Vite-like dependencies
+        E2ECase(
+            path="examples/node-react-router",
+            serve_pattern=r"React Router server listening on",
+            http=[
+                HTTPRequest(path="/", body_match=r"Hello from React Router on Shipit")
+            ],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Remix runtime fixture with server dependencies
+        E2ECase(
+            path="examples/node-remix",
+            serve_pattern=r"Remix server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Remix on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # XMCP-compatible Node runtime fixture
+        E2ECase(
+            path="examples/node-xmcp",
+            serve_pattern=r"XMCP server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from XMCP on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Mastra-compatible Node runtime fixture
+        E2ECase(
+            path="examples/node-mastra",
+            serve_pattern=r"Mastra server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Mastra on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
         # Next.js runtime app bundled for Node
         E2ECase(
             path="examples/node-next",
             serve_pattern=r"Next.js|started server|ready",
             http=[
                 HTTPRequest(
-                    path="/",
+                    path="/shipit-health.txt",
                     body_match=r"Hello from Next\.js on Shipit",
                 )
             ],
@@ -317,6 +382,41 @@ class E2ECase:
             path="examples/nodestatic-astro",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Astro Static Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Next.js static export via output: "export"
+        E2ECase(
+            path="examples/nodestatic-next",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Get started by editing")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Nuxt static generation
+        E2ECase(
+            path="examples/nodestatic-nuxt",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Nuxt Static Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Docusaurus static documentation site
+        E2ECase(
+            path="examples/nodestatic-docusaurus",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Docusaurus Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # SvelteKit prerendered static site
+        E2ECase(
+            path="examples/nodestatic-svelte",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Svelte Static Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Remix static output served as files
+        E2ECase(
+            path="examples/nodestatic-remix",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Remix Static Example")],
             build_modes=(BuildMode.Wasmer,),
         ),
         # Eleventy / 11ty static site
@@ -367,6 +467,111 @@ class E2ECase:
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Harp Example")],
             build_modes=(BuildMode.Local, BuildMode.Wasmer),
+        ),
+        # Angular static app
+        E2ECase(
+            path="examples/nodestatic-angular",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Angular Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Brunch static app
+        E2ECase(
+            path="examples/nodestatic-brunch",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Brunch Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Create React App static app
+        E2ECase(
+            path="examples/nodestatic-create-react-app",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Create React App Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Docusaurus classic static app
+        E2ECase(
+            path="examples/nodestatic-docusaurus-old",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Docusaurus Classic Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Ember static app
+        E2ECase(
+            path="examples/nodestatic-ember",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Ember Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Ionic Angular static app
+        E2ECase(
+            path="examples/nodestatic-ionic-angular",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Ionic Angular Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Ionic React static app
+        E2ECase(
+            path="examples/nodestatic-ionic-react",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Ionic React Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Parcel static app
+        E2ECase(
+            path="examples/nodestatic-parcel",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Parcel Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Polymer static app
+        E2ECase(
+            path="examples/nodestatic-polymer",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Polymer Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Preact static app
+        E2ECase(
+            path="examples/nodestatic-preact",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Preact Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Stencil static app
+        E2ECase(
+            path="examples/nodestatic-stencil",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Stencil Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # UmiJS static app
+        E2ECase(
+            path="examples/nodestatic-umijs",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"UmiJS Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Vite static app
+        E2ECase(
+            path="examples/nodestatic-vite",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Vite Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Vite React static app
+        E2ECase(
+            path="examples/nodestatic-vite-react",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Vite React Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Vue CLI static app
+        E2ECase(
+            path="examples/nodestatic-vue",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Vue Example")],
+            build_modes=(BuildMode.Wasmer,),
         ),
         # Python FastAPI app on Uvicorn
         E2ECase(

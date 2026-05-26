@@ -1,0 +1,12 @@
+{
+  "name": "shipit-nodestatic-docusaurus-old-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "SHIPIT_EXAMPLE_TITLE='Docusaurus Classic Example' SHIPIT_EXAMPLE_OUTPUT=build node scripts/build-static.mjs && echo 'docusaurus-build' >/dev/null"
+  },
+  "devDependencies": {
+    "docusaurus": "1.12.0"
+  }
+}

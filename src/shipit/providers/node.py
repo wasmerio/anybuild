@@ -120,20 +120,32 @@ class PackageManager(Enum):
 
 
 class NodeFramework(Enum):
+    ANGULAR = "angular"
     NEXT = "next"
     ASTRO = "astro"
+    BRUNCH = "brunch"
+    CREATE_REACT_APP = "create-react-app"
     VITE = "vite"
     GATSBY = "gatsby"
     ELEVENTY = "eleventy"
+    EMBER = "ember"
     VITEPRESS = "vitepress"
     VUEPRESS = "vuepress"
     HEXO = "hexo"
+    IONIC_ANGULAR = "ionic-angular"
+    IONIC_REACT = "ionic-react"
     METALSMITH = "metalsmith"
     ASSEMBLE = "assemble"
     HARP = "harp"
+    PARCEL = "parcel"
+    POLYMER = "polymer"
+    PREACT = "preact"
+    STENCIL = "stencil"
     DOCUSAURUS_OLD = "docusaurus-old"
     DOCUSAURUS = "docusaurus"
     SVELTE = "svelte"
+    UMIJS = "umijs"
+    VUE = "vue"
     REMIX = "remix"
     NUXT_OLD = "nuxt"
     NUXT_V3 = "nuxt3"
@@ -144,7 +156,11 @@ class NodeFramework(Enum):
 
     def can_be_static(self) -> bool:
         return self in {
+            NodeFramework.ANGULAR,
             NodeFramework.ASTRO,
+            NodeFramework.BRUNCH,
+            NodeFramework.CREATE_REACT_APP,
+            NodeFramework.EMBER,
             NodeFramework.VITE,
             NodeFramework.NEXT,
             NodeFramework.GATSBY,
@@ -152,12 +168,20 @@ class NodeFramework(Enum):
             NodeFramework.VITEPRESS,
             NodeFramework.VUEPRESS,
             NodeFramework.HEXO,
+            NodeFramework.IONIC_ANGULAR,
+            NodeFramework.IONIC_REACT,
             NodeFramework.METALSMITH,
             NodeFramework.ASSEMBLE,
             NodeFramework.HARP,
+            NodeFramework.PARCEL,
+            NodeFramework.POLYMER,
+            NodeFramework.PREACT,
+            NodeFramework.STENCIL,
             NodeFramework.DOCUSAURUS_OLD,
             NodeFramework.DOCUSAURUS,
             NodeFramework.SVELTE,
+            NodeFramework.UMIJS,
+            NodeFramework.VUE,
             NodeFramework.REMIX,
             NodeFramework.NUXT_OLD,
             NodeFramework.NUXT_V3,
@@ -168,28 +192,47 @@ class NodeFramework(Enum):
 
     def is_pure_static(self) -> bool:
         return self in {
+            NodeFramework.ANGULAR,
+            NodeFramework.BRUNCH,
+            NodeFramework.CREATE_REACT_APP,
             NodeFramework.ELEVENTY,
+            NodeFramework.EMBER,
             NodeFramework.VITEPRESS,
             NodeFramework.VUEPRESS,
             NodeFramework.ASSEMBLE,
             NodeFramework.HARP,
             NodeFramework.HEXO,
+            NodeFramework.IONIC_ANGULAR,
+            NodeFramework.IONIC_REACT,
             NodeFramework.METALSMITH,
+            NodeFramework.PARCEL,
+            NodeFramework.POLYMER,
+            NodeFramework.PREACT,
+            NodeFramework.STENCIL,
             NodeFramework.DOCUSAURUS,
             NodeFramework.DOCUSAURUS_OLD,
             NodeFramework.SVELTE,
+            NodeFramework.UMIJS,
+            NodeFramework.VITE,
+            NodeFramework.VUE,
         }
 
     def get_static_output_dir(self) -> str:
         output_dirs = {
+            NodeFramework.ANGULAR: "dist",
             NodeFramework.NEXT: "out",
             NodeFramework.ELEVENTY: "_site",
             NodeFramework.NUXT_V3: ".output/public",
             NodeFramework.ASTRO: "dist",
+            NodeFramework.BRUNCH: "public",
+            NodeFramework.CREATE_REACT_APP: "build",
+            NodeFramework.EMBER: "dist",
             NodeFramework.VITE: "dist",
             NodeFramework.NUXT_OLD: "dist",
             NodeFramework.GATSBY: "public",
             NodeFramework.HEXO: "public",
+            NodeFramework.IONIC_ANGULAR: "www",
+            NodeFramework.IONIC_REACT: "dist",
             NodeFramework.VITEPRESS: "docs/.vitepress/dist",
             NodeFramework.VUEPRESS: "docs/.vuepress/dist",
             NodeFramework.REMIX_OLD: "build/client",
@@ -198,9 +241,15 @@ class NodeFramework(Enum):
             NodeFramework.REMIX_V2_CLASSIC: "public",
             NodeFramework.ASSEMBLE: "dist",
             NodeFramework.HARP: "www",
+            NodeFramework.PARCEL: "dist",
+            NodeFramework.POLYMER: "build/default",
+            NodeFramework.PREACT: "build",
+            NodeFramework.STENCIL: "www",
             NodeFramework.DOCUSAURUS: "build",
             NodeFramework.DOCUSAURUS_OLD: "build",
             NodeFramework.SVELTE: "build",
+            NodeFramework.UMIJS: "dist",
+            NodeFramework.VUE: "dist",
             NodeFramework.METALSMITH: "build",
         }
         if self not in output_dirs:
@@ -212,18 +261,29 @@ class NodeFramework(Enum):
     @classmethod
     def detect_from_command(cls, build_command: str) -> list["NodeFramework"]:
         commands = {
+            "ng": [NodeFramework.IONIC_ANGULAR, NodeFramework.ANGULAR],
             "gatsby": [NodeFramework.GATSBY],
             "astro": [NodeFramework.ASTRO],
             "@11ty/eleventy": [NodeFramework.ELEVENTY],
             "eleventy": [NodeFramework.ELEVENTY],
+            "brunch": [NodeFramework.BRUNCH],
+            "react-scripts": [
+                NodeFramework.IONIC_REACT,
+                NodeFramework.CREATE_REACT_APP,
+            ],
             "remix-ssg": [NodeFramework.REMIX_OLD],
             "remix": [NodeFramework.REMIX_V2_CLASSIC, NodeFramework.REMIX_V2],
+            "ember": [NodeFramework.EMBER],
             "vite": [NodeFramework.VITE],
             "vitepress": [NodeFramework.VITEPRESS],
             "vuepress": [NodeFramework.VUEPRESS],
             "hexo": [NodeFramework.HEXO],
             "metalsmith": [NodeFramework.METALSMITH],
             "harp": [NodeFramework.HARP],
+            "parcel": [NodeFramework.PARCEL],
+            "polymer": [NodeFramework.POLYMER],
+            "preact": [NodeFramework.PREACT],
+            "stencil": [NodeFramework.STENCIL],
             "docusaurus": [
                 NodeFramework.DOCUSAURUS,
                 NodeFramework.DOCUSAURUS_OLD,
@@ -232,6 +292,8 @@ class NodeFramework(Enum):
             "nuxi": [NodeFramework.NUXT_V3],
             "nuxt": [NodeFramework.NUXT_OLD],
             "svelte-kit": [NodeFramework.SVELTE],
+            "umi": [NodeFramework.UMIJS],
+            "vue-cli-service": [NodeFramework.VUE],
         }
         try:
             tokens = shlex.split(build_command)
@@ -247,6 +309,7 @@ class NodeFramework(Enum):
 
     def build_static_command(self) -> str:
         build_commands = {
+            NodeFramework.ANGULAR: "ng build",
             NodeFramework.GATSBY: "gatsby build",
             NodeFramework.ELEVENTY: "@11ty/eleventy",
             NodeFramework.VITEPRESS: "vitepress build docs",
@@ -255,6 +318,15 @@ class NodeFramework(Enum):
             NodeFramework.METALSMITH: "metalsmith build",
             NodeFramework.ASSEMBLE: "grunt assemble",
             NodeFramework.HARP: "harp compile . www",
+            NodeFramework.BRUNCH: "brunch build --production",
+            NodeFramework.CREATE_REACT_APP: "react-scripts build",
+            NodeFramework.EMBER: "ember build",
+            NodeFramework.IONIC_ANGULAR: "ng build",
+            NodeFramework.IONIC_REACT: "vite build",
+            NodeFramework.PARCEL: "parcel build",
+            NodeFramework.POLYMER: "polymer build",
+            NodeFramework.PREACT: "preact build",
+            NodeFramework.STENCIL: "stencil build",
             NodeFramework.ASTRO: "astro build",
             NodeFramework.REMIX_OLD: "remix-ssg build",
             NodeFramework.REMIX_V2: "vite build",
@@ -262,7 +334,9 @@ class NodeFramework(Enum):
             NodeFramework.DOCUSAURUS: "docusaurus build",
             NodeFramework.DOCUSAURUS_OLD: "docusaurus build",
             NodeFramework.SVELTE: "svelte-kit build",
+            NodeFramework.UMIJS: "umi build",
             NodeFramework.VITE: "vite build",
+            NodeFramework.VUE: "vue-cli-service build",
             NodeFramework.NEXT: "next export",
             NodeFramework.NUXT_V3: "nuxi generate",
             NodeFramework.NUXT_OLD: "nuxt generate",

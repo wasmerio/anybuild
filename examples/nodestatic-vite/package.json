@@ -1,0 +1,16 @@
+{
+  "name": "shipit-nodestatic-vite-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "SHIPIT_EXAMPLE_TITLE='Vite Example' SHIPIT_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'vite build' >/dev/null"
+  },
+  "dependencies": {
+    "vue": "3.2.45"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "4.0.0",
+    "vite": "4.1.0"
+  }
+}
