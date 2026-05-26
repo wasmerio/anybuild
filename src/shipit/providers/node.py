@@ -2,7 +2,7 @@ import json
 import shlex
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional, Set
+from typing import Any, ClassVar, Dict, Optional, Set
 
 import yaml
 from pydantic import Field
@@ -152,8 +152,17 @@ class NodeFramework(Enum):
     REMIX_OLD = "remix-old"
     REMIX_V2 = "remix-v2"
     REMIX_V2_CLASSIC = "remix-v2-classic"
+    REACT_ROUTER = "react-router"
+    NITRO = "nitro"
+    HONO = "hono"
     EXPRESS = "express"
+    H3 = "h3"
+    KOA = "koa"
+    NESTJS = "nestjs"
     ELYSIA = "elysia"
+    FASTIFY = "fastify"
+    XMCP = "xmcp"
+    MASTRA = "mastra"
 
     def can_be_static(self) -> bool:
         return self in {
@@ -395,6 +404,34 @@ class NodeConfig(Config):
 
 class NodeProvider:
     only_build: bool = False
+    FRAMEWORK_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
+        "next",
+        "astro",
+        "@react-router/dev",
+        "@react-router/node",
+        "@react-router/serve",
+        "@remix-run/dev",
+        "@remix-run/node",
+        "@remix-run/react",
+        "@remix-run/server-runtime",
+        "nitropack",
+        "nitro",
+        "@nestjs/common",
+        "@nestjs/core",
+        "@nestjs/platform-express",
+        "@nestjs/platform-fastify",
+        "hono",
+        "@hono/node-server",
+        "express",
+        "h3",
+        "koa",
+        "elysia",
+        "@elysia/node",
+        "fastify",
+        "xmcp",
+        "mastra",
+        "@mastra/core",
+    )
     COMMON_ENTRY_FILES = (
         "server.js",
         "app.js",
@@ -438,8 +475,11 @@ class NodeProvider:
             config.package_manager = cls.detect_package_manager(path)
 
         package_json = cls.parse_package_json(path)
+        found_deps = cls._check_package_json_deps(
+            package_json, *cls.FRAMEWORK_DEPENDENCIES
+        )
         if not config.framework:
-            config.framework = cls.detect_framework(package_json)
+            config.framework = cls.detect_framework(package_json, found_deps)
 
         if not config.build_command:
             config.build_command = cls.get_build_command(
@@ -488,7 +528,10 @@ class NodeProvider:
                 return DetectResult(cls.name(), 30)
 
         package_json = cls.parse_package_json(path)
-        if cls.detect_framework(package_json):
+        found_deps = cls._check_package_json_deps(
+            package_json, *cls.FRAMEWORK_DEPENDENCIES
+        )
+        if cls.detect_framework(package_json, found_deps):
             return DetectResult(cls.name(), 45)
 
         if (path / "package.json").is_file():
@@ -543,18 +586,73 @@ class NodeProvider:
 
     @classmethod
     def detect_framework(
-        cls, package_json: Optional[Dict[str, Any]]
+        cls,
+        package_json: Optional[Dict[str, Any]],
+        found_deps: Optional[Set[str]] = None,
     ) -> Optional[NodeFramework]:
-        if cls.has_dependency(package_json, "next"):
+        found_deps = found_deps or set()
+
+        if "next" in found_deps:
             return NodeFramework.NEXT
 
-        elif cls.has_dependency(package_json, "astro"):
+        elif "astro" in found_deps:
             return NodeFramework.ASTRO
 
-        elif cls.has_dependency(package_json, "elysia") or cls.has_dependency(
-            package_json, "@elysia/node"
-        ):
+        elif found_deps & {
+            "@react-router/dev",
+            "@react-router/node",
+            "@react-router/serve",
+        }:
+            return NodeFramework.REACT_ROUTER
+
+        elif found_deps & {
+            "@remix-run/dev",
+            "@remix-run/node",
+            "@remix-run/react",
+            "@remix-run/server-runtime",
+        }:
+            return NodeFramework.REMIX
+
+        elif found_deps & {"nitropack", "nitro"}:
+            return NodeFramework.NITRO
+
+        elif found_deps & {
+            "@nestjs/common",
+            "@nestjs/core",
+            "@nestjs/platform-express",
+            "@nestjs/platform-fastify",
+        }:
+            return NodeFramework.NESTJS
+
+        elif found_deps & {
+            "hono",
+            "@hono/node-server",
+        }:
+            return NodeFramework.HONO
+
+        elif "express" in found_deps:
+            return NodeFramework.EXPRESS
+
+        elif "h3" in found_deps:
+            return NodeFramework.H3
+
+        elif "koa" in found_deps:
+            return NodeFramework.KOA
+
+        elif found_deps & {"elysia", "@elysia/node"}:
             return NodeFramework.ELYSIA
+
+        elif "fastify" in found_deps:
+            return NodeFramework.FASTIFY
+
+        elif "xmcp" in found_deps:
+            return NodeFramework.XMCP
+
+        elif found_deps & {
+            "mastra",
+            "@mastra/core",
+        }:
+            return NodeFramework.MASTRA
 
         for command in cls._script_commands(package_json):
             try:
@@ -565,6 +663,40 @@ class NodeProvider:
                 return NodeFramework.NEXT
 
         return None
+
+    @classmethod
+    def has_any_dependency(
+        cls,
+        path: Path,
+        deps: tuple[str, ...],
+    ) -> bool:
+        return bool(cls.check_deps(path, *deps))
+
+    @classmethod
+    def check_deps(cls, path: Path, *deps: str) -> Set[str]:
+        package_json = cls.parse_package_json(path)
+        return cls._check_package_json_deps(package_json, *deps)
+
+    @classmethod
+    def _check_package_json_deps(
+        cls, package_json: Optional[Dict[str, Any]], *deps: str
+    ) -> Set[str]:
+        if not package_json:
+            return set()
+
+        pending_deps = set(deps)
+        initial_deps = set(pending_deps)
+        for section in ("dependencies", "devDependencies", "peerDependencies"):
+            dep_section = package_json.get(section, {})
+            if not isinstance(dep_section, dict):
+                continue
+
+            found = pending_deps & dep_section.keys()
+            pending_deps -= found
+            if not pending_deps:
+                break
+
+        return initial_deps - pending_deps
 
     @classmethod
     def _script_commands(

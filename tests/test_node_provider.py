@@ -43,6 +43,29 @@ def test_node_package_manager_defaults_to_npm(tmp_path: Path) -> None:
     assert provider_config.package_manager == PackageManager.NPM
 
 
+def test_node_check_deps_returns_matching_dependencies(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "dependencies": {
+    "express": "5.1.0"
+  },
+  "devDependencies": {
+    "hono": "^4.12.23"
+  }
+}
+"""
+    )
+
+    found_deps = NodeProvider.check_deps(
+        tmp_path,
+        "express",
+        "elysia",
+        "hono",
+    )
+
+    assert found_deps == {"express", "hono"}
+
+
 def test_node_detection_does_not_beat_node_static() -> None:
     path = REPO_ROOT / "examples" / "nodestatic-vitepress"
     base_config = Config()
@@ -63,27 +86,30 @@ def test_node_provider_detects_generic_node_example() -> None:
 
 
 @pytest.mark.parametrize(
-    "example",
+    ("example", "framework"),
     [
-        "node-fastify",
-        "node-hono",
-        "node-express",
-        "node-koa",
-        "node-h3",
-        "node-elysia",
-        "node-nestjs",
-        "node-nitro",
-        "node-react-router",
-        "node-remix",
-        "node-xmcp",
-        "node-mastra",
+        ("node-fastify", NodeFramework.FASTIFY),
+        ("node-hono", NodeFramework.HONO),
+        ("node-express", NodeFramework.EXPRESS),
+        ("node-koa", NodeFramework.KOA),
+        ("node-h3", NodeFramework.H3),
+        ("node-elysia", NodeFramework.ELYSIA),
+        ("node-nestjs", NodeFramework.NESTJS),
+        ("node-nitro", NodeFramework.NITRO),
+        ("node-react-router", NodeFramework.REACT_ROUTER),
+        ("node-remix", NodeFramework.REMIX),
+        ("node-xmcp", NodeFramework.XMCP),
+        ("node-mastra", NodeFramework.MASTRA),
     ],
 )
-def test_node_provider_detects_node_runtime_examples(example: str) -> None:
+def test_node_provider_detects_node_runtime_examples(
+    example: str, framework: NodeFramework
+) -> None:
     path = REPO_ROOT / "examples" / example
 
     assert load_provider(path, Config()) is NodeProvider
     provider_config = NodeProvider.load_config(path, Config())
+    assert provider_config.framework == framework
     assert provider_config.commands.start == "node server.js"
 
 
