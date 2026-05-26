@@ -25,6 +25,42 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
             "npm run build",
         ),
         (
+            "nodestatic-gatsby",
+            NodeFramework.GATSBY,
+            "public",
+            "npm run build",
+        ),
+        (
+            "nodestatic-next",
+            NodeFramework.NEXT,
+            "out",
+            "npm run build",
+        ),
+        (
+            "nodestatic-nuxt",
+            NodeFramework.NUXT_V3,
+            ".output/public",
+            "npm run generate",
+        ),
+        (
+            "nodestatic-docusaurus",
+            NodeFramework.DOCUSAURUS,
+            "build",
+            "npm run build",
+        ),
+        (
+            "nodestatic-svelte",
+            NodeFramework.SVELTE,
+            "build",
+            "npm run build",
+        ),
+        (
+            "nodestatic-remix",
+            NodeFramework.REMIX_V2_CLASSIC,
+            "public",
+            "npm run build",
+        ),
+        (
             "nodestatic-eleventy",
             NodeFramework.ELEVENTY,
             "_site",
@@ -144,6 +180,86 @@ def test_explicit_next_export_command_stays_node_static(tmp_path: Path) -> None:
     assert load_provider(tmp_path, base_config) is NodeStaticProvider
 
 
+def test_next_output_export_config_uses_node_static(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "next export"
+  },
+  "dependencies": {
+    "next": "^14.2.14"
+  }
+}
+"""
+    )
+    (tmp_path / "next.config.mjs").write_text(
+        """const nextConfig = {
+  output: "export",
+};
+
+export default nextConfig;
+"""
+    )
+
+    provider_config = NodeStaticProvider.load_config(tmp_path, Config())
+
+    assert load_provider(tmp_path, Config()) is NodeStaticProvider
+    assert provider_config.framework == NodeFramework.NEXT
+    assert provider_config.static_dir == "out"
+    assert provider_config.build_command == "npm run build"
+
+
+def test_nuxt_generate_fallback_uses_node_static(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "nuxt build",
+    "generate": "nuxt generate"
+  },
+  "dependencies": {
+    "nuxt": "^3.8.1"
+  }
+}
+"""
+    )
+
+    provider_config = NodeStaticProvider.load_config(tmp_path, Config())
+
+    assert load_provider(tmp_path, Config()) is NodeStaticProvider
+    assert provider_config.framework == NodeFramework.NUXT_V3
+    assert provider_config.static_dir == ".output/public"
+    assert provider_config.build_command == "npm run generate"
+
+
+def test_static_remix_output_can_use_node_static_with_node_dep(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "public").mkdir()
+    (tmp_path / "public" / "index.html").write_text("Remix static\n")
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "remix build",
+    "start": "serve -l 3000 public"
+  },
+  "dependencies": {
+    "@remix-run/node": "^2.2.0"
+  },
+  "devDependencies": {
+    "@remix-run/dev": "^2.2.0"
+  }
+}
+"""
+    )
+
+    provider_config = NodeStaticProvider.load_config(tmp_path, Config())
+
+    assert load_provider(tmp_path, Config()) is NodeStaticProvider
+    assert provider_config.framework == NodeFramework.REMIX_V2_CLASSIC
+    assert provider_config.static_dir == "public"
+    assert provider_config.build_command == "npm run build"
+
+
 def test_node_static_defaults_to_npm_without_lockfile(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text(
         """{
@@ -205,6 +321,8 @@ def test_node_static_script_commands_prefers_build_over_fallbacks() -> None:
         ("metalsmith", NodeFramework.METALSMITH),
         ("grunt assemble", NodeFramework.ASSEMBLE),
         ("harp compile src www", NodeFramework.HARP),
+        ("svelte-kit build", NodeFramework.SVELTE),
+        ("nuxt generate", NodeFramework.NUXT_OLD),
     ],
 )
 def test_new_static_builder_commands_are_detected(

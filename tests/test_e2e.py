@@ -319,6 +319,41 @@ class E2ECase:
             http=[HTTPRequest(path="/", body_match=r"Astro Static Example")],
             build_modes=(BuildMode.Wasmer,),
         ),
+        # Next.js static export via output: "export"
+        E2ECase(
+            path="examples/nodestatic-next",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Get started by editing")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Nuxt static generation
+        E2ECase(
+            path="examples/nodestatic-nuxt",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Nuxt Static Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Docusaurus static documentation site
+        E2ECase(
+            path="examples/nodestatic-docusaurus",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Docusaurus Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # SvelteKit prerendered static site
+        E2ECase(
+            path="examples/nodestatic-svelte",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Svelte Static Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Remix static output served as files
+        E2ECase(
+            path="examples/nodestatic-remix",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Remix Static Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
         # Eleventy / 11ty static site
         E2ECase(
             path="examples/nodestatic-eleventy",

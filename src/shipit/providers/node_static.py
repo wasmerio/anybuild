@@ -17,7 +17,7 @@ from .base import (
     _exists,
 )
 from .node import NodeConfig, NodeFramework, NodeProvider, PackageManager
-from .staticfile import StaticFileProvider, StaticFileConfig
+from .staticfile import StaticFileConfig, StaticFileProvider
 
 
 class NodeStaticConfig(NodeConfig, StaticFileConfig):
@@ -39,6 +39,9 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
     # Only use this commands if the build command is not found in the package.json
     SCRIPT_BUILD_COMMAND_FALLBACK = ("generate", "export", "docs:build",)
     _ASSEMBLE_DEST_PATTERN = re.compile(r"\bdest\s*:\s*['\"]([^'\"]+)['\"]")
+    _NEXT_STATIC_EXPORT_PATTERN = re.compile(
+        r"\boutput\s*:\s*['\"]export['\"]"
+    )
 
     def __init__(
         self, path: Path, config: NodeStaticConfig, only_build: bool = False
@@ -184,6 +187,18 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         return build_script_commands
 
     @classmethod
+    def _detect_script_commands(
+        cls, package_json: Optional[Dict[str, Any]]
+    ) -> list[str]:
+        commands = list(cls._script_commands(package_json))
+        for command in NodeProvider._script_commands(
+            package_json, preferred=cls.SCRIPT_BUILD_COMMAND_FALLBACK
+        ):
+            if command not in commands:
+                commands.append(command)
+        return commands
+
+    @classmethod
     def _args_after_command(cls, command: str, executable: str) -> list[str]:
         try:
             tokens = shlex.split(command)
@@ -279,6 +294,41 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         return None
 
     @classmethod
+    def _has_next_static_export_config(cls, path: Path) -> bool:
+        config_names = (
+            "next.config.js",
+            "next.config.cjs",
+            "next.config.mjs",
+            "next.config.ts",
+        )
+        for config_name in config_names:
+            config_path = path / config_name
+            if not config_path.is_file():
+                continue
+            try:
+                if cls._NEXT_STATIC_EXPORT_PATTERN.search(
+                    config_path.read_text()
+                ):
+                    return True
+            except OSError:
+                continue
+        return False
+
+    @classmethod
+    def _has_static_remix_output(
+        cls,
+        path: Path,
+        package_json: Optional[Dict[str, Any]],
+    ) -> bool:
+        scripts = cls.package_scripts(package_json)
+        start_command = scripts.get("start", "")
+        return (
+            (path / "public" / "index.html").is_file()
+            and "serve" in start_command
+            and "public" in start_command
+        )
+
+    @classmethod
     def name(cls) -> str:
         return "node-static"
 
@@ -330,15 +380,22 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         #         return DetectResult(cls.name(), 40)
         #     return None
 
-        dependencies_that_require_full_node = [
-            "@astrojs/node",
-            "@remix-run/node",
-            "@sveltejs/adapter-node",
-        ]
-        if any(cls.has_dependency(package_json, dep) for dep in dependencies_that_require_full_node):
+        if any(
+            cls.has_dependency(package_json, dep)
+            for dep in ("@astrojs/node", "@sveltejs/adapter-node")
+        ):
+            return None
+        if cls.has_dependency(
+            package_json, "@remix-run/node"
+        ) and not cls._has_static_remix_output(path, package_json):
             return None
 
-        for build_command in cls._script_commands(package_json):
+        if cls.has_dependency(
+            package_json, "next"
+        ) and cls._has_next_static_export_config(path):
+            return DetectResult(cls.name(), 60)
+
+        for build_command in cls._detect_script_commands(package_json):
             for framework in NodeFramework:
                 if not framework.can_be_static():
                     continue

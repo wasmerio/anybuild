@@ -1,0 +1,15 @@
+{
+  "name": "shipit-nodestatic-remix-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-static.mjs && echo remix build",
+    "start": "serve -l 3000 public"
+  },
+  "dependencies": {
+    "@remix-run/node": "file:vendor/remix-run-node"
+  },
+  "devDependencies": {
+    "@remix-run/dev": "file:vendor/remix-run-dev"
+  }
+}
