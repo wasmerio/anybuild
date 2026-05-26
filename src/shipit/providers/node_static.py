@@ -399,6 +399,8 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             "@shopify/hydrogen",
             "@shopify/remix-oxygen",
             "@redwoodjs/core",
+            "@elysia/node",
+            "elysia",
             "sanity",
         )
         return any(

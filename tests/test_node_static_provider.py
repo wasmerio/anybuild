@@ -300,6 +300,26 @@ export default nextConfig;
     assert provider_config.build_command == "npm run build"
 
 
+def test_elysia_dependency_uses_node_provider(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "vite build",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@elysia/node": "^1.4.6",
+    "elysia": "^1.4.28",
+    "vite": "^7.2.4"
+  }
+}
+"""
+    )
+
+    assert NodeStaticProvider.detect(tmp_path, Config()) is None
+    assert load_provider(tmp_path, Config()) is not NodeStaticProvider
+
+
 def test_nuxt_generate_fallback_uses_node_static(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text(
         """{

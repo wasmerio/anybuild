@@ -1,0 +1,13 @@
+{
+  "name": "shipit-node-elysia-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@elysia/node": "^1.4.6",
+    "elysia": "^1.4.28"
+  }
+}

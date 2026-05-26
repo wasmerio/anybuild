@@ -153,6 +153,7 @@ class NodeFramework(Enum):
     REMIX_V2 = "remix-v2"
     REMIX_V2_CLASSIC = "remix-v2-classic"
     EXPRESS = "express"
+    ELYSIA = "elysia"
 
     def can_be_static(self) -> bool:
         return self in {
@@ -549,6 +550,11 @@ class NodeProvider:
 
         elif cls.has_dependency(package_json, "astro"):
             return NodeFramework.ASTRO
+
+        elif cls.has_dependency(package_json, "elysia") or cls.has_dependency(
+            package_json, "@elysia/node"
+        ):
+            return NodeFramework.ELYSIA
 
         for command in cls._script_commands(package_json):
             try:

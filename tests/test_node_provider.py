@@ -70,6 +70,7 @@ def test_node_provider_detects_generic_node_example() -> None:
         "node-express",
         "node-koa",
         "node-h3",
+        "node-elysia",
         "node-nestjs",
         "node-nitro",
         "node-react-router",
@@ -90,6 +91,15 @@ def test_node_provider_detects_astro_runtime_example() -> None:
     path = REPO_ROOT / "examples" / "node-astro"
 
     assert load_provider(path, Config()) is NodeProvider
+
+
+def test_node_provider_detects_elysia_runtime_example() -> None:
+    path = REPO_ROOT / "examples" / "node-elysia"
+
+    assert load_provider(path, Config()) is NodeProvider
+    provider_config = NodeProvider.load_config(path, Config())
+    assert provider_config.framework == NodeFramework.ELYSIA
+    assert provider_config.commands.start == "node server.js"
 
 
 def test_node_provider_detects_nextjs_runtime_app(tmp_path: Path) -> None:

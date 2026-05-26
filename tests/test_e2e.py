@@ -296,6 +296,13 @@ class E2ECase:
             http=[HTTPRequest(path="/", body_match=r"Hello from H3 on Shipit")],
             build_modes=(BuildMode.Wasmer,),
         ),
+        # Elysia app running on the Node adapter
+        E2ECase(
+            path="examples/node-elysia",
+            serve_pattern=r"Elysia server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Elysia on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
         # NestJS-compatible Node runtime fixture
         E2ECase(
             path="examples/node-nestjs",
