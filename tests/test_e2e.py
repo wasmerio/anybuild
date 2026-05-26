@@ -346,7 +346,7 @@ class E2ECase:
             serve_pattern=r"Next.js|started server|ready",
             http=[
                 HTTPRequest(
-                    path="/",
+                    path="/shipit-health.txt",
                     body_match=r"Hello from Next\.js on Shipit",
                 )
             ],
