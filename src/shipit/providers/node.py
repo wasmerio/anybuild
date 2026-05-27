@@ -640,6 +640,12 @@ class NodeProvider:
             return NodeFramework.ASTRO
 
         elif found_deps & {
+            "@shopify/hydrogen",
+            "@shopify/remix-oxygen",
+        } or cls._has_hydrogen_config(path):
+            return NodeFramework.HYDROGEN
+
+        elif found_deps & {
             "@react-router/dev",
             "@react-router/node",
             "@react-router/serve",
@@ -665,12 +671,6 @@ class NodeProvider:
 
         elif found_deps & {"@tanstack/react-start", "@tanstack/solid-start"}:
             return NodeFramework.TANSTACK_START
-
-        elif found_deps & {
-            "@shopify/hydrogen",
-            "@shopify/remix-oxygen",
-        } or cls._has_hydrogen_config(path):
-            return NodeFramework.HYDROGEN
 
         elif found_deps & {
             "@nestjs/common",
