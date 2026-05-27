@@ -1,0 +1,15 @@
+{
+  "name": "shipit-nodestatic-sveltekit-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "SHIPIT_EXAMPLE_TITLE='SvelteKit Example' SHIPIT_EXAMPLE_OUTPUT=build node scripts/build-static.mjs && echo 'svelte-kit build' >/dev/null"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.8",
+    "@sveltejs/kit": "^2.16.1",
+    "svelte": "^5.19.7",
+    "vite": "^6.1.0"
+  }
+}

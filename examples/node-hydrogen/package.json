@@ -1,0 +1,14 @@
+{
+  "name": "shipit-node-hydrogen-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@shopify/hydrogen": "^2026.4.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

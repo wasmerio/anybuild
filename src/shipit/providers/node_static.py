@@ -63,6 +63,9 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         "@docusaurus/core",
         "react-scripts",
         "umi",
+        "@sveltejs/kit",
+        "sanity",
+        "storybook",
     )
     STATIC_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
         "astro",
@@ -93,7 +96,6 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         "@redwoodjs/core",
         "@elysia/node",
         "elysia",
-        "sanity",
     )
     STATIC_DETECT_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
         *STATIC_FRAMEWORK_DEPENDENCIES,
@@ -152,6 +154,12 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         package_json: Optional[Dict[str, Any]],
         found_deps: Set[str],
     ) -> Optional[NodeFramework]:
+        if "storybook" in found_deps:
+            return NodeFramework.STORYBOOK
+        if "sanity" in found_deps:
+            if cls.has_dependency_major(package_json, "sanity", 3):
+                return NodeFramework.SANITY_V3
+            return NodeFramework.SANITY
         if "@ionic/angular" in found_deps:
             return NodeFramework.IONIC_ANGULAR
         if "@ionic/react" in found_deps:
@@ -198,6 +206,8 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             return NodeFramework.DOCUSAURUS_OLD
         if "@docusaurus/core" in found_deps:
             return NodeFramework.DOCUSAURUS
+        if "@sveltejs/kit" in found_deps:
+            return NodeFramework.SVELTEKIT
         if "svelte" in found_deps:
             return NodeFramework.SVELTE
         if "@remix-run/dev" in found_deps:
@@ -526,7 +536,7 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             package_json,
             *cls.STATIC_DETECT_DEPENDENCIES,
         )
-        if cls._has_runtime_dependency(found_deps):
+        if cls._has_runtime_dependency(found_deps) or cls._has_hydrogen_config(path):
             return None
         if (
             "@remix-run/node" in found_deps

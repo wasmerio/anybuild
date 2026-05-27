@@ -51,7 +51,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
         ),
         (
             "nodestatic-svelte",
-            NodeFramework.SVELTE,
+            NodeFramework.SVELTEKIT,
+            "build",
+            "npm run build",
+        ),
+        (
+            "nodestatic-sveltekit",
+            NodeFramework.SVELTEKIT,
             "build",
             "npm run build",
         ),
@@ -191,6 +197,18 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
             "nodestatic-vue",
             NodeFramework.VUE,
             "dist",
+            "npm run build",
+        ),
+        (
+            "nodestatic-sanity",
+            NodeFramework.SANITY_V3,
+            "dist",
+            "npm run build",
+        ),
+        (
+            "nodestatic-storybook",
+            NodeFramework.STORYBOOK,
+            "storybook-static",
             "npm run build",
         ),
     ],
@@ -378,7 +396,9 @@ def test_static_remix_output_can_use_node_static_with_node_dep(
         {"@remix-run/node": "^2.10.0", "@remix-run/dev": "^2.10.0"},
         {"@tanstack/react-start": "^1.0.0", "vite": "^5.0.0"},
         {"@solidjs/start": "^1.0.0", "vite": "^5.0.0"},
+        {"@sveltejs/adapter-node": "^5.0.0", "@sveltejs/kit": "^2.16.1"},
         {"nitropack": "^2.11.0", "vite": "^5.0.0"},
+        {"@shopify/hydrogen": "^2026.4.2", "vite": "^7.0.0"},
     ],
 )
 def test_runtime_vite_like_frameworks_are_not_node_static(
@@ -393,6 +413,26 @@ def test_runtime_vite_like_frameworks_are_not_node_static(
         "dependencies": dependencies,
     }
     (tmp_path / "package.json").write_text(json.dumps(package_json) + "\n")
+    (tmp_path / "server.js").write_text("console.log('ok')\n")
+
+    assert NodeStaticProvider.detect(tmp_path, Config()) is None
+    assert load_provider(tmp_path, Config()) is not NodeStaticProvider
+
+
+def test_hydrogen_config_is_not_node_static(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "scripts": {
+    "build": "vite build",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "vite": "^7.0.0"
+  }
+}
+"""
+    )
+    (tmp_path / "hydrogen.config.js").write_text("export default {}\n")
     (tmp_path / "server.js").write_text("console.log('ok')\n")
 
     assert NodeStaticProvider.detect(tmp_path, Config()) is None
@@ -471,10 +511,12 @@ def test_node_static_script_commands_prefers_build_over_fallbacks() -> None:
         ("polymer build", [NodeFramework.POLYMER]),
         ("preact build", [NodeFramework.PREACT]),
         ("stencil build", [NodeFramework.STENCIL]),
-        ("svelte-kit build", [NodeFramework.SVELTE]),
+        ("svelte-kit build", [NodeFramework.SVELTEKIT]),
         ("umi build", [NodeFramework.UMIJS]),
         ("vue-cli-service build", [NodeFramework.VUE]),
         ("nuxt generate", [NodeFramework.NUXT_OLD]),
+        ("sanity build", [NodeFramework.SANITY]),
+        ("storybook build", [NodeFramework.STORYBOOK]),
     ],
 )
 def test_new_static_builder_commands_are_detected(
