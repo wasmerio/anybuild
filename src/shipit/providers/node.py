@@ -2,7 +2,7 @@ import json
 import shlex
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional, Set
+from typing import Any, ClassVar, Dict, Optional, Set
 
 import yaml
 from pydantic import Field
@@ -144,6 +144,7 @@ class NodeFramework(Enum):
     DOCUSAURUS_OLD = "docusaurus-old"
     DOCUSAURUS = "docusaurus"
     SVELTE = "svelte"
+    SVELTEKIT = "sveltekit"
     UMIJS = "umijs"
     VUE = "vue"
     REMIX = "remix"
@@ -152,7 +153,23 @@ class NodeFramework(Enum):
     REMIX_OLD = "remix-old"
     REMIX_V2 = "remix-v2"
     REMIX_V2_CLASSIC = "remix-v2-classic"
+    REACT_ROUTER = "react-router"
+    NITRO = "nitro"
+    SOLIDSTART = "solidstart"
+    TANSTACK_START = "tanstack-start"
+    HYDROGEN = "hydrogen"
+    HONO = "hono"
     EXPRESS = "express"
+    H3 = "h3"
+    KOA = "koa"
+    NESTJS = "nestjs"
+    ELYSIA = "elysia"
+    FASTIFY = "fastify"
+    XMCP = "xmcp"
+    MASTRA = "mastra"
+    SANITY = "sanity"
+    SANITY_V3 = "sanity-v3"
+    STORYBOOK = "storybook"
 
     def can_be_static(self) -> bool:
         return self in {
@@ -180,6 +197,7 @@ class NodeFramework(Enum):
             NodeFramework.DOCUSAURUS_OLD,
             NodeFramework.DOCUSAURUS,
             NodeFramework.SVELTE,
+            NodeFramework.SVELTEKIT,
             NodeFramework.UMIJS,
             NodeFramework.VUE,
             NodeFramework.REMIX,
@@ -188,6 +206,9 @@ class NodeFramework(Enum):
             NodeFramework.REMIX_OLD,
             NodeFramework.REMIX_V2,
             NodeFramework.REMIX_V2_CLASSIC,
+            NodeFramework.SANITY,
+            NodeFramework.SANITY_V3,
+            NodeFramework.STORYBOOK,
         }
 
     def is_pure_static(self) -> bool:
@@ -212,9 +233,13 @@ class NodeFramework(Enum):
             NodeFramework.DOCUSAURUS,
             NodeFramework.DOCUSAURUS_OLD,
             NodeFramework.SVELTE,
+            NodeFramework.SVELTEKIT,
             NodeFramework.UMIJS,
             NodeFramework.VITE,
             NodeFramework.VUE,
+            NodeFramework.SANITY,
+            NodeFramework.SANITY_V3,
+            NodeFramework.STORYBOOK,
         }
 
     def get_static_output_dir(self) -> str:
@@ -248,9 +273,13 @@ class NodeFramework(Enum):
             NodeFramework.DOCUSAURUS: "build",
             NodeFramework.DOCUSAURUS_OLD: "build",
             NodeFramework.SVELTE: "build",
+            NodeFramework.SVELTEKIT: "build",
             NodeFramework.UMIJS: "dist",
             NodeFramework.VUE: "dist",
             NodeFramework.METALSMITH: "build",
+            NodeFramework.SANITY: "dist",
+            NodeFramework.SANITY_V3: "dist",
+            NodeFramework.STORYBOOK: "storybook-static",
         }
         if self not in output_dirs:
             raise ValueError(
@@ -291,9 +320,11 @@ class NodeFramework(Enum):
             "next": [NodeFramework.NEXT],
             "nuxi": [NodeFramework.NUXT_V3],
             "nuxt": [NodeFramework.NUXT_OLD],
-            "svelte-kit": [NodeFramework.SVELTE],
+            "svelte-kit": [NodeFramework.SVELTEKIT],
             "umi": [NodeFramework.UMIJS],
             "vue-cli-service": [NodeFramework.VUE],
+            "sanity": [NodeFramework.SANITY],
+            "storybook": [NodeFramework.STORYBOOK],
         }
         try:
             tokens = shlex.split(build_command)
@@ -334,6 +365,7 @@ class NodeFramework(Enum):
             NodeFramework.DOCUSAURUS: "docusaurus build",
             NodeFramework.DOCUSAURUS_OLD: "docusaurus build",
             NodeFramework.SVELTE: "svelte-kit build",
+            NodeFramework.SVELTEKIT: "svelte-kit build",
             NodeFramework.UMIJS: "umi build",
             NodeFramework.VITE: "vite build",
             NodeFramework.VUE: "vue-cli-service build",
@@ -341,6 +373,9 @@ class NodeFramework(Enum):
             NodeFramework.NUXT_V3: "nuxi generate",
             NodeFramework.NUXT_OLD: "nuxt generate",
             NodeFramework.REMIX: "remix build",
+            NodeFramework.SANITY: "sanity build",
+            NodeFramework.SANITY_V3: "sanity build",
+            NodeFramework.STORYBOOK: "storybook build",
         }
         if self not in build_commands:
             raise ValueError(
@@ -394,6 +429,47 @@ class NodeConfig(Config):
 
 class NodeProvider:
     only_build: bool = False
+    FRAMEWORK_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
+        "next",
+        "astro",
+        "@react-router/dev",
+        "@react-router/node",
+        "@react-router/serve",
+        "@remix-run/dev",
+        "@remix-run/node",
+        "@remix-run/react",
+        "@remix-run/server-runtime",
+        "@sveltejs/kit",
+        "@sveltejs/adapter-node",
+        "nitropack",
+        "nitro",
+        "@solidjs/start",
+        "solid-start",
+        "solid-js",
+        "@tanstack/react-start",
+        "@tanstack/solid-start",
+        "@shopify/hydrogen",
+        "@shopify/remix-oxygen",
+        "@nestjs/common",
+        "@nestjs/core",
+        "@nestjs/platform-express",
+        "@nestjs/platform-fastify",
+        "hono",
+        "@hono/node-server",
+        "express",
+        "h3",
+        "koa",
+        "elysia",
+        "@elysia/node",
+        "fastify",
+        "xmcp",
+        "mastra",
+        "@mastra/core",
+    )
+    HYDROGEN_CONFIG_FILES: ClassVar[tuple[str, ...]] = (
+        "hydrogen.config.js",
+        "hydrogen.config.ts",
+    )
     COMMON_ENTRY_FILES = (
         "server.js",
         "app.js",
@@ -437,8 +513,13 @@ class NodeProvider:
             config.package_manager = cls.detect_package_manager(path)
 
         package_json = cls.parse_package_json(path)
+        found_deps = cls._check_package_json_deps(
+            package_json, *cls.FRAMEWORK_DEPENDENCIES
+        )
         if not config.framework:
-            config.framework = cls.detect_framework(package_json)
+            config.framework = cls.detect_framework(
+                package_json, found_deps, path
+            )
 
         if not config.build_command:
             config.build_command = cls.get_build_command(
@@ -487,7 +568,10 @@ class NodeProvider:
                 return DetectResult(cls.name(), 30)
 
         package_json = cls.parse_package_json(path)
-        if cls.detect_framework(package_json):
+        found_deps = cls._check_package_json_deps(
+            package_json, *cls.FRAMEWORK_DEPENDENCIES
+        )
+        if cls.detect_framework(package_json, found_deps, path):
             return DetectResult(cls.name(), 45)
 
         if (path / "package.json").is_file():
@@ -542,13 +626,89 @@ class NodeProvider:
 
     @classmethod
     def detect_framework(
-        cls, package_json: Optional[Dict[str, Any]]
+        cls,
+        package_json: Optional[Dict[str, Any]],
+        found_deps: Optional[Set[str]] = None,
+        path: Optional[Path] = None,
     ) -> Optional[NodeFramework]:
-        if cls.has_dependency(package_json, "next"):
+        found_deps = found_deps or set()
+
+        if "next" in found_deps:
             return NodeFramework.NEXT
 
-        elif cls.has_dependency(package_json, "astro"):
+        elif "astro" in found_deps:
             return NodeFramework.ASTRO
+
+        elif found_deps & {
+            "@shopify/hydrogen",
+            "@shopify/remix-oxygen",
+        } or cls._has_hydrogen_config(path):
+            return NodeFramework.HYDROGEN
+
+        elif found_deps & {
+            "@react-router/dev",
+            "@react-router/node",
+            "@react-router/serve",
+        }:
+            return NodeFramework.REACT_ROUTER
+
+        elif found_deps & {
+            "@remix-run/dev",
+            "@remix-run/node",
+            "@remix-run/react",
+            "@remix-run/server-runtime",
+        }:
+            return NodeFramework.REMIX
+
+        elif "@sveltejs/kit" in found_deps:
+            return NodeFramework.SVELTEKIT
+
+        elif found_deps & {"nitropack", "nitro"}:
+            return NodeFramework.NITRO
+
+        elif found_deps & {"@solidjs/start", "solid-start"}:
+            return NodeFramework.SOLIDSTART
+
+        elif found_deps & {"@tanstack/react-start", "@tanstack/solid-start"}:
+            return NodeFramework.TANSTACK_START
+
+        elif found_deps & {
+            "@nestjs/common",
+            "@nestjs/core",
+            "@nestjs/platform-express",
+            "@nestjs/platform-fastify",
+        }:
+            return NodeFramework.NESTJS
+
+        elif found_deps & {
+            "hono",
+            "@hono/node-server",
+        }:
+            return NodeFramework.HONO
+
+        elif "express" in found_deps:
+            return NodeFramework.EXPRESS
+
+        elif "h3" in found_deps:
+            return NodeFramework.H3
+
+        elif "koa" in found_deps:
+            return NodeFramework.KOA
+
+        elif found_deps & {"elysia", "@elysia/node"}:
+            return NodeFramework.ELYSIA
+
+        elif "fastify" in found_deps:
+            return NodeFramework.FASTIFY
+
+        elif "xmcp" in found_deps:
+            return NodeFramework.XMCP
+
+        elif found_deps & {
+            "mastra",
+            "@mastra/core",
+        }:
+            return NodeFramework.MASTRA
 
         for command in cls._script_commands(package_json):
             try:
@@ -559,6 +719,46 @@ class NodeProvider:
                 return NodeFramework.NEXT
 
         return None
+
+    @classmethod
+    def _has_hydrogen_config(cls, path: Optional[Path]) -> bool:
+        if path is None:
+            return False
+        return any((path / file).is_file() for file in cls.HYDROGEN_CONFIG_FILES)
+
+    @classmethod
+    def has_any_dependency(
+        cls,
+        path: Path,
+        deps: tuple[str, ...],
+    ) -> bool:
+        return bool(cls.check_deps(path, *deps))
+
+    @classmethod
+    def check_deps(cls, path: Path, *deps: str) -> Set[str]:
+        package_json = cls.parse_package_json(path)
+        return cls._check_package_json_deps(package_json, *deps)
+
+    @classmethod
+    def _check_package_json_deps(
+        cls, package_json: Optional[Dict[str, Any]], *deps: str
+    ) -> Set[str]:
+        if not package_json:
+            return set()
+
+        pending_deps = set(deps)
+        initial_deps = set(pending_deps)
+        for section in ("dependencies", "devDependencies", "peerDependencies"):
+            dep_section = package_json.get(section, {})
+            if not isinstance(dep_section, dict):
+                continue
+
+            found = pending_deps & dep_section.keys()
+            pending_deps -= found
+            if not pending_deps:
+                break
+
+        return initial_deps - pending_deps
 
     @classmethod
     def _script_commands(
@@ -617,6 +817,41 @@ class NodeProvider:
                 else:
                     return True
         return False
+
+    @classmethod
+    def has_dependency_major(
+        cls,
+        package_json: Optional[Dict[str, Any]],
+        dep: str,
+        major: int,
+    ) -> bool:
+        version = cls.dependency_version(package_json, dep)
+        if version is None:
+            return False
+        try:
+            return Version(f"{major}.999.999") in NpmSpec(version)
+        except Exception:
+            normalized = version.lstrip("^~>=< ")
+            return normalized == str(major) or normalized.startswith(
+                f"{major}."
+            )
+
+    @classmethod
+    def dependency_version(
+        cls,
+        package_json: Optional[Dict[str, Any]],
+        dep: str,
+    ) -> Optional[str]:
+        if not package_json:
+            return None
+        for section in ("dependencies", "devDependencies", "peerDependencies"):
+            dep_section = package_json.get(section, {})
+            if not isinstance(dep_section, dict):
+                continue
+            version = dep_section.get(dep)
+            if isinstance(version, str):
+                return version
+        return None
 
     @classmethod
     def get_build_command(

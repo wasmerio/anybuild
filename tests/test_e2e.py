@@ -296,6 +296,13 @@ class E2ECase:
             http=[HTTPRequest(path="/", body_match=r"Hello from H3 on Shipit")],
             build_modes=(BuildMode.Wasmer,),
         ),
+        # Elysia app running on the Node adapter
+        E2ECase(
+            path="examples/node-elysia",
+            serve_pattern=r"Elysia server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Elysia on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
         # NestJS-compatible Node runtime fixture
         E2ECase(
             path="examples/node-nestjs",
@@ -308,6 +315,13 @@ class E2ECase:
             path="examples/node-nitro",
             serve_pattern=r"Nitro server listening on",
             http=[HTTPRequest(path="/", body_match=r"Hello from Nitro on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Hydrogen-compatible Node runtime fixture
+        E2ECase(
+            path="examples/node-hydrogen",
+            serve_pattern=r"Hydrogen server listening on",
+            http=[HTTPRequest(path="/", body_match=r"Hello from Hydrogen on Shipit")],
             build_modes=(BuildMode.Wasmer,),
         ),
         # React Router runtime fixture with Vite-like dependencies
@@ -324,6 +338,27 @@ class E2ECase:
             path="examples/node-remix",
             serve_pattern=r"Remix server listening on",
             http=[HTTPRequest(path="/", body_match=r"Hello from Remix on Shipit")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # SolidStart-compatible Node runtime fixture
+        E2ECase(
+            path="examples/node-solidstart",
+            serve_pattern=r"SolidStart server listening on",
+            http=[
+                HTTPRequest(path="/", body_match=r"Hello from SolidStart on Shipit")
+            ],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # TanStack Start-compatible Node runtime fixture
+        E2ECase(
+            path="examples/node-tanstack-start",
+            serve_pattern=r"TanStack Start server listening on",
+            http=[
+                HTTPRequest(
+                    path="/",
+                    body_match=r"Hello from TanStack Start on Shipit",
+                )
+            ],
             build_modes=(BuildMode.Wasmer,),
         ),
         # XMCP-compatible Node runtime fixture
@@ -410,6 +445,13 @@ class E2ECase:
             path="examples/nodestatic-svelte",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Svelte Static Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # SvelteKit static site
+        E2ECase(
+            path="examples/nodestatic-sveltekit",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"SvelteKit Example")],
             build_modes=(BuildMode.Wasmer,),
         ),
         # Remix static output served as files
@@ -571,6 +613,20 @@ class E2ECase:
             path="examples/nodestatic-vue",
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Vue Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Sanity Studio static app
+        E2ECase(
+            path="examples/nodestatic-sanity",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Sanity Example")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Storybook static app
+        E2ECase(
+            path="examples/nodestatic-storybook",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Storybook Example")],
             build_modes=(BuildMode.Wasmer,),
         ),
         # Python FastAPI app on Uvicorn

@@ -1,0 +1,12 @@
+{
+  "name": "shipit-nodestatic-storybook-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "SHIPIT_EXAMPLE_TITLE='Storybook Example' SHIPIT_EXAMPLE_OUTPUT=storybook-static node scripts/build-static.mjs && echo 'storybook build' >/dev/null"
+  },
+  "devDependencies": {
+    "storybook": "^8.6.0"
+  }
+}

@@ -43,6 +43,29 @@ def test_node_package_manager_defaults_to_npm(tmp_path: Path) -> None:
     assert provider_config.package_manager == PackageManager.NPM
 
 
+def test_node_check_deps_returns_matching_dependencies(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        """{
+  "dependencies": {
+    "express": "5.1.0"
+  },
+  "devDependencies": {
+    "hono": "^4.12.23"
+  }
+}
+"""
+    )
+
+    found_deps = NodeProvider.check_deps(
+        tmp_path,
+        "express",
+        "elysia",
+        "hono",
+    )
+
+    assert found_deps == {"express", "hono"}
+
+
 def test_node_detection_does_not_beat_node_static() -> None:
     path = REPO_ROOT / "examples" / "nodestatic-vitepress"
     base_config = Config()
@@ -63,26 +86,33 @@ def test_node_provider_detects_generic_node_example() -> None:
 
 
 @pytest.mark.parametrize(
-    "example",
+    ("example", "framework"),
     [
-        "node-fastify",
-        "node-hono",
-        "node-express",
-        "node-koa",
-        "node-h3",
-        "node-nestjs",
-        "node-nitro",
-        "node-react-router",
-        "node-remix",
-        "node-xmcp",
-        "node-mastra",
+        ("node-fastify", NodeFramework.FASTIFY),
+        ("node-hono", NodeFramework.HONO),
+        ("node-express", NodeFramework.EXPRESS),
+        ("node-koa", NodeFramework.KOA),
+        ("node-h3", NodeFramework.H3),
+        ("node-elysia", NodeFramework.ELYSIA),
+        ("node-nestjs", NodeFramework.NESTJS),
+        ("node-nitro", NodeFramework.NITRO),
+        ("node-hydrogen", NodeFramework.HYDROGEN),
+        ("node-react-router", NodeFramework.REACT_ROUTER),
+        ("node-remix", NodeFramework.REMIX),
+        ("node-solidstart", NodeFramework.SOLIDSTART),
+        ("node-tanstack-start", NodeFramework.TANSTACK_START),
+        ("node-xmcp", NodeFramework.XMCP),
+        ("node-mastra", NodeFramework.MASTRA),
     ],
 )
-def test_node_provider_detects_node_runtime_examples(example: str) -> None:
+def test_node_provider_detects_node_runtime_examples(
+    example: str, framework: NodeFramework
+) -> None:
     path = REPO_ROOT / "examples" / example
 
     assert load_provider(path, Config()) is NodeProvider
     provider_config = NodeProvider.load_config(path, Config())
+    assert provider_config.framework == framework
     assert provider_config.commands.start == "node server.js"
 
 
@@ -90,6 +120,25 @@ def test_node_provider_detects_astro_runtime_example() -> None:
     path = REPO_ROOT / "examples" / "node-astro"
 
     assert load_provider(path, Config()) is NodeProvider
+
+
+def test_node_provider_detects_hydrogen_config_file(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text("{}\n")
+    (tmp_path / "hydrogen.config.ts").write_text("export default {}\n")
+
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+
+    assert load_provider(tmp_path, Config()) is NodeProvider
+    assert provider_config.framework == NodeFramework.HYDROGEN
+
+
+def test_node_provider_detects_elysia_runtime_example() -> None:
+    path = REPO_ROOT / "examples" / "node-elysia"
+
+    assert load_provider(path, Config()) is NodeProvider
+    provider_config = NodeProvider.load_config(path, Config())
+    assert provider_config.framework == NodeFramework.ELYSIA
+    assert provider_config.commands.start == "node server.js"
 
 
 def test_node_provider_detects_nextjs_runtime_app(tmp_path: Path) -> None:

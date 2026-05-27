@@ -2,7 +2,7 @@ import json
 import re
 import shlex
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional, Set
 
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
@@ -38,6 +38,70 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
     SCRIPT_BUILD_COMMAND = ("build",)
     # Only use this commands if the build command is not found in the package.json
     SCRIPT_BUILD_COMMAND_FALLBACK = ("generate", "export", "docs:build",)
+    PURE_STATIC_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
+        "@angular/cli",
+        "@11ty/eleventy",
+        "@ionic/angular",
+        "@ionic/react",
+        "@stencil/core",
+        "@vue/cli-service",
+        "brunch",
+        "ember-cli",
+        "ember-source",
+        "vitepress",
+        "vuepress",
+        "hexo",
+        "hexo-cli",
+        "metalsmith",
+        "assemble",
+        "grunt-assemble",
+        "harp",
+        "parcel",
+        "polymer-cli",
+        "preact-cli",
+        "docusaurus",
+        "@docusaurus/core",
+        "react-scripts",
+        "umi",
+        "@sveltejs/kit",
+        "sanity",
+        "storybook",
+    )
+    STATIC_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
+        "astro",
+        "vite",
+        "next",
+        "nuxt",
+        "gatsby",
+        "svelte",
+        "@remix-run/dev",
+    )
+    STATIC_FRAMEWORK_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
+        *PURE_STATIC_DEPENDENCIES,
+        *STATIC_DEPENDENCIES,
+        "@remix-run/vite",
+    )
+    RUNTIME_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
+        "@astrojs/node",
+        "@sveltejs/adapter-node",
+        "@react-router/dev",
+        "@react-router/serve",
+        "@remix-run/serve",
+        "@tanstack/react-start",
+        "@solidjs/start",
+        "solid-start",
+        "nitropack",
+        "@shopify/hydrogen",
+        "@shopify/remix-oxygen",
+        "@redwoodjs/core",
+        "@elysia/node",
+        "elysia",
+    )
+    STATIC_DETECT_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
+        *STATIC_FRAMEWORK_DEPENDENCIES,
+        *RUNTIME_DEPENDENCIES,
+        "@remix-run/node",
+    )
     _ASSEMBLE_DEST_PATTERN = re.compile(r"\bdest\s*:\s*['\"]([^'\"]+)['\"]")
     _NEXT_STATIC_EXPORT_PATTERN = re.compile(
         r"\boutput\s*:\s*['\"]export['\"]"
@@ -59,92 +123,14 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             config.package_manager = NodeProvider.detect_package_manager(path)
 
         package_json = cls.parse_package_json(path)
+        found_deps = cls._check_package_json_deps(
+            package_json, *cls.STATIC_FRAMEWORK_DEPENDENCIES
+        )
 
         if not config.framework:
-            if cls.has_dependency(package_json, "@ionic/angular"):
-                config.framework = NodeFramework.IONIC_ANGULAR
-            elif cls.has_dependency(package_json, "@ionic/react"):
-                config.framework = NodeFramework.IONIC_REACT
-            elif cls.has_dependency(package_json, "@angular/cli"):
-                config.framework = NodeFramework.ANGULAR
-            elif cls.has_dependency(package_json, "react-scripts"):
-                config.framework = NodeFramework.CREATE_REACT_APP
-            elif cls.has_dependency(package_json, "brunch"):
-                config.framework = NodeFramework.BRUNCH
-            elif cls.has_dependency(package_json, "ember-cli") or cls.has_dependency(
-                package_json, "ember-source"
-            ):
-                config.framework = NodeFramework.EMBER
-            elif cls.has_dependency(package_json, "parcel"):
-                config.framework = NodeFramework.PARCEL
-            elif cls.has_dependency(package_json, "polymer-cli"):
-                config.framework = NodeFramework.POLYMER
-            elif cls.has_dependency(package_json, "preact-cli"):
-                config.framework = NodeFramework.PREACT
-            elif cls.has_dependency(package_json, "@stencil/core"):
-                config.framework = NodeFramework.STENCIL
-            elif cls.has_dependency(package_json, "umi"):
-                config.framework = NodeFramework.UMIJS
-            elif cls.has_dependency(package_json, "@vue/cli-service"):
-                config.framework = NodeFramework.VUE
-            elif cls.has_dependency(package_json, "@11ty/eleventy"):
-                config.framework = NodeFramework.ELEVENTY
-            elif cls.has_dependency(package_json, "vitepress"):
-                config.framework = NodeFramework.VITEPRESS
-            elif cls.has_dependency(package_json, "vuepress"):
-                config.framework = NodeFramework.VUEPRESS
-            elif cls.has_dependency(package_json, "hexo") or cls.has_dependency(
-                package_json, "hexo-cli"
-            ):
-                config.framework = NodeFramework.HEXO
-            elif cls.has_dependency(package_json, "metalsmith"):
-                config.framework = NodeFramework.METALSMITH
-            elif cls.has_dependency(package_json, "assemble") or cls.has_dependency(
-                package_json, "grunt-assemble"
-            ):
-                config.framework = NodeFramework.ASSEMBLE
-            elif cls.has_dependency(package_json, "harp"):
-                config.framework = NodeFramework.HARP
-            elif cls.has_dependency(package_json, "gatsby"):
-                config.framework = NodeFramework.GATSBY
-            elif cls.has_dependency(package_json, "astro"):
-                config.framework = NodeFramework.ASTRO
-            elif cls.has_dependency(package_json, "docusaurus"):
-                config.framework = NodeFramework.DOCUSAURUS_OLD
-            elif cls.has_dependency(package_json, "@docusaurus/core"):
-                config.framework = NodeFramework.DOCUSAURUS
-            elif cls.has_dependency(package_json, "svelte"):
-                config.framework = NodeFramework.SVELTE
-            elif cls.has_dependency(
-                package_json, "@remix-run/dev", "1"
-            ) or cls.has_dependency(package_json, "@remix-run/dev", "0"):
-                config.framework = NodeFramework.REMIX_OLD
-            elif cls.has_dependency(package_json, "@remix-run/dev"):
-                has_vite = (
-                    cls.has_dependency(package_json, "@remix-run/vite")
-                    or cls.has_dependency(package_json, "vite")
-                    or _exists(
-                        path,
-                        "vite.config.js",
-                        "vite.config.ts",
-                        "vite.config.mjs",
-                        "vite.config.cjs",
-                    )
-                )
-                if has_vite:
-                    config.framework = NodeFramework.REMIX_V2
-                else:
-                    config.framework = NodeFramework.REMIX_V2_CLASSIC
-            elif cls.has_dependency(package_json, "vite"):
-                config.framework = NodeFramework.VITE
-            elif cls.has_dependency(package_json, "next"):
-                config.framework = NodeFramework.NEXT
-            elif cls.has_dependency(package_json, "nuxt", "2") or cls.has_dependency(
-                package_json, "nuxt", "1"
-            ):
-                config.framework = NodeFramework.NUXT_OLD
-            elif cls.has_dependency(package_json, "nuxt"):
-                config.framework = NodeFramework.NUXT_V3
+            config.framework = cls.detect_static_framework(
+                path, package_json, found_deps
+            )
 
         if not config.build_command:
             config.build_command = cls.get_build_command(
@@ -160,6 +146,101 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
                 config.static_dir = "dist"
 
         return config
+
+    @classmethod
+    def detect_static_framework(
+        cls,
+        path: Path,
+        package_json: Optional[Dict[str, Any]],
+        found_deps: Set[str],
+    ) -> Optional[NodeFramework]:
+        if "storybook" in found_deps:
+            return NodeFramework.STORYBOOK
+        if "sanity" in found_deps:
+            if cls.has_dependency_major(package_json, "sanity", 3):
+                return NodeFramework.SANITY_V3
+            return NodeFramework.SANITY
+        if "@ionic/angular" in found_deps:
+            return NodeFramework.IONIC_ANGULAR
+        if "@ionic/react" in found_deps:
+            return NodeFramework.IONIC_REACT
+        if "@angular/cli" in found_deps:
+            return NodeFramework.ANGULAR
+        if "react-scripts" in found_deps:
+            return NodeFramework.CREATE_REACT_APP
+        if "brunch" in found_deps:
+            return NodeFramework.BRUNCH
+        if found_deps & {"ember-cli", "ember-source"}:
+            return NodeFramework.EMBER
+        if "parcel" in found_deps:
+            return NodeFramework.PARCEL
+        if "polymer-cli" in found_deps:
+            return NodeFramework.POLYMER
+        if "preact-cli" in found_deps:
+            return NodeFramework.PREACT
+        if "@stencil/core" in found_deps:
+            return NodeFramework.STENCIL
+        if "umi" in found_deps:
+            return NodeFramework.UMIJS
+        if "@vue/cli-service" in found_deps:
+            return NodeFramework.VUE
+        if "@11ty/eleventy" in found_deps:
+            return NodeFramework.ELEVENTY
+        if "vitepress" in found_deps:
+            return NodeFramework.VITEPRESS
+        if "vuepress" in found_deps:
+            return NodeFramework.VUEPRESS
+        if found_deps & {"hexo", "hexo-cli"}:
+            return NodeFramework.HEXO
+        if "metalsmith" in found_deps:
+            return NodeFramework.METALSMITH
+        if found_deps & {"assemble", "grunt-assemble"}:
+            return NodeFramework.ASSEMBLE
+        if "harp" in found_deps:
+            return NodeFramework.HARP
+        if "gatsby" in found_deps:
+            return NodeFramework.GATSBY
+        if "astro" in found_deps:
+            return NodeFramework.ASTRO
+        if "docusaurus" in found_deps:
+            return NodeFramework.DOCUSAURUS_OLD
+        if "@docusaurus/core" in found_deps:
+            return NodeFramework.DOCUSAURUS
+        if "@sveltejs/kit" in found_deps:
+            return NodeFramework.SVELTEKIT
+        if "svelte" in found_deps:
+            return NodeFramework.SVELTE
+        if "@remix-run/dev" in found_deps:
+            if cls.has_dependency(
+                package_json, "@remix-run/dev", "1"
+            ) or cls.has_dependency(package_json, "@remix-run/dev", "0"):
+                return NodeFramework.REMIX_OLD
+            if cls._has_vite_remix(path, found_deps):
+                return NodeFramework.REMIX_V2
+            return NodeFramework.REMIX_V2_CLASSIC
+        if "vite" in found_deps:
+            return NodeFramework.VITE
+        if "next" in found_deps:
+            return NodeFramework.NEXT
+        if "nuxt" in found_deps:
+            if cls.has_dependency(
+                package_json, "nuxt", "2"
+            ) or cls.has_dependency(package_json, "nuxt", "1"):
+                return NodeFramework.NUXT_OLD
+            return NodeFramework.NUXT_V3
+        return None
+
+    @classmethod
+    def _has_vite_remix(cls, path: Path, found_deps: Set[str]) -> bool:
+        return bool(
+            found_deps & {"@remix-run/vite", "vite"}
+        ) or _exists(
+            path,
+            "vite.config.js",
+            "vite.config.ts",
+            "vite.config.mjs",
+            "vite.config.cjs",
+        )
 
     @classmethod
     def get_static_dir(
@@ -384,27 +465,9 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
 
     @classmethod
     def _has_runtime_dependency(
-        cls, package_json: Optional[Dict[str, Any]]
+        cls, found_deps: Set[str]
     ) -> bool:
-        runtime_dependencies = (
-            "@astrojs/node",
-            "@sveltejs/adapter-node",
-            "@react-router/dev",
-            "@react-router/serve",
-            "@remix-run/serve",
-            "@tanstack/react-start",
-            "@solidjs/start",
-            "solid-start",
-            "nitropack",
-            "@shopify/hydrogen",
-            "@shopify/remix-oxygen",
-            "@redwoodjs/core",
-            "sanity",
-        )
-        return any(
-            cls.has_dependency(package_json, dep)
-            for dep in runtime_dependencies
-        )
+        return bool(found_deps.intersection(cls.RUNTIME_DEPENDENCIES))
 
     @classmethod
     def _has_next_static_export_config(cls, path: Path) -> bool:
@@ -469,11 +532,16 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         #         return DetectResult(cls.name(), 40)
 
         package_json = cls.parse_package_json(path)
-        if cls._has_runtime_dependency(package_json):
+        found_deps = cls._check_package_json_deps(
+            package_json,
+            *cls.STATIC_DETECT_DEPENDENCIES,
+        )
+        if cls._has_runtime_dependency(found_deps) or cls._has_hydrogen_config(path):
             return None
-        if cls.has_dependency(
-            package_json, "@remix-run/node"
-        ) and not cls._has_static_remix_output(path, package_json):
+        if (
+            "@remix-run/node" in found_deps
+            and not cls._has_static_remix_output(path, package_json)
+        ):
             return None
 
         has_package_manager_build_command = False
@@ -500,9 +568,10 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         #         return DetectResult(cls.name(), 40)
         #     return None
 
-        if cls.has_dependency(
-            package_json, "next"
-        ) and cls._has_next_static_export_config(path):
+        if (
+            "next" in found_deps
+            and cls._has_next_static_export_config(path)
+        ):
             return DetectResult(cls.name(), 60)
 
         for build_command in cls._detect_script_commands(package_json):
@@ -517,44 +586,9 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             ):
                 return DetectResult(cls.name(), 60)
 
-        pure_static_dependencies = [
-            "@angular/cli",
-            "@11ty/eleventy",
-            "@ionic/angular",
-            "@ionic/react",
-            "@stencil/core",
-            "@vue/cli-service",
-            "brunch",
-            "ember-cli",
-            "ember-source",
-            "vitepress",
-            "vuepress",
-            "hexo",
-            "hexo-cli",
-            "metalsmith",
-            "assemble",
-            "grunt-assemble",
-            "harp",
-            "parcel",
-            "polymer-cli",
-            "preact-cli",
-            "docusaurus",
-            "@docusaurus/core",
-            "react-scripts",
-            "umi",
-        ]
-        static_dependencies = [
-            "astro",
-            "vite",
-            "next",
-            "nuxt",
-            "gatsby",
-            "svelte",
-            "@remix-run/dev",
-        ]
-        if any(cls.has_dependency(package_json, dep) for dep in pure_static_dependencies):
+        if found_deps.intersection(cls.PURE_STATIC_DEPENDENCIES):
             return DetectResult(cls.name(), 60)
-        if any(cls.has_dependency(package_json, dep) for dep in static_dependencies):
+        if found_deps.intersection(cls.STATIC_DEPENDENCIES):
             return DetectResult(cls.name(), 20)
         if has_package_manager_build_command:
             return DetectResult(cls.name(), 20)
