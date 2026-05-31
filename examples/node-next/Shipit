@@ -15,7 +15,7 @@ serve(
     env(CI="true", NPM_CONFIG_FUND="false"),
     run("npm install", inputs=["package.json"], group="install"),
     copy(".", ignore=["node_modules", ".git", "package-lock.json"]),
-    run("npx -y next-bundle --build-command 'npm run build'", outputs=["."], group="build"),
+    run("npx -y next-bundle@0.2.0 --build-command 'npm run build'", outputs=["."], group="build"),
     run("npm prune --omit=dev --ignore-scripts", group="prune"),
     run("cp -R .next-bundle/* {}".format(app.path))
   ],

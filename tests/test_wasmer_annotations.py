@@ -202,7 +202,7 @@ def test_wasmer_node_manifest_maps_to_edgejs(tmp_path: Path) -> None:
     runner.build_serve(serve)
 
     manifest = tomllib.loads((runner.wasmer_dir_path / "wasmer.toml").read_text())
-    assert manifest["dependencies"]["wasmer/edgejs-quickjs"] == "=0.0.2"
+    assert manifest["dependencies"]["wasmer/edgejs-quickjs"] == "=0.0.3"
     assert manifest["command"][0]["module"] == "wasmer/edgejs-quickjs:edge"
     assert manifest["command"][0]["annotations"]["wasi"]["main-args"] == [
         "server.js"
