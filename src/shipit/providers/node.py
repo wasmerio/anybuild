@@ -389,7 +389,7 @@ class NodeFramework(Enum):
         if self == NodeFramework.NEXT:
             quoted_command = shlex.quote(build_command)
             return package_manager.dlx_command(
-                f"next-bundle --build-command {quoted_command}"
+                f"next-bundle@0.2.0 --build-command {quoted_command}"
             )
         return build_command
 
