@@ -101,9 +101,9 @@ class WasmerRunner:
     mapper: Dict[str, MapperItem] = {
         "node": {
             "dependencies": {
-                "latest": "wasmer/edgejs-quickjs@=0.0.2",
-                "24": "wasmer/edgejs-quickjs@=0.0.2",
-                "22": "wasmer/edgejs-quickjs@=0.0.2",
+                "latest": "wasmer/edgejs-quickjs@=0.0.3",
+                "24": "wasmer/edgejs-quickjs@=0.0.3",
+                "22": "wasmer/edgejs-quickjs@=0.0.3",
             },
             "scripts": {"edge"},
             "aliases": {"node": "edge"},
