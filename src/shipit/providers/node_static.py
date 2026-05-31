@@ -154,8 +154,34 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         package_json: Optional[Dict[str, Any]],
         found_deps: Set[str],
     ) -> Optional[NodeFramework]:
-        if "storybook" in found_deps:
-            return NodeFramework.STORYBOOK
+        if "harp" in found_deps:
+            return NodeFramework.HARP
+        if "gatsby" in found_deps:
+            return NodeFramework.GATSBY
+        if "astro" in found_deps:
+            return NodeFramework.ASTRO
+        if "next" in found_deps:
+            return NodeFramework.NEXT
+        if "nuxt" in found_deps:
+            if cls.has_dependency(
+                package_json, "nuxt", "2"
+            ) or cls.has_dependency(package_json, "nuxt", "1"):
+                return NodeFramework.NUXT_OLD
+            return NodeFramework.NUXT_V3
+        if "vitepress" in found_deps:
+            return NodeFramework.VITEPRESS
+        if "vuepress" in found_deps:
+            return NodeFramework.VUEPRESS
+        if found_deps & {"hexo", "hexo-cli"}:
+            return NodeFramework.HEXO
+        if "metalsmith" in found_deps:
+            return NodeFramework.METALSMITH
+        if found_deps & {"assemble", "grunt-assemble"}:
+            return NodeFramework.ASSEMBLE
+        if "docusaurus" in found_deps:
+            return NodeFramework.DOCUSAURUS_OLD
+        if "@docusaurus/core" in found_deps:
+            return NodeFramework.DOCUSAURUS
         if "sanity" in found_deps:
             if cls.has_dependency_major(package_json, "sanity", 3):
                 return NodeFramework.SANITY_V3
@@ -186,26 +212,6 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             return NodeFramework.VUE
         if "@11ty/eleventy" in found_deps:
             return NodeFramework.ELEVENTY
-        if "vitepress" in found_deps:
-            return NodeFramework.VITEPRESS
-        if "vuepress" in found_deps:
-            return NodeFramework.VUEPRESS
-        if found_deps & {"hexo", "hexo-cli"}:
-            return NodeFramework.HEXO
-        if "metalsmith" in found_deps:
-            return NodeFramework.METALSMITH
-        if found_deps & {"assemble", "grunt-assemble"}:
-            return NodeFramework.ASSEMBLE
-        if "harp" in found_deps:
-            return NodeFramework.HARP
-        if "gatsby" in found_deps:
-            return NodeFramework.GATSBY
-        if "astro" in found_deps:
-            return NodeFramework.ASTRO
-        if "docusaurus" in found_deps:
-            return NodeFramework.DOCUSAURUS_OLD
-        if "@docusaurus/core" in found_deps:
-            return NodeFramework.DOCUSAURUS
         if "@sveltejs/kit" in found_deps:
             return NodeFramework.SVELTEKIT
         if "svelte" in found_deps:
@@ -220,14 +226,8 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             return NodeFramework.REMIX_V2_CLASSIC
         if "vite" in found_deps:
             return NodeFramework.VITE
-        if "next" in found_deps:
-            return NodeFramework.NEXT
-        if "nuxt" in found_deps:
-            if cls.has_dependency(
-                package_json, "nuxt", "2"
-            ) or cls.has_dependency(package_json, "nuxt", "1"):
-                return NodeFramework.NUXT_OLD
-            return NodeFramework.NUXT_V3
+        if "storybook" in found_deps:
+            return NodeFramework.STORYBOOK
         return None
 
     @classmethod
@@ -586,9 +586,13 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             ):
                 return DetectResult(cls.name(), 60)
 
-        if found_deps.intersection(cls.PURE_STATIC_DEPENDENCIES):
+        pure_static_deps = found_deps.intersection(cls.PURE_STATIC_DEPENDENCIES)
+        static_deps = found_deps.intersection(cls.STATIC_DEPENDENCIES)
+
+        if pure_static_deps and not (static_deps - pure_static_deps):
             return DetectResult(cls.name(), 60)
-        if found_deps.intersection(cls.STATIC_DEPENDENCIES):
+
+        if static_deps:
             return DetectResult(cls.name(), 20)
         if has_package_manager_build_command:
             return DetectResult(cls.name(), 20)
