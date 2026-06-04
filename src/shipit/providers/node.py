@@ -939,7 +939,12 @@ class NodeProvider:
             steps.append(f'copy("{lockfile}")')
 
         if package_manager == PackageManager.PNPM:
-            steps.append(f'env(pnpm_config_dangerously_allow_all_builds="true")')
+            steps.append(
+                'env('
+                'pnpm_config_minimum_release_age="0", '
+                'pnpm_config_dangerously_allow_all_builds="true"'
+                ')'
+            )
         elif package_manager == PackageManager.NPM:
             steps.append(f'env(CI="true", NPM_CONFIG_FUND="false")')
 

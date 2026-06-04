@@ -43,6 +43,22 @@ def test_node_package_manager_defaults_to_npm(tmp_path: Path) -> None:
     assert provider_config.package_manager == PackageManager.NPM
 
 
+def test_pnpm_install_sets_minimum_release_age_env(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text("{}\n")
+    (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+    provider = NodeProvider(tmp_path, provider_config)
+
+    assert provider.build_steps_install() == [
+        'copy("pnpm-lock.yaml")',
+        (
+            'env(pnpm_config_minimum_release_age="0", '
+            'pnpm_config_dangerously_allow_all_builds="true")'
+        ),
+        'run("pnpm install", inputs=["package.json"], group="install")',
+    ]
+
+
 def test_node_check_deps_returns_matching_dependencies(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text(
         """{
