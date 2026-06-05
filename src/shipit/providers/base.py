@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Literal
-from shipit.procfile import Procfile
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -34,15 +33,21 @@ class CustomCommands(BaseSettings):
     #                 cmd = " ".join(cmd)
     #             custom_commands.start = cmd
 
-    def enrich_from_path(self, path: Path, use_procfile: bool = True) -> "CustomCommands":
+    def enrich_from_path(
+        self, path: Path, use_procfile: bool = True
+    ) -> "CustomCommands":
         if use_procfile:
-            procfile_path = path / "Procfile"
-            if procfile_path.exists():
-                try:
-                    procfile = Procfile.loads(procfile_path.read_text())
-                    self.start = procfile.get_start_command()
-                except Exception:
-                    pass
+            from shipit.platforms import select_platform_entry
+            from shipit.platforms.procfile import ProcfilePlatformDetector
+
+            configs = ProcfilePlatformDetector.detect_all(path)
+            if configs:
+                entry = select_platform_entry(configs[0])
+            else:
+                entry = None
+            if entry:
+                self.start = entry.start_command
+                self.after_deploy = entry.pre_deploy_command
         return self
 
 

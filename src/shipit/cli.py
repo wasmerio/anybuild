@@ -13,6 +13,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 
 from shipit.generator import generate_shipit, load_provider, load_provider_config
+from shipit.platforms import apply_platform_config, detect_platform_config
 from shipit.providers.base import Config
 from dotenv import dotenv_values
 from shipit.builders import BuildBackend, DockerBuildBackend, LocalBuildBackend
@@ -48,6 +49,29 @@ app = typer.Typer(invoke_without_command=True)
 DIR_PATH = Path(__file__).resolve().parent
 ASSETS_PATH = DIR_PATH / "assets"
 OPTIONAL_RUN_COMMANDS = {"start", "after_deploy"}
+
+
+def resolve_platform_base_config(
+    path: Path,
+    install_command: Optional[str] = None,
+    build_command: Optional[str] = None,
+    start_command: Optional[str] = None,
+    serve_port: Optional[int | str] = None,
+) -> Config:
+    base_config = Config()
+    platform_config = detect_platform_config(path)
+    apply_platform_config(base_config, platform_config)
+
+    if start_command:
+        base_config.commands.start = start_command
+    if install_command:
+        base_config.commands.install = install_command
+    if build_command:
+        base_config.commands.build = build_command
+    if serve_port:
+        base_config.port = int(serve_port)
+
+    return base_config
 
 
 @dataclass
@@ -586,17 +610,15 @@ def generate(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
+    base_config = resolve_platform_base_config(
+        path,
+        install_command=install_command,
+        build_command=build_command,
+        start_command=start_command,
+    )
     if out is None:
         out = path / "Shipit"
 
-    base_config = Config()
-    base_config.commands.enrich_from_path(path)
-    if start_command:
-        base_config.commands.start = start_command
-    if install_command:
-        base_config.commands.install = install_command
-    if build_command:
-        base_config.commands.build = build_command
     provider_cls = load_provider(path, base_config, use_provider=provider)
     provider_config = load_provider_config(
         provider_cls, path, base_config, config=config
@@ -765,7 +787,12 @@ def run(
     )
 
     if commands_to_run:
-        run_serve_commands(path, runner, commands_to_run, volume_specs=volume_specs)
+        run_serve_commands(
+            path,
+            runner,
+            commands_to_run,
+            volume_specs=volume_specs,
+        )
     else:
         console.print("[bold]No commands specified. Use `--command` to run a command.[/bold]")
 
@@ -872,6 +899,13 @@ def plan(
             config=config,
         )
 
+    base_config = resolve_platform_base_config(
+        path,
+        install_command=install_command,
+        build_command=build_command,
+        start_command=start_command,
+        serve_port=serve_port,
+    )
     shipit_file = get_shipit_path(path, shipit_path)
 
     if docker or docker_client:
@@ -891,16 +925,6 @@ def plan(
     else:
         runner = LocalRunner(build_backend, path)
 
-    base_config = Config()
-    base_config.commands.enrich_from_path(path)
-    if install_command:
-        base_config.commands.install = install_command
-    if build_command:
-        base_config.commands.build = build_command
-    if start_command:
-        base_config.commands.start = start_command
-    if serve_port:
-        base_config.port = serve_port
     provider_cls = load_provider(path, base_config, use_provider=provider)
     provider_config = load_provider_config(
         provider_cls, path, base_config, config=config
@@ -1027,6 +1051,14 @@ def build(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
+    env_port = serve_port or os.environ.get("PORT")
+    base_config = resolve_platform_base_config(
+        path,
+        install_command=install_command,
+        build_command=build_command,
+        start_command=start_command,
+        serve_port=env_port,
+    )
     shipit_file = get_shipit_path(path, shipit_path)
 
     if docker or docker_client:
@@ -1045,18 +1077,6 @@ def build(
         )
     else:
         runner = LocalRunner(build_backend, path)
-
-    base_config = Config()
-    base_config.commands.enrich_from_path(path)
-    if start_command:
-        base_config.commands.start = start_command
-    if install_command:
-        base_config.commands.install = install_command
-    if build_command:
-        base_config.commands.build = build_command
-    serve_port = serve_port or os.environ.get("PORT")
-    if serve_port:
-        base_config.port = serve_port
 
     provider_cls = load_provider(path, base_config, use_provider=provider)
     provider_config = load_provider_config(
