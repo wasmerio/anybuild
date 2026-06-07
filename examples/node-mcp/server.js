@@ -29,7 +29,10 @@ function createServer() {
   return server;
 }
 
-const app = createMcpExpressApp();
+const app = createMcpExpressApp({
+  // This is required to make the server accessible without having allowedHosts
+  host: '0.0.0.0',
+});
 
 app.get('/', (_req, res) => {
   res
