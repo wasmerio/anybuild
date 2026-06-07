@@ -20,9 +20,7 @@ serve(
     run("cp -R .next-bundle/* {}".format(app.path))
   ],
   deps=[node],
-  env = {
-    "PORT": PORT
-  },
+  env = {},
   commands = {
     "start": "node server.mjs"
   },

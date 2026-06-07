@@ -1047,7 +1047,7 @@ class NodeProvider:
     def env(self) -> Optional[Dict[str, str]]:
         if self.only_build:
             return None
-        return {"PORT": "PORT"}
+        return {}
 
     def services(self) -> list[ServiceSpec]:
         return []

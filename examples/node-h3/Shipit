@@ -18,9 +18,7 @@ serve(
     run("cp -R . {}".format(app.path))
   ],
   deps=[node],
-  env = {
-    "PORT": PORT
-  },
+  env = {},
   commands = {
     "start": "node server.js"
   },

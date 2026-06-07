@@ -5,7 +5,7 @@ build = mount("build")
 app = mount("app")
 
 serve(
-  name="node-mastra",
+  name="node-mcp",
   provider="node",
   cwd=app.serve_path,
   build=[
