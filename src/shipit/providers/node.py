@@ -964,6 +964,8 @@ class NodeProvider:
         install_command = package_manager.install_command(
             has_lockfile=has_lockfile
         )
+        if self.app_subdir and package_manager == PackageManager.PNPM:
+            install_command = f"{install_command} --no-frozen-lockfile"
         install_context = discover_js_install_context(self.path)
         requires_all_files = (
             self.config.install_requires_all_files
@@ -982,13 +984,18 @@ class NodeProvider:
             steps.append(f'copy("{lockfile}")')
 
         if package_manager == PackageManager.PNPM:
-            steps.append(
-                'env('
-                'pnpm_config_minimum_release_age="0", '
-                'CI="true", '
-                'pnpm_config_dangerously_allow_all_builds="true"'
-                ')'
-            )
+            env_vars = [
+                'pnpm_config_minimum_release_age="0"',
+                'CI="true"',
+            ]
+            if self.app_subdir:
+                env_vars.extend(
+                    [
+                        'pnpm_config_inject_workspace_packages="true"',
+                    ]
+                )
+            env_vars.append('pnpm_config_dangerously_allow_all_builds="true"')
+            steps.append(f'env({", ".join(env_vars)})')
         elif package_manager == PackageManager.NPM:
             steps.append(f'env(CI="true", NPM_CONFIG_FUND="false")')
 
@@ -1038,15 +1045,45 @@ class NodeProvider:
             ]
         return [f"run({command}, group=\"build\")"]
 
-    def build_steps_optimize_deps(self) -> list[str]:
+    def package_name(self) -> Optional[str]:
+        package_json = self.parse_package_json(self.path)
+        if not package_json:
+            return None
+        name = package_json.get("name")
+        if isinstance(name, str) and name:
+            return name
+        return None
+
+    def build_steps_export(self, copy_source: str) -> list[str]:
+        if (
+            self.app_subdir
+            and self.config.package_manager == PackageManager.PNPM
+            and (package_name := self.package_name())
+        ):
+            package_filter = shlex.quote(package_name)
+            return [
+                "workdir(build.path)",
+                (
+                    f'run("pnpm deploy --filter {package_filter} --prod '
+                    '--config.node-linker=hoisted {}".format(app.path))'
+                ),
+                "workdir(app.path)",
+            ]
+
+        copy_flags = "-RL" if self.app_subdir else "-R"
+        return [f'run("cp {copy_flags} {copy_source} {{}}".format(app.path))']
+
+    def build_steps_optimize_deps(self, include_prune: bool = True) -> list[str]:
         if not (self.path / "package.json").exists():
             return []
         package_manager = self.config.package_manager
         if package_manager is None:
             return []
-        steps = [
-            f"run(\"{package_manager.prune_command()}\", group=\"prune\")"
-        ]
+        steps = []
+        if include_prune:
+            steps.append(
+                f"run(\"{package_manager.prune_command()}\", group=\"prune\")"
+            )
         if self.config.framework and self.config.optimize_node_dependencies:
             node_optimize_deps_paths = self.config.framework.node_optimize_deps_paths()
             if node_optimize_deps_paths:
@@ -1076,13 +1113,25 @@ class NodeProvider:
         if self.config.framework:
             folders_to_copy = ", ".join(self.config.framework.folders_to_copy())
         copy_source = folders_to_copy or "."
+        export_steps = self.build_steps_export(copy_source)
+        uses_pnpm_deploy = (
+            self.app_subdir
+            and self.config.package_manager == PackageManager.PNPM
+            and self.package_name()
+        )
+        optimize_steps = self.build_steps_optimize_deps(
+            include_prune=not uses_pnpm_deploy
+        )
+        if uses_pnpm_deploy:
+            tail_steps = [*export_steps, *optimize_steps]
+        else:
+            tail_steps = [*optimize_steps, *export_steps]
         return list(filter(None, [
             *self.build_workdir_steps("build"),
             *self.build_steps_install(),
             self.build_steps_copy(),
             *self.build_steps_build(),
-            *self.build_steps_optimize_deps(),
-            f'run("cp -R {copy_source} {{}}".format(app.path))',
+            *tail_steps,
         ]))
 
     def declarations(self) -> Optional[str]:

@@ -98,6 +98,33 @@ def _write_pnpm_static_workspace(path: Path) -> Path:
     return app_path
 
 
+def _write_pnpm_node_workspace(path: Path) -> Path:
+    app_path = path / "apps" / "api"
+    app_path.mkdir(parents=True)
+    (path / "package.json").write_text(
+        json.dumps({"name": "workspace", "private": True}) + "\n"
+    )
+    (path / "pnpm-workspace.yaml").write_text("packages:\n  - apps/*\n")
+    (app_path / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "@workspace/api",
+                "scripts": {
+                    "build": "astro build",
+                    "start": "node dist/server/entry.mjs",
+                },
+                "dependencies": {
+                    "@astrojs/node": "10.1.3",
+                    "astro": "^6.4.4",
+                },
+            }
+        )
+        + "\n"
+    )
+    (app_path / "server.js").write_text("console.log('ok')\n")
+    return app_path
+
+
 def test_generate_subdir_shipit_uses_plain_mounts(tmp_path: Path) -> None:
     _write_node_workspace(tmp_path)
 
@@ -121,7 +148,7 @@ def test_generate_subdir_shipit_uses_plain_mounts(tmp_path: Path) -> None:
         in shipit
     )
     assert 'copy(app_subdir, ".", ignore=[' not in shipit
-    assert 'run("cp -R . {}".format(app.path))' in shipit
+    assert 'run("cp -RL . {}".format(app.path))' in shipit
     assert '"{}/{}".format(app.path, app_subdir)' not in shipit
     assert '"{}/{}".format(app.serve_path, app_subdir)' not in shipit
 
@@ -139,12 +166,41 @@ def test_generate_subdir_inherits_workspace_package_manager(
     assert result.exit_code == 0, result.output
     shipit = (tmp_path / "Shipit").read_text()
     assert 'pnpm = dep("pnpm", config.pnpm_version)' in shipit
-    assert 'run("pnpm install", group="install")' in shipit
+    assert 'run("pnpm install' in shipit
     assert (
         'run("pnpm run build", outputs=[config.static_dir], group="build")'
         in shipit
     )
     assert 'run("npm install"' not in shipit
+
+
+def test_generate_pnpm_node_subdir_uses_deploy_export(
+    tmp_path: Path,
+) -> None:
+    _write_pnpm_node_workspace(tmp_path)
+
+    result = runner.invoke(
+        cli.app,
+        ["generate", str(tmp_path), "--subdir=apps/api"],
+    )
+
+    assert result.exit_code == 0, result.output
+    shipit = (tmp_path / "Shipit").read_text()
+    assert 'workdir("{}/{}".format(build.path, app_subdir))' in shipit
+    assert 'run("pnpm install' in shipit
+    assert 'pnpm_config_inject_workspace_packages="true"' in shipit
+    assert "pnpm_config_dedupe_injected_deps" not in shipit
+    assert 'pnpm_config_dangerously_allow_all_builds="true"' in shipit
+    assert 'run("pnpm run build", outputs=["."], group="build")' in shipit
+    assert 'workdir(build.path)' in shipit
+    assert (
+        'run("pnpm deploy --filter @workspace/api --prod '
+        '--config.node-linker=hoisted {}".format(app.path))'
+    ) in shipit
+    assert 'run("pnpm prune --prod", group="prune")' not in shipit
+    assert 'run("pnpm dlx optimize-deps@0.1.1 dist --replace")' in shipit
+    assert 'run("cp -R .' not in shipit
+    assert 'run("cp -RL .' not in shipit
 
 
 def test_generate_subdir_static_provider_keeps_serve_mount_flat(
