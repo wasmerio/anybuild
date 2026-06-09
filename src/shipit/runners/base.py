@@ -19,5 +19,6 @@ class Runner(Protocol):
         self,
         command: str,
         volume_mappings: Optional[Dict[str, str]] = None,
+        env: Optional[Dict[str, str]] = None,
     ) -> None: ...
     def get_serve_mount_path(self, name: str) -> Path: ...

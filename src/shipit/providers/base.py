@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Literal
@@ -51,6 +52,7 @@ class Config(BaseSettings):
 
     port: Optional[int] = 8080
     commands: CustomCommands = Field(default_factory=CustomCommands)
+    app_subdir: Optional[str] = Field(default=None, exclude=True)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.commands, name, None)
@@ -129,3 +131,24 @@ class ProviderPlan:
 
 def _exists(path: Path, *candidates: str) -> bool:
     return any((path / c).exists() for c in candidates)
+
+
+def subdir_build_context_steps(
+    mount_name: str,
+    app_subdir: Optional[str],
+    extra_ignore: Optional[List[str]] = None,
+) -> List[str]:
+    steps = [f"workdir({mount_name}.path)"]
+    if not app_subdir:
+        return steps
+
+    ignore = [".git"]
+    for item in extra_ignore or []:
+        if item not in ignore:
+            ignore.append(item)
+
+    steps += [
+        f'copy(".", ".", ignore={json.dumps(ignore)})',
+        f'workdir("{{}}/{{}}".format({mount_name}.path, app_subdir))',
+    ]
+    return steps

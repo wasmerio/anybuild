@@ -167,28 +167,28 @@ class WasmerRunner:
         },
         "phpix": {
             "dependencies": {
-                "latest": "phpix/phpix-83-32bit@=0.2.0-rc.4",
-                "8.3": "phpix/phpix-83-32bit@=0.2.0-rc.4",
-                "8.3.29": "phpix/phpix-83-32bit@=0.2.0-rc.4",
-                "8.2": "phpix/phpix-82-32bit@=0.2.0-rc.4",
-                "8.1": "phpix/phpix-81-32bit@=0.2.0-rc.4",
+                "latest": "phpix/phpix-83-32bit@=0.2.0-rc.6",
+                "8.3": "phpix/phpix-83-32bit@=0.2.0-rc.6",
+                "8.3.29": "phpix/phpix-83-32bit@=0.2.0-rc.6",
+                "8.2": "phpix/phpix-82-32bit@=0.2.0-rc.6",
+                "8.1": "phpix/phpix-81-32bit@=0.2.0-rc.6",
                 "7.4": "php/php-32@=7.4.3301", # Note, we don't have PHPix + PHP 7.4 and never will
             },
             "architecture_dependencies": {
                 "64-bit": {
-                    "latest": "phpix/phpix-83-64bit@=0.2.0-rc.4",
-                    "8.3": "phpix/phpix-83-64bit@=0.2.0-rc.4",
-                    "8.3.29": "phpix/phpix-83-64bit@=0.2.0-rc.4",
-                    "8.2": "phpix/phpix-82-64bit@=0.2.0-rc.4",
-                    "8.1": "phpix/phpix-81-64bit@=0.2.0-rc.4",
+                    "latest": "phpix/phpix-83-64bit@=0.2.0-rc.6",
+                    "8.3": "phpix/phpix-83-64bit@=0.2.0-rc.6",
+                    "8.3.29": "phpix/phpix-83-64bit@=0.2.0-rc.6",
+                    "8.2": "phpix/phpix-82-64bit@=0.2.0-rc.6",
+                    "8.1": "phpix/phpix-81-64bit@=0.2.0-rc.6",
                     "7.4": "php/php-64@=7.4.3301",
                 },
                 "32-bit": {
-                    "latest": "phpix/phpix-83-32bit@=0.2.0-rc.4",
-                    "8.3": "phpix/phpix-83-32bit@=0.2.0-rc.4",
-                    "8.3.29": "phpix/phpix-83-32bit@=0.2.0-rc.4",
-                    "8.2": "phpix/phpix-82-32bit@=0.2.0-rc.4",
-                    "8.1": "phpix/phpix-81-32bit@=0.2.0-rc.4",
+                    "latest": "phpix/phpix-83-32bit@=0.2.0-rc.6",
+                    "8.3": "phpix/phpix-83-32bit@=0.2.0-rc.6",
+                    "8.3.29": "phpix/phpix-83-32bit@=0.2.0-rc.6",
+                    "8.2": "phpix/phpix-82-32bit@=0.2.0-rc.6",
+                    "8.1": "phpix/phpix-81-32bit@=0.2.0-rc.6",
                     "7.4": "php/php-32@=7.4.3301",
                 },
             },
@@ -642,6 +642,7 @@ class WasmerRunner:
         self,
         command: str,
         volume_mappings: Optional[Dict[str, str]] = None,
+        env: Optional[Dict[str, str]] = None,
     ) -> None:
         parsed_command = shlex.split(command)
         if not parsed_command:
@@ -657,6 +658,7 @@ class WasmerRunner:
 
         if self.wasmer_registry:
             extra_args = [f"--registry={self.wasmer_registry}"] + extra_args
+        run_env = {**os.environ, **(env or {})}
         self.run_command(
             self.bin,
             [
@@ -672,7 +674,7 @@ class WasmerRunner:
                 *extra_args,
                 *(["--", *command_args] if command_args else []),
             ],
-            env=os.environ,
+            env=run_env,
         )
 
     def command_uses_edgejs(self, command: str) -> bool:

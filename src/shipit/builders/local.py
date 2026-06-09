@@ -62,8 +62,14 @@ class LocalBuildBackend:
             extra = ""
             if step.inputs:
                 for input in step.inputs:
-                    console.print(f"Copying {input} to {build_path / input}")
-                    shutil.copy((self.src_dir / input), (build_path / input))
+                    source = self.src_dir / input
+                    target = build_path / input
+                    console.print(f"Copying {input} to {target}")
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    if source.is_dir():
+                        shutil.copytree(source, target, dirs_exist_ok=True)
+                    else:
+                        shutil.copy(source, target)
                 all_inputs = ", ".join(step.inputs)
                 extra = f" [bright_black]# using {all_inputs}[/bright_black]"
             console.print(
@@ -113,11 +119,25 @@ class LocalBuildBackend:
                     raise Exception(f"Unknown base: {step.base}")
 
                 console.print(
-                    f"[bold]Copy to {step.target} from {step.source}[/bold]{ignore_extra}"
+                    "[bold]Copy to "
+                    f"{step.target} from {step.source}[/bold]{ignore_extra}"
                 )
 
-                source = base / step.source
-                target = build_path / step.target
+                source_path = Path(step.source)
+                target_path = Path(step.target)
+                source = (
+                    source_path
+                    if source_path.is_absolute()
+                    else base / source_path
+                )
+                target = (
+                    target_path
+                    if target_path.is_absolute()
+                    else build_path / target_path
+                )
+                if source.resolve(strict=False) == target.resolve(strict=False):
+                    return
+                target.parent.mkdir(parents=True, exist_ok=True)
                 if source.is_dir():
                     shutil.copytree(
                         source,

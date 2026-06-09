@@ -162,6 +162,15 @@ RUN curl https://mise.run | sh
                 docker_file_contents += f"WORKDIR {step.path.absolute()}\n"
             elif isinstance(step, RunStep):
                 if step.inputs:
+                    parents = sorted(
+                        {
+                            Path(input).parent.as_posix()
+                            for input in step.inputs
+                            if Path(input).parent != Path(".")
+                        }
+                    )
+                    for parent in parents:
+                        docker_file_contents += f"RUN mkdir -p {parent}\n"
                     pre = "\\\n  " + "".join(
                         [
                             f"--mount=type=bind,source={input},target={input} \\\n  "

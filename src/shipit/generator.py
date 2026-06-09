@@ -104,7 +104,11 @@ def load_provider_config(
     return provider_config
 
 
-def generate_shipit(path: Path, provider: Provider) -> str:
+def generate_shipit(
+    path: Path,
+    provider: Provider,
+    subdir: Optional[str] = None,
+) -> str:
     default_serve_name = path.absolute().name
 
     # Collect parts
@@ -139,15 +143,15 @@ def generate_shipit(path: Path, provider: Provider) -> str:
     def format_command(k: str, v: str) -> str:
         return f'    "{k}": {v}'
 
-    commands_lines = ",\n".join(
-        [format_command(k, v) for k, v in plan.commands.items()]
-    )
+    commands = plan.commands
+    commands_lines = ",\n".join([format_command(k, v) for k, v in commands.items()])
     env_lines = None
-    if plan.env is not None:
-        if len(plan.env) == 0:
+    env = plan.env
+    if env is not None:
+        if len(env) == 0:
             env_lines = "{}"
         else:
-            env_lines = ",\n".join([f'    "{k}": {v}' for k, v in plan.env.items()])
+            env_lines = ",\n".join([f'    "{k}": {v}' for k, v in env.items()])
     mounts_block = None
     volumes_block = None
     attach_serve_names: list[str] = []
@@ -171,6 +175,10 @@ def generate_shipit(path: Path, provider: Provider) -> str:
     if plan.mounts:
         for m in plan.mounts:
             out.append(f'{m.name} = mount("{m.name}")')
+        out.append("")
+
+    if subdir:
+        out.append(f"app_subdir = {json.dumps(subdir)}")
         out.append("")
 
     if plan.volumes:

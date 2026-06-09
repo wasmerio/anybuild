@@ -1,0 +1,34 @@
+node = dep("node", config.node_version)
+pnpm = dep("pnpm", config.pnpm_version)
+
+build = mount("build")
+app = mount("app")
+
+app_subdir = "apps/dashboard"
+
+serve(
+  name="dashboard",
+  provider="node",
+  cwd=app.serve_path,
+  build=[
+    use(node, pnpm),
+    workdir(build.path),
+    copy(".", ".", ignore=[".git", "node_modules"]),
+    workdir("{}/{}".format(build.path, app_subdir)),
+    env(pnpm_config_minimum_release_age="0", CI="true", pnpm_config_inject_workspace_packages="true", pnpm_config_dangerously_allow_all_builds="true"),
+    run("pnpm install --no-frozen-lockfile", group="install"),
+    run("pnpm run build", outputs=["."], group="build"),
+    workdir(build.path),
+    run("pnpm deploy --filter @shipit-example/dashboard --prod --config.node-linker=hoisted {}".format(app.path)),
+    workdir(app.path),
+    run("pnpm dlx optimize-deps@0.1.1 dist --replace")
+  ],
+  deps=[node],
+  env = {},
+  commands = {
+    "start": "node dist/server/entry.mjs"
+  },
+  mounts=[
+    app
+  ],
+)

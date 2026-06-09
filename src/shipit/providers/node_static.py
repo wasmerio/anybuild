@@ -640,7 +640,11 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         return filter(
             None,
             [
-                'workdir(temp.path)' if not self.only_build else None,
+                *(
+                    self.build_workdir_steps("temp")
+                    if not self.only_build
+                    else []
+                ),
                 *self.build_steps_install(),
                 self.build_steps_copy(),
                 *self.build_steps_build(output="config.static_dir"),

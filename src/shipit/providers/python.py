@@ -1,11 +1,16 @@
+from enum import Enum
 import re
 from pathlib import Path
 from typing import Dict, Optional, Set
-from enum import Enum
 
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
+from .install_context import (
+    discover_python_dependency_files,
+    discover_python_install_context,
+    starlark_string_list,
+)
 from .base import (
     DetectResult,
     DependencySpec,
@@ -15,6 +20,7 @@ from .base import (
     ServiceSpec,
     VolumeSpec,
     Config,
+    subdir_build_context_steps,
 )
 
 
@@ -150,6 +156,14 @@ class PythonProvider:
         if "file://" in found_deps:
             config.install_requires_all_files = True
 
+        dependency_context = discover_python_install_context(
+            path,
+            include_pyproject=_exists(path, "pyproject.toml"),
+            include_requirements=_exists(path, "requirements.txt"),
+        )
+        if dependency_context.requires_all_files:
+            config.install_requires_all_files = True
+
         if not config.server:
             # ASGI/WSGI Server
             if "uvicorn" in found_deps:
@@ -277,16 +291,17 @@ class PythonProvider:
     def check_deps(cls, path: Path, *deps: str) -> Set[str]:
         pending_deps = {dep.lower() for dep in deps}
         initial_deps = set(pending_deps)
-        for file in ["requirements.txt", "pyproject.toml"]:
-            if _exists(path, file):
-                for line in (path / file).read_text().splitlines():
-                    for dep in set(pending_deps):
-                        if dep in line.lower():
-                            pending_deps.remove(dep)
-                            if not pending_deps:
-                                break
-                    if not pending_deps:
-                        break
+        for file in discover_python_dependency_files(path):
+            if file.name == "uv.lock":
+                continue
+            for line in file.read_text().splitlines():
+                for dep in set(pending_deps):
+                    if dep in line.lower():
+                        pending_deps.remove(dep)
+                        if not pending_deps:
+                            break
+                if not pending_deps:
+                    break
             if not pending_deps:
                 break
         return initial_deps - pending_deps
@@ -367,37 +382,40 @@ class PythonProvider:
         )
 
     def build_steps(self) -> list[str]:
-        if not self.only_build:
-            steps = ['workdir(app.path)']
-        else:
-            steps = ['workdir(temp.path)']
+        app_subdir = self.config.app_subdir
+        mount_name = "temp" if self.only_build or app_subdir else "app"
+        steps = subdir_build_context_steps(
+            mount_name,
+            app_subdir,
+            extra_ignore=[".venv", "__pycache__"],
+        )
 
         extra_deps = ", ".join([f"{dep}" for dep in self.config.extra_dependencies])
         has_requirements = _exists(self.path, "requirements.txt")
         if _exists(self.path, "pyproject.toml"):
-            input_files = ["pyproject.toml"]
+            install_context = discover_python_install_context(
+                self.path,
+                include_pyproject=True,
+            )
+            requires_all_files = (
+                self.config.install_requires_all_files
+                or install_context.requires_all_files
+            )
             extra_args = ""
             if _exists(self.path, "uv.lock"):
-                input_files.append("uv.lock")
                 extra_args = " --locked"
 
-            # Extra input files check, as glob pattern
-            globs = ["README*", "LICENSE*", "LICENCE*", "MAINTAINERS*", "AUTHORS*"]
-            # Glob check
-            for glob in globs:
-                for path in self.path.glob(glob):
-                    # make path relative to self.path
-                    path = str(path.relative_to(self.path))
-                    input_files.append(path)
-
             # Join inputs
-            inputs = ", ".join([f'"{input}"' for input in input_files])
+            inputs = starlark_string_list(install_context.inputs)
+            inputs_arg = (
+                "" if app_subdir or requires_all_files else f", inputs=[{inputs}]"
+            )
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path, UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}")',
-                'copy(".", ".")' if self.config.install_requires_all_files else None,
-                f'run(f"uv sync{extra_args}", inputs=[{inputs}], group="install")',
+                'copy(".", ".")' if requires_all_files and not app_subdir else None,
+                f'run(f"uv sync{extra_args}"{inputs_arg}, group="install")',
                 'copy("pyproject.toml", "pyproject.toml")'
-                if not self.config.install_requires_all_files
+                if not app_subdir and not requires_all_files
                 else None,
                 f'run("uv add {extra_deps}", group="install")' if extra_deps else None,
             ]
@@ -408,16 +426,28 @@ class PythonProvider:
                     'run("rm cross-requirements.txt") if cross_platform else None',
                 ]
         elif has_requirements or extra_deps:
+            install_context = discover_python_install_context(
+                self.path,
+                include_requirements=has_requirements,
+            )
+            requires_all_files = (
+                self.config.install_requires_all_files
+                or install_context.requires_all_files
+            )
+            inputs = starlark_string_list(install_context.inputs)
+            inputs_arg = (
+                "" if app_subdir or requires_all_files else f", inputs=[{inputs}]"
+            )
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path)',
                 'run(f"uv init", inputs=[], outputs=["uv.lock"], group="install")',
                 'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
-                if self.config.install_requires_all_files
+                if requires_all_files and not app_subdir
                 else None,
             ]
             if has_requirements:
                 steps += [
-                    f'run("uv add -r requirements.txt {extra_deps}", inputs=["requirements.txt"], group="install")',
+                    f'run("uv add -r requirements.txt {extra_deps}"{inputs_arg}, group="install")',
                 ]
             else:
                 steps += [
@@ -425,7 +455,7 @@ class PythonProvider:
                 ]
             if not self.only_build:
                 steps += [
-                    'run(f"uv pip compile requirements.txt --python-version={python_version} --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", inputs=["requirements.txt"], outputs=["cross-requirements.txt"]) if cross_platform else None',
+                    f'run(f"uv pip compile requirements.txt --python-version={{python_version}} --universal --extra-index-url {{python_extra_index_url}} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt"{inputs_arg}, outputs=["cross-requirements.txt"]) if cross_platform else None',
                     f'run(f"uvx pip install -r cross-requirements.txt {extra_deps} --target {{python_cross_packages_path}} --platform {{cross_platform}} --only-binary=:all: --python-version={{python_version}} --compile") if cross_platform else None',
                     'run("rm cross-requirements.txt") if cross_platform else None',
                 ]
@@ -433,7 +463,7 @@ class PythonProvider:
         steps += [
             'path((local_venv.path if cross_platform else venv.path) + "/bin")',
             'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
-            if not self.config.install_requires_all_files
+            if not app_subdir and not self.config.install_requires_all_files
             else None,
         ]
         if self.config.framework == PythonFramework.MCP:
@@ -444,6 +474,10 @@ class PythonProvider:
         if self.config.framework == PythonFramework.Django:
             steps += [
                 'run("python manage.py collectstatic --noinput", group="build")',
+            ]
+        if app_subdir and not self.only_build:
+            steps += [
+                'run("cp -R . {}".format(app.path))',
             ]
         return list(filter(None, steps))
 
@@ -545,11 +579,14 @@ class PythonProvider:
                 MountSpec("temp", attach_to_serve=False),
                 MountSpec("local_venv", attach_to_serve=False),
             ]
-        return [
+        mounts = [
             MountSpec("app"),
             MountSpec("venv"),
             MountSpec("local_venv", attach_to_serve=False),
         ]
+        if self.config.app_subdir:
+            mounts.insert(0, MountSpec("temp", attach_to_serve=False))
+        return mounts
 
     def volumes(self) -> list[VolumeSpec]:
         return []

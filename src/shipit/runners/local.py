@@ -1,3 +1,4 @@
+import os
 import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, TYPE_CHECKING
@@ -112,6 +113,11 @@ class LocalRunner:
         self,
         command: str,
         volume_mappings: Optional[Dict[str, str]] = None,
+        env: Optional[Dict[str, str]] = None,
     ) -> None:
         command_path = self.serve_bin_path / command
-        sh.Command(str(command_path))(_out=write_stdout, _err=write_stderr)
+        sh.Command(str(command_path))(
+            _out=write_stdout,
+            _err=write_stderr,
+            _env={**os.environ, **(env or {})},
+        )
