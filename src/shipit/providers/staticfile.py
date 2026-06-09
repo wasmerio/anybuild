@@ -121,11 +121,15 @@ class StaticFileProvider:
         ]
 
     def build_steps(self) -> list[str]:
+        source = json.dumps(self.config.static_dir or ".")
+        if self.config.app_subdir:
+            if self.config.static_dir:
+                source = f'"{{}}/{self.config.static_dir}".format(app_subdir)'
+            else:
+                source = "app_subdir"
         return [
             'workdir(static_app.path)',
-            'copy({}, ".", ignore=[".git"])'.format(
-                json.dumps(self.config.static_dir or ".")
-            ),
+            f'copy({source}, ".", ignore=[".git"])',
         ] + self.build_steps_redirects()
 
     def prepare_steps(self) -> Optional[list[str]]:

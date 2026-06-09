@@ -20,6 +20,7 @@ from .base import (
     ServiceSpec,
     VolumeSpec,
     Config,
+    subdir_build_context_steps,
 )
 
 
@@ -381,10 +382,13 @@ class PythonProvider:
         )
 
     def build_steps(self) -> list[str]:
-        if not self.only_build:
-            steps = ['workdir(app.path)']
-        else:
-            steps = ['workdir(temp.path)']
+        app_subdir = self.config.app_subdir
+        mount_name = "temp" if self.only_build or app_subdir else "app"
+        steps = subdir_build_context_steps(
+            mount_name,
+            app_subdir,
+            extra_ignore=[".venv", "__pycache__"],
+        )
 
         extra_deps = ", ".join([f"{dep}" for dep in self.config.extra_dependencies])
         has_requirements = _exists(self.path, "requirements.txt")
@@ -403,13 +407,15 @@ class PythonProvider:
 
             # Join inputs
             inputs = starlark_string_list(install_context.inputs)
-            inputs_arg = "" if requires_all_files else f", inputs=[{inputs}]"
+            inputs_arg = (
+                "" if app_subdir or requires_all_files else f", inputs=[{inputs}]"
+            )
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path, UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}")',
-                'copy(".", ".")' if requires_all_files else None,
+                'copy(".", ".")' if requires_all_files and not app_subdir else None,
                 f'run(f"uv sync{extra_args}"{inputs_arg}, group="install")',
                 'copy("pyproject.toml", "pyproject.toml")'
-                if not requires_all_files
+                if not app_subdir and not requires_all_files
                 else None,
                 f'run("uv add {extra_deps}", group="install")' if extra_deps else None,
             ]
@@ -429,12 +435,14 @@ class PythonProvider:
                 or install_context.requires_all_files
             )
             inputs = starlark_string_list(install_context.inputs)
-            inputs_arg = "" if requires_all_files else f", inputs=[{inputs}]"
+            inputs_arg = (
+                "" if app_subdir or requires_all_files else f", inputs=[{inputs}]"
+            )
             steps += [
                 'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path)',
                 'run(f"uv init", inputs=[], outputs=["uv.lock"], group="install")',
                 'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
-                if requires_all_files
+                if requires_all_files and not app_subdir
                 else None,
             ]
             if has_requirements:
@@ -455,7 +463,7 @@ class PythonProvider:
         steps += [
             'path((local_venv.path if cross_platform else venv.path) + "/bin")',
             'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
-            if not self.config.install_requires_all_files
+            if not app_subdir and not self.config.install_requires_all_files
             else None,
         ]
         if self.config.framework == PythonFramework.MCP:
@@ -466,6 +474,10 @@ class PythonProvider:
         if self.config.framework == PythonFramework.Django:
             steps += [
                 'run("python manage.py collectstatic --noinput", group="build")',
+            ]
+        if app_subdir and not self.only_build:
+            steps += [
+                'run("cp -R . {}".format(app.path))',
             ]
         return list(filter(None, steps))
 
@@ -567,11 +579,14 @@ class PythonProvider:
                 MountSpec("temp", attach_to_serve=False),
                 MountSpec("local_venv", attach_to_serve=False),
             ]
-        return [
+        mounts = [
             MountSpec("app"),
             MountSpec("venv"),
             MountSpec("local_venv", attach_to_serve=False),
         ]
+        if self.config.app_subdir:
+            mounts.insert(0, MountSpec("temp", attach_to_serve=False))
+        return mounts
 
     def volumes(self) -> list[VolumeSpec]:
         return []

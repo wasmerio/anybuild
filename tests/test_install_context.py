@@ -210,6 +210,7 @@ def test_node_provider_keeps_narrow_install_without_local_deps(
         'copy("pnpm-lock.yaml")',
         (
             'env(pnpm_config_minimum_release_age="0", '
+            'CI="true", '
             'pnpm_config_dangerously_allow_all_builds="true")'
         ),
         'run("pnpm install", inputs=["package.json"], group="install")',

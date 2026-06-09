@@ -43,6 +43,27 @@ def test_node_package_manager_defaults_to_npm(tmp_path: Path) -> None:
     assert provider_config.package_manager == PackageManager.NPM
 
 
+def test_node_package_manager_uses_package_manager_field(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"packageManager": "pnpm@10.0.0"}\n'
+    )
+    (tmp_path / "package-lock.json").write_text("{}\n")
+
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+
+    assert provider_config.package_manager == PackageManager.PNPM
+
+
+def test_node_package_manager_uses_pnpm_workspace(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text("{}\n")
+    (tmp_path / "package-lock.json").write_text("{}\n")
+    (tmp_path / "pnpm-workspace.yaml").write_text("packages:\n  - apps/*\n")
+
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+
+    assert provider_config.package_manager == PackageManager.PNPM
+
+
 def test_pnpm_install_sets_minimum_release_age_env(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text("{}\n")
     (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
@@ -53,6 +74,7 @@ def test_pnpm_install_sets_minimum_release_age_env(tmp_path: Path) -> None:
         'copy("pnpm-lock.yaml")',
         (
             'env(pnpm_config_minimum_release_age="0", '
+            'CI="true", '
             'pnpm_config_dangerously_allow_all_builds="true")'
         ),
         'run("pnpm install", inputs=["package.json"], group="install")',

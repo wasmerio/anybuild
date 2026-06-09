@@ -16,6 +16,7 @@ from .base import (
     MountSpec,
     ServiceSpec,
     VolumeSpec,
+    subdir_build_context_steps,
 )
 from .install_context import (
     discover_js_install_context,
@@ -502,6 +503,17 @@ class NodeProvider:
         self.config = config
         self.only_build = only_build
 
+    @property
+    def app_subdir(self) -> Optional[str]:
+        return self.config.app_subdir
+
+    def build_workdir_steps(self, mount_name: str) -> list[str]:
+        return subdir_build_context_steps(
+            mount_name,
+            self.app_subdir,
+            extra_ignore=["node_modules"],
+        )
+
     @classmethod
     def name(cls) -> str:
         return "node"
@@ -594,6 +606,16 @@ class NodeProvider:
 
     @classmethod
     def detect_package_manager(cls, path: Path) -> PackageManager:
+        package_json = cls.parse_package_json(path) or {}
+        package_manager = package_json.get("packageManager")
+        if isinstance(package_manager, str):
+            name = package_manager.split("@", 1)[0].lower()
+            for manager in PackageManager:
+                if manager.value == name:
+                    return manager
+
+        if (path / "pnpm-workspace.yaml").exists():
+            return PackageManager.PNPM
         if (path / "package-lock.json").exists():
             return PackageManager.NPM
         if (path / "pnpm-lock.yaml").exists():
@@ -949,7 +971,12 @@ class NodeProvider:
         )
         steps = []
 
-        if requires_all_files:
+        if self.app_subdir:
+            if has_lockfile:
+                steps.append(
+                    f'copy("{{}}/{lockfile}".format(app_subdir), "{lockfile}")'
+                )
+        elif requires_all_files:
             steps.append('copy(".", ".", ignore=["node_modules", ".git"])')
         elif has_lockfile:
             steps.append(f'copy("{lockfile}")')
@@ -958,13 +985,14 @@ class NodeProvider:
             steps.append(
                 'env('
                 'pnpm_config_minimum_release_age="0", '
+                'CI="true", '
                 'pnpm_config_dangerously_allow_all_builds="true"'
                 ')'
             )
         elif package_manager == PackageManager.NPM:
             steps.append(f'env(CI="true", NPM_CONFIG_FUND="false")')
 
-        if requires_all_files:
+        if self.app_subdir or requires_all_files:
             steps.append(f'run("{install_command}", group="install")')
         else:
             inputs = starlark_string_list(install_context.inputs)
@@ -990,6 +1018,8 @@ class NodeProvider:
         return ignored_files
 
     def build_steps_copy(self) -> Optional[str]:
+        if self.app_subdir:
+            return None
         if self.install_uses_all_files():
             return None
         ignored = ", ".join(
@@ -1045,13 +1075,14 @@ class NodeProvider:
         folders_to_copy = "."
         if self.config.framework:
             folders_to_copy = ", ".join(self.config.framework.folders_to_copy())
+        copy_source = folders_to_copy or "."
         return list(filter(None, [
-            "workdir(build.path)",
+            *self.build_workdir_steps("build"),
             *self.build_steps_install(),
             self.build_steps_copy(),
             *self.build_steps_build(),
             *self.build_steps_optimize_deps(),
-            f"run(\"cp -R {folders_to_copy or "."} {{}}\".format(app.path))",
+            f'run("cp -R {copy_source} {{}}".format(app.path))',
         ]))
 
     def declarations(self) -> Optional[str]:

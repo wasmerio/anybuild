@@ -2,6 +2,7 @@ import tempfile
 import os
 import sys
 import json
+import re
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, cast, Literal
@@ -55,6 +56,134 @@ class CtxMount:
     ref: str
     path: str
     serve_path: str
+
+
+@dataclass(frozen=True)
+class ProjectPaths:
+    workspace_root: Path
+    app_path: Path
+    subdir: Optional[str] = None
+
+
+def resolve_project_paths(path: Path, subdir: Optional[Path] = None) -> ProjectPaths:
+    workspace_root = path.resolve()
+    if subdir is None:
+        return ProjectPaths(workspace_root, workspace_root)
+
+    if subdir.is_absolute():
+        raise ValueError("--subdir must be relative to the project path")
+
+    subdir_text = subdir.as_posix().strip("/")
+    if not subdir_text or subdir_text == ".":
+        return ProjectPaths(workspace_root, workspace_root)
+
+    app_path = (workspace_root / subdir_text).resolve()
+    try:
+        app_path.relative_to(workspace_root)
+    except ValueError:
+        raise ValueError("--subdir must stay inside the project path") from None
+
+    if not app_path.exists():
+        raise ValueError(f"--subdir does not exist: {subdir_text}")
+    if not app_path.is_dir():
+        raise ValueError(f"--subdir is not a directory: {subdir_text}")
+
+    normalized_subdir = app_path.relative_to(workspace_root).as_posix()
+    return ProjectPaths(workspace_root, app_path, normalized_subdir)
+
+
+def read_shipit_subdir(shipit_file: Path) -> Optional[Path]:
+    if not shipit_file.exists():
+        return None
+    match = re.search(
+        r"^app_subdir\s*=\s*(\"(?:\\.|[^\"])*\")\s*$",
+        shipit_file.read_text(),
+        re.MULTILINE,
+    )
+    if not match:
+        return None
+    value = json.loads(match.group(1))
+    return Path(value) if value else None
+
+
+def load_env_files(
+    project_paths: ProjectPaths,
+    env_name: Optional[str],
+    target: Dict[str, str],
+) -> None:
+    env_dirs = [project_paths.workspace_root]
+    if project_paths.subdir:
+        env_dirs.append(project_paths.app_path)
+
+    env_names = [".env"]
+    if env_name:
+        env_names.append(f".env.{env_name}")
+
+    for env_dir in env_dirs:
+        for env_file_name in env_names:
+            env_file = env_dir / env_file_name
+            if env_file.exists():
+                target.update(dotenv_values(env_file))
+
+
+def _rewrite_package_manager_command(
+    command: Optional[str],
+    old_manager: Any,
+    new_manager: Any,
+) -> Optional[str]:
+    if not command:
+        return command
+    old_run = f"{old_manager.value} run "
+    if command.startswith(old_run):
+        return f"{new_manager.value} run {command[len(old_run):]}"
+    return command
+
+
+def apply_subdir_workspace_config(
+    project_paths: ProjectPaths,
+    provider_config: Any,
+) -> None:
+    if not project_paths.subdir or not hasattr(provider_config, "package_manager"):
+        return
+    if not (project_paths.app_path / "package.json").exists():
+        return
+
+    from shipit.providers.node import NodeProvider, PackageManager
+
+    app_has_lockfile = any(
+        (project_paths.app_path / manager.lockfile()).exists()
+        for manager in PackageManager
+    )
+    if app_has_lockfile:
+        return
+
+    workspace_manager = NodeProvider.detect_package_manager(
+        project_paths.workspace_root
+    )
+    current_manager = provider_config.package_manager
+    if current_manager == workspace_manager:
+        return
+
+    provider_config.package_manager = workspace_manager
+    provider_config.build_command = _rewrite_package_manager_command(
+        getattr(provider_config, "build_command", None),
+        current_manager,
+        workspace_manager,
+    )
+    if provider_config.commands:
+        provider_config.commands.build = _rewrite_package_manager_command(
+            provider_config.commands.build,
+            current_manager,
+            workspace_manager,
+        )
+
+
+def apply_subdir_provider_config(
+    project_paths: ProjectPaths,
+    provider_config: Any,
+) -> None:
+    if hasattr(provider_config, "app_subdir"):
+        provider_config.app_subdir = project_paths.subdir
 
 
 class Ctx:
@@ -350,6 +479,11 @@ def auto(
         help="Project path (defaults to current directory).",
         show_default=False,
     ),
+    subdir: Optional[Path] = typer.Option(
+        None,
+        "--subdir",
+        help="App subdirectory relative to the project path.",
+    ),
     wasmer: bool = typer.Option(
         False,
         help="Use Wasmer to build and run the project.",
@@ -469,6 +603,7 @@ def auto(
 
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
+    project_paths = resolve_project_paths(path, subdir)
 
     if temp_shipit:
         if shipit_path:
@@ -481,12 +616,13 @@ def auto(
     if not regenerate:
         if shipit_path and not shipit_path.exists():
             regenerate = True
-        elif not (path / "Shipit").exists():
+        elif not (project_paths.workspace_root / "Shipit").exists():
             regenerate = True
 
     if regenerate:
         generate(
-            path,
+            project_paths.workspace_root,
+            subdir=Path(project_paths.subdir) if project_paths.subdir else None,
             out=shipit_path,
             install_command=install_command,
             build_command=build_command,
@@ -496,7 +632,8 @@ def auto(
         )
 
     build(
-        path,
+        project_paths.workspace_root,
+        subdir=Path(project_paths.subdir) if project_paths.subdir else None,
         shipit_path=shipit_path,
         install_command=install_command,
         build_command=build_command,
@@ -521,7 +658,7 @@ def auto(
         or after_deploy
     ):
         run(
-            path,
+            project_paths.workspace_root,
             wasmer=wasmer,
             wasmer_bin=wasmer_bin,
             docker=docker,
@@ -536,7 +673,7 @@ def auto(
     
     if wasmer_deploy or wasmer_deploy_config:
         deploy(
-            path,
+            project_paths.workspace_root,
             wasmer_deploy=wasmer_deploy,
             wasmer_deploy_config=wasmer_deploy_config,
             wasmer_bin=wasmer_bin,
@@ -553,6 +690,11 @@ def generate(
         Path("."),
         help="Project path (defaults to current directory).",
         show_default=False,
+    ),
+    subdir: Optional[Path] = typer.Option(
+        None,
+        "--subdir",
+        help="App subdirectory relative to the project path.",
     ),
     out: Optional[Path] = typer.Option(
         None,
@@ -585,24 +727,38 @@ def generate(
 ):
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
+    project_paths = resolve_project_paths(path, subdir)
 
     if out is None:
-        out = path / "Shipit"
+        out = project_paths.workspace_root / "Shipit"
 
     base_config = Config()
-    base_config.commands.enrich_from_path(path)
+    base_config.commands.enrich_from_path(project_paths.app_path)
     if start_command:
         base_config.commands.start = start_command
     if install_command:
         base_config.commands.install = install_command
     if build_command:
         base_config.commands.build = build_command
-    provider_cls = load_provider(path, base_config, use_provider=provider)
-    provider_config = load_provider_config(
-        provider_cls, path, base_config, config=config
+    provider_cls = load_provider(
+        project_paths.app_path,
+        base_config,
+        use_provider=provider,
     )
-    provider = provider_cls(path, provider_config)
-    content = generate_shipit(path, provider)
+    provider_config = load_provider_config(
+        provider_cls,
+        project_paths.app_path,
+        base_config,
+        config=config,
+    )
+    apply_subdir_provider_config(project_paths, provider_config)
+    apply_subdir_workspace_config(project_paths, provider_config)
+    provider = provider_cls(project_paths.app_path, provider_config)
+    content = generate_shipit(
+        project_paths.app_path,
+        provider,
+        subdir=project_paths.subdir,
+    )
     config_json = provider_config.model_dump_json(indent=2, exclude_defaults=True)
     if config_json and config_json != "{}":
         manifest_panel = Panel(
@@ -776,6 +932,11 @@ def plan(
         help="Project path (defaults to current directory).",
         show_default=False,
     ),
+    subdir: Optional[Path] = typer.Option(
+        None,
+        "--subdir",
+        help="App subdirectory relative to the project path.",
+    ),
     out: Optional[Path] = typer.Option(
         None,
         "-o",
@@ -846,6 +1007,7 @@ def plan(
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
+    project_paths = resolve_project_paths(path, subdir)
 
     if temp_shipit:
         if shipit_path:
@@ -858,12 +1020,13 @@ def plan(
     if not regenerate:
         if shipit_path and not shipit_path.exists():
             regenerate = True
-        elif not (path / "Shipit").exists():
+        elif not (project_paths.workspace_root / "Shipit").exists():
             regenerate = True
 
     if regenerate:
         generate(
-            path,
+            project_paths.workspace_root,
+            subdir=Path(project_paths.subdir) if project_paths.subdir else None,
             out=shipit_path,
             install_command=install_command,
             build_command=build_command,
@@ -872,27 +1035,32 @@ def plan(
             config=config,
         )
 
-    shipit_file = get_shipit_path(path, shipit_path)
+    shipit_file = get_shipit_path(project_paths.workspace_root, shipit_path)
+    if project_paths.subdir is None:
+        project_paths = resolve_project_paths(
+            project_paths.workspace_root,
+            read_shipit_subdir(shipit_file),
+        )
 
     if docker or docker_client:
         build_backend: BuildBackend = DockerBuildBackend(
-            path, ASSETS_PATH, docker_client
+            project_paths.workspace_root, ASSETS_PATH, docker_client
         )
     else:
-        build_backend = LocalBuildBackend(path, ASSETS_PATH)
+        build_backend = LocalBuildBackend(project_paths.workspace_root, ASSETS_PATH)
     if wasmer:
         runner: Runner = WasmerRunner(
             build_backend,
-            path,
+            project_paths.workspace_root,
             registry=wasmer_registry,
             token=wasmer_token,
             bin=wasmer_bin,
         )
     else:
-        runner = LocalRunner(build_backend, path)
+        runner = LocalRunner(build_backend, project_paths.workspace_root)
 
     base_config = Config()
-    base_config.commands.enrich_from_path(path)
+    base_config.commands.enrich_from_path(project_paths.app_path)
     if install_command:
         base_config.commands.install = install_command
     if build_command:
@@ -901,10 +1069,19 @@ def plan(
         base_config.commands.start = start_command
     if serve_port:
         base_config.port = serve_port
-    provider_cls = load_provider(path, base_config, use_provider=provider)
-    provider_config = load_provider_config(
-        provider_cls, path, base_config, config=config
+    provider_cls = load_provider(
+        project_paths.app_path,
+        base_config,
+        use_provider=provider,
     )
+    provider_config = load_provider_config(
+        provider_cls,
+        project_paths.app_path,
+        base_config,
+        config=config,
+    )
+    apply_subdir_provider_config(project_paths, provider_config)
+    apply_subdir_workspace_config(project_paths, provider_config)
     # provider_config = runner.prepare_config(provider_config)
     ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
 
@@ -954,6 +1131,11 @@ def build(
         Path("."),
         help="Project path (defaults to current directory).",
         show_default=False,
+    ),
+    subdir: Optional[Path] = typer.Option(
+        None,
+        "--subdir",
+        help="App subdirectory relative to the project path.",
     ),
     shipit_path: Optional[Path] = typer.Option(
         None,
@@ -1028,26 +1210,33 @@ def build(
         raise Exception(f"The path {path} does not exist")
 
     shipit_file = get_shipit_path(path, shipit_path)
+    project_paths = resolve_project_paths(
+        path,
+        subdir or read_shipit_subdir(shipit_file),
+    )
 
     if docker or docker_client:
         build_backend: BuildBackend = DockerBuildBackend(
-            path, ASSETS_PATH, docker_client, docker_opts=docker_opts
+            project_paths.workspace_root,
+            ASSETS_PATH,
+            docker_client,
+            docker_opts=docker_opts,
         )
     else:
-        build_backend = LocalBuildBackend(path, ASSETS_PATH)
+        build_backend = LocalBuildBackend(project_paths.workspace_root, ASSETS_PATH)
     if wasmer:
         runner: Runner = WasmerRunner(
             build_backend,
-            path,
+            project_paths.workspace_root,
             registry=wasmer_registry,
             token=wasmer_token,
             bin=wasmer_bin,
         )
     else:
-        runner = LocalRunner(build_backend, path)
+        runner = LocalRunner(build_backend, project_paths.workspace_root)
 
     base_config = Config()
-    base_config.commands.enrich_from_path(path)
+    base_config.commands.enrich_from_path(project_paths.app_path)
     if start_command:
         base_config.commands.start = start_command
     if install_command:
@@ -1058,10 +1247,19 @@ def build(
     if serve_port:
         base_config.port = serve_port
 
-    provider_cls = load_provider(path, base_config, use_provider=provider)
-    provider_config = load_provider_config(
-        provider_cls, path, base_config, config=config
+    provider_cls = load_provider(
+        project_paths.app_path,
+        base_config,
+        use_provider=provider,
     )
+    provider_config = load_provider_config(
+        provider_cls,
+        project_paths.app_path,
+        base_config,
+        config=config,
+    )
+    apply_subdir_provider_config(project_paths, provider_config)
+    apply_subdir_workspace_config(project_paths, provider_config)
     provider_config = runner.prepare_config(provider_config)
     ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
     env = {
@@ -1081,7 +1279,10 @@ def build(
                 f"[bold]ℹ️ Building locally instead of Docker to speed up the build, as all commands are safe to run locally[/bold]"
             )
             return build(
-                path,
+                project_paths.workspace_root,
+                subdir=Path(project_paths.subdir)
+                if project_paths.subdir
+                else None,
                 shipit_path=shipit_path,
                 install_command=install_command,
                 build_command=build_command,
@@ -1102,13 +1303,7 @@ def build(
             )
 
     serve.env = serve.env or {}
-    if (path / ".env").exists():
-        env_vars = dotenv_values(path / ".env")
-        serve.env.update(env_vars)
-
-    if (path / f".env.{env_name}").exists():
-        env_vars = dotenv_values(path / f".env.{env_name}")
-        serve.env.update(env_vars)
+    load_env_files(project_paths, env_name, serve.env)
 
     assert serve.commands.get("start"), (
         "No start command could be found, please provide a start command"
@@ -1119,7 +1314,7 @@ def build(
 
     # Build and serve
     build_backend.build(serve.name, env, serve.mounts or [], build_steps)
-    build_volumes(path, serve)
+    build_volumes(project_paths.workspace_root, serve)
     runner.build(serve)
     if serve.prepare and not skip_prepare:
         console.print("\n[bold]Running prepare step[/bold]")
