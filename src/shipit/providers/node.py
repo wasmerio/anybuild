@@ -17,6 +17,10 @@ from .base import (
     ServiceSpec,
     VolumeSpec,
 )
+from .install_context import (
+    discover_js_install_context,
+    starlark_string_list,
+)
 
 
 NODE_MODULES_OPTIMIZER_ASSET = "node/optimize-node-modules.sh"
@@ -425,6 +429,7 @@ class NodeConfig(Config):
     # Optimize node_modules size further when targeting Edge by removing
     # executable native binaries that cannot run there anyway.
     remove_native_binaries: Optional[bool] = False
+    install_requires_all_files: bool = False
 
 
 class NodeProvider:
@@ -513,6 +518,10 @@ class NodeProvider:
             config.package_manager = cls.detect_package_manager(path)
 
         package_json = cls.parse_package_json(path)
+        install_context = discover_js_install_context(path)
+        if install_context.requires_all_files:
+            config.install_requires_all_files = True
+
         found_deps = cls._check_package_json_deps(
             package_json, *cls.FRAMEWORK_DEPENDENCIES
         )
@@ -933,9 +942,16 @@ class NodeProvider:
         install_command = package_manager.install_command(
             has_lockfile=has_lockfile
         )
+        install_context = discover_js_install_context(self.path)
+        requires_all_files = (
+            self.config.install_requires_all_files
+            or install_context.requires_all_files
+        )
         steps = []
 
-        if has_lockfile:
+        if requires_all_files:
+            steps.append('copy(".", ".", ignore=["node_modules", ".git"])')
+        elif has_lockfile:
             steps.append(f'copy("{lockfile}")')
 
         if package_manager == PackageManager.PNPM:
@@ -948,8 +964,22 @@ class NodeProvider:
         elif package_manager == PackageManager.NPM:
             steps.append(f'env(CI="true", NPM_CONFIG_FUND="false")')
 
-        steps.append(f'run("{install_command}", inputs=["package.json"], group="install")')
+        if requires_all_files:
+            steps.append(f'run("{install_command}", group="install")')
+        else:
+            inputs = starlark_string_list(install_context.inputs)
+            steps.append(
+                f'run("{install_command}", '
+                f'inputs=[{inputs}], group="install")'
+            )
         return steps
+
+    def install_uses_all_files(self) -> bool:
+        install_context = discover_js_install_context(self.path)
+        return (
+            self.config.install_requires_all_files
+            or install_context.requires_all_files
+        )
 
     def ignored_source_files(self) -> list[str]:
         ignored_files = ["node_modules", ".git"]
@@ -959,7 +989,9 @@ class NodeProvider:
                 ignored_files.append(lockfile)
         return ignored_files
 
-    def build_steps_copy(self) -> str:
+    def build_steps_copy(self) -> Optional[str]:
+        if self.install_uses_all_files():
+            return None
         ignored = ", ".join(
             json.dumps(file) for file in self.ignored_source_files()
         )
@@ -1013,14 +1045,14 @@ class NodeProvider:
         folders_to_copy = "."
         if self.config.framework:
             folders_to_copy = ", ".join(self.config.framework.folders_to_copy())
-        return [
+        return list(filter(None, [
             "workdir(build.path)",
             *self.build_steps_install(),
             self.build_steps_copy(),
             *self.build_steps_build(),
             *self.build_steps_optimize_deps(),
             f"run(\"cp -R {folders_to_copy or "."} {{}}\".format(app.path))",
-        ]
+        ]))
 
     def declarations(self) -> Optional[str]:
         return None
