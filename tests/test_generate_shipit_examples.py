@@ -2,8 +2,18 @@ from pathlib import Path
 
 import pytest
 
+from shipit.cli import (
+    ProjectPaths,
+    apply_subdir_provider_config,
+    apply_subdir_workspace_config,
+)
 from shipit.generator import generate_shipit, load_provider, load_provider_config
 from shipit.providers.base import Config
+
+
+SUBDIR_EXAMPLES = {
+    "node-pnpm-workspace-subdir": "apps/dashboard",
+}
 
 
 def _example_dirs_with_shipit() -> list[Path]:
@@ -31,14 +41,19 @@ def test_generate_shipit_matches_example(
         monkeypatch.setenv("SHIPIT_WP_VERSION", "latest")
         monkeypatch.setenv("SHIPIT_PHPIX", "true")
 
+    subdir = SUBDIR_EXAMPLES.get(example_dir.name)
+    app_path = example_dir / subdir if subdir else example_dir
     base_config = Config()
-    base_config.commands.enrich_from_path(example_dir)
+    base_config.commands.enrich_from_path(app_path)
 
-    provider_cls = load_provider(example_dir, base_config)
-    provider_config = load_provider_config(provider_cls, example_dir, base_config)
-    provider = provider_cls(example_dir, provider_config)
+    provider_cls = load_provider(app_path, base_config)
+    provider_config = load_provider_config(provider_cls, app_path, base_config)
+    project_paths = ProjectPaths(example_dir, app_path, subdir)
+    apply_subdir_provider_config(project_paths, provider_config)
+    apply_subdir_workspace_config(project_paths, provider_config)
+    provider = provider_cls(app_path, provider_config)
 
-    generated = generate_shipit(example_dir, provider)
+    generated = generate_shipit(app_path, provider, subdir=subdir)
     expected = (example_dir / "Shipit").read_text()
     # Use raw assert to let pytest show a unified diff on mismatch
     assert generated == expected

@@ -1,0 +1,21 @@
+---
+import { messageClass, renderMessage } from "@shipit-example/ui/message";
+
+const message = renderMessage("pnpm workspace subdir");
+const renderedAt = new Date().toISOString();
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{message}</title>
+  </head>
+  <body>
+    <main class={messageClass}>
+      <h1>{message}</h1>
+      <p>Rendered by Astro from a workspace app.</p>
+      <time datetime={renderedAt}>{renderedAt}</time>
+    </main>
+  </body>
+</html>

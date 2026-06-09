@@ -1,0 +1,15 @@
+{
+  "name": "@shipit-example/dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "astro build",
+    "start": "node dist/server/entry.mjs"
+  },
+  "dependencies": {
+    "@astrojs/node": "^10.1.1",
+    "@shipit-example/ui": "workspace:*",
+    "astro": "^6.3.7"
+  }
+}
