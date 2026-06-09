@@ -16,8 +16,14 @@ from shipit.shipit_types import CopyStep, RunStep, WorkdirStep
 runner = CliRunner()
 
 
-def _write_node_workspace(path: Path) -> Path:
-    app_path = path / "apps" / "site"
+def _subdir_shipit_file(path: Path, subdir: str = "apps/site") -> Path:
+    return cli.default_shipit_path(
+        cli.resolve_project_paths(path, Path(subdir))
+    )
+
+
+def _write_node_app(path: Path, subdir: str) -> Path:
+    app_path = path / subdir
     app_path.mkdir(parents=True)
     (app_path / "package.json").write_text(
         json.dumps(
@@ -35,6 +41,67 @@ def _write_node_workspace(path: Path) -> Path:
     (app_path / "package-lock.json").write_text("{}\n")
     (app_path / "server.js").write_text("console.log('ok')\n")
     return app_path
+
+
+def _write_node_workspace(path: Path) -> Path:
+    return _write_node_app(path, "apps/site")
+
+
+def _patch_fake_build_runner(monkeypatch: pytest.MonkeyPatch):
+    build_backend_instances = []
+    runner_instances = []
+
+    class FakeBuildBackend:
+        def __init__(self, src_dir: Path, assets_path: Path) -> None:
+            self.src_dir = src_dir
+            self.assets_path = assets_path
+            self.runtime_path = None
+            build_backend_instances.append(self)
+
+        def get_build_mount_path(self, name: str) -> Path:
+            return self.src_dir / ".shipit" / "fake" / "build" / name
+
+        def get_artifact_mount_path(self, name: str) -> Path:
+            return self.get_build_mount_path(name)
+
+        def get_volume_path(self, name: str) -> Path:
+            return self.src_dir / ".shipit" / "volumes" / name
+
+        def get_runtime_path(self) -> str | None:
+            return self.runtime_path
+
+        def build(self, name, env, mounts, steps) -> None:
+            self.build_args = {
+                "name": name,
+                "env": env,
+                "mounts": mounts,
+                "steps": steps,
+            }
+
+    class FakeRunner:
+        def __init__(self, build_backend, src_dir: Path) -> None:
+            self.build_backend = build_backend
+            self.src_dir = src_dir
+            runner_instances.append(self)
+
+        def prepare_config(self, provider_config):
+            return provider_config
+
+        def prepare_build_steps(self, build_steps):
+            return build_steps
+
+        def get_serve_mount_path(self, name: str) -> Path:
+            return self.build_backend.get_artifact_mount_path(name)
+
+        def build(self, serve) -> None:
+            self.serve = serve
+
+        def prepare(self, env, prepare) -> None:
+            self.prepare_args = (env, prepare)
+
+    monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
+    monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
+    return build_backend_instances, runner_instances
 
 
 def _write_static_workspace(path: Path) -> Path:
@@ -134,7 +201,10 @@ def test_generate_subdir_shipit_uses_plain_mounts(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    shipit = (tmp_path / "Shipit").read_text()
+    shipit_file = _subdir_shipit_file(tmp_path)
+    shipit = shipit_file.read_text()
+    assert shipit_file.name == "Shipit.apps-site"
+    assert not (tmp_path / "Shipit").exists()
     assert not (tmp_path / "apps" / "site" / "Shipit").exists()
     assert 'app = mount("app")' in shipit
     assert "subdir=" not in shipit
@@ -153,6 +223,30 @@ def test_generate_subdir_shipit_uses_plain_mounts(tmp_path: Path) -> None:
     assert '"{}/{}".format(app.serve_path, app_subdir)' not in shipit
 
 
+def test_generate_subdir_shipit_files_do_not_overwrite(
+    tmp_path: Path,
+) -> None:
+    _write_node_app(tmp_path, "apps/dashboard")
+    _write_node_app(tmp_path, "apps/site")
+    _write_node_app(tmp_path, "apps/docs")
+
+    for subdir in ["apps/dashboard", "apps/site", "apps/docs"]:
+        result = runner.invoke(
+            cli.app,
+            ["generate", str(tmp_path), f"--subdir={subdir}"],
+        )
+        assert result.exit_code == 0, result.output
+
+    dashboard = (tmp_path / "Shipit.apps-dashboard").read_text()
+    site = (tmp_path / "Shipit.apps-site").read_text()
+    docs = (tmp_path / "Shipit.apps-docs").read_text()
+
+    assert 'app_subdir = "apps/dashboard"' in dashboard
+    assert 'app_subdir = "apps/site"' in site
+    assert 'app_subdir = "apps/docs"' in docs
+    assert not (tmp_path / "Shipit").exists()
+
+
 def test_generate_subdir_inherits_workspace_package_manager(
     tmp_path: Path,
 ) -> None:
@@ -164,7 +258,7 @@ def test_generate_subdir_inherits_workspace_package_manager(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = (tmp_path / "Shipit").read_text()
+    shipit = _subdir_shipit_file(tmp_path).read_text()
     assert 'pnpm = dep("pnpm", config.pnpm_version)' in shipit
     assert 'run("pnpm install' in shipit
     assert (
@@ -185,7 +279,7 @@ def test_generate_pnpm_node_subdir_uses_deploy_export(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = (tmp_path / "Shipit").read_text()
+    shipit = _subdir_shipit_file(tmp_path, "apps/api").read_text()
     assert 'workdir("{}/{}".format(build.path, app_subdir))' in shipit
     assert 'run("pnpm install' in shipit
     assert 'pnpm_config_inject_workspace_packages="true"' in shipit
@@ -214,7 +308,7 @@ def test_generate_subdir_static_provider_keeps_serve_mount_flat(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = (tmp_path / "Shipit").read_text()
+    shipit = _subdir_shipit_file(tmp_path).read_text()
     assert 'workdir(static_app.path)' in shipit
     assert 'copy("{}/public".format(app_subdir), ".", ignore=[".git"])' in shipit
     assert '"{}/{}".format(static_app.serve_path, app_subdir)' not in shipit
@@ -232,7 +326,7 @@ def test_generate_subdir_rewrites_active_build_mount_paths(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = (tmp_path / "Shipit").read_text()
+    shipit = _subdir_shipit_file(tmp_path).read_text()
     assert 'copy(".", ".", ignore=[".git"])' in shipit
     assert "node_modules" not in shipit
     assert 'GOPATH="{}/{}".format(temp.path, app_subdir)' in shipit
@@ -254,7 +348,7 @@ def test_generate_python_subdir_uses_temp_build_mount(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = (tmp_path / "Shipit").read_text()
+    shipit = _subdir_shipit_file(tmp_path).read_text()
     assert 'temp = mount("temp")' in shipit
     assert 'app = mount("app")' in shipit
     assert 'cwd=app.serve_path,' in shipit
@@ -320,61 +414,19 @@ def test_build_recovers_subdir_from_generated_shipit(
     )
     assert generate_result.exit_code == 0, generate_result.output
 
-    build_backend_instances = []
-    runner_instances = []
+    build_backend_instances, runner_instances = _patch_fake_build_runner(
+        monkeypatch
+    )
 
-    class FakeBuildBackend:
-        def __init__(self, src_dir: Path, assets_path: Path) -> None:
-            self.src_dir = src_dir
-            self.assets_path = assets_path
-            self.runtime_path = None
-            build_backend_instances.append(self)
-
-        def get_build_mount_path(self, name: str) -> Path:
-            return self.src_dir / ".shipit" / "fake" / "build" / name
-
-        def get_artifact_mount_path(self, name: str) -> Path:
-            return self.get_build_mount_path(name)
-
-        def get_volume_path(self, name: str) -> Path:
-            return self.src_dir / ".shipit" / "volumes" / name
-
-        def get_runtime_path(self) -> str | None:
-            return self.runtime_path
-
-        def build(self, name, env, mounts, steps) -> None:
-            self.build_args = {
-                "name": name,
-                "env": env,
-                "mounts": mounts,
-                "steps": steps,
-            }
-
-    class FakeRunner:
-        def __init__(self, build_backend, src_dir: Path) -> None:
-            self.build_backend = build_backend
-            self.src_dir = src_dir
-            runner_instances.append(self)
-
-        def prepare_config(self, provider_config):
-            return provider_config
-
-        def prepare_build_steps(self, build_steps):
-            return build_steps
-
-        def get_serve_mount_path(self, name: str) -> Path:
-            return self.build_backend.get_artifact_mount_path(name)
-
-        def build(self, serve) -> None:
-            self.serve = serve
-
-        def prepare(self, env, prepare) -> None:
-            self.prepare_args = (env, prepare)
-
-    monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
-    monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
-
-    result = runner.invoke(cli.app, ["build", str(tmp_path)])
+    result = runner.invoke(
+        cli.app,
+        [
+            "build",
+            str(tmp_path),
+            "--shipit-path",
+            str(_subdir_shipit_file(tmp_path)),
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     assert build_backend_instances[-1].src_dir == tmp_path.resolve()
@@ -388,6 +440,32 @@ def test_build_recovers_subdir_from_generated_shipit(
     assert install_step.inputs is None
 
 
+def test_build_subdir_uses_app_specific_shipit_by_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_node_workspace(tmp_path)
+    (tmp_path / "Shipit").write_text("this is not valid starlark\n")
+    generate_result = runner.invoke(
+        cli.app,
+        ["generate", str(tmp_path), "--subdir=apps/site"],
+    )
+    assert generate_result.exit_code == 0, generate_result.output
+
+    build_backend_instances, runner_instances = _patch_fake_build_runner(
+        monkeypatch
+    )
+
+    result = runner.invoke(
+        cli.app,
+        ["build", str(tmp_path), "--subdir=apps/site"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert build_backend_instances[-1].src_dir == tmp_path.resolve()
+    assert runner_instances[-1].serve.cwd.endswith("/app")
+
+
 def test_plan_accepts_subdir_and_reports_app_provider(tmp_path: Path) -> None:
     _write_node_workspace(tmp_path)
 
@@ -397,6 +475,8 @@ def test_plan_accepts_subdir_and_reports_app_provider(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0, result.output
+    assert _subdir_shipit_file(tmp_path).exists()
+    assert not (tmp_path / "Shipit").exists()
     output = json.loads(result.stdout)
     assert output["provider"] == "node"
 
@@ -433,7 +513,10 @@ def test_auto_passes_subdir_to_generate_and_build(
 
     def fake_generate(path: Path, **kwargs) -> None:
         calls["generate"] = (path, kwargs)
-        (path / "Shipit").write_text('app_subdir = "apps/site"\n')
+        out = kwargs["out"] or cli.default_shipit_path(
+            cli.resolve_project_paths(path, kwargs["subdir"])
+        )
+        out.write_text('app_subdir = "apps/site"\n')
 
     def fake_build(path: Path, **kwargs) -> None:
         calls["build"] = (path, kwargs)
@@ -446,8 +529,12 @@ def test_auto_passes_subdir_to_generate_and_build(
     assert result.exit_code == 0, result.output
     assert calls["generate"][0] == tmp_path.resolve()
     assert calls["generate"][1]["subdir"] == Path("apps/site")
+    assert calls["generate"][1]["out"] is None
     assert calls["build"][0] == tmp_path.resolve()
     assert calls["build"][1]["subdir"] == Path("apps/site")
+    assert calls["build"][1]["shipit_path"] is None
+    assert (tmp_path / "Shipit.apps-site").exists()
+    assert not (tmp_path / "Shipit").exists()
 
 
 @pytest.mark.parametrize(

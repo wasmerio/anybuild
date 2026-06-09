@@ -65,6 +65,20 @@ class ProjectPaths:
     subdir: Optional[str] = None
 
 
+def shipit_subdir_slug(subdir: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", subdir.replace("/", "-"))
+    return slug.strip("-") or "app"
+
+
+def default_shipit_path(project_paths: ProjectPaths) -> Path:
+    if project_paths.subdir is None:
+        return project_paths.workspace_root / "Shipit"
+    return (
+        project_paths.workspace_root
+        / f"Shipit.{shipit_subdir_slug(project_paths.subdir)}"
+    )
+
+
 def resolve_project_paths(path: Path, subdir: Optional[Path] = None) -> ProjectPaths:
     workspace_root = path.resolve()
     if subdir is None:
@@ -539,7 +553,7 @@ def auto(
     ),
     shipit_path: Optional[Path] = typer.Option(
         None,
-        help="The path to the Shipit file (defaults to Shipit in the provided path).",
+        help="The path to the Shipit file (defaults to Shipit or Shipit.<subdir>).",
     ),
     temp_shipit: bool = typer.Option(
         False,
@@ -616,7 +630,7 @@ def auto(
     if not regenerate:
         if shipit_path and not shipit_path.exists():
             regenerate = True
-        elif not (project_paths.workspace_root / "Shipit").exists():
+        elif not shipit_path and not default_shipit_path(project_paths).exists():
             regenerate = True
 
     if regenerate:
@@ -703,7 +717,7 @@ def generate(
         "--out",
         "--output",
         "--shipit-path",
-        help="Output path (defaults to the Shipit file in the provided path).",
+        help="Output path (defaults to Shipit or Shipit.<subdir>).",
     ),
     install_command: Optional[str] = typer.Option(
         None,
@@ -731,7 +745,7 @@ def generate(
     project_paths = resolve_project_paths(path, subdir)
 
     if out is None:
-        out = project_paths.workspace_root / "Shipit"
+        out = default_shipit_path(project_paths)
 
     base_config = Config()
     base_config.commands.enrich_from_path(project_paths.app_path)
@@ -965,7 +979,7 @@ def plan(
     ),
     shipit_path: Optional[Path] = typer.Option(
         None,
-        help="The path to the Shipit file (defaults to Shipit in the provided path).",
+        help="The path to the Shipit file (defaults to Shipit or Shipit.<subdir>).",
     ),
     wasmer: bool = typer.Option(
         False,
@@ -1031,7 +1045,7 @@ def plan(
     if not regenerate:
         if shipit_path and not shipit_path.exists():
             regenerate = True
-        elif not (project_paths.workspace_root / "Shipit").exists():
+        elif not shipit_path and not default_shipit_path(project_paths).exists():
             regenerate = True
 
     if regenerate:
@@ -1046,7 +1060,7 @@ def plan(
             config=config,
         )
 
-    shipit_file = get_shipit_path(project_paths.workspace_root, shipit_path)
+    shipit_file = get_shipit_path(project_paths, shipit_path)
     if project_paths.subdir is None:
         project_paths = resolve_project_paths(
             project_paths.workspace_root,
@@ -1150,7 +1164,7 @@ def build(
     ),
     shipit_path: Optional[Path] = typer.Option(
         None,
-        help="The path to the Shipit file (defaults to Shipit in the provided path).",
+        help="The path to the Shipit file (defaults to Shipit or Shipit.<subdir>).",
     ),
     start_command: Optional[str] = typer.Option(
         None,
@@ -1220,11 +1234,16 @@ def build(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
 
-    shipit_file = get_shipit_path(path, shipit_path)
     project_paths = resolve_project_paths(
         path,
-        subdir or read_shipit_subdir(shipit_file),
+        subdir,
     )
+    shipit_file = get_shipit_path(project_paths, shipit_path)
+    if project_paths.subdir is None:
+        project_paths = resolve_project_paths(
+            path,
+            read_shipit_subdir(shipit_file),
+        )
 
     if docker or docker_client:
         build_backend: BuildBackend = DockerBuildBackend(
@@ -1332,16 +1351,22 @@ def build(
         runner.prepare(env, serve.prepare)
 
 
-def get_shipit_path(path: Path, shipit_path: Optional[Path] = None) -> Path:
+def get_shipit_path(
+    project_paths: ProjectPaths,
+    shipit_path: Optional[Path] = None,
+) -> Path:
     if shipit_path is None:
-        shipit_path = path / "Shipit"
+        shipit_path = default_shipit_path(project_paths)
         if not shipit_path.exists():
+            command = f"shipit generate {project_paths.workspace_root}"
+            if project_paths.subdir:
+                command = f"{command} --subdir={project_paths.subdir}"
             raise Exception(
-                f"Shipit file not found at {shipit_path}. Run `shipit generate {path}` to create it."
+                f"Shipit file not found at {shipit_path}. Run `{command}` to create it."
             )
     elif not shipit_path.exists():
         raise Exception(
-            f"Shipit file not found at {shipit_path}. Run `shipit generate {path} -o {shipit_path}` to create it."
+            f"Shipit file not found at {shipit_path}. Run `shipit generate {project_paths.workspace_root} -o {shipit_path}` to create it."
         )
     return shipit_path
 
