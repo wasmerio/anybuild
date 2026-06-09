@@ -19,7 +19,10 @@ mkdir -p wp-content/upgrade
 
 if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
   shopt -s dotglob nullglob
-  cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content || true
+  # Note: change this back to copy all, once using the WP Zip files.
+  # cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content || true
+  cp -R "${WPCONTENT_BASE_PATH}"/plugins/* /app/wp-content/plugins || true
+  cp -R "${WPCONTENT_BASE_PATH}"/themes/twentytwenty* /app/wp-content/themes || true
   shopt -u dotglob nullglob
 fi
 
