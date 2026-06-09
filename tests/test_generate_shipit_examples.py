@@ -12,6 +12,7 @@ from shipit.providers.base import Config
 
 
 SUBDIR_EXAMPLES = {
+    "node-npm-file-subdir": "apps/dashboard",
     "node-pnpm-workspace-subdir": "apps/dashboard",
 }
 
