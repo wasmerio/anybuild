@@ -89,6 +89,43 @@ def test_build_volumes_links_runtime_volume_to_host_directory(
     assert load_volume_mappings(tmp_path) == {"wp-content": str(target)}
 
 
+def test_build_volumes_can_use_namespaced_shipit_directory(
+    tmp_path: Path,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    assets_path = tmp_path / "assets"
+    assets_path.mkdir()
+    shipit_dir = src_dir / ".shipit" / "apps-site"
+    build_backend = LocalBuildBackend(src_dir, assets_path, shipit_dir=shipit_dir)
+
+    target = build_backend.get_artifact_mount_path("app") / "wp-content"
+    target.mkdir(parents=True, exist_ok=True)
+
+    volume = Volume(
+        name="wp-content",
+        path=build_backend.get_volume_path("wp-content"),
+        serve_path=target,
+    )
+    serve = Serve(
+        name="wordpress",
+        provider="wordpress",
+        build=[],
+        deps=[],
+        commands={"start": "php -S localhost:8080 -t /app"},
+        volumes=[volume],
+    )
+
+    mappings = build_volumes(src_dir, serve, shipit_dir=shipit_dir)
+
+    assert volume.path == shipit_dir / "volumes" / "wp-content"
+    assert mappings == {"wp-content": str(target)}
+    assert load_volume_mappings(src_dir, shipit_dir=shipit_dir) == {
+        "wp-content": str(target)
+    }
+    assert not (src_dir / ".shipit" / "volumes" / "mappings.json").exists()
+
+
 def test_wasmer_runner_passes_volume_paths_into_wasmer_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

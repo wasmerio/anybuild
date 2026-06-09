@@ -18,10 +18,16 @@ if TYPE_CHECKING:
 
 
 class LocalRunner:
-    def __init__(self, build_backend: BuildBackend, src_dir: Path) -> None:
+    def __init__(
+        self,
+        build_backend: BuildBackend,
+        src_dir: Path,
+        shipit_dir: Optional[Path] = None,
+    ) -> None:
         self.build_backend = build_backend
         self.src_dir = src_dir
-        self.runner_path = self.src_dir / ".shipit" / "runner" / "local"
+        self.shipit_dir = shipit_dir or self.src_dir / ".shipit"
+        self.runner_path = self.shipit_dir / "runner" / "local"
         self.serve_bin_path = self.runner_path / "bin"
         self.prepare_bash_script = self.runner_path / "prepare" / "prepare.sh"
 

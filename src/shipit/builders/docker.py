@@ -45,12 +45,17 @@ class DockerBuildBackend:
     }
 
     def __init__(
-        self, src_dir: Path, assets_path: Path, docker_client: Optional[str] = None,
-        docker_opts: Optional[str] = None
+        self,
+        src_dir: Path,
+        assets_path: Path,
+        docker_client: Optional[str] = None,
+        docker_opts: Optional[str] = None,
+        shipit_dir: Optional[Path] = None,
     ) -> None:
         self.src_dir = src_dir
         self.assets_path = assets_path
-        self.docker_path = self.src_dir / ".shipit" / "docker"
+        self.shipit_dir = shipit_dir or self.src_dir / ".shipit"
+        self.docker_path = self.shipit_dir / "docker"
         self.docker_path.mkdir(parents=True, exist_ok=True)
         self.docker_out_path = self.docker_path / "out"
         self.docker_file_path = self.docker_path / "Dockerfile"
@@ -77,7 +82,7 @@ class DockerBuildBackend:
         return self.docker_out_path / self.get_mount_path(name)
 
     def get_volume_path(self, name: str) -> Path:
-        return self.src_dir / ".shipit" / "volumes" / name
+        return self.shipit_dir / "volumes" / name
 
     @property
     def is_depot(self) -> bool:

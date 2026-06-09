@@ -25,10 +25,16 @@ from shipit.utils import download_file
 
 
 class LocalBuildBackend:
-    def __init__(self, src_dir: Path, assets_path: Path) -> None:
+    def __init__(
+        self,
+        src_dir: Path,
+        assets_path: Path,
+        shipit_dir: Optional[Path] = None,
+    ) -> None:
         self.src_dir = src_dir
         self.assets_path = assets_path
-        self.local_path = self.src_dir / ".shipit" / "local"
+        self.shipit_dir = shipit_dir or self.src_dir / ".shipit"
+        self.local_path = self.shipit_dir / "local"
         self.build_path = self.local_path / "build"
         self.workdir = self.build_path
         self.runtime_path: Optional[str] = None
@@ -46,7 +52,7 @@ class LocalBuildBackend:
         return self.get_mount_path(name)
 
     def get_volume_path(self, name: str) -> Path:
-        return self.src_dir / ".shipit" / "volumes" / name
+        return self.shipit_dir / "volumes" / name
 
     def execute_step(self, step: Step, env: Dict[str, str]) -> None:
         build_path = self.workdir

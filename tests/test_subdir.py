@@ -52,20 +52,26 @@ def _patch_fake_build_runner(monkeypatch: pytest.MonkeyPatch):
     runner_instances = []
 
     class FakeBuildBackend:
-        def __init__(self, src_dir: Path, assets_path: Path) -> None:
+        def __init__(
+            self,
+            src_dir: Path,
+            assets_path: Path,
+            shipit_dir: Path | None = None,
+        ) -> None:
             self.src_dir = src_dir
             self.assets_path = assets_path
+            self.shipit_dir = shipit_dir or src_dir / ".shipit"
             self.runtime_path = None
             build_backend_instances.append(self)
 
         def get_build_mount_path(self, name: str) -> Path:
-            return self.src_dir / ".shipit" / "fake" / "build" / name
+            return self.shipit_dir / "fake" / "build" / name
 
         def get_artifact_mount_path(self, name: str) -> Path:
             return self.get_build_mount_path(name)
 
         def get_volume_path(self, name: str) -> Path:
-            return self.src_dir / ".shipit" / "volumes" / name
+            return self.shipit_dir / "volumes" / name
 
         def get_runtime_path(self) -> str | None:
             return self.runtime_path
@@ -79,9 +85,16 @@ def _patch_fake_build_runner(monkeypatch: pytest.MonkeyPatch):
             }
 
     class FakeRunner:
-        def __init__(self, build_backend, src_dir: Path) -> None:
+        def __init__(
+            self,
+            build_backend,
+            src_dir: Path,
+            shipit_dir: Path | None = None,
+        ) -> None:
             self.build_backend = build_backend
             self.src_dir = src_dir
+            self.shipit_dir = shipit_dir or src_dir / ".shipit"
+            self.calls = []
             runner_instances.append(self)
 
         def prepare_config(self, provider_config):
@@ -98,6 +111,23 @@ def _patch_fake_build_runner(monkeypatch: pytest.MonkeyPatch):
 
         def prepare(self, env, prepare) -> None:
             self.prepare_args = (env, prepare)
+
+        def has_serve_command(self, command: str) -> bool:
+            return True
+
+        def run_serve_command(
+            self,
+            command: str,
+            volume_mappings=None,
+            env=None,
+        ) -> None:
+            self.calls.append(
+                {
+                    "command": command,
+                    "volume_mappings": volume_mappings,
+                    "env": env,
+                }
+            )
 
     monkeypatch.setattr(cli, "LocalBuildBackend", FakeBuildBackend)
     monkeypatch.setattr(cli, "LocalRunner", FakeRunner)
@@ -430,6 +460,12 @@ def test_build_recovers_subdir_from_generated_shipit(
 
     assert result.exit_code == 0, result.output
     assert build_backend_instances[-1].src_dir == tmp_path.resolve()
+    assert build_backend_instances[-1].shipit_dir == (
+        tmp_path.resolve() / ".shipit" / "apps-site"
+    )
+    assert runner_instances[-1].shipit_dir == (
+        tmp_path.resolve() / ".shipit" / "apps-site"
+    )
     serve = runner_instances[-1].serve
     assert serve.cwd.endswith("/app")
     install_step = next(
@@ -463,7 +499,105 @@ def test_build_subdir_uses_app_specific_shipit_by_default(
 
     assert result.exit_code == 0, result.output
     assert build_backend_instances[-1].src_dir == tmp_path.resolve()
+    assert build_backend_instances[-1].shipit_dir == (
+        tmp_path.resolve() / ".shipit" / "apps-site"
+    )
+    assert runner_instances[-1].shipit_dir == (
+        tmp_path.resolve() / ".shipit" / "apps-site"
+    )
     assert runner_instances[-1].serve.cwd.endswith("/app")
+
+
+def test_run_subdir_uses_app_specific_shipit_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_node_workspace(tmp_path)
+    build_backend_instances, runner_instances = _patch_fake_build_runner(
+        monkeypatch
+    )
+
+    result = runner.invoke(
+        cli.app,
+        ["run", str(tmp_path), "--subdir=apps/site", "--start"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert build_backend_instances[-1].shipit_dir == (
+        tmp_path.resolve() / ".shipit" / "apps-site"
+    )
+    assert runner_instances[-1].shipit_dir == (
+        tmp_path.resolve() / ".shipit" / "apps-site"
+    )
+    assert runner_instances[-1].calls == [
+        {
+            "command": "start",
+            "volume_mappings": {},
+            "env": {"PORT": "8080"},
+        }
+    ]
+
+
+def test_deploy_subdir_uses_app_specific_shipit_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_node_workspace(tmp_path)
+    build_backend_instances, _runner_instances = _patch_fake_build_runner(
+        monkeypatch
+    )
+    wasmer_runner_instances = []
+
+    class FakeWasmerRunner:
+        def __init__(
+            self,
+            build_backend,
+            src_dir: Path,
+            registry=None,
+            token=None,
+            bin=None,
+            shipit_dir: Path | None = None,
+        ) -> None:
+            self.build_backend = build_backend
+            self.src_dir = src_dir
+            self.registry = registry
+            self.token = token
+            self.bin = bin
+            self.shipit_dir = shipit_dir or src_dir / ".shipit"
+            self.deploy_calls = []
+            wasmer_runner_instances.append(self)
+
+        def deploy_config(self, config_path: Path) -> None:
+            self.deploy_config_path = config_path
+
+        def deploy(self, app_owner=None, app_name=None) -> None:
+            self.deploy_calls.append(
+                {
+                    "app_owner": app_owner,
+                    "app_name": app_name,
+                }
+            )
+
+    monkeypatch.setattr(cli, "WasmerRunner", FakeWasmerRunner)
+
+    result = runner.invoke(
+        cli.app,
+        ["deploy", str(tmp_path), "--subdir=apps/site"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert build_backend_instances[-1].shipit_dir == (
+        tmp_path.resolve() / ".shipit" / "apps-site"
+    )
+    assert wasmer_runner_instances[-1].shipit_dir == (
+        tmp_path.resolve() / ".shipit" / "apps-site"
+    )
+    assert wasmer_runner_instances[-1].deploy_calls == [
+        {
+            "app_owner": None,
+            "app_name": None,
+        }
+    ]
 
 
 def test_plan_accepts_subdir_and_reports_app_provider(tmp_path: Path) -> None:
@@ -535,6 +669,52 @@ def test_auto_passes_subdir_to_generate_and_build(
     assert calls["build"][1]["shipit_path"] is None
     assert (tmp_path / "Shipit.apps-site").exists()
     assert not (tmp_path / "Shipit").exists()
+
+
+def test_auto_passes_subdir_to_run_and_deploy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_node_workspace(tmp_path)
+    calls = {}
+
+    def fake_generate(path: Path, **kwargs) -> None:
+        calls["generate"] = (path, kwargs)
+        out = kwargs["out"] or cli.default_shipit_path(
+            cli.resolve_project_paths(path, kwargs["subdir"])
+        )
+        out.write_text('app_subdir = "apps/site"\n')
+
+    def fake_build(path: Path, **kwargs) -> None:
+        calls["build"] = (path, kwargs)
+
+    def fake_run(path: Path, **kwargs) -> None:
+        calls["run"] = (path, kwargs)
+
+    def fake_deploy(path: Path, **kwargs) -> None:
+        calls["deploy"] = (path, kwargs)
+
+    monkeypatch.setattr(cli, "generate", fake_generate)
+    monkeypatch.setattr(cli, "build", fake_build)
+    monkeypatch.setattr(cli, "run", fake_run)
+    monkeypatch.setattr(cli, "deploy", fake_deploy)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "auto",
+            str(tmp_path),
+            "--subdir=apps/site",
+            "--start",
+            "--wasmer-deploy",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls["run"][0] == tmp_path.resolve()
+    assert calls["run"][1]["subdir"] == Path("apps/site")
+    assert calls["deploy"][0] == tmp_path.resolve()
+    assert calls["deploy"][1]["subdir"] == Path("apps/site")
 
 
 @pytest.mark.parametrize(

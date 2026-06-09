@@ -224,10 +224,12 @@ class WasmerRunner:
         registry: Optional[str] = None,
         token: Optional[str] = None,
         bin: Optional[str] = None,
+        shipit_dir: Optional[Path] = None,
     ) -> None:
         self.build_backend = build_backend
         self.src_dir = src_dir
-        self.wasmer_dir_path = self.src_dir / ".shipit" / "wasmer"
+        self.shipit_dir = shipit_dir or self.src_dir / ".shipit"
+        self.wasmer_dir_path = self.shipit_dir / "wasmer"
         self.wasmer_registry = registry
         self.wasmer_token = token
         self.bin = bin or "wasmer"
@@ -342,7 +344,7 @@ class WasmerRunner:
         self.run_serve_command(
             "bash /prepare/prepare.sh",
             volume_mappings={
-                **load_volume_mappings(self.src_dir),
+                **load_volume_mappings(self.src_dir, shipit_dir=self.shipit_dir),
                 "/prepare": prepare_dir,
             },
         )

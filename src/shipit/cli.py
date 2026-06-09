@@ -79,6 +79,13 @@ def default_shipit_path(project_paths: ProjectPaths) -> Path:
     )
 
 
+def default_shipit_dir(project_paths: ProjectPaths) -> Path:
+    shipit_dir = project_paths.workspace_root / ".shipit"
+    if project_paths.subdir is None:
+        return shipit_dir
+    return shipit_dir / shipit_subdir_slug(project_paths.subdir)
+
+
 def resolve_project_paths(path: Path, subdir: Optional[Path] = None) -> ProjectPaths:
     workspace_root = path.resolve()
     if subdir is None:
@@ -673,6 +680,7 @@ def auto(
     ):
         run(
             project_paths.workspace_root,
+            subdir=Path(project_paths.subdir) if project_paths.subdir else None,
             wasmer=wasmer,
             wasmer_bin=wasmer_bin,
             docker=docker,
@@ -685,10 +693,11 @@ def auto(
             wasmer_registry=wasmer_registry,
             serve_port=serve_port,
         )
-    
+
     if wasmer_deploy or wasmer_deploy_config:
         deploy(
             project_paths.workspace_root,
+            subdir=Path(project_paths.subdir) if project_paths.subdir else None,
             wasmer_deploy=wasmer_deploy,
             wasmer_deploy_config=wasmer_deploy_config,
             wasmer_bin=wasmer_bin,
@@ -809,6 +818,11 @@ def deploy(
         help="Project path (defaults to current directory).",
         show_default=False,
     ),
+    subdir: Optional[Path] = typer.Option(
+        None,
+        "--subdir",
+        help="App subdirectory relative to the project path.",
+    ),
     wasmer_deploy: bool = typer.Option(
         True,
         help="Deploy the project to Wasmer.",
@@ -840,14 +854,21 @@ def deploy(
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
+    project_paths = resolve_project_paths(path, subdir)
+    shipit_dir = default_shipit_dir(project_paths)
 
-    build_backend = LocalBuildBackend(path, ASSETS_PATH)
+    build_backend = LocalBuildBackend(
+        project_paths.workspace_root,
+        ASSETS_PATH,
+        shipit_dir=shipit_dir,
+    )
     runner = WasmerRunner(
         build_backend,
-        path,
+        project_paths.workspace_root,
         registry=wasmer_registry,
         token=wasmer_token,
         bin=wasmer_bin,
+        shipit_dir=shipit_dir,
     )
 
     if wasmer_deploy_config:
@@ -862,6 +883,11 @@ def run(
         Path("."),
         help="Project path (defaults to current directory).",
         show_default=False,
+    ),
+    subdir: Optional[Path] = typer.Option(
+        None,
+        "--subdir",
+        help="App subdirectory relative to the project path.",
     ),
     wasmer: bool = typer.Option(
         False,
@@ -915,23 +941,38 @@ def run(
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
+    project_paths = resolve_project_paths(path, subdir)
+    shipit_dir = default_shipit_dir(project_paths)
 
     if docker or docker_client:
         build_backend: BuildBackend = DockerBuildBackend(
-            path, ASSETS_PATH, docker_client, docker_opts
+            project_paths.workspace_root,
+            ASSETS_PATH,
+            docker_client,
+            docker_opts,
+            shipit_dir=shipit_dir,
         )
     else:
-        build_backend = LocalBuildBackend(path, ASSETS_PATH)
+        build_backend = LocalBuildBackend(
+            project_paths.workspace_root,
+            ASSETS_PATH,
+            shipit_dir=shipit_dir,
+        )
 
     if wasmer:
         runner: Runner = WasmerRunner(
             build_backend,
-            path,
+            project_paths.workspace_root,
             registry=wasmer_registry,
             bin=wasmer_bin,
+            shipit_dir=shipit_dir,
         )
     else:
-        runner = LocalRunner(build_backend, path)
+        runner = LocalRunner(
+            build_backend,
+            project_paths.workspace_root,
+            shipit_dir=shipit_dir,
+        )
 
     commands_to_run = resolve_run_commands(
         command_names=command_names,
@@ -941,11 +982,12 @@ def run(
 
     if commands_to_run:
         run_serve_commands(
-            path,
+            project_paths.workspace_root,
             runner,
             commands_to_run,
             volume_specs=volume_specs,
             env=runtime_serve_env(serve_port),
+            shipit_dir=shipit_dir,
         )
     else:
         console.print("[bold]No commands specified. Use `--command` to run a command.[/bold]")
@@ -1066,13 +1108,21 @@ def plan(
             project_paths.workspace_root,
             read_shipit_subdir(shipit_file),
         )
+    shipit_dir = default_shipit_dir(project_paths)
 
     if docker or docker_client:
         build_backend: BuildBackend = DockerBuildBackend(
-            project_paths.workspace_root, ASSETS_PATH, docker_client
+            project_paths.workspace_root,
+            ASSETS_PATH,
+            docker_client,
+            shipit_dir=shipit_dir,
         )
     else:
-        build_backend = LocalBuildBackend(project_paths.workspace_root, ASSETS_PATH)
+        build_backend = LocalBuildBackend(
+            project_paths.workspace_root,
+            ASSETS_PATH,
+            shipit_dir=shipit_dir,
+        )
     if wasmer:
         runner: Runner = WasmerRunner(
             build_backend,
@@ -1080,9 +1130,14 @@ def plan(
             registry=wasmer_registry,
             token=wasmer_token,
             bin=wasmer_bin,
+            shipit_dir=shipit_dir,
         )
     else:
-        runner = LocalRunner(build_backend, project_paths.workspace_root)
+        runner = LocalRunner(
+            build_backend,
+            project_paths.workspace_root,
+            shipit_dir=shipit_dir,
+        )
 
     base_config = Config()
     base_config.commands.enrich_from_path(project_paths.app_path)
@@ -1244,6 +1299,7 @@ def build(
             path,
             read_shipit_subdir(shipit_file),
         )
+    shipit_dir = default_shipit_dir(project_paths)
 
     if docker or docker_client:
         build_backend: BuildBackend = DockerBuildBackend(
@@ -1251,9 +1307,14 @@ def build(
             ASSETS_PATH,
             docker_client,
             docker_opts=docker_opts,
+            shipit_dir=shipit_dir,
         )
     else:
-        build_backend = LocalBuildBackend(project_paths.workspace_root, ASSETS_PATH)
+        build_backend = LocalBuildBackend(
+            project_paths.workspace_root,
+            ASSETS_PATH,
+            shipit_dir=shipit_dir,
+        )
     if wasmer:
         runner: Runner = WasmerRunner(
             build_backend,
@@ -1261,9 +1322,14 @@ def build(
             registry=wasmer_registry,
             token=wasmer_token,
             bin=wasmer_bin,
+            shipit_dir=shipit_dir,
         )
     else:
-        runner = LocalRunner(build_backend, project_paths.workspace_root)
+        runner = LocalRunner(
+            build_backend,
+            project_paths.workspace_root,
+            shipit_dir=shipit_dir,
+        )
 
     base_config = Config()
     base_config.commands.enrich_from_path(project_paths.app_path)
@@ -1344,7 +1410,7 @@ def build(
 
     # Build and serve
     build_backend.build(serve.name, env, serve.mounts or [], build_steps)
-    build_volumes(project_paths.workspace_root, serve)
+    build_volumes(project_paths.workspace_root, serve, shipit_dir=shipit_dir)
     runner.build(serve)
     if serve.prepare and not skip_prepare:
         console.print("\n[bold]Running prepare step[/bold]")
@@ -1390,9 +1456,10 @@ def run_serve_commands(
     commands: List[str],
     volume_specs: Optional[List[str]] = None,
     env: Optional[Dict[str, str]] = None,
+    shipit_dir: Optional[Path] = None,
 ) -> None:
     volume_mappings = merge_volume_mappings(
-        load_volume_mappings(path),
+        load_volume_mappings(path, shipit_dir=shipit_dir),
         parse_cli_volume_mappings(volume_specs),
     )
     for command in commands:

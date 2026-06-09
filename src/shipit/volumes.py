@@ -1,22 +1,29 @@
 import json
 import shutil
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from shipit.builders.base import BuildBackend
 from shipit.shipit_types import Serve, Volume
 
 
-def get_volumes_dir(src_dir: Path) -> Path:
-    return src_dir / ".shipit" / "volumes"
+def get_volumes_dir(src_dir: Path, shipit_dir: Optional[Path] = None) -> Path:
+    return (shipit_dir or src_dir / ".shipit") / "volumes"
 
 
-def get_volume_mappings_path(src_dir: Path) -> Path:
-    return get_volumes_dir(src_dir) / "mappings.json"
+def get_volume_mappings_path(
+    src_dir: Path,
+    shipit_dir: Optional[Path] = None,
+) -> Path:
+    return get_volumes_dir(src_dir, shipit_dir=shipit_dir) / "mappings.json"
 
 
-def build_volumes(src_dir: Path, serve: Serve) -> Dict[str, str]:
-    volumes_dir = get_volumes_dir(src_dir)
+def build_volumes(
+    src_dir: Path,
+    serve: Serve,
+    shipit_dir: Optional[Path] = None,
+) -> Dict[str, str]:
+    volumes_dir = get_volumes_dir(src_dir, shipit_dir=shipit_dir)
     volumes_dir.mkdir(parents=True, exist_ok=True)
 
     mappings = {
@@ -25,17 +32,20 @@ def build_volumes(src_dir: Path, serve: Serve) -> Dict[str, str]:
     }
     for volume in serve.volumes or []:
         volume.path.mkdir(parents=True, exist_ok=True)
-        if _should_link_local_volume(src_dir, volume):
+        if _should_link_local_volume(src_dir, volume, shipit_dir=shipit_dir):
             _link_local_volume(volume)
 
-    get_volume_mappings_path(src_dir).write_text(
+    get_volume_mappings_path(src_dir, shipit_dir=shipit_dir).write_text(
         json.dumps(mappings, indent=2, sort_keys=True) + "\n"
     )
     return mappings
 
 
-def load_volume_mappings(src_dir: Path) -> Dict[str, str]:
-    mappings_path = get_volume_mappings_path(src_dir)
+def load_volume_mappings(
+    src_dir: Path,
+    shipit_dir: Optional[Path] = None,
+) -> Dict[str, str]:
+    mappings_path = get_volume_mappings_path(src_dir, shipit_dir=shipit_dir)
     if not mappings_path.is_file():
         return {}
 
@@ -98,8 +108,12 @@ def _parse_volume_spec(spec: str) -> tuple[str, str]:
     return name, guest_path
 
 
-def _should_link_local_volume(src_dir: Path, volume: Volume) -> bool:
-    shipit_dir = (src_dir / ".shipit").absolute()
+def _should_link_local_volume(
+    src_dir: Path,
+    volume: Volume,
+    shipit_dir: Optional[Path] = None,
+) -> bool:
+    shipit_dir = (shipit_dir or src_dir / ".shipit").absolute()
     return volume.serve_path.is_absolute() and volume.serve_path.is_relative_to(
         shipit_dir
     )
