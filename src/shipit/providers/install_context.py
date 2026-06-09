@@ -461,14 +461,16 @@ def _find_js_workspace_packages(root: Path) -> dict[str, Path]:
             data = yaml.safe_load(pnpm_workspace.read_text()) or {}
         except Exception:
             data = {}
-        packages = data.get("packages", []) if isinstance(data, dict) else []
-        if isinstance(packages, list):
+        workspace_patterns = (
+            data.get("packages", []) if isinstance(data, dict) else []
+        )
+        if isinstance(workspace_patterns, list):
             patterns.extend(
-                pattern for pattern in packages
+                pattern for pattern in workspace_patterns
                 if isinstance(pattern, str)
             )
 
-    packages: dict[str, Path] = {}
+    package_paths: dict[str, Path] = {}
     for pattern in patterns:
         if pattern.startswith("!"):
             continue
@@ -476,13 +478,13 @@ def _find_js_workspace_packages(root: Path) -> dict[str, Path]:
             if "node_modules" in path.parts:
                 continue
             package_json_path = path / "package.json"
-            package_json = _read_json(package_json_path)
-            if not package_json:
+            package_data = _read_json(package_json_path)
+            if not package_data:
                 continue
-            name = package_json.get("name")
+            name = package_data.get("name")
             if isinstance(name, str) and name:
-                packages[name] = path.resolve(strict=False)
-    return packages
+                package_paths[name] = path.resolve(strict=False)
+    return package_paths
 
 
 def _package_json_workspace_patterns(package_json: dict[str, Any]) -> list[str]:
