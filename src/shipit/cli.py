@@ -669,6 +669,7 @@ def auto(
             start=start,
             after_deploy=after_deploy,
             wasmer_registry=wasmer_registry,
+            serve_port=serve_port,
         )
     
     if wasmer_deploy or wasmer_deploy_config:
@@ -893,6 +894,10 @@ def run(
         None,
         help="Wasmer registry.",
     ),
+    serve_port: Optional[int] = typer.Option(
+        None,
+        help="The port to use (defaults to 8080).",
+    ),
 ) -> None:
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
@@ -921,7 +926,13 @@ def run(
     )
 
     if commands_to_run:
-        run_serve_commands(path, runner, commands_to_run, volume_specs=volume_specs)
+        run_serve_commands(
+            path,
+            runner,
+            commands_to_run,
+            volume_specs=volume_specs,
+            env=runtime_serve_env(serve_port),
+        )
     else:
         console.print("[bold]No commands specified. Use `--command` to run a command.[/bold]")
 
@@ -1353,6 +1364,7 @@ def run_serve_commands(
     runner: Runner,
     commands: List[str],
     volume_specs: Optional[List[str]] = None,
+    env: Optional[Dict[str, str]] = None,
 ) -> None:
     volume_mappings = merge_volume_mappings(
         load_volume_mappings(path),
@@ -1362,7 +1374,19 @@ def run_serve_commands(
         if command in OPTIONAL_RUN_COMMANDS and not runner.has_serve_command(command):
             continue
         console.print(f"\nRunning command [bold]{command}[/bold]")
-        runner.run_serve_command(command, volume_mappings=volume_mappings)
+        runner.run_serve_command(
+            command,
+            volume_mappings=volume_mappings,
+            env=env,
+        )
+
+
+def runtime_serve_env(serve_port: Optional[int]) -> Dict[str, str]:
+    if serve_port is not None:
+        port = str(serve_port)
+    else:
+        port = os.environ.get("PORT", "8080")
+    return {"PORT": port}
 
 def main() -> None:
     args = sys.argv[1:]

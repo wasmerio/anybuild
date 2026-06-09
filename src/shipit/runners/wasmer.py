@@ -642,6 +642,7 @@ class WasmerRunner:
         self,
         command: str,
         volume_mappings: Optional[Dict[str, str]] = None,
+        env: Optional[Dict[str, str]] = None,
     ) -> None:
         parsed_command = shlex.split(command)
         if not parsed_command:
@@ -657,6 +658,7 @@ class WasmerRunner:
 
         if self.wasmer_registry:
             extra_args = [f"--registry={self.wasmer_registry}"] + extra_args
+        run_env = {**os.environ, **(env or {})}
         self.run_command(
             self.bin,
             [
@@ -672,7 +674,7 @@ class WasmerRunner:
                 *extra_args,
                 *(["--", *command_args] if command_args else []),
             ],
-            env=os.environ,
+            env=run_env,
         )
 
     def command_uses_edgejs(self, command: str) -> bool:

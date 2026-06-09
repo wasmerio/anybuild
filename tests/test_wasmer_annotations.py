@@ -196,7 +196,6 @@ def test_wasmer_node_manifest_maps_to_edgejs(tmp_path: Path) -> None:
         deps=[Package("node", "22")],
         cwd="/app",
         commands={"start": "node server.js"},
-        env={"PORT": "8080"},
     )
 
     runner.build_serve(serve)
@@ -204,9 +203,9 @@ def test_wasmer_node_manifest_maps_to_edgejs(tmp_path: Path) -> None:
     manifest = tomllib.loads((runner.wasmer_dir_path / "wasmer.toml").read_text())
     assert manifest["dependencies"]["wasmer/edgejs-quickjs"] == "=0.0.4"
     assert manifest["command"][0]["module"] == "wasmer/edgejs-quickjs:edge"
-    assert manifest["command"][0]["annotations"]["wasi"]["main-args"] == [
-        "server.js"
-    ]
+    wasi = manifest["command"][0]["annotations"]["wasi"]
+    assert wasi["main-args"] == ["server.js"]
+    assert "env" not in wasi
 
 
 def test_wasmer_prepare_config_enables_node_edge_optimizations(
@@ -252,3 +251,26 @@ runner = "wasi"
 
     assert captured["command"] == "wasmer"
     # assert captured["extra_args"][:2] == ["run", "--experimental-napi"]
+
+
+def test_wasmer_run_command_passes_runtime_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir, bin="wasmer")
+
+    captured: dict[str, object] = {}
+
+    def fake_run_command(command, extra_args=None, env=None) -> None:
+        captured["command"] = command
+        captured["extra_args"] = extra_args
+        captured["env"] = env
+
+    monkeypatch.setattr(runner, "run_command", fake_run_command)
+
+    runner.run_serve_command("start", env={"PORT": "45678"})
+
+    assert captured["command"] == "wasmer"
+    assert captured["env"]["PORT"] == "45678"
