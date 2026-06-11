@@ -1,4 +1,5 @@
 import json
+import re
 import shlex
 from enum import Enum
 from pathlib import Path
@@ -483,6 +484,46 @@ class NodeProvider:
         "src/server.js",
         "src/index.js",
     )
+    NODE_BUILTIN_MODULES: ClassVar[tuple[str, ...]] = (
+        "assert",
+        "buffer",
+        "child_process",
+        "cluster",
+        "crypto",
+        "dgram",
+        "dns",
+        "events",
+        "fs",
+        "http",
+        "http2",
+        "https",
+        "module",
+        "net",
+        "os",
+        "path",
+        "perf_hooks",
+        "process",
+        "querystring",
+        "readline",
+        "stream",
+        "timers",
+        "tls",
+        "tty",
+        "url",
+        "util",
+        "v8",
+        "vm",
+        "worker_threads",
+        "zlib",
+    )
+    NODE_ENTRY_MARKER_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
+        r"\bmodule\.exports\b"
+        r"|\bexports\."
+        r"|\b__dirname\b"
+        r"|\b__filename\b"
+        r"|\bprocess\.(?:env|argv|exit|cwd|platform|version)\b"
+        r"|\b[A-Za-z_$][\w$]*\.listen\s*\("
+    )
     START_PROGRAMS = {
         "edge",
         "node",
@@ -598,11 +639,61 @@ class NodeProvider:
         if (path / "package.json").is_file():
             return DetectResult(cls.name(), 30)
 
-        for entry_file in cls.COMMON_ENTRY_FILES:
-            if (path / entry_file).is_file():
-                return DetectResult(cls.name(), 30)
+        if cls._common_entry_file(path, require_node_evidence=True):
+            return DetectResult(cls.name(), 30)
 
         return None
+
+    @classmethod
+    def _common_entry_file(
+        cls,
+        path: Path,
+        *,
+        require_node_evidence: bool,
+    ) -> Optional[str]:
+        for entry_file in cls.COMMON_ENTRY_FILES:
+            entry_path = path / entry_file
+            if not entry_path.is_file():
+                continue
+            if not require_node_evidence:
+                return entry_file
+            if cls._looks_like_node_entry(entry_path):
+                return entry_file
+        return None
+
+    @classmethod
+    def _looks_like_node_entry(cls, entry_path: Path) -> bool:
+        try:
+            source = entry_path.read_text(errors="ignore")
+        except OSError:
+            return False
+
+        first_line = source.splitlines()[0] if source else ""
+        has_node_shebang = (
+            first_line.startswith("#!")
+            and re.search(r"\bnode(?:js)?\b", first_line)
+        )
+        if has_node_shebang:
+            return True
+
+        if cls.NODE_ENTRY_MARKER_PATTERN.search(source):
+            return True
+
+        module_ref = cls._node_builtin_module_ref_pattern()
+        module_patterns = (
+            rf"\brequire\s*\(\s*['\"]{module_ref}['\"]\s*\)",
+            rf"\bimport\s*\(\s*['\"]{module_ref}['\"]\s*\)",
+            rf"\bfrom\s*['\"]{module_ref}['\"]",
+            rf"\bimport\s*['\"]{module_ref}['\"]",
+        )
+        return any(re.search(pattern, source) for pattern in module_patterns)
+
+    @classmethod
+    def _node_builtin_module_ref_pattern(cls) -> str:
+        modules = "|".join(
+            re.escape(module) for module in cls.NODE_BUILTIN_MODULES
+        )
+        return rf"(?:node:)?(?:{modules})(?:/[^'\"\s)]*)?"
 
     @classmethod
     def detect_package_manager(cls, path: Path) -> PackageManager:
@@ -921,9 +1012,12 @@ class NodeProvider:
             if isinstance(main, str) and main.strip():
                 return cls._node_entry_command(main.strip())
 
-        for entry_file in cls.COMMON_ENTRY_FILES:
-            if (path / entry_file).is_file():
-                return cls._node_entry_command(entry_file)
+        entry_file = cls._common_entry_file(
+            path,
+            require_node_evidence=not (path / "package.json").is_file(),
+        )
+        if entry_file:
+            return cls._node_entry_command(entry_file)
 
         return None
 
