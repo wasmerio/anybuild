@@ -1,0 +1,19 @@
+staticwebserver = dep("static-web-server", config.sws_version)
+
+static_app = mount("static_app")
+
+serve(
+  name="static-htmlwithjs",
+  provider="staticfile",
+  build=[
+    workdir(static_app.path),
+    copy(".", ".", ignore=[".git"])
+  ],
+  deps=[staticwebserver],
+  commands = {
+    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app.serve_path, PORT)
+  },
+  mounts=[
+    static_app
+  ],
+)

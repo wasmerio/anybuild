@@ -123,6 +123,24 @@ def test_node_provider_detects_generic_node_example() -> None:
     assert load_provider(path, Config()) is NodeProvider
 
 
+def test_common_entry_without_package_json_needs_node_evidence(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "app.js").write_text(
+        """import http from "node:http";
+
+http.createServer((_req, res) => {
+  res.end("ok");
+}).listen(process.env.PORT || 8080);
+"""
+    )
+
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+
+    assert load_provider(tmp_path, Config()) is NodeProvider
+    assert provider_config.commands.start == "node app.js"
+
+
 @pytest.mark.parametrize(
     ("example", "framework"),
     [
@@ -332,7 +350,14 @@ def test_node_start_command_uses_package_main(tmp_path: Path) -> None:
 
 
 def test_node_start_command_uses_common_entry_file(tmp_path: Path) -> None:
-    (tmp_path / "server.js").write_text("console.log('ok')\n")
+    (tmp_path / "server.js").write_text(
+        """const http = require("http");
+
+http.createServer((_req, res) => {
+  res.end("ok");
+}).listen(8080);
+"""
+    )
 
     provider_config = NodeProvider.load_config(tmp_path, Config())
 

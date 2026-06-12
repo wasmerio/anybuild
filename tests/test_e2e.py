@@ -230,6 +230,13 @@ class E2ECase:
             serve_pattern=r"server is listening on",
             http=[HTTPRequest(path="/", body_match=r"Test")],
         ),
+        # Static HTML app with browser JavaScript should not be treated as Node.
+        E2ECase(
+            path="examples/static-htmlwithjs",
+            serve_pattern=r"server is listening on",
+            http=[HTTPRequest(path="/", body_match=r"Static HTML with JS")],
+            build_modes=(BuildMode.Wasmer,),
+        ),
         # Staticfile provider serving content under site/
         E2ECase(
             path="examples/staticfile",
