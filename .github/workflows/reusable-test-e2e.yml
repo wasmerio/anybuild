@@ -100,12 +100,5 @@ jobs:
 
       - name: Run e2e tests
         run: |
-          E2E_FILTER="(BuildMode.Wasmer"
-          E2E_FILTER="$E2E_FILTER and not cdn"
-          E2E_FILTER="$E2E_FILTER and not hugo"
-          E2E_FILTER="$E2E_FILTER and not python-streamlit"
-          E2E_FILTER="$E2E_FILTER and not BuildMode.WasmerAndDocker)"
-          E2E_FILTER="$E2E_FILTER or (python-django"
-          E2E_FILTER="$E2E_FILTER and BuildMode.WasmerAndDocker)"
           uv run pytest -m e2e -v tests/test_e2e.py -n 4 \
-            -k "($E2E_FILTER)"
+            -k "(BuildMode.Wasmer and not cdn and not hugo and not python-streamlit and not BuildMode.WasmerAndDocker)"
