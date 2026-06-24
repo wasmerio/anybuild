@@ -1,15 +1,15 @@
 name: Publish to PyPI
 
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types:
+      - published
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name }}
   cancel-in-progress: true
 
 jobs:
@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
@@ -34,7 +36,7 @@ jobs:
 
       - name: Validate tag matches package versions
         env:
-          GIT_TAG: ${{ github.ref_name }}
+          GIT_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
 
@@ -88,6 +90,9 @@ jobs:
     timeout-minutes: 15
     needs:
       - test_and_e2e
+    environment:
+      name: pypi
+      url: https://pypi.org/p/shipit-cli
     permissions:
       contents: read
       id-token: write
@@ -95,6 +100,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
@@ -111,5 +118,3 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_KEY }}
