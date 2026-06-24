@@ -144,7 +144,7 @@ RUN apt-get update \\
     && apt-get -y --no-install-recommends install \\
         build-essential gcc make autoconf libtool bison \\
         dpkg-dev pkg-config re2c locate \\
-        libmariadb-dev libmariadb-dev-compat libpq-dev \\
+        libmariadb-dev libmariadb-dev-compat libpq-dev libsqlite3-dev \\
         libvips-dev default-libmysqlclient-dev libmagickwand-dev \\
         libicu-dev libxml2-dev libxslt-dev libyaml-dev \\
         sudo curl ca-certificates unzip git \\

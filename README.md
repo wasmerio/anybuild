@@ -122,16 +122,25 @@ The e2e tests will:
 * Run the project (locally or with Wasmer)
 * Test that the project output (via http requests) is the correct one
 
-### Automatic PyPI Publish
+### Release Automation
 
-Publishing to PyPI is automated with GitHub Actions on version tags.
+Releases are automated with Release Please and PyPI Trusted Publishing.
 
 Requirements:
 
-* Add a repository secret named `PYPI_API_TOKEN` with a PyPI API token.
-* Push tags using the `vX.Y.Z` format (for example: `v0.17.5`).
+* Add a repository secret named `RELEASE_PLEASE_TOKEN` with a GitHub token
+  that can open pull requests and create releases.
+* Configure PyPI Trusted Publishing for the `shipit-cli` project:
+  * owner: `wasmerio`
+  * repository: `shipit`
+  * workflow: `pypi-publish.yml`
+  * environment: `pypi`
+* Create a GitHub environment named `pypi`. Add reviewers there if releases
+  should require manual approval before publishing.
 
-On each `v*` tag push, the workflow:
+On each push to `main`, Release Please opens or updates a release PR based on
+Conventional Commits. When that PR is merged, it creates a GitHub release with
+a `vX.Y.Z` tag. On each published GitHub release, the PyPI workflow:
 
 * Runs regular test and e2e workflows.
 * Validates that the tag version without the leading `v` matches:

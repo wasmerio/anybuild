@@ -648,11 +648,16 @@ class E2ECase:
             serve_pattern=r"Uvicorn running on .*",
             http=[HTTPRequest(path="/", body_match=r"Welcome to Flask")],
         ),
-        # Python Django via Uvicorn WSGI (check admin login)
+        # Python Django via Uvicorn WSGI. Docker covers collectstatic.
         E2ECase(
             path="examples/python-django",
             serve_pattern=r"Uvicorn running on .*",
             http=[HTTPRequest(path="/", body_match=r"Django")],
+            build_modes=(
+                BuildMode.Local,
+                BuildMode.Wasmer,
+                BuildMode.WasmerAndDocker,
+            ),
         ),
         # Python ffmpeg demo (FastAPI), homepage is static HTML form
         E2ECase(
