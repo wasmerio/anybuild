@@ -65,6 +65,7 @@ class E2ECase:
     http: List[HTTPRequest]
     path: str | None = None
     download: str | None = None
+    name: str | None = None
     use_random_port: bool = True
     env: dict[str, str] | None = None
     extra_env: dict[str, str] | None = None
@@ -77,6 +78,8 @@ class E2ECase:
     build_modes: tuple[BuildMode, ...] | None = None
 
     def __str__(self):
+        if self.name:
+            return self.name
         if self.path:
             return self.path
         assert self.download is not None
@@ -84,6 +87,12 @@ class E2ECase:
 
     def __repr__(self):
         return str(self)
+
+
+BRO_BARBERSHOP_ARCHIVE_URL = (
+    "https://github.com/motopress/bro-barbershop/archive/"
+    "refs/heads/master.zip"
+)
 
 
 @pytest.mark.e2e
@@ -200,6 +209,41 @@ class E2ECase:
                     "wp eval 'echo json_encode([\"status\" => \"ok\"]);'",
                     stdout_match=r'\{"status":"ok"\}',
                 )
+            ],
+            build_modes=(BuildMode.Wasmer,),
+        ),
+        # Real WordPress theme from GitHub; validates custom theme activation.
+        E2ECase(
+            download=BRO_BARBERSHOP_ARCHIVE_URL,
+            name="wordpress_bro_barbershop_theme",
+            serve_pattern=(
+                r"listening addr"
+            ),
+            http=[
+                HTTPRequest(
+                    path="/",
+                    expected_status=200,
+                )
+            ],
+            use_random_port=False,
+            env={
+                "DB_NAME": "test",
+                "DB_USERNAME": "root",
+                "DB_HOST": "127.0.0.1",
+                "DB_PORT": "3306",
+                "DB_PASSWORD": "",
+                "SHIPIT_PHPIX": "true",
+                "SHIPIT_WP_VERSION": "6.9.4",
+            },
+            create_db=True,
+            create_wp_content_volume=True,
+            run_after_deploy=True,
+            commands=[
+                RunCommand("wp theme is-active bro-barbershop"),
+                RunCommand(
+                    "wp option get stylesheet",
+                    stdout_match=r"^bro-barbershop\s*$",
+                ),
             ],
             build_modes=(BuildMode.Wasmer,),
         ),
@@ -788,6 +832,7 @@ async def test_end_to_end(
                     env=env,
                     timeout=180,
                 )
+                _print_run_command_output(command, cmd, result)
                 _assert_run_command(command, cmd, result)
             return
 
@@ -1286,6 +1331,25 @@ async def _stop_process(proc: asyncio.subprocess.Process) -> None:
         else:
             proc.kill()
             await proc.wait()
+
+
+def _print_run_command_output(
+    command: RunCommand,
+    cmd: list[str],
+    result: CompletedCommand,
+) -> None:
+    print(f"[run-command] {shlex.join(cmd)}")
+    print(
+        "[run-command] "
+        f"expected_returncode={command.expected_returncode} "
+        f"returncode={result.returncode}"
+    )
+    if result.stdout:
+        print("[run-command stdout]")
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+    if result.stderr:
+        print("[run-command stderr]")
+        print(result.stderr, end="" if result.stderr.endswith("\n") else "\n")
 
 
 def _assert_run_command(

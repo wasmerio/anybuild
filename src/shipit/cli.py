@@ -1493,6 +1493,7 @@ def main() -> None:
         console.print(f"[bold red]{type(e).__name__}[/bold red]: {e}")
         if os.environ.get("SHIPIT_DEBUG", "false").lower() in ["1", "true", "yes", "y"]:
             raise e
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 # Needed to get the WP-CLI commands to avoid asking for the TTY size
 IFS=$'\n\t'
+set -e
 
 export COLUMNS=80  # Prevent WP-CLI from asking for TTY size
 export PAGER="cat"
@@ -11,18 +12,21 @@ WP_DEFAULT_LOCALE=${WP_DEFAULT_LOCALE:-"en_US"}
 WP_LOCALE=${WP_LOCALE:-"$WP_DEFAULT_LOCALE"}
 WP_SITEURL=${WP_SITEURL:-"http://localhost"}
 WP_SITE_TITLE=${WP_SITE_TITLE:-"WordPress"}
+WP_CONTENT_DIR=${WP_CONTENT_DIR:-"wp-content"}
 
 echo "📁 Initializing wp-content..."
-mkdir -p wp-content/plugins
-mkdir -p wp-content/themes
-mkdir -p wp-content/upgrade
+mkdir -p "${WP_CONTENT_DIR}/plugins"
+mkdir -p "${WP_CONTENT_DIR}/themes"
+mkdir -p "${WP_CONTENT_DIR}/upgrade"
 
 if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
   shopt -s dotglob nullglob
-  # Note: change this back to copy all, once using the WP Zip files.
-  # cp -R "${WPCONTENT_BASE_PATH}"/* /app/wp-content || true
-  cp -R "${WPCONTENT_BASE_PATH}"/plugins/* /app/wp-content/plugins || true
-  cp -R "${WPCONTENT_BASE_PATH}"/themes/twentytwenty* /app/wp-content/themes || true
+  cp -R "${WPCONTENT_BASE_PATH}"/plugins/* "${WP_CONTENT_DIR}/plugins" || true
+  if [ -n "${WP_DEFAULT_THEME:-}" ]; then
+    cp -R "${WPCONTENT_BASE_PATH}"/themes/* "${WP_CONTENT_DIR}/themes" || true
+  else
+    cp -R "${WPCONTENT_BASE_PATH}"/themes/twentytwenty* "${WP_CONTENT_DIR}/themes" || true
+  fi
   shopt -u dotglob nullglob
 fi
 
