@@ -47,6 +47,9 @@ class WordPressProvider(PhpProvider):
     THEME_HEADER_RE = re.compile(
         r"^[ \t/*#@]*Theme Name\s*:", re.I | re.M
     )
+    TEXT_DOMAIN_RE = re.compile(
+        r"^[ \t/*#@]*Text Domain\s*:\s*([^\s*/#@]+)", re.I | re.M
+    )
 
     @classmethod
     def name(cls) -> str:
@@ -93,7 +96,9 @@ class WordPressProvider(PhpProvider):
         for plugin_file in plugin_files:
             if not cls._file_has_header(plugin_file, cls.PLUGIN_HEADER_RE):
                 continue
-            slug = cls._slugify(path.name)
+            slug = cls._detect_text_domain_slug(plugin_file) or cls._slugify(
+                path.name
+            )
             return WordPressExtension(
                 kind="plugin",
                 slug=slug,
@@ -113,7 +118,9 @@ class WordPressProvider(PhpProvider):
             or (path / "theme.json").is_file()
         ):
             return None
-        slug = cls._slugify(path.name)
+        slug = cls._detect_text_domain_slug(style_css) or cls._slugify(
+            path.name
+        )
         return WordPressExtension(
             kind="theme",
             slug=slug,
@@ -122,14 +129,35 @@ class WordPressProvider(PhpProvider):
         )
 
     @classmethod
+    def _detect_text_domain_slug(cls, header_file: Path) -> Optional[str]:
+        text_domain = cls._file_header_value(
+            header_file,
+            cls.TEXT_DOMAIN_RE,
+        )
+        if not text_domain:
+            return None
+        return cls._slugify(text_domain)
+
+    @classmethod
     def _file_has_header(cls, path: Path, pattern: re.Pattern[str]) -> bool:
+        return cls._file_header_value(path, pattern) is not None
+
+    @classmethod
+    def _file_header_value(
+        cls, path: Path, pattern: re.Pattern[str]
+    ) -> Optional[str]:
         if not path.is_file():
-            return False
+            return None
         try:
             contents = path.read_text(errors="ignore")[: cls.HEADER_SCAN_BYTES]
         except OSError:
-            return False
-        return bool(pattern.search(contents))
+            return None
+        match = pattern.search(contents)
+        if not match:
+            return None
+        if match.lastindex:
+            return match.group(1).strip()
+        return match.group(0).strip()
 
     @staticmethod
     def _slugify(value: str) -> str:
