@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   issues: write
   pull-requests: write
@@ -23,6 +24,18 @@ jobs:
 
     steps:
       - name: Create or update release PR
-        uses: googleapis/release-please-action@v4
+        id: release
+        uses: googleapis/release-please-action@v5
         with:
-          token: ${{ secrets.RELEASE_PLEASE_GH_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repo-url: ${{ github.repository }}
+
+      - name: Trigger PyPI publish
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+        run: |
+          gh workflow run pypi-publish.yml \
+            --ref "$TAG_NAME" \
+            -f tag_name="$TAG_NAME"

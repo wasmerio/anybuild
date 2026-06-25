@@ -4,12 +4,18 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Release tag to publish
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.release.tag_name }}
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag_name }}
   cancel-in-progress: true
 
 jobs:
@@ -22,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || inputs.tag_name }}
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
@@ -36,7 +42,7 @@ jobs:
 
       - name: Validate tag matches package versions
         env:
-          GIT_TAG: ${{ github.event.release.tag_name }}
+          GIT_TAG: ${{ github.event.release.tag_name || inputs.tag_name }}
         run: |
           set -euo pipefail
 
@@ -101,7 +107,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || inputs.tag_name }}
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6

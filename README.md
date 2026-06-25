@@ -128,8 +128,8 @@ Releases are automated with Release Please and PyPI Trusted Publishing.
 
 Requirements:
 
-* Add a repository secret named `RELEASE_PLEASE_TOKEN` with a GitHub token
-  that can open pull requests and create releases.
+* Enable GitHub Actions workflow permissions for creating pull requests in the
+  repository settings. Release Please uses the built-in `GITHUB_TOKEN`.
 * Configure PyPI Trusted Publishing for the `shipit-cli` project:
   * owner: `wasmerio`
   * repository: `shipit`
@@ -140,7 +140,8 @@ Requirements:
 
 On each push to `main`, Release Please opens or updates a release PR based on
 Conventional Commits. When that PR is merged, it creates a GitHub release with
-a `vX.Y.Z` tag. On each published GitHub release, the PyPI workflow:
+a `vX.Y.Z` tag and dispatches the PyPI workflow for that tag with the built-in
+`GITHUB_TOKEN`. The PyPI workflow also supports manual dispatch for reruns. It:
 
 * Runs regular test and e2e workflows.
 * Validates that the tag version without the leading `v` matches:
