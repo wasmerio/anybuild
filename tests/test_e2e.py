@@ -240,6 +240,10 @@ BRO_BARBERSHOP_ARCHIVE_URL = (
             run_after_deploy=True,
             commands=[
                 RunCommand("wp theme is-active bro-barbershop"),
+                RunCommand(
+                    "wp option get stylesheet",
+                    stdout_match=r"^bro-barbershop\s*$",
+                ),
             ],
             build_modes=(BuildMode.Wasmer,),
         ),
@@ -828,6 +832,7 @@ async def test_end_to_end(
                     env=env,
                     timeout=180,
                 )
+                _print_run_command_output(command, cmd, result)
                 _assert_run_command(command, cmd, result)
             return
 
@@ -1326,6 +1331,25 @@ async def _stop_process(proc: asyncio.subprocess.Process) -> None:
         else:
             proc.kill()
             await proc.wait()
+
+
+def _print_run_command_output(
+    command: RunCommand,
+    cmd: list[str],
+    result: CompletedCommand,
+) -> None:
+    print(f"[run-command] {shlex.join(cmd)}")
+    print(
+        "[run-command] "
+        f"expected_returncode={command.expected_returncode} "
+        f"returncode={result.returncode}"
+    )
+    if result.stdout:
+        print("[run-command stdout]")
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+    if result.stderr:
+        print("[run-command stderr]")
+        print(result.stderr, end="" if result.stderr.endswith("\n") else "\n")
 
 
 def _assert_run_command(
