@@ -37,5 +37,6 @@ jobs:
           TAG_NAME: ${{ steps.release.outputs.tag_name }}
         run: |
           gh workflow run pypi-publish.yml \
+            --repo "$GITHUB_REPOSITORY" \
             --ref "$TAG_NAME" \
             -f tag_name="$TAG_NAME"
