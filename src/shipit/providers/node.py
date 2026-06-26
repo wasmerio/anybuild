@@ -27,6 +27,7 @@ from .install_context import (
 
 NODE_MODULES_OPTIMIZER_ASSET = "node/optimize-node-modules.sh"
 OPTIMIZE_DEPS_VERSION = "0.1.1"
+NEXT_BUNDLE_VERSION = "1.0.0"
 
 class PackageManager(Enum):
     NPM = "npm"
@@ -395,7 +396,8 @@ class NodeFramework(Enum):
         if self == NodeFramework.NEXT:
             quoted_command = shlex.quote(build_command)
             return package_manager.dlx_command(
-                f"next-bundle@0.2.0 --build-command {quoted_command}"
+                f"next-bundle@{NEXT_BUNDLE_VERSION} "
+                f"--build-command {quoted_command}"
             )
         return build_command
 

@@ -218,7 +218,7 @@ def test_node_provider_detects_nextjs_runtime_app(tmp_path: Path) -> None:
     assert load_provider(tmp_path, Config()) is NodeProvider
     assert provider_config.framework == NodeFramework.NEXT
     assert provider_config.build_command == (
-        "npx -y next-bundle@0.2.0 --build-command 'npm run build'"
+        "npx -y next-bundle@1.0.0 --build-command 'npm run build'"
     )
     assert provider_config.commands.start == "node server.mjs"
 
@@ -228,19 +228,19 @@ def test_node_provider_detects_nextjs_runtime_app(tmp_path: Path) -> None:
     [
         (
             "package-lock.json",
-            "npx -y next-bundle@0.2.0 --build-command 'npm run build'",
+            "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
         ),
         (
             "pnpm-lock.yaml",
-            "pnpm dlx next-bundle@0.2.0 --build-command 'pnpm run build'",
+            "pnpm dlx next-bundle@1.0.0 --build-command 'pnpm run build'",
         ),
         (
             "yarn.lock",
-            "yarn dlx next-bundle@0.2.0 --build-command 'yarn run build'",
+            "yarn dlx next-bundle@1.0.0 --build-command 'yarn run build'",
         ),
         (
             "bun.lockb",
-            "bunx next-bundle@0.2.0 --build-command 'bun run build'",
+            "bunx next-bundle@1.0.0 --build-command 'bun run build'",
         ),
     ],
 )
@@ -282,7 +282,7 @@ def test_nextjs_build_command_wraps_explicit_build_command(
     provider_config = NodeProvider.load_config(tmp_path, base_config)
 
     assert provider_config.build_command == (
-        "npx -y next-bundle@0.2.0 --build-command 'next build --debug'"
+        "npx -y next-bundle@1.0.0 --build-command 'next build --debug'"
     )
     assert provider_config.commands.build == provider_config.build_command
 
