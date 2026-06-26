@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.4](https://github.com/wasmerio/shipit/compare/v0.21.3...v0.21.4) (2026-06-26)
+
+
+### Bug Fixes
+
+* use next-bundle 1.0.0 for Next.js builds ([f470f87](https://github.com/wasmerio/shipit/commit/f470f87104f13ff6aea4128c8bf73a1ec513f997))
+
 ## [0.21.3](https://github.com/wasmerio/shipit/compare/v0.21.2...v0.21.3) (2026-06-25)
 
 
