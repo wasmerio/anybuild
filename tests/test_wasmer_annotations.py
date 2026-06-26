@@ -201,11 +201,33 @@ def test_wasmer_node_manifest_maps_to_edgejs(tmp_path: Path) -> None:
     runner.build_serve(serve)
 
     manifest = tomllib.loads((runner.wasmer_dir_path / "wasmer.toml").read_text())
-    assert manifest["dependencies"]["wasmer/edgejs-quickjs"] == "=0.0.4"
+    assert manifest["dependencies"]["wasmer/edgejs-quickjs"] == "=0.0.5"
     assert manifest["command"][0]["module"] == "wasmer/edgejs-quickjs:edge"
     wasi = manifest["command"][0]["annotations"]["wasi"]
-    assert wasi["main-args"] == ["server.js"]
+    assert wasi["main-args"] == ["--bytecode-cache", "server.js"]
     assert "env" not in wasi
+
+
+def test_wasmer_edge_manifest_does_not_duplicate_bytecode_cache(
+    tmp_path: Path,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
+
+    serve = Serve(
+        name="node",
+        provider="node",
+        build=[],
+        deps=[Package("node", "22")],
+        commands={"start": "edge --bytecode-cache server.js"},
+    )
+
+    runner.build_serve(serve)
+
+    manifest = tomllib.loads((runner.wasmer_dir_path / "wasmer.toml").read_text())
+    wasi = manifest["command"][0]["annotations"]["wasi"]
+    assert wasi["main-args"] == ["--bytecode-cache", "server.js"]
 
 
 def test_wasmer_prepare_config_enables_node_edge_optimizations(
@@ -218,6 +240,21 @@ def test_wasmer_prepare_config_enables_node_edge_optimizations(
     config = runner.prepare_config(NodeConfig())
 
     assert config.use_edgejs is True
+    assert config.edgejs_precompile is True
+    assert config.remove_native_binaries is True
+
+
+def test_wasmer_prepare_config_preserves_node_precompile_override(
+    tmp_path: Path,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
+
+    config = runner.prepare_config(NodeConfig(edgejs_precompile=False))
+
+    assert config.use_edgejs is True
+    assert config.edgejs_precompile is False
     assert config.remove_native_binaries is True
 
 
