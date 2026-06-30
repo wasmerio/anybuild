@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.21.5](https://github.com/wasmerio/shipit/compare/v0.21.4...v0.21.5) (2026-06-30)
+
+
+### Bug Fixes
+
+* bump EdgeJS QuickJS to 0.0.6 ([33ee878](https://github.com/wasmerio/shipit/commit/33ee878264efd72076577d570b1af711054c2176))
+* Speed up PyPI releases ([f9c8164](https://github.com/wasmerio/shipit/commit/f9c81645286d8c90be5856c7152a14ae49320903))
+* use the flag as precompile_edgejs ([76fa80c](https://github.com/wasmerio/shipit/commit/76fa80c2dbae903bb645d79d91cee6d320d4008e))
+
 ## [0.21.4](https://github.com/wasmerio/shipit/compare/v0.21.3...v0.21.4) (2026-06-26)
 
 
