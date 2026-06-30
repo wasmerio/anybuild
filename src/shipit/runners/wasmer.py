@@ -29,6 +29,7 @@ SHIPIT_CONFIG_ANNOTATION = "shipitcli.com/config"
 SHIPIT_PROVIDER_ANNOTATION = "shipitcli.com/provider"
 SHIPIT_VERSION_ANNOTATION = "shipitcli.com/version"
 WASMER_APP_KIND_ANNOTATION = "wasmer.io/app-kind"
+EDGEJS_QUICKJS_DEPENDENCY = "wasmer/edgejs-quickjs@=0.0.5"
 
 
 def serialize_provider_config(provider_config: Any) -> Dict[str, Any]:
@@ -101,9 +102,9 @@ class WasmerRunner:
     mapper: Dict[str, MapperItem] = {
         "node": {
             "dependencies": {
-                "latest": "wasmer/edgejs-quickjs@=0.0.4",
-                "24": "wasmer/edgejs-quickjs@=0.0.4",
-                "22": "wasmer/edgejs-quickjs@=0.0.4",
+                "latest": EDGEJS_QUICKJS_DEPENDENCY,
+                "24": EDGEJS_QUICKJS_DEPENDENCY,
+                "22": EDGEJS_QUICKJS_DEPENDENCY,
             },
             "scripts": {"edge"},
             "aliases": {"node": "edge"},
@@ -256,6 +257,8 @@ class WasmerRunner:
             provider_config.phpix = True
         if isinstance(provider_config, NodeConfig):
             provider_config.use_edgejs = True
+            if provider_config.edgejs_precompile is None:
+                provider_config.edgejs_precompile = True
             provider_config.remove_native_binaries = True
         self.provider_config = provider_config
         return provider_config
@@ -486,7 +489,8 @@ class WasmerRunner:
                 wasi_args = table()
                 if serve.cwd:
                     wasi_args.add("cwd", serve.cwd)
-                wasi_args.add("main-args", array(parts[1:]).multiline(True))
+                main_args = self.main_args_for_module(command_module, parts[1:])
+                wasi_args.add("main-args", array(main_args).multiline(True))
                 if serve.env:
                     command_env.update(serve.env)
                 if command_env:
@@ -700,6 +704,11 @@ class WasmerRunner:
             atom = wasi.get("atom") if isinstance(wasi, dict) else None
             return "edgejs" in module or atom == "edgejs"
         return False
+
+    def main_args_for_module(self, module: str, args: List[str]) -> List[str]:
+        if "edgejs" not in module or "--bytecode-cache" in args:
+            return args
+        return ["--bytecode-cache", *args]
 
     def has_serve_command(self, command: str) -> bool:
         wasmer_toml_path = self.wasmer_dir_path / "wasmer.toml"

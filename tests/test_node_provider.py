@@ -7,7 +7,12 @@ import pytest
 from shipit.generator import load_provider
 from shipit.providers.base import Config
 from shipit.providers.laravel import LaravelProvider
-from shipit.providers.node import NodeFramework, NodeProvider, PackageManager
+from shipit.providers.node import (
+    NodeConfig,
+    NodeFramework,
+    NodeProvider,
+    PackageManager,
+)
 from shipit.providers.node_static import NodeStaticProvider
 from shipit.providers.php import PhpFramework
 
@@ -418,6 +423,19 @@ def test_node_provider_skips_native_binary_optimizer_by_default(
     )
     assert all(dep.name != "bash" for dep in provider.dependencies())
     assert all(mount.name != "assets" for mount in provider.mounts())
+
+
+def test_node_prepare_steps_use_edgejs_precompile_flag(tmp_path: Path) -> None:
+    config = NodeConfig()
+    provider = NodeProvider(tmp_path, config)
+
+    assert config.edgejs_precompile is None
+    assert provider.prepare_steps() == []
+
+    config.edgejs_precompile = True
+    assert provider.prepare_steps() == [
+        'run("edgejs --precompile {}".format(app.serve_path))',
+    ]
 
 
 def test_node_provider_uses_build_only_assets_mount(tmp_path: Path) -> None:
