@@ -257,8 +257,8 @@ class WasmerRunner:
             provider_config.phpix = True
         if isinstance(provider_config, NodeConfig):
             provider_config.use_edgejs = True
-            if provider_config.edgejs_precompile is None:
-                provider_config.edgejs_precompile = True
+            if provider_config.precompile_edgejs is None:
+                provider_config.precompile_edgejs = True
             provider_config.remove_native_binaries = True
         self.provider_config = provider_config
         return provider_config

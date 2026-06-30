@@ -425,14 +425,14 @@ def test_node_provider_skips_native_binary_optimizer_by_default(
     assert all(mount.name != "assets" for mount in provider.mounts())
 
 
-def test_node_prepare_steps_use_edgejs_precompile_flag(tmp_path: Path) -> None:
+def test_node_prepare_steps_use_precompile_edgejs_flag(tmp_path: Path) -> None:
     config = NodeConfig()
     provider = NodeProvider(tmp_path, config)
 
-    assert config.edgejs_precompile is None
+    assert config.precompile_edgejs is None
     assert provider.prepare_steps() == []
 
-    config.edgejs_precompile = True
+    config.precompile_edgejs = True
     assert provider.prepare_steps() == [
         'run("edgejs --precompile {}".format(app.serve_path))',
     ]

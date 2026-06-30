@@ -420,7 +420,7 @@ class NodeConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
     use_edgejs: Optional[bool] = False
-    edgejs_precompile: Optional[bool] = None
+    precompile_edgejs: Optional[bool] = None
     package_manager: Optional[PackageManager] = None
     framework: Optional[NodeFramework] = None
     extra_dependencies: Set[str] = Field(default_factory=set)
@@ -1235,7 +1235,7 @@ class NodeProvider:
         return None
 
     def prepare_steps(self) -> Optional[list[str]]:
-        if not self.config.edgejs_precompile:
+        if not self.config.precompile_edgejs:
             return []
         return [
             'run("edgejs --precompile {}".format(app.serve_path))',

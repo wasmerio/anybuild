@@ -240,7 +240,7 @@ def test_wasmer_prepare_config_enables_node_edge_optimizations(
     config = runner.prepare_config(NodeConfig())
 
     assert config.use_edgejs is True
-    assert config.edgejs_precompile is True
+    assert config.precompile_edgejs is True
     assert config.remove_native_binaries is True
 
 
@@ -251,10 +251,10 @@ def test_wasmer_prepare_config_preserves_node_precompile_override(
     src_dir.mkdir()
     runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
 
-    config = runner.prepare_config(NodeConfig(edgejs_precompile=False))
+    config = runner.prepare_config(NodeConfig(precompile_edgejs=False))
 
     assert config.use_edgejs is True
-    assert config.edgejs_precompile is False
+    assert config.precompile_edgejs is False
     assert config.remove_native_binaries is True
 
 
