@@ -84,18 +84,20 @@ jobs:
             exit 1
           fi
 
-  test_and_e2e:
-    name: Test + E2E
+  unit_tests:
+    name: Unit tests
     uses: ./.github/workflows/reusable-test-e2e.yml
     needs:
       - validate_version
+    with:
+      run_e2e: false
 
   publish:
     name: Build and publish package
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs:
-      - test_and_e2e
+      - unit_tests
     environment:
       name: pypi
       url: https://pypi.org/p/shipit-cli

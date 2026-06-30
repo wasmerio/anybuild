@@ -143,7 +143,7 @@ Conventional Commits. When that PR is merged, it creates a GitHub release with
 a `vX.Y.Z` tag and dispatches the PyPI workflow for that tag with the built-in
 `GITHUB_TOKEN`. The PyPI workflow also supports manual dispatch for reruns. It:
 
-* Runs regular test and e2e workflows.
+* Runs regular tests, excluding e2e tests.
 * Validates that the tag version without the leading `v` matches:
   * `project.version` in `pyproject.toml`
   * `version` in `src/shipit/version.py`

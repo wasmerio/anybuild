@@ -2,6 +2,12 @@ name: Reusable Test + E2E
 
 on:
   workflow_call:
+    inputs:
+      run_e2e:
+        description: Run the E2E test job after unit tests pass.
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -47,6 +53,7 @@ jobs:
 
   e2e:
     name: E2E (Python 3.13)
+    if: ${{ inputs.run_e2e }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs: test
