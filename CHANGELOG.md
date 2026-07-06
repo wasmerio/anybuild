@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.6](https://github.com/wasmerio/shipit/compare/v0.21.5...v0.21.6) (2026-07-06)
+
+
+### Bug Fixes
+
+* **wasmer:** update edgejs-quickjs to 0.0.7 ([95d7c54](https://github.com/wasmerio/shipit/commit/95d7c543178a5195b6208b7e30be578f48d1f997))
+
 ## [0.21.5](https://github.com/wasmerio/shipit/compare/v0.21.4...v0.21.5) (2026-06-30)
 
 
