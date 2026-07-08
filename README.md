@@ -117,6 +117,14 @@ You can run the e2e tests in parallel (`-n 8`) with:
 uv run pytest -m e2e -v "tests/test_e2e.py" -s -n 8
 ```
 
+You can also run one technology slice at a time with `e2e_static`,
+`e2e_staticpython`, `e2e_staticnode1`, `e2e_staticnode2`, `e2e_python`,
+`e2e_node`, or `e2e_php`, for example:
+
+```bash
+uv run pytest -m "e2e and e2e_staticnode1" -v "tests/test_e2e.py" -s -n 4
+```
+
 The e2e tests will:
 * Build the project (locally, or with docker)
 * Run the project (locally or with Wasmer)

@@ -55,6 +55,13 @@ dev = [
 asyncio_mode = "auto"
 markers = [
     "e2e: end-to-end tests that require external runtimes and network access",
+    "e2e_static: static-site end-to-end tests",
+    "e2e_staticnode1: first Node-built static-site end-to-end test shard",
+    "e2e_staticnode2: second Node-built static-site end-to-end test shard",
+    "e2e_staticpython: Python-built static-site end-to-end tests",
+    "e2e_python: Python end-to-end tests",
+    "e2e_node: Node.js end-to-end tests",
+    "e2e_php: PHP and WordPress end-to-end tests",
 ]
 
 [tool.mypy]

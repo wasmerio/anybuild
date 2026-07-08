@@ -52,11 +52,22 @@ jobs:
         run: uv run pytest -m "not e2e" -q
 
   e2e:
-    name: E2E (Python 3.13)
+    name: E2E ${{ matrix.suite }} (Python 3.13)
     if: ${{ inputs.run_e2e }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - static
+          - staticpython
+          - staticnode1
+          - staticnode2
+          - python
+          - node
+          - php
     services:
       mysql:
         image: mysql:8.0
@@ -107,5 +118,6 @@ jobs:
 
       - name: Run e2e tests
         run: |
-          uv run pytest -m e2e -v tests/test_e2e.py -n 4 \
+          uv run pytest -m "e2e and e2e_${{ matrix.suite }}" \
+            -v tests/test_e2e.py -n 4 \
             -k "(BuildMode.Wasmer and not cdn and not hugo and not python-streamlit and not BuildMode.WasmerAndDocker)"
