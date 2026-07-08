@@ -30,6 +30,16 @@ class BuildMode(Enum):
     Local = "local"
 
 
+class E2ETechnology(Enum):
+    Static = "static"
+    StaticNode1 = "staticnode1"
+    StaticNode2 = "staticnode2"
+    StaticPython = "staticpython"
+    Python = "python"
+    Node = "node"
+    Php = "php"
+
+
 @dataclass(frozen=True)
 class HTTPRequest:
     path: str
@@ -95,12 +105,93 @@ BRO_BARBERSHOP_ARCHIVE_URL = (
 )
 
 
+STATIC_E2E_PATHS = frozenset(
+    {
+        "examples/cdn",
+        "examples/hugo",
+        "examples/static-htmlwithjs",
+        "examples/static-nobuild",
+        "examples/staticfile",
+        "examples/staticfile-redirects",
+    }
+)
+
+
+STATIC_PYTHON_E2E_PATHS = frozenset(
+    {
+        "examples/mkdocs",
+        "examples/mkdocs-with-plugins",
+    }
+)
+
+
+STATIC_NODE_1_E2E_PATHS = frozenset(
+    {
+        "examples/nodestatic-angular",
+        "examples/nodestatic-assemble",
+        "examples/nodestatic-astro",
+        "examples/nodestatic-brunch",
+        "examples/nodestatic-docusaurus",
+        "examples/nodestatic-eleventy",
+        "examples/nodestatic-harp",
+        "examples/nodestatic-hexo",
+        "examples/nodestatic-metalsmith",
+        "examples/nodestatic-next",
+        "examples/nodestatic-nuxt",
+        "examples/nodestatic-remix",
+        "examples/nodestatic-svelte",
+        "examples/nodestatic-sveltekit",
+        "examples/nodestatic-vitepress",
+        "examples/nodestatic-vuepress",
+    }
+)
+
+
+def _technology_for_case(case: E2ECase) -> E2ETechnology:
+    identifier = case.path or case.name or ""
+    if case.download:
+        download_name = Path(urlparse(case.download).path).stem
+        if "wordpress" in download_name:
+            return E2ETechnology.Php
+    if (
+        identifier.startswith("wordpress")
+        or identifier.startswith("examples/php-")
+    ):
+        return E2ETechnology.Php
+    if identifier.startswith("examples/python-"):
+        return E2ETechnology.Python
+    if identifier == "examples/node" or identifier.startswith("examples/node-"):
+        return E2ETechnology.Node
+    if identifier in STATIC_E2E_PATHS:
+        return E2ETechnology.Static
+    if identifier in STATIC_PYTHON_E2E_PATHS:
+        return E2ETechnology.StaticPython
+    if identifier in STATIC_NODE_1_E2E_PATHS:
+        return E2ETechnology.StaticNode1
+    if identifier.startswith("examples/nodestatic-"):
+        return E2ETechnology.StaticNode2
+    raise ValueError(f"Could not classify e2e case by technology: {case}")
+
+
+def _e2e_case_params(cases: list[E2ECase]) -> list[object]:
+    params = []
+    for case in cases:
+        technology = _technology_for_case(case)
+        params.append(
+            pytest.param(
+                case,
+                marks=getattr(pytest.mark, f"e2e_{technology.value}"),
+            )
+        )
+    return params
+
+
 @pytest.mark.e2e
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "case",
-    [
-        # Simple PHP site that calls phpinfo()
+    _e2e_case_params([
+        # CDN/static fixture
         E2ECase(
             path="examples/cdn",
             serve_pattern=r"server is listening on",
@@ -733,7 +824,7 @@ BRO_BARBERSHOP_ARCHIVE_URL = (
             serve_pattern=r".*You can now view your Streamlit app in your browser.*",
             http=[HTTPRequest(path="/", body_match=r"Streamlit")],
         ),
-    ],
+    ]),
     ids=lambda c: str(c),
 )
 @pytest.mark.flaky(reruns=2, reruns_delay=2)

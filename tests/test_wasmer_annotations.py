@@ -208,6 +208,44 @@ def test_wasmer_node_manifest_maps_to_edgejs(tmp_path: Path) -> None:
     assert "env" not in wasi
 
 
+@pytest.mark.parametrize(
+    ("version", "architecture", "expected_package"),
+    [
+        (None, None, "phpix/phpix-84-32bit"),
+        ("latest", "64-bit", "phpix/phpix-84-64bit"),
+        ("8.5", "32-bit", "phpix/phpix-85-32bit"),
+        ("8.5", "64-bit", "phpix/phpix-85-64bit"),
+        ("8.4", "32-bit", "phpix/phpix-84-32bit"),
+        ("8.4", "64-bit", "phpix/phpix-84-64bit"),
+        ("8.3.29", None, "phpix/phpix-83-32bit"),
+    ],
+)
+def test_wasmer_phpix_manifest_maps_php_versions(
+    tmp_path: Path,
+    version: str | None,
+    architecture: str | None,
+    expected_package: str,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
+
+    serve = Serve(
+        name="php",
+        provider="php",
+        build=[],
+        deps=[Package("phpix", version, architecture)],
+        cwd="/app",
+        commands={"start": "phpix -S localhost:8080 -t /app"},
+    )
+
+    runner.build_serve(serve)
+
+    manifest = tomllib.loads((runner.wasmer_dir_path / "wasmer.toml").read_text())
+    assert manifest["dependencies"][expected_package] == "=0.3.0-rc.1"
+    assert manifest["command"][0]["module"] == f"{expected_package}:phpix"
+
+
 def test_wasmer_edge_manifest_does_not_duplicate_bytecode_cache(
     tmp_path: Path,
 ) -> None:
