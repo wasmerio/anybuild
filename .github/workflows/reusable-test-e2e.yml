@@ -93,7 +93,7 @@ jobs:
       - name: Set up Wasmer
         uses: wasmerio/setup-wasmer@v3.1
         with:
-          version: v7.2.0-rc.1
+          version: v7.2.0
 
       - name: Verify toolchain
         run: |
