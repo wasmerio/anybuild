@@ -30,6 +30,11 @@ SHIPIT_PROVIDER_ANNOTATION = "shipitcli.com/provider"
 SHIPIT_VERSION_ANNOTATION = "shipitcli.com/version"
 WASMER_APP_KIND_ANNOTATION = "wasmer.io/app-kind"
 EDGEJS_QUICKJS_DEPENDENCY = "wasmer/edgejs-quickjs@=0.0.7"
+PHPIX_VERSION = "0.3.0-rc.1"
+
+
+def _phpix_dependency(php_version: str, bits: int) -> str:
+    return f"phpix/phpix-{php_version}-{bits}bit@={PHPIX_VERSION}"
 
 
 def serialize_provider_config(provider_config: Any) -> Dict[str, Any]:
@@ -168,28 +173,35 @@ class WasmerRunner:
         },
         "phpix": {
             "dependencies": {
-                "latest": "phpix/phpix-83-32bit@=0.2.2",
-                "8.3": "phpix/phpix-83-32bit@=0.2.2",
-                "8.3.29": "phpix/phpix-83-32bit@=0.2.2",
-                "8.2": "phpix/phpix-82-32bit@=0.2.2",
-                "8.1": "phpix/phpix-81-32bit@=0.2.2",
-                "7.4": "php/php-32@=7.4.3301", # Note, we don't have PHPix + PHP 7.4 and never will
+                "latest": _phpix_dependency("84", 32),
+                "8.5": _phpix_dependency("85", 32),
+                "8.4": _phpix_dependency("84", 32),
+                "8.3": _phpix_dependency("83", 32),
+                "8.3.29": _phpix_dependency("83", 32),
+                "8.2": _phpix_dependency("82", 32),
+                "8.1": _phpix_dependency("81", 32),
+                # Note, we don't have PHPix + PHP 7.4 and never will.
+                "7.4": "php/php-32@=7.4.3301",
             },
             "architecture_dependencies": {
                 "64-bit": {
-                    "latest": "phpix/phpix-83-64bit@=0.2.2",
-                    "8.3": "phpix/phpix-83-64bit@=0.2.2",
-                    "8.3.29": "phpix/phpix-83-64bit@=0.2.2",
-                    "8.2": "phpix/phpix-82-64bit@=0.2.2",
-                    "8.1": "phpix/phpix-81-64bit@=0.2.2",
+                    "latest": _phpix_dependency("84", 64),
+                    "8.5": _phpix_dependency("85", 64),
+                    "8.4": _phpix_dependency("84", 64),
+                    "8.3": _phpix_dependency("83", 64),
+                    "8.3.29": _phpix_dependency("83", 64),
+                    "8.2": _phpix_dependency("82", 64),
+                    "8.1": _phpix_dependency("81", 64),
                     "7.4": "php/php-64@=7.4.3301",
                 },
                 "32-bit": {
-                    "latest": "phpix/phpix-83-32bit@=0.2.2",
-                    "8.3": "phpix/phpix-83-32bit@=0.2.2",
-                    "8.3.29": "phpix/phpix-83-32bit@=0.2.2",
-                    "8.2": "phpix/phpix-82-32bit@=0.2.2",
-                    "8.1": "phpix/phpix-81-32bit@=0.2.2",
+                    "latest": _phpix_dependency("84", 32),
+                    "8.5": _phpix_dependency("85", 32),
+                    "8.4": _phpix_dependency("84", 32),
+                    "8.3": _phpix_dependency("83", 32),
+                    "8.3.29": _phpix_dependency("83", 32),
+                    "8.2": _phpix_dependency("82", 32),
+                    "8.1": _phpix_dependency("81", 32),
                     "7.4": "php/php-32@=7.4.3301",
                 },
             },
@@ -393,10 +405,11 @@ class WasmerRunner:
                     if architecture_dependencies:
                         mapped_dependencies = architecture_dependencies
                 if version in mapped_dependencies:
+                    mapped_dependency = mapped_dependencies[version]
                     console.print(
-                        f"* {dep.name}@{version} mapped to {self.mapper[dep.name]['dependencies'][version]}"
+                        f"* {dep.name}@{version} mapped to {mapped_dependency}"
                     )
-                    package_name, version = mapped_dependencies[version].split("@")
+                    package_name, version = mapped_dependency.split("@")
                     dependencies.add(package_name, version)
                     scripts = self.mapper[dep.name].get("scripts") or []
                     for script in scripts:
