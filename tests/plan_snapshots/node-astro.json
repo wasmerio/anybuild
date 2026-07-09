@@ -87,24 +87,6 @@
  "commands": {
   "start": "node ./dist/server/entry.mjs"
  },
- "ctx_mounts": [
-  {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/build",
-   "name": "build",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/build"
-  },
-  {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
-   "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
-  }
- ],
- "ctx_packages": {
-  "node@24": "node@24",
-  "npm": "npm"
- },
- "ctx_services": {},
- "ctx_volumes": [],
  "cwd": "<SHIPIT_DIR>/local/build/app",
  "deps": [
   "node@24"

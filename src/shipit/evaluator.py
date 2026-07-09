@@ -53,11 +53,7 @@ class Ctx:
         self.build_backend = build_backend
         self.runner = runner
         self.source_dir = source_dir
-        self.packages: Dict[str, Package] = {}
         self.serves: Dict[str, Serve] = {}
-        self.mounts: List[Mount] = []
-        self.volumes: List[Volume] = []
-        self.services: Dict[str, Service] = {}
 
     def file_exists(self, path: str) -> bool:
         """Read-only probe of the app source tree, exposed to Shipit files.
@@ -89,17 +85,12 @@ class Ctx:
         version: Optional[str] = None,
         architecture: Optional[Literal["64-bit", "32-bit"]] = None,
     ) -> Package:
-        package = Package(name, version, architecture)
-        index = f"{name}@{version}" if version else name
-        self.packages[index] = package
-        return package
+        return Package(name, version, architecture)
 
     def service(
         self, name: str, provider: Literal["postgres", "mysql", "redis"]
     ) -> Service:
-        service = Service(name, provider)
-        self.services[name] = service
-        return service
+        return Service(name, provider)
 
     def serve(
         self,
@@ -168,7 +159,6 @@ class Ctx:
         build_path = self.build_backend.get_build_mount_path(name)
         serve_path = self.runner.get_serve_mount_path(name)
         mount = Mount(name, build_path, serve_path)
-        self.mounts.append(mount)
         return CtxMount(
             mount=mount,
             path=str(build_path.absolute()),
@@ -181,7 +171,6 @@ class Ctx:
             path=self.build_backend.get_volume_path(name),
             serve_path=Path(serve),
         )
-        self.volumes.append(volume)
         return {
             "volume": volume,
             "name": name,

@@ -60,25 +60,6 @@
  "commands": {
   "start": "php -S localhost:8080 -t <SHIPIT_DIR>/local/build/app/public"
  },
- "ctx_mounts": [
-  {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
-   "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
-  },
-  {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/assets",
-   "name": "assets",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/assets"
-  }
- ],
- "ctx_packages": {
-  "bash": "bash",
-  "composer": "composer",
-  "php@8.3.29": "php@8.3.29"
- },
- "ctx_services": {},
- "ctx_volumes": [],
  "cwd": "<SHIPIT_DIR>/local/build/app",
  "deps": [
   "php@8.3.29",

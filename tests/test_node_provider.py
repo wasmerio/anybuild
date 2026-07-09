@@ -7,7 +7,7 @@ import pytest
 
 from shipit.generator import load_provider
 from shipit.providers.base import Config
-from shipit.shipit_types import CopyStep, RunStep
+from shipit.shipit_types import CopyStep, RunStep, UseStep
 
 from plan_helpers import evaluate_project_plan
 from shipit.providers.laravel import LaravelProvider
@@ -401,15 +401,19 @@ def test_node_provider_skips_native_binary_optimizer_by_default(
 ) -> None:
     (tmp_path / "package.json").write_text("{}\n")
 
-    _backend, ctx, serve, config = evaluate_project_plan(tmp_path, tmp_path)
+    _backend, _ctx, serve, config = evaluate_project_plan(tmp_path, tmp_path)
     assert config.remove_native_binaries is False
     assert all(
         "optimize-node-modules.sh" not in getattr(step, "command", "")
         for step in serve.build
         if isinstance(step, RunStep)
     )
-    assert "bash" not in ctx.packages
-    assert all(mount.name != "assets" for mount in ctx.mounts)
+    use_steps = [step for step in serve.build if isinstance(step, UseStep)]
+    assert all(
+        pkg.name != "bash" for step in use_steps for pkg in step.dependencies
+    )
+    assert all(dep.name != "bash" for dep in serve.deps)
+    assert all(mount.name != "assets" for mount in (serve.mounts or []))
 
 
 def test_node_prepare_steps_use_precompile_edgejs_flag(tmp_path: Path) -> None:
@@ -436,11 +440,16 @@ def test_node_prepare_steps_use_precompile_edgejs_flag(tmp_path: Path) -> None:
 def test_node_provider_uses_build_only_assets_mount(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text("{}\n")
 
-    _backend, ctx, serve, _config = evaluate_project_plan(
+    backend, _ctx, serve, _config = evaluate_project_plan(
         tmp_path, tmp_path, config_overrides={"remove_native_binaries": True}
     )
-    # The assets mount exists for the build but is not attached to the serve.
-    assert any(mount.name == "assets" for mount in ctx.mounts)
+    # The assets mount serves the build (the optimizer stages into it) but is
+    # not attached to the serve.
+    assets_path = backend.get_build_mount_path("assets")
+    assert any(
+        isinstance(step, RunStep) and step.command == f"mkdir -p {assets_path}"
+        for step in serve.build
+    )
     assert all(mount.name != "assets" for mount in (serve.mounts or []))
 
 
@@ -493,7 +502,12 @@ def test_laravel_reuses_node_provider_without_static_serving(
     provider_config = LaravelProvider.load_config(path, Config())
     assert provider_config.framework == PhpFramework.Laravel
 
-    _backend, ctx, serve, _config = evaluate_project_plan(path, tmp_path)
+    backend, _ctx, serve, _config = evaluate_project_plan(path, tmp_path)
     assert serve.provider == "laravel"
-    assert all(mount.name != "static_app" for mount in ctx.mounts)
+    assert all(mount.name != "static_app" for mount in (serve.mounts or []))
+    static_app_path = str(backend.get_build_mount_path("static_app"))
+    assert all(
+        static_app_path not in str(getattr(step, "command", ""))
+        for step in serve.build
+    )
     assert serve.commands["start"].startswith("php -S localhost:")

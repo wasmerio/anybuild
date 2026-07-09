@@ -107,7 +107,7 @@ def _norm_step(step: Any) -> Any:
     return _jsonable(data)
 
 
-def _normalize(ctx: Any, serve: Any) -> dict:
+def _normalize(serve: Any) -> dict:
     return {
         "name": serve.name,
         "provider": serve.provider,
@@ -126,12 +126,6 @@ def _normalize(ctx: Any, serve: Any) -> dict:
         "services": _jsonable(
             [dataclasses.asdict(service) for service in (serve.services or [])]
         ),
-        "ctx_mounts": _jsonable([dataclasses.asdict(m) for m in ctx.mounts]),
-        "ctx_volumes": _jsonable([dataclasses.asdict(v) for v in ctx.volumes]),
-        "ctx_services": {
-            key: dataclasses.asdict(service) for key, service in ctx.services.items()
-        },
-        "ctx_packages": {key: str(pkg) for key, pkg in ctx.packages.items()},
     }
 
 
@@ -148,10 +142,10 @@ def _evaluate_plan(
     shipit_dir = tmp_path / ".shipit"
     backend = LocalBuildBackend(workspace, ASSETS_PATH, shipit_dir=shipit_dir)
     runner = LocalRunner(backend, workspace, shipit_dir=shipit_dir)
-    ctx, serve = evaluate_shipit(
+    _ctx, serve = evaluate_shipit(
         shipit_file, backend, runner, provider_config, project_root=workspace
     )
-    plan = _normalize(ctx, serve)
+    plan = _normalize(serve)
     # Tokenize machine-specific roots so snapshots are stable everywhere.
     text = json.dumps(plan, indent=1, sort_keys=True)
     text = text.replace(str(shipit_dir), "<SHIPIT_DIR>")

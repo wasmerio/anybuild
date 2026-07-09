@@ -48,23 +48,6 @@
  "commands": {
   "start": "<SHIPIT_DIR>/local/build/app/server_server"
  },
- "ctx_mounts": [
-  {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/temp",
-   "name": "temp",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/temp"
-  },
-  {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
-   "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
-  }
- ],
- "ctx_packages": {
-  "go@1.25.5": "go@1.25.5"
- },
- "ctx_services": {},
- "ctx_volumes": [],
  "cwd": "<SHIPIT_DIR>/local/build/app",
  "deps": [],
  "env": {},

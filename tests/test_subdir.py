@@ -10,7 +10,7 @@ from shipit.cli import evaluate_shipit
 from shipit.generator import load_provider, load_provider_config
 from shipit.providers.base import Config
 from shipit.runners.local import LocalRunner
-from shipit.shipit_types import CopyStep, EnvStep, RunStep, WorkdirStep
+from shipit.shipit_types import CopyStep, EnvStep, RunStep, UseStep, WorkdirStep
 
 
 runner = CliRunner()
@@ -330,11 +330,14 @@ def test_generate_subdir_inherits_workspace_package_manager(
 
     assert result.exit_code == 0, result.output
 
-    _backend, ctx, serve, config = _evaluate_subdir_shipit(
+    _backend, _ctx, serve, config = _evaluate_subdir_shipit(
         tmp_path, tmp_path / "apps" / "site"
     )
     # The workspace package manager (pnpm) wins over the app-level default.
-    assert "pnpm" in ctx.packages
+    use_steps = [step for step in serve.build if isinstance(step, UseStep)]
+    assert any(
+        pkg.name == "pnpm" for step in use_steps for pkg in step.dependencies
+    )
     commands = _run_commands(serve)
     assert any(command.startswith("pnpm install") for command in commands)
     assert not any(command.startswith("npm install") for command in commands)

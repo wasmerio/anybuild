@@ -87,29 +87,6 @@
  "commands": {
   "start": "uvicorn src.main:app --host 0.0.0.0 --port 8080"
  },
- "ctx_mounts": [
-  {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
-   "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
-  },
-  {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/venv",
-   "name": "venv",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/venv"
-  },
-  {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/local_venv",
-   "name": "local_venv",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/local_venv"
-  }
- ],
- "ctx_packages": {
-  "python@3.13": "python@3.13",
-  "uv@0.8.15": "uv@0.8.15"
- },
- "ctx_services": {},
- "ctx_volumes": [],
  "cwd": "<SHIPIT_DIR>/local/build/app",
  "deps": [
   "python@3.13"
