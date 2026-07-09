@@ -39,7 +39,7 @@ def php_env(config, assets):
 
 def php_ini_steps(config, assets):
     """Stage php.ini into the assets mount (project's own or the default)."""
-    if config.has_php_ini:
+    if file_exists("php.ini"):
         return [copy("php.ini", "{}/php.ini".format(assets.path))]
     return [copy("php/php.ini", "{}/php.ini".format(assets.path), base = "assets")]
 

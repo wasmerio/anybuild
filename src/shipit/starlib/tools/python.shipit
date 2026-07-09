@@ -1,8 +1,9 @@
 """Python apps: uv-managed virtualenv, optional cross-platform wheels.
 
-Everything here is a pure function of `config` — a frozen snapshot produced
-by shipit's Python-side detection. No filesystem access happens in this file;
-every fact (does uv.lock exist? which framework?) is a config field.
+Everything here is a function of `config` (a frozen snapshot produced by
+shipit's Python-side detection) and read-only file_exists() probes of the
+app source tree. Derived facts (framework, install inputs, versions) live
+in config; simple existence checks use file_exists() directly.
 
   python_build(config, ...)           install deps + stage sources (embeddable)
   python_serve(config, build, ...)    wire the Python runtime around a build
@@ -46,8 +47,8 @@ def _install_steps(config, venv, local_venv):
     inputs = None if (in_subdir or all_files) else config.install_inputs
 
     steps = []
-    if config.has_pyproject:
-        lock = " --locked" if config.has_uv_lock else ""
+    if file_exists("pyproject.toml"):
+        lock = " --locked" if file_exists("uv.lock") else ""
         steps += [
             env(
                 UV_PROJECT_ENVIRONMENT = local_venv.path if cross else venv.path,
@@ -59,13 +60,13 @@ def _install_steps(config, venv, local_venv):
             copy("pyproject.toml", "pyproject.toml") if not in_subdir and not all_files else None,
             run("uv add {}".format(extra), group = "install") if extra else None,
         ]
-    elif config.has_requirements or extra:
+    elif file_exists("requirements.txt") or extra:
         steps += [
             env(UV_PROJECT_ENVIRONMENT = local_venv.path if cross else venv.path),
             run("uv init", inputs = [], outputs = ["uv.lock"], group = "install"),
             copy(".", ".", ignore = [".venv", ".git", "__pycache__"]) if all_files and not in_subdir else None,
         ]
-        if config.has_requirements:
+        if file_exists("requirements.txt"):
             steps.append(run("uv add -r requirements.txt {}".format(extra), inputs = inputs, group = "install"))
         else:
             steps.append(run("uv add {}".format(extra), group = "install"))
@@ -83,7 +84,7 @@ def _cross_wheel_steps(config, venv, local_venv):
     in_subdir = config.app_subdir != None
     cross_packages = "{}/lib/python{}/site-packages".format(venv.path, python_version)
 
-    if config.has_pyproject:
+    if file_exists("pyproject.toml"):
         compile_step = run(
             "uv pip compile pyproject.toml --universal --extra-index-url {} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt".format(index),
             outputs = ["cross-requirements.txt"],
@@ -120,7 +121,7 @@ def python_build(config, source = None, venv = None, cross_wheels = False, copy_
     steps += _install_steps(config, venv, local_venv)
     # Cross wheels only make sense when an install branch ran (pyproject,
     # requirements, or extra deps) — a bare script app has nothing to compile.
-    has_install = config.has_pyproject or config.has_requirements or len(config.extra_dependencies) > 0
+    has_install = file_exists("pyproject.toml") or file_exists("requirements.txt") or len(config.extra_dependencies) > 0
     if cross_wheels and has_install:
         steps += _cross_wheel_steps(config, venv, local_venv)
     steps += [

@@ -33,8 +33,6 @@ class PhpConfig(Config):
     php_version: Optional[str] = "8.3.29"
     php_architecture: Optional[Literal["64-bit", "32-bit"]] = None
     phpix_worker_threads: Optional[int] = 4
-    # Static snapshot of the filesystem facts the Starlark provider needs.
-    has_php_ini: bool = False
     # Docroot subdirectory ("web", "public", "app") or None for the app root.
     public_dir: Optional[str] = None
 
@@ -149,7 +147,6 @@ class PhpProvider:
             # Drupal relies on Apache-style rewrite behavior that the built-in
             # php server handles more predictably than phpix by default.
             config.phpix = False
-        config.has_php_ini = _exists(path, "php.ini")
         if config.framework == PhpFramework.Drupal and _exists(path, "web/index.php"):
             config.public_dir = "web"
         elif _exists(path, "public/index.php"):

@@ -435,9 +435,7 @@ class NodeConfig(Config):
     # executable native binaries that cannot run there anyway.
     remove_native_binaries: Optional[bool] = False
     install_requires_all_files: bool = False
-    # Static snapshot of the filesystem facts the Starlark provider needs.
-    has_package_json: bool = False
-    has_lockfile: bool = False
+    # Derived facts for the Starlark provider.
     install_inputs: Optional[list[str]] = None
     package_name: Optional[str] = None
 
@@ -622,11 +620,7 @@ class NodeProvider:
         package_json: Optional[Dict[str, Any]],
         install_context: Any,
     ) -> None:
-        """Record the filesystem facts the Starlark provider needs."""
-        config.has_package_json = (path / "package.json").exists()
-        if config.package_manager:
-            lockfile = config.package_manager.lockfile()
-            config.has_lockfile = (path / lockfile).exists()
+        """Record the derived facts the Starlark provider needs."""
         config.install_inputs = install_context.inputs
         name = (package_json or {}).get("name")
         if isinstance(name, str) and name:

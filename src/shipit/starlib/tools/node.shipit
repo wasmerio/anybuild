@@ -56,10 +56,11 @@ def _manager_version(config):
 def node_toolchain(config, serving = True):
     """Build-time packages: node, the package manager, and extras."""
     node = dep("node", config.node_version)
+    has_package_json = file_exists("package.json")
     build_deps = []
-    if config.has_package_json or config.build_command:
+    if has_package_json or config.build_command:
         build_deps.append(node)
-    if config.package_manager and config.has_package_json:
+    if config.package_manager and has_package_json:
         build_deps.append(dep(config.package_manager, _manager_version(config)))
         if serving and config.remove_native_binaries:
             build_deps.append(dep("bash"))
@@ -79,12 +80,13 @@ def node_stage_steps(config, source):
 
 def node_install_steps(config):
     """Lockfile staging, package-manager env, and the install run."""
-    if not config.has_package_json:
+    if not file_exists("package.json"):
         return []
     manager = config.package_manager
     lockfile = _LOCKFILES[manager]
+    has_lockfile = file_exists(lockfile)
     install = _INSTALL_COMMANDS[manager]
-    if manager == "bun" and config.has_lockfile:
+    if manager == "bun" and has_lockfile:
         install += " --no-save"
     if config.app_subdir and manager == "pnpm":
         install += " --no-frozen-lockfile"
@@ -92,11 +94,11 @@ def node_install_steps(config):
 
     steps = []
     if config.app_subdir:
-        if config.has_lockfile:
+        if has_lockfile:
             steps.append(copy("{}/{}".format(config.app_subdir, lockfile), lockfile))
     elif all_files:
         steps.append(copy(".", ".", ignore = ["node_modules", ".git"]))
-    elif config.has_lockfile:
+    elif has_lockfile:
         steps.append(copy(lockfile))
 
     if manager == "pnpm":
@@ -127,7 +129,7 @@ def node_copy_step(config):
     if config.app_subdir or config.install_requires_all_files:
         return None
     ignore = ["node_modules", ".git"]
-    if config.package_manager and config.has_lockfile:
+    if config.package_manager and file_exists(_LOCKFILES[config.package_manager]):
         ignore.append(_LOCKFILES[config.package_manager])
     return copy(".", ignore = ignore)
 
@@ -140,7 +142,7 @@ def node_build_step(config, outputs = ["."], serving = True):
 
 def node_optimize_steps(config, assets = None, include_prune = True, serving = True):
     """Prune dev deps and shrink node_modules for the serve environment."""
-    if not config.has_package_json or not config.package_manager:
+    if not file_exists("package.json") or not config.package_manager:
         return []
     steps = []
     if include_prune:

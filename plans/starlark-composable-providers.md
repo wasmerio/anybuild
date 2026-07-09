@@ -57,9 +57,11 @@ in CI/e2e. The shipped code supersedes the sketches below where they differ:
   jekyll don't inherit an entrypoint they don't implement yet). Ported
   providers generate the two-liner; everything else uses the legacy inline
   generator (`generate_shipit_inline`), kept until all providers are ported.
-- Config additions: base `Config.name`; `PythonConfig.{has_pyproject,
-  has_requirements, has_uv_lock, install_inputs, mcp_self_running}`;
+- Config additions: base `Config.name`; derived fields like
+  `PythonConfig.{install_inputs, mcp_self_running}`, `PhpConfig.public_dir`,
   `StaticFileConfig.redirects_config` (rendered sws.toml, computed at load).
+  Plain existence checks stay out of config: providers call the
+  `file_exists()` builtin (app-dir-scoped, read-only) directly.
 - Verification: `tests/test_plan_equivalence.py` evaluates the legacy inline
   text and the new two-liner with the same config for **every example in the
   repo** (~80 cases: all python/static/node/nodestatic/php/wordpress/laravel/
@@ -132,11 +134,14 @@ This has three compounding costs:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Design invariant:** `.shipit` files are hermetic — pure functions of
-`config`. Every filesystem fact they need (does `uv.lock` exist? which
-`index.php` is the docroot?) must be a config field computed by
-`load_config()`. This finishes the "config is the full static snapshot" story
-the first stage started.
+**Design invariant:** `.shipit` files are functions of `config` plus
+read-only `file_exists()` probes of the app source tree. Simple existence
+checks (does `uv.lock` exist?) use the `file_exists()` builtin directly —
+keeping config free of `has_x` noise — while *derived or overridable* facts
+(the docroot, install inputs, rendered redirects, detected extensions) are
+config fields computed by `load_config()`. `file_exists()` is scoped to the
+app directory and cannot escape it; no other filesystem access exists in
+Starlark.
 
 ### What stays exactly as it is
 
@@ -1047,10 +1052,11 @@ build and run the examples) stay as the final gate.
 3. **f-string limitation** (identifiers only) is a style footgun for stdlib
    authors. Enforced by the parser at load time, so failures are loud; the
    style rule is "bind attributes to locals first, or use `.format()`".
-4. **Config completeness.** Any filesystem fact still probed at
-   generation-time must become a config field, or the Starlark port silently
-   diverges. The plan-equivalence tests are the safety net — divergence shows
-   up as plan JSON diffs, example by example.
+4. **Config completeness.** Any generation-time filesystem fact must become
+   either a `file_exists()` probe (plain existence) or a config field
+   (derived values), or the Starlark port silently diverges. The
+   plan-equivalence tests are the safety net — divergence shows up as plan
+   JSON diffs, example by example.
 5. **Subdir persistence.** Keeping the `app_subdir = "..."` assignment in the
    generated file preserves `read_shipit_subdir()`'s regex. Cleaner long-term:
    persist it in config metadata rather than the Shipit file — out of scope

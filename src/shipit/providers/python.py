@@ -79,10 +79,7 @@ class PythonConfig(Config):
     python_extra_index_url: Optional[str] = None
     pandoc_version: Optional[str] = None
     ffmpeg_version: Optional[str] = None
-    # Static snapshot of the filesystem facts the Starlark provider needs.
-    has_pyproject: bool = False
-    has_requirements: bool = False
-    has_uv_lock: bool = False
+    # Derived install inputs for the Starlark provider (None => all files).
     install_inputs: Optional[List[str]] = None
     # MCP main file starts its own server (mcp.run()/__main__ block).
     mcp_self_running: bool = False
@@ -292,16 +289,13 @@ class PythonProvider:
                 database = None
             config.database = database
 
-        config.has_pyproject = _exists(path, "pyproject.toml")
-        config.has_requirements = _exists(path, "requirements.txt")
-        config.has_uv_lock = _exists(path, "uv.lock")
-        if config.has_pyproject:
+        if _exists(path, "pyproject.toml"):
             config.install_inputs = discover_python_install_context(
                 path, include_pyproject=True
             ).inputs
         else:
             config.install_inputs = discover_python_install_context(
-                path, include_requirements=config.has_requirements
+                path, include_requirements=_exists(path, "requirements.txt")
             ).inputs
         if config.framework == PythonFramework.MCP and config.main_file:
             main_path = path / config.main_file

@@ -209,9 +209,15 @@ def apply_subdir_provider_config(
 
 
 class Ctx:
-    def __init__(self, build_backend: BuildBackend, runner: Runner) -> None:
+    def __init__(
+        self,
+        build_backend: BuildBackend,
+        runner: Runner,
+        source_dir: Optional[Path] = None,
+    ) -> None:
         self.build_backend = build_backend
         self.runner = runner
+        self.source_dir = source_dir
         self.packages: Dict[str, Package] = {}
         self.builds: List[Build] = []
         self.steps: List[Step] = []
@@ -219,6 +225,27 @@ class Ctx:
         self.mounts: List[Mount] = []
         self.volumes: List[Volume] = []
         self.services: Dict[str, Service] = {}
+
+    def file_exists(self, path: str) -> bool:
+        """Read-only probe of the app source tree, exposed to Shipit files.
+
+        Paths are relative to the app directory (the subdir for subdir
+        projects) and may not escape it. Matches files and directories.
+        """
+        if self.source_dir is None:
+            raise ValueError("file_exists() is not available in this context")
+        candidate = Path(path)
+        if candidate.is_absolute():
+            raise ValueError(
+                f"file_exists() requires a project-relative path, got {path!r}"
+            )
+        root = self.source_dir.resolve()
+        target = (root / candidate).resolve()
+        if target != root and root not in target.parents:
+            raise ValueError(
+                f"file_exists() path escapes the project: {path!r}"
+            )
+        return target.exists()
 
     def add_package(self, package: Package) -> str:
         index = f"{package.name}@{package.version}" if package.version else package.name
@@ -402,7 +429,13 @@ def evaluate_shipit(
     project_root: Optional[Path] = None,
 ) -> Tuple[Ctx, Serve]:
     source = shipit_file.read_text()
-    ctx = Ctx(build_backend, runner)
+    workspace_root = project_root or shipit_file.resolve().parent
+    # file_exists() probes the app directory: the subdir for subdir projects.
+    source_dir = workspace_root
+    app_subdir = getattr(provider_config, "app_subdir", None)
+    if app_subdir:
+        source_dir = workspace_root / app_subdir
+    ctx = Ctx(build_backend, runner, source_dir=source_dir)
 
     def set_builtins(glb: "sl.GlobalsBuilder") -> None:
         glb.set("PORT", str(provider_config.port or "8080"))
@@ -418,6 +451,7 @@ def evaluate_shipit(
         glb.set("path", ctx.path)
         glb.set("env", ctx.env)
         glb.set("use", ctx.use)
+        glb.set("file_exists", ctx.file_exists)
 
     # Library modules get the builtins but not `config`: provider libraries
     # receive the config as a function parameter, keeping them pure.
@@ -433,7 +467,7 @@ def evaluate_shipit(
         entry_path=shipit_file,
         entry_globals=entry_glb.build(),
         lib_globals=lib_glb.build(),
-        project_root=project_root or shipit_file.resolve().parent,
+        project_root=workspace_root,
     )
     if not ctx.serves:
         raise ValueError(f"No serve definition found in {shipit_file}")

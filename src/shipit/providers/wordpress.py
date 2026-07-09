@@ -37,10 +37,6 @@ class WordPressConfig(PhpConfig):
     wp_version: Optional[str] = None
     wp_locale: Optional[str] = None
     wp_cli_version: Optional[str] = None
-    # Static snapshot of the filesystem facts the Starlark provider needs.
-    has_wp_config: bool = False
-    has_htaccess: bool = False
-    has_wp_content: bool = False
     # Set when the project is a plugin/theme rather than a full site.
     wp_extension_kind: Optional[Literal["plugin", "theme"]] = None
     wp_extension_slug: Optional[str] = None
@@ -72,9 +68,6 @@ class WordPressProvider(PhpProvider):
         extension = cls.detect_extension(path)
         if extension and not wp_config.wp_version:
             wp_config.wp_version = "latest"
-        wp_config.has_wp_config = _exists(path, "wp-config.php")
-        wp_config.has_htaccess = _exists(path, ".htaccess")
-        wp_config.has_wp_content = _exists(path, "wp-content")
         if extension:
             wp_config.wp_extension_kind = extension.kind
             wp_config.wp_extension_slug = extension.slug

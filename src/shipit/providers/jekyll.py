@@ -24,8 +24,6 @@ class JekyllConfig(StaticFileConfig):
     jekyll_version: Optional[str] = "4.3.0"
 
     static_dir: Optional[str] = "_site"
-    has_gemfile: bool = False
-    has_gemfile_lock: bool = False
 
 
 class JekyllProvider(StaticFileProvider):
@@ -52,8 +50,6 @@ class JekyllProvider(StaticFileProvider):
             jekyll_static_dir = jekyll_static_dir or "_site"
             assert isinstance(jekyll_static_dir, str), "destination in Jekyll config must be a string"
             config.static_dir = jekyll_static_dir
-        config.has_gemfile = _exists(path, "Gemfile")
-        config.has_gemfile_lock = _exists(path, "Gemfile.lock")
         # static_dir may have changed since the base load; recompute redirects.
         config.redirects_config = compute_redirects_config(
             path, config.static_dir, config.convert_redirects

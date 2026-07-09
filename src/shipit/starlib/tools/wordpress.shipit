@@ -39,9 +39,9 @@ def _wp_base_steps(config, app, assets):
         # Startup script wires the .htaccess handling phpix supports.
         steps.append(copy("wordpress/start.php", "{}/start-wp.php".format(assets.path), base = "assets"))
     is_extension = config.wp_extension_kind != None
-    if is_extension or not config.has_wp_config:
+    if is_extension or not file_exists("wp-config.php"):
         steps.append(copy("wordpress/wp-config.php", "{}/wp-config.php".format(app.path), base = "assets"))
-    if is_extension or not config.has_htaccess:
+    if is_extension or not file_exists(".htaccess"):
         steps.append(copy("wordpress/.htaccess", "{}/.htaccess".format(app.path), base = "assets"))
     return steps
 
@@ -49,7 +49,7 @@ def _wp_content_seed_steps(config, app, wpcontent_base):
     steps = []
     if config.wp_version:
         steps.append(run("cp -R {}/wp-content/* {}".format(app.path, wpcontent_base.path)))
-    if config.has_wp_content:
+    if file_exists("wp-content"):
         steps.append(copy("wp-content", "{}".format(wpcontent_base.path)))
     return steps
 
