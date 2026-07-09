@@ -5,9 +5,10 @@ shipit's Python-side detection) and read-only file_exists() probes of the
 app source tree. Derived facts (framework, install inputs, versions) live
 in config; simple existence checks use file_exists() directly.
 
-  python_build(config, ...)           install deps + stage sources (embeddable)
-  python_serve(config, build, ...)    wire the Python runtime around a build
-  python_build_and_serve(config)      the canonical entrypoint
+  python_build(config)                the full serving build (mounts, uv
+                                      install, cross wheels); serving=False
+                                      gives the embeddable local-venv flavor
+  python_serve(config, build)         wire the Python runtime around a build
 """
 
 load("//shipit:prelude.shipit", "compact", "merged")
@@ -102,19 +103,28 @@ def _cross_wheel_steps(config, venv, local_venv):
         run("rm cross-requirements.txt"),
     ]
 
-def python_build(config, source = None, venv = None, cross_wheels = False, copy_output_to = None):
+def python_build(config, source = None, app = None, venv = None, serving = True):
     """Install dependencies with uv and stage the app sources.
 
-    With no arguments this is the build-only flavor (temp mount + local venv)
-    for embedding in other providers. python_build_and_serve passes the serve
-    mounts and cross_wheels=True.
+    The default is the full serving build: app/venv mounts, cross-platform
+    wheels, and the subdir export. serving=False gives the embeddable flavor
+    (temp mount + local venv) that composing providers like mkdocs build on.
     """
     tc = python_toolchain(config)
-    source = source or mount("temp")
-    local_venv = mount("local_venv")
-    venv = venv or local_venv  # build-only: everything targets the local venv
-    cross = config.cross_platform
     in_subdir = config.app_subdir != None
+    copy_output_to = None
+    if serving:
+        temp = mount("temp") if in_subdir else None
+        app = app or mount("app")
+        venv = venv or mount("venv")
+        source = source or (temp if in_subdir else app)
+        if in_subdir:
+            copy_output_to = app
+    else:
+        source = source or mount("temp")
+    local_venv = mount("local_venv")
+    venv = venv or local_venv  # embeddable flavor targets the local venv
+    cross = config.cross_platform
 
     steps = [use(tc.python, tc.uv)]
     steps += _stage_steps(config, source)
@@ -122,7 +132,7 @@ def python_build(config, source = None, venv = None, cross_wheels = False, copy_
     # Cross wheels only make sense when an install branch ran (pyproject,
     # requirements, or extra deps) — a bare script app has nothing to compile.
     has_install = file_exists("pyproject.toml") or file_exists("requirements.txt") or len(config.extra_dependencies) > 0
-    if cross_wheels and has_install:
+    if serving and has_install:
         steps += _cross_wheel_steps(config, venv, local_venv)
     steps += [
         path((local_venv.path if cross else venv.path) + "/bin"),
@@ -139,10 +149,12 @@ def python_build(config, source = None, venv = None, cross_wheels = False, copy_
         steps.append(run("cp -R . {}".format(copy_output_to.path)))
 
     return build_struct(
+        provider = "python",
         steps = steps,
         serve_deps = python_runtime_deps(config, tc),
         python = tc.python,
         uv = tc.uv,
+        app = app,
         source = source,
         venv = venv,
         local_venv = local_venv,
@@ -237,14 +249,13 @@ def python_serve(
         services = None,
         **overrides):
     """Wire the Python runtime serve around a build struct."""
-    app = app or build.source
+    app = app or build.app or build.source
     venv = build.venv
     site_packages = "{}/lib/python{}/site-packages".format(venv.serve_path, config.python_version)
 
     return build_and_serve(
         config,
-        provider = "python",
-        build = build,
+        build,
         name = name,
         cwd = app.serve_path,
         prepare = prepare if prepare != None else python_prepare(config, site_packages, app.serve_path),
@@ -254,19 +265,3 @@ def python_serve(
         mounts = [app, venv],
         **overrides
     )
-
-def python_build_and_serve(config, name = None, **overrides):
-    """Build with uv, then serve — the whole Python provider in one call."""
-    in_subdir = config.app_subdir != None
-    temp = mount("temp") if in_subdir else None
-    app = mount("app")
-    venv = mount("venv")
-
-    build = python_build(
-        config,
-        source = temp if in_subdir else app,
-        venv = venv,
-        cross_wheels = True,
-        copy_output_to = app if in_subdir else None,
-    )
-    return python_serve(config, build, app = app, name = name, **overrides)

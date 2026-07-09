@@ -406,7 +406,8 @@ def test_generate_subdir_static_provider_keeps_serve_mount_flat(
     assert result.exit_code == 0, result.output
     shipit_file = _subdir_shipit_file(tmp_path)
     shipit = shipit_file.read_text()
-    assert "staticfile_build_and_serve(config)" in shipit
+    assert "build = staticfile_build(config)" in shipit
+    assert "staticfile_serve(config, build)" in shipit
     assert 'app_subdir = "apps/site"' in shipit
 
     base_config = Config()
@@ -477,7 +478,8 @@ def test_generate_python_subdir_uses_temp_build_mount(
     assert result.exit_code == 0, result.output
     shipit_file = _subdir_shipit_file(tmp_path)
     shipit = shipit_file.read_text()
-    assert "python_build_and_serve(config)" in shipit
+    assert "build = python_build(config)" in shipit
+    assert "python_serve(config, build)" in shipit
     assert 'app_subdir = "apps/site"' in shipit
 
     base_config = Config()

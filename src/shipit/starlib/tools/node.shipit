@@ -194,6 +194,7 @@ def node_build(config, build_mount = None, app = None):
     steps += tail
 
     return build_struct(
+        provider = "node",
         steps = compact(steps),
         serve_deps = [tc.node],
         mounts = [app],
@@ -216,15 +217,10 @@ def node_serve(config, build, name = None, prepare = None, **overrides):
             prepare = []
     return build_and_serve(
         config,
-        provider = "node",
-        build = build,
+        build,
         name = name,
         cwd = app.serve_path,
         prepare = prepare,
         commands = commands,
         **overrides
     )
-
-def node_build_and_serve(config, name = None, **overrides):
-    """Install, build, and serve a Node app."""
-    return node_serve(config, node_build(config), name = name, **overrides)

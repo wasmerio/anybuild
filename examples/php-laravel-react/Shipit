@@ -1,3 +1,5 @@
-load("//shipit/tools:laravel.shipit", "laravel_build_and_serve")
+load("//shipit/tools:laravel.shipit", "laravel_build", "laravel_serve")
 
-laravel_build_and_serve(config)
+build = laravel_build(config)
+
+laravel_serve(config, build)

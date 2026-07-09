@@ -1,3 +1,5 @@
-load("//shipit/tools:python.shipit", "python_build_and_serve")
+load("//shipit/tools:python.shipit", "python_build", "python_serve")
 
-python_build_and_serve(config)
+build = python_build(config)
+
+python_serve(config, build)

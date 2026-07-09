@@ -1,3 +1,6 @@
-load("//shipit/tools:mkdocs.shipit", "mkdocs_build_and_serve")
+load("//shipit/tools:mkdocs.shipit", "mkdocs_build")
+load("//shipit/tools:staticfile.shipit", "staticfile_serve")
 
-mkdocs_build_and_serve(config)
+build = mkdocs_build(config)
+
+staticfile_serve(config, build)

@@ -33,12 +33,9 @@ def nodestatic_build(config, static_app = None):
         steps.append(write("{}/{}".format(static_config.path, REDIRECTS_FILE), config.redirects_config))
 
     return build_struct(
+        provider = "node-static",
         steps = compact(steps),
         mounts = [static_app] + ([static_config] if static_config != None else []),
         static_app = static_app,
         static_config = static_config,
     )
-
-def nodestatic_build_and_serve(config, name = None, **overrides):
-    """Build the static export, then serve it."""
-    return staticfile_serve(config, nodestatic_build(config), name = name, provider = "node-static", **overrides)

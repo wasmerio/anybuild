@@ -1,3 +1,6 @@
-load("//shipit/tools:node_static.shipit", "nodestatic_build_and_serve")
+load("//shipit/tools:node_static.shipit", "nodestatic_build")
+load("//shipit/tools:staticfile.shipit", "staticfile_serve")
 
-nodestatic_build_and_serve(config)
+build = nodestatic_build(config)
+
+staticfile_serve(config, build)

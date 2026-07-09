@@ -11,11 +11,12 @@ load("//shipit/tools:staticfile.shipit", "staticfile_serve")
 
 def mkdocs_build(config, static_app = None):
     """Install mkdocs with uv, then build the site into static_app."""
-    py = python_build(config)
+    py = python_build(config, serving = False)
     static_app = static_app or mount("static_app")
     static_config = mount("static_config") if config.redirects_config else None
 
     return build_struct(
+        provider = "mkdocs",
         steps = py.steps + [
             run("uv run mkdocs build --site-dir={}".format(static_app.path), outputs = ["."], group = "build"),
         ],
@@ -25,6 +26,4 @@ def mkdocs_build(config, static_app = None):
         static_config = static_config,
     )
 
-def mkdocs_build_and_serve(config, name = None, **overrides):
-    """Build the MkDocs site, then serve it."""
-    return staticfile_serve(config, mkdocs_build(config), name = name, provider = "mkdocs", **overrides)
+

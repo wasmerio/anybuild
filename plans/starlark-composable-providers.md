@@ -8,9 +8,11 @@ This proposal moves all plan construction into real Starlark libraries
 (`.shipit` files) bundled with the CLI, so the generated file collapses to:
 
 ```python
-load("//shipit/tools:python.shipit", "python_build_and_serve")
+load("//shipit/tools:python.shipit", "python_build", "python_serve")
 
-python_build_and_serve(config)
+build = python_build(config)
+
+python_serve(config, build)
 ```
 
 Python keeps what it is good at — filesystem detection and building a fully
@@ -47,20 +49,25 @@ sketches below where they differ:
   `evaluate_shipit`. Legacy inlined Shipit files still evaluate unchanged.
 - Stdlib: `src/shipit/starlib/` — `prelude.shipit`, `serve.shipit`, and
   `tools/{python,staticfile,hugo,mkdocs}.shipit`.
-- **Convention refinement**: providers split into `X_build(config, ...)` (a
-  build fragment returning a `build_struct(steps, serve_deps, mounts, env,
-  **extra)`), `X_serve(config, build, ...)` (serve wiring around any build
-  struct), and `X_build_and_serve(config, ...)` (the canonical entrypoint the
-  generated file calls). The generic assembler `build_and_serve()` lives in
-  `//shipit:serve.shipit` and defines the uniform override surface
-  (`build_pre`, `build_post`, `extra_deps`, `extra_env`, `extra_commands`).
-  This split is what providers-that-inherit compose on: mkdocs =
-  `python_build` + `staticfile_serve`.
-- Generator dispatch: `STARLARK_ENTRYPOINTS` in `generator.py` (keyed by
-  provider name — deliberately not a class attribute, so a subclassed
-  provider never inherits an entrypoint it doesn't implement). Every
-  registered provider has an entrypoint; an unregistered provider is a
-  loud error at generation time.
+- **Convention**: each provider exposes exactly two functions —
+  `X_build(config, ...)` returning a `build_struct(provider, steps,
+  serve_deps, mounts, env, **extra)`, and `X_serve(config, build, ...)`
+  wiring a serve around any build struct. The generated file calls both, so
+  the seam users compose on is explicit; static-site builders (hugo, jekyll,
+  mkdocs, node-static) pair their own build with the shared
+  `staticfile_serve` — visibly, in the user's own Shipit file. The build
+  struct carries its `provider` label, so serves need no provider kwarg.
+  Bare `python_build(config)`/`node_build(config)` produce the full serving
+  build; `serving=False` gives the embeddable flavor composing providers use.
+  The generic assembler `build_and_serve()` in `//shipit:serve.shipit`
+  defines the uniform override surface (`build_pre`, `build_post`,
+  `extra_deps`, `extra_env`, `extra_commands`).
+- Generator dispatch: `STARLARK_ENTRYPOINTS` in `generator.py` maps each
+  provider name to its (build, serve) function pair — the two may live in
+  different modules (hugo's build pairs with staticfile's serve). Keyed by
+  provider name deliberately (not a class attribute), so a subclassed
+  provider never inherits an entrypoint it doesn't implement; an
+  unregistered provider is a loud error at generation time.
 - Config additions: base `Config.name`; derived fields like
   `PythonConfig.{install_inputs, mcp_self_running}`, `PhpConfig.public_dir`,
   `StaticFileConfig.redirects_config` (rendered sws.toml, computed at load).
@@ -117,15 +124,16 @@ This has three compounding costs:
 └───────────────┬─────────────────────────────────────────────────┘
                 │  config (plain data, injected as a global)
 ┌───────────────▼─────────────────────────────────────────────────┐
-│ User project: Shipit  (generated once, user-editable, 2 lines)  │
+│ User project: Shipit  (generated once, user-editable)           │
 │   load("//shipit/tools:python.shipit",                          │
-│        "python_build_and_serve")                                │
-│   python_build_and_serve(config)                                │
+│        "python_build", "python_serve")                          │
+│   build = python_build(config)                                  │
+│   python_serve(config, build)                                   │
 └───────────────┬─────────────────────────────────────────────────┘
                 │  load()
 ┌───────────────▼─────────────────────────────────────────────────┐
 │ Shipit stdlib (.shipit files bundled in the wheel)              │
-│   tools/python.shipit    python_build_and_serve(config, ...)    │
+│   tools/python.shipit    python_build + python_serve            │
 │   tools/php.shipit       php_serve(config, **hooks)             │
 │   tools/wordpress.shipit wordpress_serve → php_serve            │
 │   tools/mkdocs.shipit    python_build + staticfile_serve        │
@@ -185,9 +193,11 @@ serve(
 **After**:
 
 ```python
-load("//shipit/tools:python.shipit", "python_build_and_serve")
+load("//shipit/tools:python.shipit", "python_build", "python_serve")
 
-python_build_and_serve(config)
+build = python_build(config)
+
+python_serve(config, build)
 ```
 
 With a subdir, the marker line stays (keeps `read_shipit_subdir()` working):
@@ -916,8 +926,11 @@ Add a build step and an env var:
 ```python
 load("//shipit/tools:python.shipit", "python_serve")
 
-python_build_and_serve(
+build = python_build(config)
+
+python_serve(
     config,
+    build,
     extra_env = {"DJANGO_SETTINGS_MODULE": "mysite.settings.prod"},
     build_post = [
         run("python manage.py compress", group = "build"),
@@ -928,7 +941,9 @@ python_build_and_serve(
 Swap the start command but keep everything else:
 
 ```python
-python_build_and_serve(config, extra_commands = {
+build = python_build(config)
+
+python_serve(config, build, extra_commands = {
     "start": "gunicorn mysite.wsgi -b 0.0.0.0:$PORT",
 })
 ```
@@ -937,11 +952,12 @@ Project-local provider library (a team encodes their own conventions once):
 
 ```python
 # deploy/acme.shipit
-load("//shipit/tools:python.shipit", "python_build_and_serve")
+load("//shipit/tools:python.shipit", "python_build", "python_serve")
 
-def acme_python_serve(config, **kwargs):
-    return python_build_and_serve(
+def acme_python_serve(config, build, **kwargs):
+    return python_serve(
         config,
+        build,
         extra_env = {"SENTRY_ENVIRONMENT": "production"},
         build_post = [run("python -m acme_healthcheck", group = "build")],
         **kwargs
@@ -950,9 +966,12 @@ def acme_python_serve(config, **kwargs):
 
 ```python
 # Shipit
+load("//shipit/tools:python.shipit", "python_build")
 load("//deploy:acme.shipit", "acme_python_serve")
 
-acme_python_serve(config)
+build = python_build(config)
+
+acme_python_serve(config, build)
 ```
 
 Full control remains available: nothing stops a user from ignoring the stdlib

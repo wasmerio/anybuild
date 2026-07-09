@@ -58,20 +58,57 @@ def load_provider_config(
     return provider_config
 
 
-# Starlark stdlib entrypoint per provider: provider name -> (module, function).
-# The generated Shipit file is a two-liner loading the bundled library.
-STARLARK_ENTRYPOINTS: dict[str, tuple[str, str]] = {
-    "python": ("//shipit/tools:python.shipit", "python_build_and_serve"),
-    "staticfile": ("//shipit/tools:staticfile.shipit", "staticfile_build_and_serve"),
-    "hugo": ("//shipit/tools:hugo.shipit", "hugo_build_and_serve"),
-    "mkdocs": ("//shipit/tools:mkdocs.shipit", "mkdocs_build_and_serve"),
-    "go": ("//shipit/tools:go.shipit", "go_build_and_serve"),
-    "jekyll": ("//shipit/tools:jekyll.shipit", "jekyll_build_and_serve"),
-    "php": ("//shipit/tools:php.shipit", "php_build_and_serve"),
-    "wordpress": ("//shipit/tools:wordpress.shipit", "wordpress_build_and_serve"),
-    "node": ("//shipit/tools:node.shipit", "node_build_and_serve"),
-    "node-static": ("//shipit/tools:node_static.shipit", "nodestatic_build_and_serve"),
-    "laravel": ("//shipit/tools:laravel.shipit", "laravel_build_and_serve"),
+_STATICFILE_SERVE = ("//shipit/tools:staticfile.shipit", "staticfile_serve")
+
+# Starlark stdlib entrypoints per provider: a (module, function) pair for the
+# build and one for the serve. The generated Shipit file loads both and calls
+# them in sequence, keeping the build/serve seam users compose on explicit —
+# static-site builders pair their own build with the shared staticfile serve.
+STARLARK_ENTRYPOINTS: dict[str, dict[str, tuple[str, str]]] = {
+    "python": {
+        "build": ("//shipit/tools:python.shipit", "python_build"),
+        "serve": ("//shipit/tools:python.shipit", "python_serve"),
+    },
+    "staticfile": {
+        "build": ("//shipit/tools:staticfile.shipit", "staticfile_build"),
+        "serve": _STATICFILE_SERVE,
+    },
+    "hugo": {
+        "build": ("//shipit/tools:hugo.shipit", "hugo_build"),
+        "serve": _STATICFILE_SERVE,
+    },
+    "mkdocs": {
+        "build": ("//shipit/tools:mkdocs.shipit", "mkdocs_build"),
+        "serve": _STATICFILE_SERVE,
+    },
+    "jekyll": {
+        "build": ("//shipit/tools:jekyll.shipit", "jekyll_build"),
+        "serve": _STATICFILE_SERVE,
+    },
+    "node-static": {
+        "build": ("//shipit/tools:node_static.shipit", "nodestatic_build"),
+        "serve": _STATICFILE_SERVE,
+    },
+    "go": {
+        "build": ("//shipit/tools:go.shipit", "go_build"),
+        "serve": ("//shipit/tools:go.shipit", "go_serve"),
+    },
+    "php": {
+        "build": ("//shipit/tools:php.shipit", "php_build"),
+        "serve": ("//shipit/tools:php.shipit", "php_serve"),
+    },
+    "wordpress": {
+        "build": ("//shipit/tools:wordpress.shipit", "wordpress_build"),
+        "serve": ("//shipit/tools:wordpress.shipit", "wordpress_serve"),
+    },
+    "node": {
+        "build": ("//shipit/tools:node.shipit", "node_build"),
+        "serve": ("//shipit/tools:node.shipit", "node_serve"),
+    },
+    "laravel": {
+        "build": ("//shipit/tools:laravel.shipit", "laravel_build"),
+        "serve": ("//shipit/tools:laravel.shipit", "laravel_serve"),
+    },
 }
 
 
@@ -89,14 +126,23 @@ def generate_shipit(
 
 
 def generate_shipit_loader(
-    entrypoint: tuple[str, str],
+    entrypoint: dict[str, tuple[str, str]],
     subdir: Optional[str] = None,
 ) -> str:
-    module, function = entrypoint
-    out: List[str] = [f'load("{module}", "{function}")', ""]
+    build_module, build_function = entrypoint["build"]
+    serve_module, serve_function = entrypoint["serve"]
+    out: List[str] = []
+    if build_module == serve_module:
+        out.append(f'load("{build_module}", "{build_function}", "{serve_function}")')
+    else:
+        out.append(f'load("{build_module}", "{build_function}")')
+        out.append(f'load("{serve_module}", "{serve_function}")')
+    out.append("")
     if subdir:
         out.append(f"app_subdir = {json.dumps(subdir)}")
         out.append("")
-    out.append(f"{function}(config)")
+    out.append(f"build = {build_function}(config)")
+    out.append("")
+    out.append(f"{serve_function}(config, build)")
     out.append("")
     return "\n".join(out)

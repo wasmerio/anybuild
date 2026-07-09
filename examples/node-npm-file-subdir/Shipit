@@ -1,5 +1,7 @@
-load("//shipit/tools:node.shipit", "node_build_and_serve")
+load("//shipit/tools:node.shipit", "node_build", "node_serve")
 
 app_subdir = "apps/dashboard"
 
-node_build_and_serve(config)
+build = node_build(config)
+
+node_serve(config, build)

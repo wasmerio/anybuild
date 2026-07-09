@@ -88,6 +88,7 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
     if config.wp_extension_kind != None:
         tc = php_toolchain(config)
         return build_struct(
+            provider = "wordpress",
             steps = [use(*php_use_deps(tc))] + _wp_extension_steps(config, app, assets, wpcontent_base),
             serve_deps = php_runtime_deps(config, tc) + extra_serve_deps,
             mounts = [app, assets, wpcontent_base],
@@ -106,6 +107,7 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
         extra_ignore = ["wp-content"],
     )
     return build_struct(
+        provider = "wordpress",
         steps = php.steps,
         serve_deps = php.serve_deps + extra_serve_deps,
         mounts = [app, assets, wpcontent_base],
@@ -145,8 +147,7 @@ def wordpress_serve(config, build, name = None, **overrides):
 
     return build_and_serve(
         config,
-        provider = "wordpress",
-        build = build,
+        build,
         name = name,
         cwd = app.serve_path,
         env = wordpress_env(config, wpcontent_base),
@@ -155,7 +156,3 @@ def wordpress_serve(config, build, name = None, **overrides):
         services = [service(name = "database", provider = "mysql")],
         **overrides
     )
-
-def wordpress_build_and_serve(config, name = None, **overrides):
-    """Download/stage WordPress (or build an extension), then serve it."""
-    return wordpress_serve(config, wordpress_build(config), name = name, **overrides)

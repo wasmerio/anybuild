@@ -1,3 +1,5 @@
-load("//shipit/tools:wordpress.shipit", "wordpress_build_and_serve")
+load("//shipit/tools:wordpress.shipit", "wordpress_build", "wordpress_serve")
 
-wordpress_build_and_serve(config)
+build = wordpress_build(config)
+
+wordpress_serve(config, build)

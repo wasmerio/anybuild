@@ -30,6 +30,7 @@ def go_build(config, app = None, temp = None):
         steps.append(run("cp {}/{} {}/{}".format(temp.path, config.serve_binary, app.path, config.serve_binary)))
 
     return build_struct(
+        provider = "go",
         steps = steps,
         mounts = [app],
         app = app,
@@ -41,14 +42,9 @@ def go_serve(config, build, name = None, **overrides):
     app = build.app
     return build_and_serve(
         config,
-        provider = "go",
-        build = build,
+        build,
         name = name,
         cwd = app.serve_path,
         commands = {"start": "{}/{}".format(app.serve_path, config.serve_binary)},
         **overrides
     )
-
-def go_build_and_serve(config, name = None, **overrides):
-    """Compile and serve a Go app."""
-    return go_serve(config, go_build(config), name = name, **overrides)
