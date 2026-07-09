@@ -45,10 +45,8 @@ def test_ctx_volume_uses_shipit_volume_directory(tmp_path: Path) -> None:
     runner = LocalRunner(build_backend, tmp_path)
     ctx = Ctx(build_backend, runner)
 
-    volume_ref = ctx.volume("uploads", "/app/uploads")
-    assert volume_ref is not None
-
-    volume = ctx.get_ref(volume_ref["ref"])
+    volume_handle = ctx.volume("uploads", "/app/uploads")
+    volume = volume_handle["volume"]
 
     assert volume.path == tmp_path / ".shipit" / "volumes" / "uploads"
     assert not volume.path.exists()

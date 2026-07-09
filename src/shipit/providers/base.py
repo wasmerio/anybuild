@@ -20,20 +20,6 @@ class CustomCommands(BaseSettings):
     start: Optional[str] = None
     after_deploy: Optional[str] = None
 
-    # if (path / "Dockerfile").exists():
-    #     # We get the start command from the Dockerfile
-    #     with open(path / "Dockerfile", "r") as f:
-    #         cmd = None
-    #         for line in f:
-    #             if line.startswith("CMD "):
-    #                 cmd = line[4:].strip()
-    #                 cmd = json.loads(cmd)
-    #         # We get the last command
-    #         if cmd:
-    #             if isinstance(cmd, list):
-    #                 cmd = " ".join(cmd)
-    #             custom_commands.start = cmd
-
     def enrich_from_path(self, path: Path, use_procfile: bool = True) -> "CustomCommands":
         if use_procfile:
             procfile_path = path / "Procfile"

@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, cast, Literal
+from typing import Any, Dict, List, Optional, Tuple, Literal
 
 import xingque as sl
 import typer
@@ -20,7 +20,6 @@ from dotenv import dotenv_values
 from shipit.builders import BuildBackend, DockerBuildBackend, LocalBuildBackend
 from shipit.runners import Runner, LocalRunner, WasmerRunner
 from shipit.shipit_types import (
-    Build,
     CopyStep,
     EnvStep,
     Mount,
@@ -54,7 +53,9 @@ OPTIONAL_RUN_COMMANDS = {"start", "after_deploy"}
 
 @dataclass
 class CtxMount:
-    ref: str
+    """Starlark-facing handle for a mount: string paths plus the plan Mount."""
+
+    mount: Mount
     path: str
     serve_path: str
 
@@ -219,8 +220,6 @@ class Ctx:
         self.runner = runner
         self.source_dir = source_dir
         self.packages: Dict[str, Package] = {}
-        self.builds: List[Build] = []
-        self.steps: List[Step] = []
         self.serves: Dict[str, Serve] = {}
         self.mounts: List[Mount] = []
         self.volumes: List[Volume] = []
@@ -247,123 +246,72 @@ class Ctx:
             )
         return target.exists()
 
-    def add_package(self, package: Package) -> str:
-        index = f"{package.name}@{package.version}" if package.version else package.name
-        self.packages[index] = package
-        return f"ref:package:{index}"
-
-    def add_service(self, service: Service) -> str:
-        self.services[service.name] = service
-        return f"ref:service:{service.name}"
-
-    def get_ref(self, index: str) -> Any:
-        if index.startswith("ref:package:"):
-            return self.packages[index[len("ref:package:") :]]
-        elif index.startswith("ref:build:"):
-            return self.builds[int(index[len("ref:build:") :])]
-        elif index.startswith("ref:serve:"):
-            return self.serves[index[len("ref:serve:") :]]
-        elif index.startswith("ref:step:"):
-            return self.steps[int(index[len("ref:step:") :])]
-        elif index.startswith("ref:mount:"):
-            return self.mounts[int(index[len("ref:mount:") :])]
-        elif index.startswith("ref:volume:"):
-            return self.volumes[int(index[len("ref:volume:") :])]
-        elif index.startswith("ref:service:"):
-            return self.services[index[len("ref:service:") :]]
-        else:
-            raise Exception(f"Invalid reference: {index}")
-
-    def get_refs(self, indices: List[str]) -> List[Any]:
-        return [self.get_ref(index) for index in indices if index is not None]
-
-    def add_build(self, build: Build) -> str:
-        self.builds.append(build)
-        return f"ref:build:{len(self.builds) - 1}"
-
-    def add_serve(self, serve: Serve) -> str:
-        self.serves[serve.name] = serve
-        return f"ref:serve:{serve.name}"
-
-    def add_step(self, step: Step) -> Optional[str]:
-        if step is None:
-            return None
-        self.steps.append(step)
-        return f"ref:step:{len(self.steps) - 1}"
+    # The builtins below return plan objects directly; Starlark passes them
+    # around opaquely and serve() receives them back unchanged.
 
     def dep(
         self,
         name: str,
         version: Optional[str] = None,
         architecture: Optional[Literal["64-bit", "32-bit"]] = None,
-    ) -> str:
+    ) -> Package:
         package = Package(name, version, architecture)
-        return self.add_package(package)
+        index = f"{name}@{version}" if version else name
+        self.packages[index] = package
+        return package
 
     def service(
         self, name: str, provider: Literal["postgres", "mysql", "redis"]
-    ) -> str:
+    ) -> Service:
         service = Service(name, provider)
-        return self.add_service(service)
+        self.services[name] = service
+        return service
 
     def serve(
         self,
         name: str,
         provider: str,
-        build: List[str],
-        deps: List[str],
+        build: List[Optional[Step]],
+        deps: List[Package],
         commands: Dict[str, str],
         cwd: Optional[str] = None,
-        prepare: Optional[List[str]] = None,
-        workers: Optional[List[str]] = None,
-        mounts: Optional[List[Mount]] = None,
-        volumes: Optional[List[Volume]] = None,
+        prepare: Optional[List[Optional[Step]]] = None,
+        mounts: Optional[List["CtxMount"]] = None,
+        volumes: Optional[List[dict]] = None,
         env: Optional[Dict[str, str]] = None,
-        services: Optional[List[str]] = None,
-    ) -> str:
-        build_refs = [cast(Step, r) for r in self.get_refs(build)]
+        services: Optional[List[Service]] = None,
+    ) -> Serve:
         prepare_steps: Optional[List[PrepareStep]] = None
         if prepare is not None:
-            # Resolve referenced steps and keep only RunStep for prepare
-            resolved = [cast(Step, r) for r in self.get_refs(prepare)]
-            prepare_steps = [
-                cast(RunStep, s) for s in resolved if isinstance(s, RunStep)
-            ]
-        dep_refs = [cast(Package, r) for r in self.get_refs(deps)]
+            # Conditional steps evaluate to None; prepare only runs commands.
+            prepare_steps = [s for s in prepare if isinstance(s, RunStep)]
         serve = Serve(
             name=name,
             provider=provider,
-            build=build_refs,
+            build=[step for step in build if step is not None],
             cwd=cwd,
-            deps=dep_refs,
+            deps=[dep for dep in deps if dep is not None],
             commands=commands,
             prepare=prepare_steps,
-            workers=workers,
-            mounts=self.get_refs([mount.ref for mount in mounts]) if mounts else None,
-            volumes=self.get_refs([volume["ref"] for volume in volumes])
-            if volumes
-            else None,
+            mounts=[m.mount for m in mounts] if mounts else None,
+            volumes=[v["volume"] for v in volumes] if volumes else None,
             env=env,
-            services=self.get_refs(services) if services else None,
+            services=list(services) if services else None,
         )
-        return self.add_serve(serve)
+        self.serves[name] = serve
+        return serve
 
-    def path(self, path: str) -> Optional[str]:
-        step = PathStep(path)
-        return self.add_step(step)
+    def path(self, path: str) -> PathStep:
+        return PathStep(path)
 
-    def use(self, *dependencies: str) -> Optional[str]:
-        deps = [cast(Package, r) for r in self.get_refs(list(dependencies))]
-        step = UseStep(deps)
-        return self.add_step(step)
+    def use(self, *dependencies: Package) -> UseStep:
+        return UseStep(list(dependencies))
 
-    def run(self, *args: Any, **kwargs: Any) -> Optional[str]:
-        step = RunStep(*args, **kwargs)
-        return self.add_step(step)
+    def run(self, *args: Any, **kwargs: Any) -> RunStep:
+        return RunStep(*args, **kwargs)
 
-    def workdir(self, path: str) -> Optional[str]:
-        step = WorkdirStep(Path(path))
-        return self.add_step(step)
+    def workdir(self, path: str) -> WorkdirStep:
+        return WorkdirStep(Path(path))
 
     def copy(
         self,
@@ -371,49 +319,37 @@ class Ctx:
         target: Optional[str] = None,
         ignore: Optional[List[str]] = None,
         base: Optional[Literal["source", "assets"]] = None,
-    ) -> Optional[str]:
+    ) -> CopyStep:
         if target is None:
             target = source
-        step = CopyStep(source, target, ignore, base or "source")
-        return self.add_step(step)
+        return CopyStep(source, target, ignore, base or "source")
 
-    def env(self, **env_vars: str) -> Optional[str]:
-        step = EnvStep(env_vars)
-        return self.add_step(step)
+    def env(self, **env_vars: str) -> EnvStep:
+        return EnvStep(env_vars)
 
-    def write(self, path: str, content: str) -> Optional[str]:
-        step = WriteFileStep(path, content)
-        return self.add_step(step)
+    def write(self, path: str, content: str) -> WriteFileStep:
+        return WriteFileStep(path, content)
 
-    def add_mount(self, mount: Mount) -> Optional[str]:
-        self.mounts.append(mount)
-        return f"ref:mount:{len(self.mounts) - 1}"
-
-    def mount(self, name: str) -> Optional[str]:
+    def mount(self, name: str) -> "CtxMount":
         build_path = self.build_backend.get_build_mount_path(name)
         serve_path = self.runner.get_serve_mount_path(name)
         mount = Mount(name, build_path, serve_path)
-        ref = self.add_mount(mount)
-
+        self.mounts.append(mount)
         return CtxMount(
-            ref=ref,
+            mount=mount,
             path=str(build_path.absolute()),
             serve_path=str(serve_path.absolute()),
         )
 
-    def add_volume(self, volume: Volume) -> Optional[str]:
-        self.volumes.append(volume)
-        return f"ref:volume:{len(self.volumes) - 1}"
-
-    def volume(self, name: str, serve: str) -> Optional[str]:
+    def volume(self, name: str, serve: str) -> dict:
         volume = Volume(
             name=name,
             path=self.build_backend.get_volume_path(name),
             serve_path=Path(serve),
         )
-        ref = self.add_volume(volume)
+        self.volumes.append(volume)
         return {
-            "ref": ref,
+            "volume": volume,
             "name": name,
             "path": str(volume.path.absolute()),
             "serve": str(volume.serve_path),

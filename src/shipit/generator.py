@@ -46,7 +46,7 @@ def load_provider_config(
     path: Path,
     base_config: Config,
     config: Optional[Union[dict, str]] = None,
-) -> dict:
+) -> Config:
     provider_config = provider_cls.load_config(path, base_config)
     if config:
         if isinstance(config, str):

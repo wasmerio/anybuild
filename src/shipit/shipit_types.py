@@ -32,7 +32,6 @@ class Serve:
     commands: Dict[str, str]
     cwd: Optional[str] = None
     prepare: Optional[List["PrepareStep"]] = None
-    workers: Optional[List[str]] = None
     mounts: Optional[List[Mount]] = None
     volumes: Optional[List[Volume]] = None
     env: Optional[Dict[str, str]] = None
@@ -110,9 +109,3 @@ Step = Union[
     WriteFileStep,
 ]
 PrepareStep = Union[RunStep]
-
-
-@dataclass
-class Build:
-    deps: List[Package]
-    steps: List[Step]

@@ -774,14 +774,6 @@ class NodeProvider:
         return any((path / file).is_file() for file in cls.HYDROGEN_CONFIG_FILES)
 
     @classmethod
-    def has_any_dependency(
-        cls,
-        path: Path,
-        deps: tuple[str, ...],
-    ) -> bool:
-        return bool(cls.check_deps(path, *deps))
-
-    @classmethod
     def check_deps(cls, path: Path, *deps: str) -> Set[str]:
         package_json = cls.parse_package_json(path)
         return cls._check_package_json_deps(package_json, *deps)
