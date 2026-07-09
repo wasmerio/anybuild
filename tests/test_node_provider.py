@@ -9,7 +9,7 @@ from shipit.generator import load_provider
 from shipit.providers.base import Config
 from shipit.shipit_types import CopyStep, RunStep
 
-from tests.plan_helpers import evaluate_project_plan
+from plan_helpers import evaluate_project_plan
 from shipit.providers.laravel import LaravelProvider
 from shipit.providers.node import (
     NodeConfig,

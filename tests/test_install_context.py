@@ -10,7 +10,7 @@ from shipit.providers.install_context import (
 from shipit.providers.node import NodeProvider, PackageManager
 from shipit.providers.python import PythonProvider
 
-from tests.plan_helpers import evaluate_project_plan
+from plan_helpers import evaluate_project_plan
 
 
 def test_python_requirements_context_follows_recursive_includes(

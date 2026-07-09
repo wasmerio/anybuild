@@ -5,7 +5,7 @@ from shipit.generator import load_provider, load_provider_config
 from shipit.providers.base import Config
 from shipit.providers.php import PhpFramework, PhpProvider
 
-from tests.plan_helpers import evaluate_project_plan
+from plan_helpers import evaluate_project_plan
 
 
 def test_php_provider_detects_moodle_from_source(tmp_path: Path) -> None:
