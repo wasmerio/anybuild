@@ -1,7 +1,7 @@
 __all__ = ["version", "version_info"]
 
 
-version = "0.21.6"  # x-release-please-version
+version = "0.21.7"  # x-release-please-version
 _version_parts = version.split(".")
 version_info = (
     int(_version_parts[0]),
