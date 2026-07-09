@@ -30,19 +30,19 @@ def go_build(config, app = None, temp = None):
         steps.append(run("cp {}/{} {}/{}".format(temp.path, config.serve_binary, app.path, config.serve_binary)))
 
     return build_struct(
-        provider = "go",
         steps = steps,
         mounts = [app],
         app = app,
         temp = temp,
     )
 
-def go_serve(config, build, name = None, **overrides):
+def go_serve(config, build, name = None, provider = "go", **overrides):
     """Serve the compiled binary from the app mount."""
     app = build.app
     return build_and_serve(
         config,
         build,
+        provider = provider,
         name = name,
         cwd = app.serve_path,
         commands = {"start": "{}/{}".format(app.serve_path, config.serve_binary)},

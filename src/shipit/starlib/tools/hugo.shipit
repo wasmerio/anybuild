@@ -11,7 +11,6 @@ def hugo_build(config, static_app = None):
     static_config = mount("static_config") if config.redirects_config else None
 
     return build_struct(
-        provider = "hugo",
         steps = [
             use(hugo),
             workdir(temp.path),

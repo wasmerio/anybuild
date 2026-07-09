@@ -55,8 +55,11 @@ sketches below where they differ:
   wiring a serve around any build struct. The generated file calls both, so
   the seam users compose on is explicit; static-site builders (hugo, jekyll,
   mkdocs, node-static) pair their own build with the shared
-  `staticfile_serve` — visibly, in the user's own Shipit file. The build
-  struct carries its `provider` label, so serves need no provider kwarg.
+  `staticfile_serve` — visibly, in the user's own Shipit file. The
+  `provider` label is deployment identity and belongs to the serve: each
+  `X_serve` defaults to its own label, and generated static-family files
+  pass it explicitly (`staticfile_serve(config, build, provider = "hugo")`)
+  so mixed compositions never inherit a stale identity from a build.
   Bare `python_build(config)`/`node_build(config)` produce the full serving
   build; `serving=False` gives the embeddable flavor composing providers use.
   The generic assembler `build_and_serve()` in `//shipit:serve.shipit`

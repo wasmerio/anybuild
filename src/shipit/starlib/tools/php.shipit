@@ -47,7 +47,6 @@ def php_build(
         config,
         app = None,
         assets = None,
-        provider = "php",
         build_pre = [],
         after_install = [],
         after_build = [],
@@ -83,7 +82,6 @@ def php_build(
     steps += after_build
 
     return build_struct(
-        provider = provider,
         steps = steps,
         serve_deps = php_runtime_deps(config, tc),
         mounts = [app, assets],
@@ -101,12 +99,13 @@ def php_commands(config, app):
         docroot = "{}/{}".format(app.serve_path, config.public_dir)
     return {"start": "{} -S localhost:{} -t {}".format(engine, PORT, docroot)}
 
-def php_serve(config, build, name = None, commands = None, **overrides):
+def php_serve(config, build, name = None, provider = "php", commands = None, **overrides):
     """Serve a PHP build with the php (or phpix) dev server."""
     app = build.app
     return build_and_serve(
         config,
         build,
+        provider = provider,
         name = name,
         cwd = app.serve_path,
         commands = commands if commands != None else php_commands(config, app),

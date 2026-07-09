@@ -10,7 +10,6 @@ def laravel_build(config, app = None, assets = None):
         config,
         app = app,
         assets = assets,
-        provider = "laravel",
         extra_use_deps = node_tc.build_deps,
         after_install = node_install_steps(config),
         after_build = node_build_step(config, serving = False),
@@ -33,12 +32,13 @@ def laravel_commands(config):
         "after_deploy": "php artisan migrate",
     }
 
-def laravel_serve(config, build, name = None, **overrides):
+def laravel_serve(config, build, name = None, provider = "laravel", **overrides):
     """php serve with Laravel's artisan commands and cache-warming prepare."""
     return php_serve(
         config,
         build,
         name = name,
+        provider = provider,
         commands = laravel_commands(config),
         prepare = laravel_prepare(config, build.app),
         **overrides

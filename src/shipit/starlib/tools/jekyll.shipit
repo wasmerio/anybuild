@@ -22,7 +22,6 @@ def jekyll_build(config, static_app = None):
         ]
 
     return build_struct(
-        provider = "jekyll",
         steps = [use(ruby), workdir(temp.path)] + install + [
             copy(".", ignore = [".git"]),
             run("jekyll build", group = "build"),

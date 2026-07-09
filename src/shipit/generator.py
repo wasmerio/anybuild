@@ -64,7 +64,9 @@ _STATICFILE_SERVE = ("//shipit/tools:staticfile.shipit", "staticfile_serve")
 # build and one for the serve. The generated Shipit file loads both and calls
 # them in sequence, keeping the build/serve seam users compose on explicit —
 # static-site builders pair their own build with the shared staticfile serve.
-STARLARK_ENTRYPOINTS: dict[str, dict[str, tuple[str, str]]] = {
+# The optional "provider" key is the deployment identity the generated file
+# passes to the serve when it differs from the serve function's default.
+STARLARK_ENTRYPOINTS: dict[str, dict] = {
     "python": {
         "build": ("//shipit/tools:python.shipit", "python_build"),
         "serve": ("//shipit/tools:python.shipit", "python_serve"),
@@ -76,18 +78,22 @@ STARLARK_ENTRYPOINTS: dict[str, dict[str, tuple[str, str]]] = {
     "hugo": {
         "build": ("//shipit/tools:hugo.shipit", "hugo_build"),
         "serve": _STATICFILE_SERVE,
+        "provider": "hugo",
     },
     "mkdocs": {
         "build": ("//shipit/tools:mkdocs.shipit", "mkdocs_build"),
         "serve": _STATICFILE_SERVE,
+        "provider": "mkdocs",
     },
     "jekyll": {
         "build": ("//shipit/tools:jekyll.shipit", "jekyll_build"),
         "serve": _STATICFILE_SERVE,
+        "provider": "jekyll",
     },
     "node-static": {
         "build": ("//shipit/tools:node_static.shipit", "nodestatic_build"),
         "serve": _STATICFILE_SERVE,
+        "provider": "node-static",
     },
     "go": {
         "build": ("//shipit/tools:go.shipit", "go_build"),
@@ -126,11 +132,12 @@ def generate_shipit(
 
 
 def generate_shipit_loader(
-    entrypoint: dict[str, tuple[str, str]],
+    entrypoint: dict,
     subdir: Optional[str] = None,
 ) -> str:
     build_module, build_function = entrypoint["build"]
     serve_module, serve_function = entrypoint["serve"]
+    provider = entrypoint.get("provider")
     out: List[str] = []
     if build_module == serve_module:
         out.append(f'load("{build_module}", "{build_function}", "{serve_function}")')
@@ -143,6 +150,9 @@ def generate_shipit_loader(
         out.append("")
     out.append(f"build = {build_function}(config)")
     out.append("")
-    out.append(f"{serve_function}(config, build)")
+    if provider:
+        out.append(f'{serve_function}(config, build, provider = "{provider}")')
+    else:
+        out.append(f"{serve_function}(config, build)")
     out.append("")
     return "\n".join(out)

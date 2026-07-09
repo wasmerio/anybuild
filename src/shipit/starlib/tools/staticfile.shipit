@@ -34,18 +34,18 @@ def staticfile_build(config, static_app = None):
         steps.append(write("{}/{}".format(static_config.path, REDIRECTS_FILE), config.redirects_config))
 
     return build_struct(
-        provider = "staticfile",
         steps = steps,
         mounts = [static_app] + ([static_config] if static_config != None else []),
         static_app = static_app,
         static_config = static_config,
     )
 
-def staticfile_serve(config, build, name = None, **overrides):
+def staticfile_serve(config, build, name = None, provider = "staticfile", **overrides):
     """Serve a build's static_app mount with static-web-server.
 
     Works with any static-family build struct (staticfile, hugo, jekyll,
-    mkdocs, node-static); the serve's provider label comes from the build.
+    mkdocs, node-static). The provider label identifies the deployment;
+    generated files pass it explicitly when it differs from "staticfile".
     """
     sws = dep("static-web-server", config.sws_version)
     static_app = build.static_app
@@ -63,6 +63,7 @@ def staticfile_serve(config, build, name = None, **overrides):
     return build_and_serve(
         config,
         build,
+        provider = provider,
         name = name,
         serve_deps = [sws],
         commands = {"start": start},

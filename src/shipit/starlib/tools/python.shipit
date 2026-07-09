@@ -149,7 +149,6 @@ def python_build(config, source = None, app = None, venv = None, serving = True)
         steps.append(run("cp -R . {}".format(copy_output_to.path)))
 
     return build_struct(
-        provider = "python",
         steps = steps,
         serve_deps = python_runtime_deps(config, tc),
         python = tc.python,
@@ -245,6 +244,7 @@ def python_serve(
         build,
         app = None,
         name = None,
+        provider = "python",
         prepare = None,
         services = None,
         **overrides):
@@ -256,6 +256,7 @@ def python_serve(
     return build_and_serve(
         config,
         build,
+        provider = provider,
         name = name,
         cwd = app.serve_path,
         prepare = prepare if prepare != None else python_prepare(config, site_packages, app.serve_path),

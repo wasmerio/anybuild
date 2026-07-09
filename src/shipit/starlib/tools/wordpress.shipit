@@ -88,7 +88,6 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
     if config.wp_extension_kind != None:
         tc = php_toolchain(config)
         return build_struct(
-            provider = "wordpress",
             steps = [use(*php_use_deps(tc))] + _wp_extension_steps(config, app, assets, wpcontent_base),
             serve_deps = php_runtime_deps(config, tc) + extra_serve_deps,
             mounts = [app, assets, wpcontent_base],
@@ -107,7 +106,6 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
         extra_ignore = ["wp-content"],
     )
     return build_struct(
-        provider = "wordpress",
         steps = php.steps,
         serve_deps = php.serve_deps + extra_serve_deps,
         mounts = [app, assets, wpcontent_base],
@@ -139,7 +137,7 @@ def wordpress_env(config, wpcontent_base):
         env_vars["WP_DEFAULT_THEME"] = config.wp_extension_activate_target
     return env_vars
 
-def wordpress_serve(config, build, name = None, **overrides):
+def wordpress_serve(config, build, name = None, provider = "wordpress", **overrides):
     app = build.app
     assets = build.assets
     wpcontent_base = build.wpcontent_base
@@ -148,6 +146,7 @@ def wordpress_serve(config, build, name = None, **overrides):
     return build_and_serve(
         config,
         build,
+        provider = provider,
         name = name,
         cwd = app.serve_path,
         env = wordpress_env(config, wpcontent_base),

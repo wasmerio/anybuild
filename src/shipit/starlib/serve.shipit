@@ -18,7 +18,6 @@ extra steps and overrides parts of the php serve).
 
 A build struct carries at least:
 
-  provider    the provider label of whatever produced this build
   steps       list of build steps (None entries allowed; filtered here)
   serve_deps  packages the runtime needs because of this build
   mounts      mounts created by the build that must attach to the serve
@@ -29,10 +28,9 @@ plus any provider-specific fields (mount handles etc.) for downstream serves.
 
 load("//shipit:prelude.shipit", "compact", "merged")
 
-def build_struct(steps, provider = None, serve_deps = [], mounts = [], env = {}, **extra):
+def build_struct(steps, serve_deps = [], mounts = [], env = {}, **extra):
     """Create a build struct with the convention fields defaulted."""
     return struct(
-        provider = provider,
         steps = steps,
         serve_deps = serve_deps,
         mounts = mounts,
@@ -43,7 +41,7 @@ def build_struct(steps, provider = None, serve_deps = [], mounts = [], env = {},
 def build_and_serve(
         config,
         build,
-        provider = None,
+        provider,
         name = None,
         commands = {},
         env = {},
@@ -62,7 +60,7 @@ def build_and_serve(
     """Assemble a serve() from a build struct plus the serve-side wiring."""
     return serve(
         name = name or config.name,
-        provider = provider or build.provider,
+        provider = provider,
         cwd = cwd,
         build = compact(list(build_pre) + list(build.steps) + list(build_post)),
         deps = list(build.serve_deps) + list(serve_deps) + list(extra_deps),
