@@ -1,17 +1,7 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
-from .base import (
-    DetectResult,
-    DependencySpec,
-    Provider,
-    _exists,
-    ServiceSpec,
-    VolumeSpec,
-    CustomCommands,
-    MountSpec,
-    Config,
-)
+from .base import DetectResult, _exists, Config
 from .staticfile import StaticFileProvider, StaticFileConfig, compute_redirects_config
 from pydantic_settings import SettingsConfigDict
 import toml
@@ -114,29 +104,3 @@ class HugoProvider(StaticFileProvider):
             return DetectResult(cls.name(), 80)
         return None
 
-    def dependencies(self) -> list[DependencySpec]:
-        return [
-            DependencySpec(
-                "hugo",
-                var_name="config.hugo_version",
-                use_in_build=True,
-            ),
-            *super().dependencies(),
-        ]
-
-    def build_steps(self) -> list[str]:
-        return [
-            'workdir(temp.path)',
-            'copy(".", ".", ignore=[".git"])',
-            'run("hugo build --gc --minify", group="build")',
-            'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
-        ]
-
-    def mounts(self) -> list[MountSpec]:
-        return [MountSpec("temp", attach_to_serve=False), *super().mounts()]
-
-    def services(self) -> list[ServiceSpec]:
-        return []
-
-    def volumes(self) -> list[VolumeSpec]:
-        return []

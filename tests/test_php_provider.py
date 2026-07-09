@@ -5,6 +5,8 @@ from shipit.generator import load_provider, load_provider_config
 from shipit.providers.base import Config
 from shipit.providers.php import PhpFramework, PhpProvider
 
+from tests.plan_helpers import evaluate_project_plan
+
 
 def test_php_provider_detects_moodle_from_source(tmp_path: Path) -> None:
     project_dir = tmp_path / "moodle"
@@ -45,13 +47,14 @@ def test_php_provider_detects_drupal_from_source(tmp_path: Path) -> None:
 
     provider_cls = load_provider(project_dir, base_config)
     provider_config = load_provider_config(provider_cls, project_dir, base_config)
-    provider = provider_cls(project_dir, provider_config)
 
     assert provider_cls is PhpProvider
     assert provider_config.framework == PhpFramework.Drupal
-    assert provider.commands()["start"] == (
-        '"php -S localhost:{} -t {}/web".format(PORT, app.serve_path)'
-    )
+    assert provider_config.public_dir == "web"
+    # Drupal serves with plain php (phpix disabled) from the web/ docroot.
+    _backend, _ctx, serve, _config = evaluate_project_plan(project_dir, tmp_path)
+    assert serve.commands["start"].startswith("php -S localhost:")
+    assert serve.commands["start"].endswith("/web")
 
 
 def test_php_provider_detects_drupal_from_source_layout(tmp_path: Path) -> None:

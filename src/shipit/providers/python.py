@@ -1,27 +1,13 @@
 from enum import Enum
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import List, Optional, Set
 
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
-from .install_context import (
-    discover_python_dependency_files,
-    discover_python_install_context,
-    starlark_string_list,
-)
-from .base import (
-    DetectResult,
-    DependencySpec,
-    Provider,
-    _exists,
-    MountSpec,
-    ServiceSpec,
-    VolumeSpec,
-    Config,
-    subdir_build_context_steps,
-)
+from .install_context import discover_python_dependency_files, discover_python_install_context
+from .base import DetectResult, _exists, Config
 
 
 class PythonFramework(Enum):
@@ -44,11 +30,6 @@ class MigrationStrategy(Enum):
     Django = "django"
     Alembic = "alembic"
 
-    def get_migration_command(self) -> str:
-        if self == MigrationStrategy.Django:
-            return 'f"python manage.py migrate"'
-        elif self == MigrationStrategy.Alembic:
-            return 'f"alembic upgrade head"'
 
 
 class DatabaseType(Enum):
@@ -86,17 +67,9 @@ class PythonConfig(Config):
 
 
 class PythonProvider:
-    only_build: bool = False
-
-    def __init__(
-        self,
-        path: Path,
-        config: PythonConfig,
-        only_build: bool = False,
-    ):
+    def __init__(self, path: Path, config: PythonConfig):
         self.path = path
         self.config = config
-        self.only_build = only_build
 
     @classmethod
     def load_config(
@@ -350,168 +323,6 @@ class PythonProvider:
             return DetectResult(cls.name(), 10)
         return None
 
-    def dependencies(self) -> list[DependencySpec]:
-        deps = [
-            DependencySpec(
-                "python",
-                var_name="config.python_version",
-                use_in_build=True,
-                use_in_serve=True,
-            ),
-            DependencySpec(
-                "uv",
-                var_name="config.uv_version",
-                use_in_build=True,
-            ),
-        ]
-        if self.config.uses_pandoc:
-            deps.append(
-                DependencySpec(
-                    "pandoc",
-                    var_name="config.pandoc_version",
-                    use_in_build=False,
-                    use_in_serve=True,
-                )
-            )
-        if self.config.uses_ffmpeg:
-            deps.append(
-                DependencySpec(
-                    "ffmpeg",
-                    var_name="config.ffmpeg_version",
-                    use_in_build=False,
-                    use_in_serve=True,
-                )
-            )
-        return deps
-
-    def declarations(self) -> Optional[str]:
-        if self.only_build:
-            return (
-                "python_version = config.python_version\n"
-                "cross_platform = config.cross_platform\n"
-                "venv = local_venv\n"
-            )
-        return (
-            "python_version = config.python_version\n"
-            "cross_platform = config.cross_platform\n"
-            "python_extra_index_url = config.python_extra_index_url\n"
-            "precompile_python = config.precompile_python\n"
-            'python_cross_packages_path = venv.path + f"/lib/python{python_version}/site-packages"\n'
-            'python_serve_site_packages_path = "{}/lib/python{}/site-packages".format(venv.serve_path, python_version)\n'
-            'app_serve_path = app.serve_path\n'
-        )
-
-    def build_steps(self) -> list[str]:
-        app_subdir = self.config.app_subdir
-        mount_name = "temp" if self.only_build or app_subdir else "app"
-        steps = subdir_build_context_steps(
-            mount_name,
-            app_subdir,
-            extra_ignore=[".venv", "__pycache__"],
-        )
-
-        # Sorted for deterministic output (mirrors the Starlark provider).
-        extra_deps = ", ".join(sorted(self.config.extra_dependencies))
-        has_requirements = _exists(self.path, "requirements.txt")
-        if _exists(self.path, "pyproject.toml"):
-            install_context = discover_python_install_context(
-                self.path,
-                include_pyproject=True,
-            )
-            requires_all_files = (
-                self.config.install_requires_all_files
-                or install_context.requires_all_files
-            )
-            extra_args = ""
-            if _exists(self.path, "uv.lock"):
-                extra_args = " --locked"
-
-            # Join inputs
-            inputs = starlark_string_list(install_context.inputs)
-            inputs_arg = (
-                "" if app_subdir or requires_all_files else f", inputs=[{inputs}]"
-            )
-            steps += [
-                'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path, UV_PYTHON_PREFERENCE="only-system", UV_PYTHON=f"python{python_version}")',
-                'copy(".", ".")' if requires_all_files and not app_subdir else None,
-                f'run(f"uv sync{extra_args}"{inputs_arg}, group="install")',
-                'copy("pyproject.toml", "pyproject.toml")'
-                if not app_subdir and not requires_all_files
-                else None,
-                f'run("uv add {extra_deps}", group="install")' if extra_deps else None,
-            ]
-            if not self.only_build:
-                steps += [
-                    'run(f"uv pip compile pyproject.toml --universal --extra-index-url {python_extra_index_url} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt", outputs=["cross-requirements.txt"]) if cross_platform else None',
-                    f'run(f"uvx pip install -r cross-requirements.txt {extra_deps} --target {{python_cross_packages_path}} --platform {{cross_platform}} --only-binary=:all: --python-version={{python_version}} --compile") if cross_platform else None',
-                    'run("rm cross-requirements.txt") if cross_platform else None',
-                ]
-        elif has_requirements or extra_deps:
-            install_context = discover_python_install_context(
-                self.path,
-                include_requirements=has_requirements,
-            )
-            requires_all_files = (
-                self.config.install_requires_all_files
-                or install_context.requires_all_files
-            )
-            inputs = starlark_string_list(install_context.inputs)
-            inputs_arg = (
-                "" if app_subdir or requires_all_files else f", inputs=[{inputs}]"
-            )
-            steps += [
-                'env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path)',
-                'run(f"uv init", inputs=[], outputs=["uv.lock"], group="install")',
-                'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
-                if requires_all_files and not app_subdir
-                else None,
-            ]
-            if has_requirements:
-                steps += [
-                    f'run("uv add -r requirements.txt {extra_deps}"{inputs_arg}, group="install")',
-                ]
-            else:
-                steps += [
-                    f'run("uv add {extra_deps}", group="install")',
-                ]
-            if not self.only_build:
-                steps += [
-                    f'run(f"uv pip compile requirements.txt --python-version={{python_version}} --universal --extra-index-url {{python_extra_index_url}} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt"{inputs_arg}, outputs=["cross-requirements.txt"]) if cross_platform else None',
-                    f'run(f"uvx pip install -r cross-requirements.txt {extra_deps} --target {{python_cross_packages_path}} --platform {{cross_platform}} --only-binary=:all: --python-version={{python_version}} --compile") if cross_platform else None',
-                    'run("rm cross-requirements.txt") if cross_platform else None',
-                ]
-
-        steps += [
-            'path((local_venv.path if cross_platform else venv.path) + "/bin")',
-            'copy(".", ".", ignore=[".venv", ".git", "__pycache__"])'
-            if not app_subdir and not self.config.install_requires_all_files
-            else None,
-        ]
-        if self.config.framework == PythonFramework.MCP:
-            steps += [
-                'run("mkdir -p {}/bin".format(venv.path)) if cross_platform else None',
-                'run("cp {}/bin/mcp {}/bin/mcp".format(local_venv.path, venv.path)) if cross_platform else None',
-            ]
-        if self.config.framework == PythonFramework.Django:
-            steps += [
-                'run("python manage.py collectstatic --noinput", group="build")',
-            ]
-        if app_subdir and not self.only_build:
-            steps += [
-                'run("cp -R . {}".format(app.path))',
-            ]
-        return list(filter(None, steps))
-
-    def prepare_steps(self) -> Optional[list[str]]:
-        if self.only_build:
-            return []
-        return [
-            'run("echo \\"Precompiling Python code...\\"") if precompile_python else None',
-            'run(f"python -m compileall -o 2 {python_serve_site_packages_path} || true") if precompile_python else None',
-            'run("echo \\"Precompiling package code...\\"") if precompile_python else None',
-            'run(f"python -m compileall -o 2 {app_serve_path} || true") if precompile_python else None',
-        ]
-
     @classmethod
     def detect_main_file(cls, root_path: Path) -> Optional[str]:
         paths_to_try = ["main.py", "app.py", "streamlit_app.py", "Home.py", "*_app.py"]
@@ -529,115 +340,6 @@ class PythonProvider:
             if found_path:
                 return str(found_path.relative_to(root_path))
         return None
-
-    def commands(self) -> Dict[str, str]:
-        return self.base_commands()
-
-    def base_commands(self) -> Dict[str, str]:
-        if self.only_build:
-            return {}
-
-        start_cmd = None
-        migrate_cmd = None
-        if self.config.server == PythonServer.Daphne:
-            assert self.config.asgi_application, (
-                "No ASGI application found for Daphne"
-            )
-            start_cmd = f'f"daphne {self.config.asgi_application} --bind 0.0.0.0 --port {{PORT}}"'
-        # elif self.config.server == PythonServer.Gunicorn:
-        #     assert self.config.wsgi_application, "No WSGI application found"
-        #     start_cmd = f'f"gunicorn {self.config.wsgi_application} --bind 0.0.0.0 --port {{PORT}}"'
-        elif self.config.server == PythonServer.Uvicorn:
-            if not self.config.main_file:
-                assert (
-                    self.config.asgi_application or self.config.wsgi_application
-                ), (
-                    "No ASGI or WSGI application found for Uvicorn and no main file found"
-                )
-            if self.config.asgi_application:
-                start_cmd = f'f"uvicorn {self.config.asgi_application} --host 0.0.0.0 --port {{PORT}}"'
-            elif self.config.wsgi_application:
-                start_cmd = f'f"uvicorn {self.config.wsgi_application} --interface=wsgi --host 0.0.0.0 --port {{PORT}}"'
-        elif self.config.server == PythonServer.Hypercorn:
-            assert self.config.asgi_application, (
-                "No ASGI application found for Hypercorn"
-            )
-            start_cmd = (
-                f'f"hypercorn {self.config.asgi_application} --bind 0.0.0.0:{{PORT}}"'
-            )
-        elif self.config.framework == PythonFramework.Streamlit:
-            assert self.config.main_file, "No main file found for Streamlit"
-            main_file = self.config.main_file
-            start_cmd = f'f"streamlit run {main_file} --server.port {{PORT}} --server.address 0.0.0.0 --server.headless true"'
-        elif self.config.framework == PythonFramework.MCP:
-            main_file = self.config.main_file
-            assert main_file, "No main file found for MCP"
-            contents = (self.path / main_file).read_text()
-            if 'if __name__ == "__main__"' in contents or "mcp.run" in contents:
-                start_cmd = f'"python {main_file}"'
-            else:
-                start_cmd = f'"python {{}}/bin/mcp run {main_file} --transport=streamable-http".format(venv.serve_path)'
-        elif self.config.framework == PythonFramework.Django:
-            start_cmd = 'f"python manage.py runserver 0.0.0.0:{PORT}"'
-
-        if not start_cmd:
-            if self.config.main_file:
-                start_cmd = f'"python {self.config.main_file}"'
-        
-        if self.config.migration_strategy:
-            migrate_cmd = self.config.migration_strategy.get_migration_command()
-
-        commands = {}
-        if start_cmd:
-            commands["start"] = start_cmd
-        if migrate_cmd:
-            commands["after_deploy"] = migrate_cmd
-        return commands
-
-    def mounts(self) -> list[MountSpec]:
-        if self.only_build:
-            return [
-                MountSpec("temp", attach_to_serve=False),
-                MountSpec("local_venv", attach_to_serve=False),
-            ]
-        mounts = [
-            MountSpec("app"),
-            MountSpec("venv"),
-            MountSpec("local_venv", attach_to_serve=False),
-        ]
-        if self.config.app_subdir:
-            mounts.insert(0, MountSpec("temp", attach_to_serve=False))
-        return mounts
-
-    def volumes(self) -> list[VolumeSpec]:
-        return []
-
-    def env(self) -> Optional[Dict[str, str]]:
-        if self.only_build:
-            return {}
-        # For Django projects, generate an empty env dict to surface the field
-        # in the Shipit file. Other Python projects omit it by default.
-        python_path = 'f"{app_serve_path}:{python_serve_site_packages_path}"'
-        main_file = self.config.main_file
-        if main_file and main_file.startswith("src/"):
-            python_path = 'f"{app_serve_path}:{app_serve_path}/src:{python_serve_site_packages_path}"'
-        else:
-            python_path = 'f"{app_serve_path}:{python_serve_site_packages_path}"'
-        env_vars = {"PYTHONPATH": python_path, "HOME": 'app.serve_path'}
-        if self.config.framework == PythonFramework.Streamlit:
-            env_vars["STREAMLIT_SERVER_HEADLESS"] = '"true"'
-        elif self.config.framework == PythonFramework.MCP:
-            env_vars["FASTMCP_HOST"] = '"0.0.0.0"'
-            env_vars["FASTMCP_PORT"] = "PORT"
-        return env_vars
-
-    def services(self) -> list[ServiceSpec]:
-        if self.config.database == DatabaseType.MySQL:
-            return [ServiceSpec(name="database", provider="mysql")]
-        elif self.config.database == DatabaseType.PostgreSQL:
-            return [ServiceSpec(name="database", provider="postgres")]
-        return []
-
 
 def format_app_import(asgi_application: str) -> str:
     # Transform "mysite.asgi.application" to "mysite.asgi:application" using regex

@@ -2,12 +2,15 @@ import json
 from pathlib import Path
 
 from shipit.providers.base import Config
+from shipit.shipit_types import CopyStep, EnvStep, RunStep
 from shipit.providers.install_context import (
     discover_js_install_context,
     discover_python_install_context,
 )
 from shipit.providers.node import NodeProvider, PackageManager
 from shipit.providers.python import PythonProvider
+
+from tests.plan_helpers import evaluate_project_plan
 
 
 def test_python_requirements_context_follows_recursive_includes(
@@ -63,13 +66,18 @@ def test_python_provider_uses_context_for_requirements_inputs(
     (tmp_path / "requirements.txt").write_text("-r deps/base.txt\n")
     (deps_dir / "base.txt").write_text("fastapi==0.115.0\n")
 
-    config = PythonProvider.load_config(tmp_path, Config())
-    provider = PythonProvider(tmp_path, config)
+    (tmp_path / "main.py").write_text("print('ok')\n")
 
-    assert (
-        'run("uv add -r requirements.txt uvicorn", '
-        'inputs=["requirements.txt", "deps/base.txt"], group="install")'
-    ) in provider.build_steps()
+    _backend, _ctx, serve, _config = evaluate_project_plan(
+        tmp_path, tmp_path, use_provider="python"
+    )
+    install_step = next(
+        step
+        for step in serve.build
+        if isinstance(step, RunStep)
+        and step.command == "uv add -r requirements.txt uvicorn"
+    )
+    assert install_step.inputs == ["requirements.txt", "deps/base.txt"]
 
 
 def test_python_pyproject_context_detects_uv_path_source(
@@ -187,14 +195,20 @@ def test_node_provider_uses_escape_hatch_for_external_local_dependency(
     )
 
     config = NodeProvider.load_config(app_dir, Config())
-    provider = NodeProvider(app_dir, config)
-
     assert config.install_requires_all_files is True
-    assert provider.build_steps_install() == [
-        'copy(".", ".", ignore=["node_modules", ".git"])',
-        'env(CI="true", NPM_CONFIG_FUND="false")',
-        'run("npm install", group="install")',
-    ]
+
+    _backend, _ctx, serve, _config = evaluate_project_plan(
+        app_dir, tmp_path, use_provider="node"
+    )
+    copy_step, env_step, install_step = serve.build[2:5]
+    assert isinstance(copy_step, CopyStep)
+    assert copy_step.source == "."
+    assert copy_step.ignore == ["node_modules", ".git"]
+    assert isinstance(env_step, EnvStep)
+    assert env_step.variables == {"CI": "true", "NPM_CONFIG_FUND": "false"}
+    assert isinstance(install_step, RunStep)
+    assert install_step.command == "npm install"
+    assert install_step.inputs is None
 
 
 def test_node_provider_keeps_narrow_install_without_local_deps(
@@ -203,18 +217,23 @@ def test_node_provider_keeps_narrow_install_without_local_deps(
     (tmp_path / "package.json").write_text("{}\n")
     (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
     config = NodeProvider.load_config(tmp_path, Config())
-    provider = NodeProvider(tmp_path, config)
-
     assert config.package_manager == PackageManager.PNPM
-    assert provider.build_steps_install() == [
-        'copy("pnpm-lock.yaml")',
-        (
-            'env(pnpm_config_minimum_release_age="0", '
-            'CI="true", '
-            'pnpm_config_dangerously_allow_all_builds="true")'
-        ),
-        'run("pnpm install", inputs=["package.json"], group="install")',
-    ]
+
+    _backend, _ctx, serve, _config = evaluate_project_plan(
+        tmp_path, tmp_path, use_provider="node"
+    )
+    copy_step, env_step, install_step = serve.build[2:5]
+    assert isinstance(copy_step, CopyStep)
+    assert copy_step.source == "pnpm-lock.yaml"
+    assert isinstance(env_step, EnvStep)
+    assert env_step.variables == {
+        "pnpm_config_minimum_release_age": "0",
+        "CI": "true",
+        "pnpm_config_dangerously_allow_all_builds": "true",
+    }
+    assert isinstance(install_step, RunStep)
+    assert install_step.command == "pnpm install"
+    assert install_step.inputs == ["package.json"]
 
 
 def test_js_context_detects_package_json_workspaces(tmp_path: Path) -> None:

@@ -7,15 +7,7 @@ from typing import Any, ClassVar, Dict, Optional, Set
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
-from .base import (
-    Config,
-    DetectResult,
-    DependencySpec,
-    MountSpec,
-    ServiceSpec,
-    VolumeSpec,
-    _exists,
-)
+from .base import Config, DetectResult, _exists
 from .install_context import discover_js_install_context
 from .node import NodeConfig, NodeFramework, NodeProvider, PackageManager
 from .staticfile import (
@@ -39,7 +31,6 @@ class NodeStaticConfig(NodeConfig, StaticFileConfig):
 
 
 class NodeStaticProvider(NodeProvider, StaticFileProvider):
-    only_build: bool = False
     SCRIPT_BUILD_COMMAND = ("build",)
     # Only use this commands if the build command is not found in the package.json
     SCRIPT_BUILD_COMMAND_FALLBACK = ("generate", "export", "docs:build",)
@@ -112,10 +103,8 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         r"\boutput\s*:\s*['\"]export['\"]"
     )
 
-    def __init__(
-        self, path: Path, config: NodeStaticConfig, only_build: bool = False
-    ):
-        NodeProvider.__init__(self, path, config, only_build=only_build)
+    def __init__(self, path: Path, config: NodeStaticConfig):
+        NodeProvider.__init__(self, path, config)
 
     @classmethod
     def load_config(
@@ -612,13 +601,6 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             return DetectResult(cls.name(), 20)
         return None
 
-    def dependencies(self) -> list[DependencySpec]:
-        node_provider = NodeProvider(self.path, self.config, only_build=True)
-        return [
-            *node_provider.dependencies(),
-            *(StaticFileProvider.dependencies(self) if not self.only_build else []),
-        ]
-
     @classmethod
     def get_build_command(
         cls,
@@ -650,43 +632,3 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         command = framework.build_static_command()
         return package_manager.run_execute_command(command)
 
-    def build_steps(self) -> list[str]:
-        return filter(
-            None,
-            [
-                *(
-                    self.build_workdir_steps("temp")
-                    if not self.only_build
-                    else []
-                ),
-                *self.build_steps_install(),
-                self.build_steps_copy(),
-                *self.build_steps_build(output="config.static_dir"),
-                'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
-                if not self.only_build
-                else None,
-            ] + self.build_steps_redirects(),
-        )
-
-    def prepare_steps(self) -> Optional[list[str]]:
-        return None
-
-    def mounts(self) -> list[MountSpec]:
-        if self.only_build:
-            return []
-        return [
-            MountSpec("temp", attach_to_serve=False),
-            *StaticFileProvider.mounts(self),
-        ]
-
-    def volumes(self) -> list[VolumeSpec]:
-        return []
-
-    def env(self) -> Optional[Dict[str, str]]:
-        return None
-
-    def commands(self) -> Dict[str, str]:
-        return StaticFileProvider.commands(self)
-
-    def services(self) -> list[ServiceSpec]:
-        return []

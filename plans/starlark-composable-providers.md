@@ -30,13 +30,17 @@ work. Details in [Engine wiring](#engine-wiring-xingque).
 
 ## Implementation status (branch `starlark-providers`)
 
-**All providers are ported.** The stdlib now covers python, staticfile, hugo,
-mkdocs, jekyll, go, php, wordpress, laravel, node, and node-static — every
-provider in the registry generates the two-line loader form. The legacy
-inline generator (`generate_shipit_inline`) and the provider emitter methods
-remain in-tree solely as the reference implementation for the
-plan-equivalence tests; deleting them is the next phase, once this has baked
-in CI/e2e. The shipped code supersedes the sketches below where they differ:
+**Complete — including Phase 4 (deletion).** The stdlib covers python,
+staticfile, hugo, mkdocs, jekyll, go, php, wordpress, laravel, node, and
+node-static; every provider generates the two-line loader form. The legacy
+string-emitting code is **gone** (~2,000 lines): provider classes are now
+detection + config loading only, `generator.py` emits only the loader form,
+and the plan dataclasses (`ProviderPlan`, `DependencySpec`, ...) are deleted.
+Before deletion, every example's plan was frozen into
+`tests/plan_snapshots/` (path-tokenized, captured while the equivalence
+suite still proved them identical to the legacy generator); the snapshot
+tests now gate all stdlib/engine changes. The shipped code supersedes the
+sketches below where they differ:
 
 - Engine plumbing: `src/shipit/starlark_loader.py` (label resolution, module
   graph eval, `config_view`), extended dialect/globals wired into
@@ -53,21 +57,20 @@ in CI/e2e. The shipped code supersedes the sketches below where they differ:
   This split is what providers-that-inherit compose on: mkdocs =
   `python_build` + `staticfile_serve`.
 - Generator dispatch: `STARLARK_ENTRYPOINTS` in `generator.py` (keyed by
-  provider name — deliberately not a class attribute, so subclasses like
-  jekyll don't inherit an entrypoint they don't implement yet). Ported
-  providers generate the two-liner; everything else uses the legacy inline
-  generator (`generate_shipit_inline`), kept until all providers are ported.
+  provider name — deliberately not a class attribute, so a subclassed
+  provider never inherits an entrypoint it doesn't implement). Every
+  registered provider has an entrypoint; an unregistered provider is a
+  loud error at generation time.
 - Config additions: base `Config.name`; derived fields like
   `PythonConfig.{install_inputs, mcp_self_running}`, `PhpConfig.public_dir`,
   `StaticFileConfig.redirects_config` (rendered sws.toml, computed at load).
   Plain existence checks stay out of config: providers call the
   `file_exists()` builtin (app-dir-scoped, read-only) directly.
-- Verification: `tests/test_plan_equivalence.py` evaluates the legacy inline
-  text and the new two-liner with the same config for **every example in the
-  repo** (~80 cases: all python/static/node/nodestatic/php/wordpress/laravel/
-  go/hugo/mkdocs examples, the pnpm/npm subdir workspaces, plus synthesized
-  jekyll/go-subdir/python-subdir/static-subdir workspaces) and asserts
-  identical normalized plans. Full non-e2e suite green; mypy clean.
+- Verification: `tests/test_plan_snapshots.py` evaluates the two-liner for
+  **every example in the repo** (98 snapshots: all examples plus the
+  cross-platform dimension and synthesized subdir/jekyll workspaces) and
+  compares against checked-in golden plans. Refresh intentionally with
+  `UPDATE_PLAN_SNAPSHOTS=1`. Full non-e2e suite green; mypy clean.
 - Composition patterns realized: mkdocs = `python_build` + `staticfile_serve`;
   node-static = node build fragments + `staticfile_serve`; wordpress =
   `php_build` with `build_pre`/`after_build` hooks (or an extension build into

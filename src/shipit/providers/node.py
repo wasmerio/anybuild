@@ -5,28 +5,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, Dict, Optional, Set
 
-import yaml
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 from semantic_version import NpmSpec, Version
 
-from .base import (
-    Config,
-    DependencySpec,
-    DetectResult,
-    MountSpec,
-    ServiceSpec,
-    VolumeSpec,
-    subdir_build_context_steps,
-)
-from .install_context import (
-    discover_js_install_context,
-    starlark_string_list,
-)
+from .base import Config, DetectResult
+from .install_context import discover_js_install_context
 
 
-NODE_MODULES_OPTIMIZER_ASSET = "node/optimize-node-modules.sh"
-OPTIMIZE_DEPS_VERSION = "0.1.1"
 NEXT_BUNDLE_VERSION = "1.0.0"
 
 class PackageManager(Enum):
@@ -35,70 +21,12 @@ class PackageManager(Enum):
     YARN = "yarn"
     BUN = "bun"
 
-    def prune_command(self) -> str:
-        return {
-            PackageManager.NPM: "npm prune --omit=dev --ignore-scripts",
-            PackageManager.PNPM: "pnpm prune --prod",
-            PackageManager.YARN: "yarn workspaces focus --all --production",
-            PackageManager.BUN: "rm -rf node_modules && bun install --omit=dev --ignore-scripts",
-        }[self]
-
-    def as_dependency(self, path: Path) -> DependencySpec:
-        dep_name = {
-            PackageManager.NPM: "npm",
-            PackageManager.PNPM: "pnpm",
-            PackageManager.YARN: "yarn",
-            PackageManager.BUN: "bun",
-        }[self]
-
-        default_version = None
-        if self == PackageManager.PNPM:
-            lockfile = path / self.lockfile()
-            lockfile_version = self.pnpm_lockfile_version(lockfile)
-            if lockfile_version:
-                if lockfile_version.startswith("5."):
-                    default_version = "7"
-                elif lockfile_version.startswith("6."):
-                    default_version = "8"
-
-        return DependencySpec(
-            dep_name,
-            var_name=f"config.{dep_name.lower()}_version",
-            default_version=default_version,
-        )
-
     def lockfile(self) -> str:
         return {
             PackageManager.NPM: "package-lock.json",
             PackageManager.PNPM: "pnpm-lock.yaml",
             PackageManager.YARN: "yarn.lock",
             PackageManager.BUN: "bun.lockb",
-        }[self]
-
-    @classmethod
-    def pnpm_lockfile_version(cls, lockfile: Path) -> Optional[str]:
-        if not lockfile.exists():
-            return None
-        with open(lockfile, "r") as f:
-            for line in f:
-                if "lockfileVersion" in line:
-                    try:
-                        config = yaml.safe_load(line)
-                        version = config.get("lockfileVersion")
-                        if isinstance(version, bytes):
-                            return version.decode()
-                        if isinstance(version, str):
-                            return version
-                    except Exception:
-                        pass
-        return None
-
-    def install_command(self, has_lockfile: bool = False) -> str:
-        return {
-            PackageManager.NPM: f"npm install",
-            PackageManager.PNPM: "pnpm install",
-            PackageManager.YARN: "yarn install",
-            PackageManager.BUN: f"bun install{' --no-save' if has_lockfile else ''}",
         }[self]
 
     def run_command(self, command: str) -> str:
@@ -401,20 +329,10 @@ class NodeFramework(Enum):
             )
         return build_command
 
-    def node_optimize_deps_paths(self) -> list[str]:
-        if self == NodeFramework.ASTRO:
-            return ["dist"]
-        return []
-
     def start_command(self) -> Optional[str]:
         if self == NodeFramework.NEXT:
             return "node server.mjs"
         return None
-
-    def folders_to_copy(self) -> list[str]:
-        if self == NodeFramework.NEXT:
-            return [".next-bundle/*"]
-        return ["."]
 
 class NodeConfig(Config):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
@@ -441,7 +359,6 @@ class NodeConfig(Config):
 
 
 class NodeProvider:
-    only_build: bool = False
     FRAMEWORK_DEPENDENCIES: ClassVar[tuple[str, ...]] = (
         "next",
         "astro",
@@ -543,23 +460,9 @@ class NodeProvider:
         "bunx",
     }
 
-    def __init__(
-        self, path: Path, config: NodeConfig, only_build: bool = False
-    ) -> None:
+    def __init__(self, path: Path, config: NodeConfig) -> None:
         self.path = path
         self.config = config
-        self.only_build = only_build
-
-    @property
-    def app_subdir(self) -> Optional[str]:
-        return self.config.app_subdir
-
-    def build_workdir_steps(self, mount_name: str) -> list[str]:
-        return subdir_build_context_steps(
-            mount_name,
-            self.app_subdir,
-            extra_ignore=["node_modules"],
-        )
 
     @classmethod
     def name(cls) -> str:
@@ -1047,239 +950,3 @@ class NodeProvider:
     def _node_entry_command(cls, entry_file: str) -> str:
         return f"node {shlex.quote(entry_file)}"
 
-    def dependencies(self) -> list[DependencySpec]:
-        node_dep = DependencySpec(
-            "node",
-            var_name="config.node_version",
-            use_in_build=bool((self.path / "package.json").exists())
-            or bool(self.config.build_command),
-            use_in_serve=not self.only_build,
-        )
-        deps = [node_dep]
-
-        if self.config.package_manager and (self.path / "package.json").exists():
-            package_manager_dep = self.config.package_manager.as_dependency(self.path)
-            package_manager_dep.use_in_build = True
-            deps.append(package_manager_dep)
-            if not self.only_build and self.config.remove_native_binaries:
-                deps.append(DependencySpec("bash", use_in_build=True))
-
-        for dep in sorted(self.config.extra_dependencies):
-            deps.append(DependencySpec(dep, use_in_build=True))
-
-        return deps
-
-    def build_steps_install(self) -> list[str]:
-        if not (self.path / "package.json").exists():
-            return []
-        package_manager = self.config.package_manager
-        if package_manager is None:
-            package_manager = self.detect_package_manager(self.path)
-        lockfile = package_manager.lockfile()
-        has_lockfile = (self.path / lockfile).exists()
-        install_command = package_manager.install_command(
-            has_lockfile=has_lockfile
-        )
-        if self.app_subdir and package_manager == PackageManager.PNPM:
-            install_command = f"{install_command} --no-frozen-lockfile"
-        install_context = discover_js_install_context(self.path)
-        requires_all_files = (
-            self.config.install_requires_all_files
-            or install_context.requires_all_files
-        )
-        steps = []
-
-        if self.app_subdir:
-            if has_lockfile:
-                steps.append(
-                    f'copy("{{}}/{lockfile}".format(app_subdir), "{lockfile}")'
-                )
-        elif requires_all_files:
-            steps.append('copy(".", ".", ignore=["node_modules", ".git"])')
-        elif has_lockfile:
-            steps.append(f'copy("{lockfile}")')
-
-        if package_manager == PackageManager.PNPM:
-            env_vars = [
-                'pnpm_config_minimum_release_age="0"',
-                'CI="true"',
-            ]
-            if self.app_subdir:
-                env_vars.extend(
-                    [
-                        'pnpm_config_inject_workspace_packages="true"',
-                    ]
-                )
-            env_vars.append('pnpm_config_dangerously_allow_all_builds="true"')
-            steps.append(f'env({", ".join(env_vars)})')
-        elif package_manager == PackageManager.NPM:
-            steps.append(f'env(CI="true", NPM_CONFIG_FUND="false")')
-
-        if self.app_subdir or requires_all_files:
-            steps.append(f'run("{install_command}", group="install")')
-        else:
-            inputs = starlark_string_list(install_context.inputs)
-            steps.append(
-                f'run("{install_command}", '
-                f'inputs=[{inputs}], group="install")'
-            )
-        return steps
-
-    def install_uses_all_files(self) -> bool:
-        install_context = discover_js_install_context(self.path)
-        return (
-            self.config.install_requires_all_files
-            or install_context.requires_all_files
-        )
-
-    def ignored_source_files(self) -> list[str]:
-        ignored_files = ["node_modules", ".git"]
-        if self.config.package_manager:
-            lockfile = self.config.package_manager.lockfile()
-            if (self.path / lockfile).exists():
-                ignored_files.append(lockfile)
-        return ignored_files
-
-    def build_steps_copy(self) -> Optional[str]:
-        if self.app_subdir:
-            return None
-        if self.install_uses_all_files():
-            return None
-        ignored = ", ".join(
-            json.dumps(file) for file in self.ignored_source_files()
-        )
-        return f'copy(".", ignore=[{ignored}])'
-
-    def build_steps_build(self, output: Optional[str] = "\".\"") -> list[str]:
-        if not self.config.build_command:
-            return []
-        command = json.dumps(self.config.build_command)
-        if not self.only_build:
-            return [
-                f"run({command}, "
-                f"outputs=[{output}], group=\"build\")"
-            ]
-        return [f"run({command}, group=\"build\")"]
-
-    def package_name(self) -> Optional[str]:
-        package_json = self.parse_package_json(self.path)
-        if not package_json:
-            return None
-        name = package_json.get("name")
-        if isinstance(name, str) and name:
-            return name
-        return None
-
-    def build_steps_export(self, copy_source: str) -> list[str]:
-        if (
-            self.app_subdir
-            and self.config.package_manager == PackageManager.PNPM
-            and (package_name := self.package_name())
-        ):
-            package_filter = shlex.quote(package_name)
-            return [
-                "workdir(build.path)",
-                (
-                    f'run("pnpm deploy --filter {package_filter} --prod '
-                    '--config.node-linker=hoisted {}".format(app.path))'
-                ),
-                "workdir(app.path)",
-            ]
-
-        copy_flags = "-RL" if self.app_subdir else "-R"
-        return [f'run("cp {copy_flags} {copy_source} {{}}".format(app.path))']
-
-    def build_steps_optimize_deps(self, include_prune: bool = True) -> list[str]:
-        if not (self.path / "package.json").exists():
-            return []
-        package_manager = self.config.package_manager
-        if package_manager is None:
-            return []
-        steps = []
-        if include_prune:
-            steps.append(
-                f"run(\"{package_manager.prune_command()}\", group=\"prune\")"
-            )
-        if self.config.framework and self.config.optimize_node_dependencies:
-            node_optimize_deps_paths = self.config.framework.node_optimize_deps_paths()
-            if node_optimize_deps_paths:
-                optimize_deps_command = package_manager.dlx_command(
-                    f"optimize-deps@{OPTIMIZE_DEPS_VERSION} {', '.join(node_optimize_deps_paths)} --replace"
-                )
-                steps.append(f"run(\"{optimize_deps_command}\")")
-        if not self.only_build and self.config.remove_native_binaries:
-            steps.extend(
-                [
-                    'run("mkdir -p {}".format(assets.path), group="optimize")',
-                    (
-                        f'copy("{NODE_MODULES_OPTIMIZER_ASSET}", '
-                        '"{}/optimize-node-modules.sh".format(assets.path), '
-                        'base="assets")'
-                    ),
-                    (
-                        'run("bash {}/optimize-node-modules.sh '
-                        'node_modules".format(assets.path), group="optimize")'
-                    ),
-                ]
-            )
-        return steps
-
-    def build_steps(self) -> list[str]:
-        folders_to_copy = "."
-        if self.config.framework:
-            folders_to_copy = ", ".join(self.config.framework.folders_to_copy())
-        copy_source = folders_to_copy or "."
-        export_steps = self.build_steps_export(copy_source)
-        uses_pnpm_deploy = (
-            self.app_subdir
-            and self.config.package_manager == PackageManager.PNPM
-            and self.package_name()
-        )
-        optimize_steps = self.build_steps_optimize_deps(
-            include_prune=not uses_pnpm_deploy
-        )
-        if uses_pnpm_deploy:
-            tail_steps = [*export_steps, *optimize_steps]
-        else:
-            tail_steps = [*optimize_steps, *export_steps]
-        return list(filter(None, [
-            *self.build_workdir_steps("build"),
-            *self.build_steps_install(),
-            self.build_steps_copy(),
-            *self.build_steps_build(),
-            *tail_steps,
-        ]))
-
-    def declarations(self) -> Optional[str]:
-        return None
-
-    def prepare_steps(self) -> Optional[list[str]]:
-        if not self.config.precompile_edgejs:
-            return []
-        return [
-            'run("edgejs --precompile {}".format(app.serve_path))',
-        ]
-
-    def commands(self) -> Dict[str, str]:
-        if not self.config.commands.start:
-            return {}
-        return {"start": json.dumps(self.config.commands.start)}
-
-    def mounts(self) -> list[MountSpec]:
-        if self.only_build:
-            return []
-        mounts = [MountSpec("build", attach_to_serve=False), MountSpec("app")]
-        if self.config.remove_native_binaries:
-            mounts.append(MountSpec("assets", attach_to_serve=False))
-        return mounts
-
-    def volumes(self) -> list[VolumeSpec]:
-        return []
-
-    def env(self) -> Optional[Dict[str, str]]:
-        if self.only_build:
-            return None
-        return {}
-
-    def services(self) -> list[ServiceSpec]:
-        return []
