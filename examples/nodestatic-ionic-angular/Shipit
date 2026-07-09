@@ -1,27 +1,3 @@
-node = dep("node", config.node_version)
-npm = dep("npm", config.npm_version)
-staticwebserver = dep("static-web-server", config.sws_version)
+load("//shipit/tools:node_static.shipit", "nodestatic_build_and_serve")
 
-temp = mount("temp")
-static_app = mount("static_app")
-
-serve(
-  name="nodestatic-ionic-angular",
-  provider="node-static",
-  build=[
-    use(node, npm),
-    workdir(temp.path),
-    env(CI="true", NPM_CONFIG_FUND="false"),
-    run("npm install", inputs=["package.json"], group="install"),
-    copy(".", ignore=["node_modules", ".git"]),
-    run("npm run build", outputs=[config.static_dir], group="build"),
-    run("cp -R {}/* {}/".format(config.static_dir, static_app.path))
-  ],
-  deps=[staticwebserver],
-  commands = {
-    "start": "static-web-server --root={} --log-level=info --port={}".format(static_app.serve_path, PORT)
-  },
-  mounts=[
-    static_app
-  ],
-)
+nodestatic_build_and_serve(config)

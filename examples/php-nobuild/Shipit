@@ -1,27 +1,3 @@
-php = dep("php", config.php_version, architecture=config.php_architecture)
+load("//shipit/tools:php.shipit", "php_build_and_serve")
 
-app = mount("app")
-assets = mount("assets")
-
-serve(
-  name="php-nobuild",
-  provider="php",
-  cwd=app.serve_path,
-  build=[
-    use(php),
-    workdir(app.path),
-    copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
-    copy(".", ignore=[".git"])
-  ],
-  deps=[php],
-  env = {
-    "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path)
-  },
-  commands = {
-    "start": "php -S localhost:{} -t {}".format(PORT, app.serve_path)
-  },
-  mounts=[
-    app,
-    assets
-  ],
-)
+php_build_and_serve(config)

@@ -435,6 +435,11 @@ class NodeConfig(Config):
     # executable native binaries that cannot run there anyway.
     remove_native_binaries: Optional[bool] = False
     install_requires_all_files: bool = False
+    # Static snapshot of the filesystem facts the Starlark provider needs.
+    has_package_json: bool = False
+    has_lockfile: bool = False
+    install_inputs: Optional[list[str]] = None
+    package_name: Optional[str] = None
 
 
 class NodeProvider:
@@ -605,7 +610,27 @@ class NodeProvider:
         if config.framework and config.commands.build and config.build_command:
             config.commands.build = config.build_command
 
+        cls.apply_static_snapshot(config, path, package_json, install_context)
+
         return config
+
+    @classmethod
+    def apply_static_snapshot(
+        cls,
+        config: NodeConfig,
+        path: Path,
+        package_json: Optional[Dict[str, Any]],
+        install_context: Any,
+    ) -> None:
+        """Record the filesystem facts the Starlark provider needs."""
+        config.has_package_json = (path / "package.json").exists()
+        if config.package_manager:
+            lockfile = config.package_manager.lockfile()
+            config.has_lockfile = (path / lockfile).exists()
+        config.install_inputs = install_context.inputs
+        name = (package_json or {}).get("name")
+        if isinstance(name, str) and name:
+            config.package_name = name
 
     @classmethod
     def detect(

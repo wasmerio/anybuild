@@ -16,8 +16,13 @@ from .base import (
     VolumeSpec,
     _exists,
 )
+from .install_context import discover_js_install_context
 from .node import NodeConfig, NodeFramework, NodeProvider, PackageManager
-from .staticfile import StaticFileConfig, StaticFileProvider
+from .staticfile import (
+    StaticFileConfig,
+    StaticFileProvider,
+    compute_redirects_config,
+)
 
 
 class NodeStaticConfig(NodeConfig, StaticFileConfig):
@@ -144,6 +149,15 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
                 )
             else:
                 config.static_dir = "dist"
+
+        install_context = discover_js_install_context(path)
+        if install_context.requires_all_files:
+            config.install_requires_all_files = True
+        NodeProvider.apply_static_snapshot(config, path, package_json, install_context)
+        # static_dir may have changed since the base load; recompute redirects.
+        config.redirects_config = compute_redirects_config(
+            path, config.static_dir, config.convert_redirects
+        )
 
         return config
 

@@ -12,7 +12,7 @@ from .base import (
     MountSpec,
     Config,
 )
-from .staticfile import StaticFileProvider, StaticFileConfig
+from .staticfile import StaticFileProvider, StaticFileConfig, compute_redirects_config
 from pydantic_settings import SettingsConfigDict
 import toml
 import json
@@ -88,6 +88,10 @@ class HugoProvider(StaticFileProvider):
                 config.hugo_version = "0.139.0"
             else:
                 config.hugo_version = "0.153.2"
+        # static_dir may have changed since the base load; recompute redirects.
+        config.redirects_config = compute_redirects_config(
+            path, config.static_dir, config.convert_redirects
+        )
         return config
 
     @classmethod

@@ -50,6 +50,8 @@ class CustomCommands(BaseSettings):
 class Config(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", env_prefix="SHIPIT_")
 
+    # Serve name; defaults to the project directory name (set by the CLI).
+    name: Optional[str] = None
     port: Optional[int] = 8080
     commands: CustomCommands = Field(default_factory=CustomCommands)
     app_subdir: Optional[str] = Field(default=None, exclude=True)

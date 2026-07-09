@@ -1,31 +1,3 @@
-php = dep("php", config.php_version, architecture=config.php_architecture)
-composer = dep("composer")
-bash = dep("bash")
+load("//shipit/tools:php.shipit", "php_build_and_serve")
 
-app = mount("app")
-assets = mount("assets")
-
-serve(
-  name="php-api",
-  provider="php",
-  cwd=app.serve_path,
-  build=[
-    use(php, composer),
-    workdir(app.path),
-    copy("php/php.ini", "{}/php.ini".format(assets.path), base="assets"),
-    env(COMPOSER_HOME="/tmp", COMPOSER_FUND="0", COMPOSER_ALLOW_SUPERUSER="1"),
-    run("composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction", inputs=["composer.json", "composer.lock"], outputs=["."], group="install"),
-    copy(".", ignore=[".git", "vendor"])
-  ],
-  deps=[php, bash],
-  env = {
-    "PHP_INI_SCAN_DIR": "{}".format(assets.serve_path)
-  },
-  commands = {
-    "start": "php -S localhost:{} -t {}/public".format(PORT, app.serve_path)
-  },
-  mounts=[
-    app,
-    assets
-  ],
-)
+php_build_and_serve(config)

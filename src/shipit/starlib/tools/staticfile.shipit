@@ -1,0 +1,70 @@
+"""Static sites served with static-web-server.
+
+The base of the static-site family: builders (hugo, mkdocs, ...) produce
+their own build struct that fills the `static_app` mount and reuse
+staticfile_serve() for the serve wiring.
+
+Static-family build structs carry two extra fields:
+
+  static_app     the mount holding the site to serve
+  static_config  mount with the sws.toml redirects file, or None
+"""
+
+load("//shipit:serve.shipit", "build_and_serve", "build_struct")
+
+REDIRECTS_FILE = "sws.toml"
+
+def staticfile_build(config, static_app = None):
+    """Copy the static site into the static_app mount."""
+    static_app = static_app or mount("static_app")
+    static_config = mount("static_config") if config.redirects_config else None
+
+    source = config.static_dir or "."
+    if config.app_subdir:
+        if config.static_dir:
+            source = "{}/{}".format(config.app_subdir, config.static_dir)
+        else:
+            source = config.app_subdir
+
+    steps = [
+        workdir(static_app.path),
+        copy(source, ".", ignore = [".git"]),
+    ]
+    if static_config != None:
+        steps.append(write("{}/{}".format(static_config.path, REDIRECTS_FILE), config.redirects_config))
+
+    return build_struct(
+        steps = steps,
+        mounts = [static_app] + ([static_config] if static_config != None else []),
+        static_app = static_app,
+        static_config = static_config,
+    )
+
+def staticfile_serve(config, build, name = None, provider = "staticfile", **overrides):
+    """Serve a build's static_app mount with static-web-server."""
+    sws = dep("static-web-server", config.sws_version)
+    static_app = build.static_app
+    static_config = build.static_config
+
+    if static_config != None:
+        start = "static-web-server --root={} --log-level=info --config-file={}/{} --port={}".format(
+            static_app.serve_path, static_config.serve_path, REDIRECTS_FILE, PORT,
+        )
+    else:
+        start = "static-web-server --root={} --log-level=info --port={}".format(
+            static_app.serve_path, PORT,
+        )
+
+    return build_and_serve(
+        config,
+        provider = provider,
+        build = build,
+        name = name,
+        serve_deps = [sws],
+        commands = {"start": start},
+        **overrides
+    )
+
+def staticfile_build_and_serve(config, name = None, **overrides):
+    """Copy and serve a directory of static files."""
+    return staticfile_serve(config, staticfile_build(config), name = name, **overrides)

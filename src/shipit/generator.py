@@ -101,10 +101,55 @@ def load_provider_config(
             config = json.loads(config)
         assert isinstance(config, dict), "Config must be a dictionary, got %s" % type(config)
         provider_config = provider_config.__class__.model_validate({**(provider_config.model_dump() | config)})
+    if not provider_config.name:
+        provider_config.name = path.absolute().name
     return provider_config
 
 
+# Providers ported to the Starlark stdlib: provider name -> (module, function).
+# Their generated Shipit file is a two-liner loading the bundled library;
+# everything else still goes through the legacy inline generator below.
+STARLARK_ENTRYPOINTS: dict[str, tuple[str, str]] = {
+    "python": ("//shipit/tools:python.shipit", "python_build_and_serve"),
+    "staticfile": ("//shipit/tools:staticfile.shipit", "staticfile_build_and_serve"),
+    "hugo": ("//shipit/tools:hugo.shipit", "hugo_build_and_serve"),
+    "mkdocs": ("//shipit/tools:mkdocs.shipit", "mkdocs_build_and_serve"),
+    "go": ("//shipit/tools:go.shipit", "go_build_and_serve"),
+    "jekyll": ("//shipit/tools:jekyll.shipit", "jekyll_build_and_serve"),
+    "php": ("//shipit/tools:php.shipit", "php_build_and_serve"),
+    "wordpress": ("//shipit/tools:wordpress.shipit", "wordpress_build_and_serve"),
+    "node": ("//shipit/tools:node.shipit", "node_build_and_serve"),
+    "node-static": ("//shipit/tools:node_static.shipit", "nodestatic_build_and_serve"),
+    "laravel": ("//shipit/tools:laravel.shipit", "laravel_build_and_serve"),
+}
+
+
 def generate_shipit(
+    path: Path,
+    provider: Provider,
+    subdir: Optional[str] = None,
+) -> str:
+    entrypoint = STARLARK_ENTRYPOINTS.get(provider.name())
+    if entrypoint:
+        return generate_shipit_loader(entrypoint, subdir=subdir)
+    return generate_shipit_inline(path, provider, subdir=subdir)
+
+
+def generate_shipit_loader(
+    entrypoint: tuple[str, str],
+    subdir: Optional[str] = None,
+) -> str:
+    module, function = entrypoint
+    out: List[str] = [f'load("{module}", "{function}")', ""]
+    if subdir:
+        out.append(f"app_subdir = {json.dumps(subdir)}")
+        out.append("")
+    out.append(f"{function}(config)")
+    out.append("")
+    return "\n".join(out)
+
+
+def generate_shipit_inline(
     path: Path,
     provider: Provider,
     subdir: Optional[str] = None,

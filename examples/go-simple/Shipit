@@ -1,25 +1,3 @@
-go = dep("go", config.go_version)
+load("//shipit/tools:go.shipit", "go_build_and_serve")
 
-temp = mount("temp")
-app = mount("app")
-
-serve(
-  name="go-simple",
-  provider="go",
-  cwd=app.serve_path,
-  build=[
-    workdir(temp.path),
-    use(go),
-    copy(".", ".", ignore=[".git"]),
-    env(GOCACHE="/tmp/.cache/go-build", GOPATH=temp.path),
-    run("go build -o {} {}".format(config.serve_binary, config.go_build_file), group="build"),
-    run("cp {}/{} {}/{}".format(temp.path, config.serve_binary, app.path, config.serve_binary))
-  ],
-  deps=[],
-  commands = {
-    "start": "{}/{}".format(app.serve_path, config.serve_binary)
-  },
-  mounts=[
-    app
-  ],
-)
+go_build_and_serve(config)

@@ -1,7 +1,7 @@
 from enum import Enum
 import re
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
@@ -79,6 +79,13 @@ class PythonConfig(Config):
     python_extra_index_url: Optional[str] = None
     pandoc_version: Optional[str] = None
     ffmpeg_version: Optional[str] = None
+    # Static snapshot of the filesystem facts the Starlark provider needs.
+    has_pyproject: bool = False
+    has_requirements: bool = False
+    has_uv_lock: bool = False
+    install_inputs: Optional[List[str]] = None
+    # MCP main file starts its own server (mcp.run()/__main__ block).
+    mcp_self_running: bool = False
 
 
 class PythonProvider:
@@ -285,6 +292,25 @@ class PythonProvider:
                 database = None
             config.database = database
 
+        config.has_pyproject = _exists(path, "pyproject.toml")
+        config.has_requirements = _exists(path, "requirements.txt")
+        config.has_uv_lock = _exists(path, "uv.lock")
+        if config.has_pyproject:
+            config.install_inputs = discover_python_install_context(
+                path, include_pyproject=True
+            ).inputs
+        else:
+            config.install_inputs = discover_python_install_context(
+                path, include_requirements=config.has_requirements
+            ).inputs
+        if config.framework == PythonFramework.MCP and config.main_file:
+            main_path = path / config.main_file
+            if main_path.is_file():
+                contents = main_path.read_text()
+                config.mcp_self_running = (
+                    'if __name__ == "__main__"' in contents or "mcp.run" in contents
+                )
+
         return config
 
     @classmethod
@@ -390,7 +416,8 @@ class PythonProvider:
             extra_ignore=[".venv", "__pycache__"],
         )
 
-        extra_deps = ", ".join([f"{dep}" for dep in self.config.extra_dependencies])
+        # Sorted for deterministic output (mirrors the Starlark provider).
+        extra_deps = ", ".join(sorted(self.config.extra_dependencies))
         has_requirements = _exists(self.path, "requirements.txt")
         if _exists(self.path, "pyproject.toml"):
             install_context = discover_python_install_context(

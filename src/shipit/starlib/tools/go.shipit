@@ -1,0 +1,54 @@
+"""Go apps: compile a static binary, serve it directly."""
+
+load("//shipit:serve.shipit", "build_and_serve", "build_struct")
+
+def go_build(config, app = None, temp = None):
+    """Compile the Go binary in the temp mount and copy it into app."""
+    go = dep("go", config.go_version)
+    temp = temp or mount("temp")
+    app = app or mount("app")
+    in_subdir = config.app_subdir != None
+
+    steps = [workdir(temp.path)]
+    if in_subdir:
+        steps += [
+            copy(".", ".", ignore = [".git"]),
+            workdir("{}/{}".format(temp.path, config.app_subdir)),
+        ]
+    steps.append(use(go))
+    if not in_subdir:
+        steps.append(copy(".", ".", ignore = [".git"]))
+
+    gopath = "{}/{}".format(temp.path, config.app_subdir) if in_subdir else temp.path
+    steps += [
+        env(GOCACHE = "/tmp/.cache/go-build", GOPATH = gopath),
+        run("go build -o {} {}".format(config.serve_binary, config.go_build_file), group = "build"),
+    ]
+    if in_subdir:
+        steps.append(run("cp {} {}/{}".format(config.serve_binary, app.path, config.serve_binary)))
+    else:
+        steps.append(run("cp {}/{} {}/{}".format(temp.path, config.serve_binary, app.path, config.serve_binary)))
+
+    return build_struct(
+        steps = steps,
+        mounts = [app],
+        app = app,
+        temp = temp,
+    )
+
+def go_serve(config, build, name = None, **overrides):
+    """Serve the compiled binary from the app mount."""
+    app = build.app
+    return build_and_serve(
+        config,
+        provider = "go",
+        build = build,
+        name = name,
+        cwd = app.serve_path,
+        commands = {"start": "{}/{}".format(app.serve_path, config.serve_binary)},
+        **overrides
+    )
+
+def go_build_and_serve(config, name = None, **overrides):
+    """Compile and serve a Go app."""
+    return go_serve(config, go_build(config), name = name, **overrides)

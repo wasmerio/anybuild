@@ -1,33 +1,5 @@
-node = dep("node", config.node_version)
-npm = dep("npm", config.npm_version)
-
-build = mount("build")
-app = mount("app")
+load("//shipit/tools:node.shipit", "node_build_and_serve")
 
 app_subdir = "apps/dashboard"
 
-serve(
-  name="dashboard",
-  provider="node",
-  cwd=app.serve_path,
-  build=[
-    use(node, npm),
-    workdir(build.path),
-    copy(".", ".", ignore=[".git", "node_modules"]),
-    workdir("{}/{}".format(build.path, app_subdir)),
-    env(CI="true", NPM_CONFIG_FUND="false"),
-    run("npm install", group="install"),
-    run("npm run build", outputs=["."], group="build"),
-    run("npm prune --omit=dev --ignore-scripts", group="prune"),
-    run("npx -y optimize-deps@0.1.1 dist --replace"),
-    run("cp -RL . {}".format(app.path))
-  ],
-  deps=[node],
-  env = {},
-  commands = {
-    "start": "node dist/server/entry.mjs"
-  },
-  mounts=[
-    app
-  ],
-)
+node_build_and_serve(config)

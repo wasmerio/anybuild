@@ -1,0 +1,30 @@
+"""MkDocs sites: install with uv (python build), build the site, serve static.
+
+The first real composition in the stdlib: a python build fragment feeding a
+staticfile serve — what used to be a Python provider class gluing two other
+providers together through emitted source strings.
+"""
+
+load("//shipit:serve.shipit", "build_struct")
+load("//shipit/tools:python.shipit", "python_build")
+load("//shipit/tools:staticfile.shipit", "staticfile_serve")
+
+def mkdocs_build(config, static_app = None):
+    """Install mkdocs with uv, then build the site into static_app."""
+    py = python_build(config)
+    static_app = static_app or mount("static_app")
+    static_config = mount("static_config") if config.redirects_config else None
+
+    return build_struct(
+        steps = py.steps + [
+            run("uv run mkdocs build --site-dir={}".format(static_app.path), outputs = ["."], group = "build"),
+        ],
+        serve_deps = py.serve_deps,
+        mounts = [static_app] + ([static_config] if static_config != None else []),
+        static_app = static_app,
+        static_config = static_config,
+    )
+
+def mkdocs_build_and_serve(config, name = None, **overrides):
+    """Build the MkDocs site, then serve it."""
+    return staticfile_serve(config, mkdocs_build(config), name = name, provider = "mkdocs", **overrides)

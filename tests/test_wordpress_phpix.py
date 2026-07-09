@@ -2,11 +2,14 @@ from pathlib import Path
 
 import yaml
 
+from shipit.builders import LocalBuildBackend
+from shipit.cli import evaluate_shipit
 from shipit.generator import generate_shipit, load_provider, load_provider_config
 from shipit.providers.base import Config
 from shipit.providers.wordpress import WordPressConfig, WordPressProvider
+from shipit.runners import LocalRunner
 from shipit.runners.wasmer import WasmerRunner
-from shipit.shipit_types import Mount, Package, Serve, Service
+from shipit.shipit_types import CopyStep, Mount, Package, RunStep, Serve, Service
 from shipit.version import version as shipit_version
 
 
@@ -41,6 +44,22 @@ def _generate_for_path(project_dir: Path) -> tuple[type, WordPressConfig, str]:
     return provider_cls, provider_config, generate_shipit(project_dir, provider)
 
 
+def _evaluate_generated(
+    project_dir: Path, provider_config: Config, generated: str, tmp_path: Path
+):
+    shipit_file = tmp_path / "Shipit.generated"
+    shipit_file.write_text(generated)
+    build_backend = LocalBuildBackend(
+        project_dir, tmp_path / "assets", shipit_dir=tmp_path / ".shipit"
+    )
+    local_runner = LocalRunner(
+        build_backend, project_dir, shipit_dir=tmp_path / ".shipit"
+    )
+    return build_backend, *evaluate_shipit(
+        shipit_file, build_backend, local_runner, provider_config
+    )
+
+
 class DummyBuildBackend:
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -70,12 +89,24 @@ def test_wordpress_provider_detects_plugin_and_generates_activation(
 
     assert provider_cls is WordPressProvider
     assert provider_config.wp_version == "latest"
-    assert "--version=latest" in generated
-    assert (
-        'copy(".", "{}/plugins/my-plugin".format(wpcontent_base.path), '
-        'ignore=[".git", ".source"])'
-    ) in generated
-    assert '"WP_PLUGINS_ACTIVATE": "my-plugin/my-plugin.php"' in generated
+
+    build_backend, _ctx, serve = _evaluate_generated(
+        project_dir, provider_config, generated, tmp_path
+    )
+    assert any(
+        isinstance(step, RunStep) and "--version=latest" in step.command
+        for step in serve.build
+    )
+    wpcontent_path = build_backend.get_build_mount_path("wpcontent_base")
+    assert any(
+        isinstance(step, CopyStep)
+        and step.source == "."
+        and step.target == f"{wpcontent_path}/plugins/my-plugin"
+        and step.ignore == [".git", ".source"]
+        for step in serve.build
+    )
+    assert serve.env
+    assert serve.env["WP_PLUGINS_ACTIVATE"] == "my-plugin/my-plugin.php"
 
 
 def test_wordpress_provider_detects_theme_and_generates_activation(
@@ -88,12 +119,24 @@ def test_wordpress_provider_detects_theme_and_generates_activation(
 
     assert provider_cls is WordPressProvider
     assert provider_config.wp_version == "latest"
-    assert "--version=latest" in generated
-    assert (
-        'copy(".", "{}/themes/my-theme".format(wpcontent_base.path), '
-        'ignore=[".git", ".source"])'
-    ) in generated
-    assert '"WP_DEFAULT_THEME": "my-theme"' in generated
+
+    build_backend, _ctx, serve = _evaluate_generated(
+        project_dir, provider_config, generated, tmp_path
+    )
+    assert any(
+        isinstance(step, RunStep) and "--version=latest" in step.command
+        for step in serve.build
+    )
+    wpcontent_path = build_backend.get_build_mount_path("wpcontent_base")
+    assert any(
+        isinstance(step, CopyStep)
+        and step.source == "."
+        and step.target == f"{wpcontent_path}/themes/my-theme"
+        and step.ignore == [".git", ".source"]
+        for step in serve.build
+    )
+    assert serve.env
+    assert serve.env["WP_DEFAULT_THEME"] == "my-theme"
 
 
 def test_wordpress_extension_keeps_user_wp_version(tmp_path: Path) -> None:
@@ -111,7 +154,7 @@ def test_wordpress_extension_keeps_user_wp_version(tmp_path: Path) -> None:
     assert provider_config.wp_version == "6.8.3"
 
 
-def test_generate_shipit_wordpress_phpix_mode() -> None:
+def test_generate_shipit_wordpress_phpix_mode(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     example_dir = repo_root / "examples" / "php-wordpress"
 
@@ -127,12 +170,20 @@ def test_generate_shipit_wordpress_phpix_mode() -> None:
 
     generated = generate_shipit(example_dir, provider)
 
-    assert "phpix = dep(" in generated
-    assert 'copy("wordpress/start.php"' in generated
-    assert (
-        '"start": "phpix --startup-script={}/start-wp.php -S localhost:{} '
-        '-t {}".format(assets.serve_path, PORT, app.serve_path)'
-    ) in generated
+    build_backend, ctx, serve = _evaluate_generated(
+        example_dir, provider_config, generated, tmp_path
+    )
+    assert any(pkg.name == "phpix" for pkg in serve.deps)
+    assert any(
+        isinstance(step, CopyStep) and step.source == "wordpress/start.php"
+        for step in serve.build
+    )
+    assets_serve = serve.mounts[1].serve_path
+    app_serve = serve.mounts[0].serve_path
+    assert serve.commands["start"] == (
+        f"phpix --startup-script={assets_serve}/start-wp.php "
+        f"-S localhost:8080 -t {app_serve}"
+    )
 
 
 def test_wasmer_app_yaml_sets_memory_limit_for_wordpress_phpix(

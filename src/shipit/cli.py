@@ -15,6 +15,7 @@ from rich.syntax import Syntax
 
 from shipit.generator import generate_shipit, load_provider, load_provider_config
 from shipit.providers.base import Config
+from shipit.starlark_loader import config_view, eval_module_graph, globals_builder
 from dotenv import dotenv_values
 from shipit.builders import BuildBackend, DockerBuildBackend, LocalBuildBackend
 from shipit.runners import Runner, LocalRunner, WasmerRunner
@@ -398,32 +399,42 @@ def evaluate_shipit(
     build_backend: BuildBackend,
     runner: Runner,
     provider_config: Config,
+    project_root: Optional[Path] = None,
 ) -> Tuple[Ctx, Serve]:
     source = shipit_file.read_text()
     ctx = Ctx(build_backend, runner)
-    glb = sl.GlobalsBuilder.standard()
 
-    glb.set("PORT", str(provider_config.port or "8080"))
-    glb.set("config", provider_config)
-    glb.set("service", ctx.service)
-    glb.set("dep", ctx.dep)
-    glb.set("serve", ctx.serve)
-    glb.set("run", ctx.run)
-    glb.set("mount", ctx.mount)
-    glb.set("volume", ctx.volume)
-    glb.set("workdir", ctx.workdir)
-    glb.set("copy", ctx.copy)
-    glb.set("write", ctx.write)
-    glb.set("path", ctx.path)
-    glb.set("env", ctx.env)
-    glb.set("use", ctx.use)
+    def set_builtins(glb: "sl.GlobalsBuilder") -> None:
+        glb.set("PORT", str(provider_config.port or "8080"))
+        glb.set("service", ctx.service)
+        glb.set("dep", ctx.dep)
+        glb.set("serve", ctx.serve)
+        glb.set("run", ctx.run)
+        glb.set("mount", ctx.mount)
+        glb.set("volume", ctx.volume)
+        glb.set("workdir", ctx.workdir)
+        glb.set("copy", ctx.copy)
+        glb.set("write", ctx.write)
+        glb.set("path", ctx.path)
+        glb.set("env", ctx.env)
+        glb.set("use", ctx.use)
 
-    dialect = sl.Dialect(enable_keyword_only_arguments=True, enable_f_strings=True)
+    # Library modules get the builtins but not `config`: provider libraries
+    # receive the config as a function parameter, keeping them pure.
+    lib_glb = globals_builder()
+    set_builtins(lib_glb)
 
-    ast = sl.AstModule.parse("Shipit", source, dialect=dialect)
+    entry_glb = globals_builder()
+    set_builtins(entry_glb)
+    entry_glb.set("config", config_view(provider_config))
 
-    evaluator = sl.Evaluator()
-    evaluator.eval_module(ast, glb.build())
+    eval_module_graph(
+        source=source,
+        entry_path=shipit_file,
+        entry_globals=entry_glb.build(),
+        lib_globals=lib_glb.build(),
+        project_root=project_root or shipit_file.resolve().parent,
+    )
     if not ctx.serves:
         raise ValueError(f"No serve definition found in {shipit_file}")
     assert len(ctx.serves) <= 1, "Only one serve is allowed for now"

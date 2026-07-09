@@ -1,0 +1,37 @@
+"""Jekyll sites: build with ruby/bundler, serve with static-web-server."""
+
+load("//shipit:serve.shipit", "build_struct")
+load("//shipit/tools:staticfile.shipit", "staticfile_serve")
+
+def jekyll_build(config, static_app = None):
+    """Build the site with jekyll into the static_app mount."""
+    ruby = dep("ruby", config.ruby_version)
+    temp = mount("temp")
+    static_app = static_app or mount("static_app")
+    static_config = mount("static_config") if config.redirects_config else None
+
+    if config.has_gemfile:
+        install = []
+        if config.has_gemfile_lock:
+            install.append(copy("Gemfile.lock"))
+        install.append(run("bundle install", inputs = ["Gemfile"], group = "install"))
+    else:
+        install = [
+            run("bundle init", group = "install"),
+            run("bundle add jekyll -v {}".format(config.jekyll_version), group = "install"),
+        ]
+
+    return build_struct(
+        steps = [use(ruby), workdir(temp.path)] + install + [
+            copy(".", ignore = [".git"]),
+            run("jekyll build", group = "build"),
+            run("cp -R {}/* {}/".format(config.static_dir, static_app.path)),
+        ],
+        mounts = [static_app] + ([static_config] if static_config != None else []),
+        static_app = static_app,
+        static_config = static_config,
+    )
+
+def jekyll_build_and_serve(config, name = None, **overrides):
+    """Build the Jekyll site, then serve it."""
+    return staticfile_serve(config, jekyll_build(config), name = name, provider = "jekyll", **overrides)
