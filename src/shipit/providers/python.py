@@ -10,7 +10,7 @@ from .install_context import discover_python_dependency_files, discover_python_i
 from .base import DetectResult, _exists, Config
 
 
-class PythonFramework(Enum):
+class PythonFramework(str, Enum):
     Django = "django"
     Streamlit = "streamlit"
     FastAPI = "fastapi"
@@ -19,20 +19,20 @@ class PythonFramework(Enum):
     MCP = "mcp"
 
 
-class PythonServer(Enum):
+class PythonServer(str, Enum):
     Hypercorn = "hypercorn"
     Uvicorn = "uvicorn"
     # Gunicorn = "gunicorn"
     Daphne = "daphne"
 
 
-class MigrationStrategy(Enum):
+class MigrationStrategy(str, Enum):
     Django = "django"
     Alembic = "alembic"
 
 
 
-class DatabaseType(Enum):
+class DatabaseType(str, Enum):
     MySQL = "mysql"
     PostgreSQL = "postgresql"
 
@@ -90,70 +90,20 @@ class PythonProvider:
                 python_version = "3.13"
             config.python_version = python_version
 
-        pg_deps = {
-            "asyncpg",
-            "aiopg",
-            "psycopg",
-            "psycopg2",
-            "psycopg-binary",
-            "psycopg2-binary",
-        }
-        mysql_deps = {
-            "mysqlclient",
-            "pymysql",
-            "mysql-connector-python",
-            "aiomysql",
-            "asyncmy",
-            "mariadb",
-        }
         must_have_deps = must_have_deps or set()
         found_deps = cls.check_deps(
             path,
-            "file://",  # This is not really a dependency, but as a way to check if the install script requires all files
-            "streamlit",
-            "alembic",
-            "django",
-            "mcp",
-            "mcp[cli]",
-            "fastapi",
-            "flask",
-            "python-fasthtml",
-            "daphne",
-            "hypercorn",
-            "uvicorn",
-            # Other
-            "ffmpeg",
-            "pandoc",
-            # "gunicorn",
-            *mysql_deps,
-            *pg_deps,
+            *DEPENDENCY_SCAN,
+            *MYSQL_DEPS,
+            *PG_DEPS,
             *must_have_deps,
         )
 
-        if "file://" in found_deps:
-            config.install_requires_all_files = True
-
-        dependency_context = discover_python_install_context(
-            path,
-            include_pyproject=_exists(path, "pyproject.toml"),
-            include_requirements=_exists(path, "requirements.txt"),
-        )
-        if dependency_context.requires_all_files:
+        if _requires_all_files(path, found_deps):
             config.install_requires_all_files = True
 
         if not config.server:
-            # ASGI/WSGI Server
-            if "uvicorn" in found_deps:
-                server = PythonServer.Uvicorn
-            elif "hypercorn" in found_deps:
-                server = PythonServer.Hypercorn
-            # elif "gunicorn" in found_deps:
-            #     server = PythonServer.Gunicorn
-            elif "daphne" in found_deps:
-                server = PythonServer.Daphne
-            else:
-                server = None
-            config.server = server
+            config.server = _detect_server(found_deps)
 
         if "ffmpeg" in found_deps:
             config.uses_ffmpeg = True
@@ -161,78 +111,24 @@ class PythonProvider:
             config.uses_pandoc = True
 
         if not config.framework:
-            # Set framework
-            if _exists(path, "manage.py") and ("django" in found_deps):
-                framework = PythonFramework.Django
+            config.framework = _detect_framework(path, found_deps)
+            if config.framework == PythonFramework.Django:
                 config.migration_strategy = MigrationStrategy.Django
-            elif "streamlit" in found_deps:
-                framework = PythonFramework.Streamlit
-            elif "mcp" in found_deps:
-                framework = PythonFramework.MCP
-            elif "fastapi" in found_deps:
-                framework = PythonFramework.FastAPI
-            elif "flask" in found_deps:
-                framework = PythonFramework.Flask
-            elif "python-fasthtml" in found_deps:
-                framework = PythonFramework.FastHTML
-            else:
-                framework = None
-            config.framework = framework
 
         if not config.migration_strategy:
-            if config.framework == PythonFramework.Django:
-                config.migration_strategy = MigrationStrategy.Django
-            elif "alembic" in found_deps or _exists(path, "alembic.ini"):
-                config.migration_strategy = MigrationStrategy.Alembic
+            config.migration_strategy = _detect_migration_strategy(
+                path, config.framework, found_deps
+            )
 
         if not config.server and config.framework:
-            if config.framework == PythonFramework.Django:
-                config.server = PythonServer.Uvicorn
-            elif config.framework == PythonFramework.FastAPI:
-                config.server = PythonServer.Uvicorn
-            elif config.framework == PythonFramework.Flask:
-                config.server = PythonServer.Uvicorn
-            elif config.framework == PythonFramework.FastHTML:
-                config.server = PythonServer.Uvicorn
-
+            config.server = _default_server_for_framework(config.framework)
             if config.server == PythonServer.Uvicorn:
                 must_have_deps.add("uvicorn")
 
         if not config.asgi_application and not config.wsgi_application:
-            if config.framework == PythonFramework.Django:
-                # Find the settings.py file using glob
-                try:
-                    settings_file = next(path.glob("**/settings.py"))
-                except StopIteration:
-                    settings_file = None
-                if settings_file:
-                    asgi_match = re.search(
-                        r"ASGI_APPLICATION\s*=\s*['\"](.*)['\"]",
-                        settings_file.read_text(),
-                    )
-                    if asgi_match:
-                        config.asgi_application = format_app_import(
-                            asgi_match.group(1)
-                        )
-                    else:
-                        wsgi_match = re.search(
-                            r"WSGI_APPLICATION\s*=\s*['\"](.*)['\"]",
-                            settings_file.read_text(),
-                        )
-                        if wsgi_match:
-                            config.wsgi_application = format_app_import(
-                                wsgi_match.group(1)
-                            )
-
-            python_path = file_to_python_path(config.main_file)
-            if config.framework == PythonFramework.FastAPI:
-                config.asgi_application = python_path
-            elif config.framework == PythonFramework.Flask:
-                config.wsgi_application = python_path
-            elif config.framework == PythonFramework.MCP:
-                config.asgi_application = python_path
-            elif config.framework == PythonFramework.FastHTML:
-                config.asgi_application = python_path
+            asgi, wsgi = _resolve_applications(path, config.framework, config.main_file)
+            config.asgi_application = asgi
+            config.wsgi_application = wsgi
 
         is_uvicorn_start = config.commands.start and config.commands.start.startswith(
             "uvicorn "
@@ -253,30 +149,12 @@ class PythonProvider:
                 config.extra_dependencies.add(dep)
 
         if not config.database:
-            # Database
-            if mysql_deps & found_deps:
-                database = DatabaseType.MySQL
-            elif pg_deps & found_deps:
-                database = DatabaseType.PostgreSQL
-            else:
-                database = None
-            config.database = database
+            config.database = _detect_database(found_deps)
 
-        if _exists(path, "pyproject.toml"):
-            config.install_inputs = discover_python_install_context(
-                path, include_pyproject=True
-            ).inputs
-        else:
-            config.install_inputs = discover_python_install_context(
-                path, include_requirements=_exists(path, "requirements.txt")
-            ).inputs
-        if config.framework == PythonFramework.MCP and config.main_file:
-            main_path = path / config.main_file
-            if main_path.is_file():
-                contents = main_path.read_text()
-                config.mcp_self_running = (
-                    'if __name__ == "__main__"' in contents or "mcp.run" in contents
-                )
+        config.install_inputs = _compute_install_inputs(path)
+        config.mcp_self_running = _detect_mcp_self_running(
+            path, config.framework, config.main_file
+        )
 
         return config
 
@@ -351,3 +229,167 @@ def file_to_python_path(path: Optional[str]) -> Optional[str]:
         return None
     file = path.rstrip(".py").replace("/", ".").replace("\\", ".")
     return f"{file}:app"
+
+
+PG_DEPS = {
+    "asyncpg",
+    "aiopg",
+    "psycopg",
+    "psycopg2",
+    "psycopg-binary",
+    "psycopg2-binary",
+}
+
+MYSQL_DEPS = {
+    "mysqlclient",
+    "pymysql",
+    "mysql-connector-python",
+    "aiomysql",
+    "asyncmy",
+    "mariadb",
+}
+
+# Dependencies scanned to derive framework/server/tooling decisions.
+DEPENDENCY_SCAN = (
+    "file://",  # Not a dependency: signals that installs need all files.
+    "streamlit",
+    "alembic",
+    "django",
+    "mcp",
+    "mcp[cli]",
+    "fastapi",
+    "flask",
+    "python-fasthtml",
+    "daphne",
+    "hypercorn",
+    "uvicorn",
+    "ffmpeg",
+    "pandoc",
+)
+
+
+def _requires_all_files(path: Path, found_deps: Set[str]) -> bool:
+    """Installs that reference local files need the whole tree staged."""
+    if "file://" in found_deps:
+        return True
+    return discover_python_install_context(
+        path,
+        include_pyproject=_exists(path, "pyproject.toml"),
+        include_requirements=_exists(path, "requirements.txt"),
+    ).requires_all_files
+
+
+def _detect_server(found_deps: Set[str]) -> Optional[PythonServer]:
+    if "uvicorn" in found_deps:
+        return PythonServer.Uvicorn
+    if "hypercorn" in found_deps:
+        return PythonServer.Hypercorn
+    if "daphne" in found_deps:
+        return PythonServer.Daphne
+    return None
+
+
+def _detect_framework(path: Path, found_deps: Set[str]) -> Optional[PythonFramework]:
+    if _exists(path, "manage.py") and "django" in found_deps:
+        return PythonFramework.Django
+    if "streamlit" in found_deps:
+        return PythonFramework.Streamlit
+    if "mcp" in found_deps:
+        return PythonFramework.MCP
+    if "fastapi" in found_deps:
+        return PythonFramework.FastAPI
+    if "flask" in found_deps:
+        return PythonFramework.Flask
+    if "python-fasthtml" in found_deps:
+        return PythonFramework.FastHTML
+    return None
+
+
+def _detect_migration_strategy(
+    path: Path,
+    framework: Optional[PythonFramework],
+    found_deps: Set[str],
+) -> Optional[MigrationStrategy]:
+    if framework == PythonFramework.Django:
+        return MigrationStrategy.Django
+    if "alembic" in found_deps or _exists(path, "alembic.ini"):
+        return MigrationStrategy.Alembic
+    return None
+
+
+def _default_server_for_framework(
+    framework: Optional[PythonFramework],
+) -> Optional[PythonServer]:
+    if framework in (
+        PythonFramework.Django,
+        PythonFramework.FastAPI,
+        PythonFramework.Flask,
+        PythonFramework.FastHTML,
+    ):
+        return PythonServer.Uvicorn
+    return None
+
+
+def _resolve_applications(
+    path: Path,
+    framework: Optional[PythonFramework],
+    main_file: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """Locate the (asgi, wsgi) application imports for the framework."""
+    asgi: Optional[str] = None
+    wsgi: Optional[str] = None
+    if framework == PythonFramework.Django:
+        settings_file = next(path.glob("**/settings.py"), None)
+        if settings_file:
+            settings = settings_file.read_text()
+            asgi_match = re.search(r"ASGI_APPLICATION\s*=\s*['\"](.*)['\"]", settings)
+            if asgi_match:
+                asgi = format_app_import(asgi_match.group(1))
+            else:
+                wsgi_match = re.search(
+                    r"WSGI_APPLICATION\s*=\s*['\"](.*)['\"]", settings
+                )
+                if wsgi_match:
+                    wsgi = format_app_import(wsgi_match.group(1))
+
+    python_path = file_to_python_path(main_file)
+    if framework == PythonFramework.FastAPI:
+        asgi = python_path
+    elif framework == PythonFramework.Flask:
+        wsgi = python_path
+    elif framework == PythonFramework.MCP:
+        asgi = python_path
+    elif framework == PythonFramework.FastHTML:
+        asgi = python_path
+    return asgi, wsgi
+
+
+def _detect_database(found_deps: Set[str]) -> Optional[DatabaseType]:
+    if MYSQL_DEPS & found_deps:
+        return DatabaseType.MySQL
+    if PG_DEPS & found_deps:
+        return DatabaseType.PostgreSQL
+    return None
+
+
+def _compute_install_inputs(path: Path) -> Optional[List[str]]:
+    if _exists(path, "pyproject.toml"):
+        return discover_python_install_context(path, include_pyproject=True).inputs
+    return discover_python_install_context(
+        path, include_requirements=_exists(path, "requirements.txt")
+    ).inputs
+
+
+def _detect_mcp_self_running(
+    path: Path,
+    framework: Optional[PythonFramework],
+    main_file: Optional[str],
+) -> bool:
+    """Whether the MCP main file starts its own server."""
+    if framework != PythonFramework.MCP or not main_file:
+        return False
+    main_path = path / main_file
+    if not main_path.is_file():
+        return False
+    contents = main_path.read_text()
+    return 'if __name__ == "__main__"' in contents or "mcp.run" in contents

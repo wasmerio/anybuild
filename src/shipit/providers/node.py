@@ -15,7 +15,7 @@ from .install_context import discover_js_install_context
 
 NEXT_BUNDLE_VERSION = "1.0.0"
 
-class PackageManager(Enum):
+class PackageManager(str, Enum):
     NPM = "npm"
     PNPM = "pnpm"
     YARN = "yarn"
@@ -54,7 +54,7 @@ class PackageManager(Enum):
         }[self]
 
 
-class NodeFramework(Enum):
+class NodeFramework(str, Enum):
     ANGULAR = "angular"
     NEXT = "next"
     ASTRO = "astro"

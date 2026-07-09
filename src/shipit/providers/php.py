@@ -7,7 +7,7 @@ from .base import DetectResult, _exists, Config
 from pydantic_settings import SettingsConfigDict
 
 
-class PhpFramework(Enum):
+class PhpFramework(str, Enum):
     Laravel = "laravel"
     Moodle = "moodle"
     Symfony = "symfony"

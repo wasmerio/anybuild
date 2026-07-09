@@ -106,6 +106,9 @@ def eval_module_graph(
         loader = loader_for(ast, path, stack + (label,))
         module = sl.Module()
         evaluator = sl.Evaluator(module)
+        # Catch statically-detectable errors (e.g. wrong arity in branches
+        # this evaluation never executes) at load time instead of at runtime.
+        evaluator.enable_static_typechecking(True)
         if loader is not None:
             evaluator.set_loader(loader)
         evaluator.eval_module(ast, lib_globals)
@@ -116,6 +119,7 @@ def eval_module_graph(
     loader = loader_for(ast, entry_path, ())
     module = sl.Module()
     evaluator = sl.Evaluator(module)
+    evaluator.enable_static_typechecking(True)
     if loader is not None:
         evaluator.set_loader(loader)
     evaluator.eval_module(ast, entry_globals)
@@ -129,8 +133,6 @@ def config_view(config: BaseModel) -> SimpleNamespace:
     become attribute-accessible namespaces; dict-typed fields stay dicts.
     """
     data = config.model_dump(mode="json")
-    # Fields excluded from serialization that Starlark still needs.
-    data["app_subdir"] = getattr(config, "app_subdir", None)
     view = _view_value(data, config)
     assert isinstance(view, SimpleNamespace)
     return view

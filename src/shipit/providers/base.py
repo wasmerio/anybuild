@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Protocol
+from typing import Optional, Protocol
 from shipit.procfile import Procfile
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,10 +39,9 @@ class Config(BaseSettings):
     name: Optional[str] = None
     port: Optional[int] = 8080
     commands: CustomCommands = Field(default_factory=CustomCommands)
-    app_subdir: Optional[str] = Field(default=None, exclude=True)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.commands, name, None)
+    # Subdirectory of the workspace the app lives in (set by the CLI after
+    # load; recorded in the generated Shipit file for subdir projects).
+    app_subdir: Optional[str] = None
 
 
 class Provider(Protocol):
