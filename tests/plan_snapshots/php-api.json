@@ -1,0 +1,107 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "architecture": null,
+     "name": "php",
+     "version": "8.3.29"
+    },
+    {
+     "architecture": null,
+     "name": "composer",
+     "version": null
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "ignore": null,
+   "source": "php/php.ini",
+   "target": "<SHIPIT_DIR>/local/build/opt/assets/php.ini"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "COMPOSER_ALLOW_SUPERUSER": "1",
+    "COMPOSER_FUND": "0",
+    "COMPOSER_HOME": "/tmp"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction",
+   "group": "install",
+   "inputs": [
+    "composer.json",
+    "composer.lock"
+   ],
+   "outputs": [
+    "."
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git",
+    "vendor"
+   ],
+   "source": ".",
+   "target": "."
+  }
+ ],
+ "commands": {
+  "start": "php -S localhost:8080 -t <SHIPIT_DIR>/local/build/app/public"
+ },
+ "ctx_mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/assets",
+   "name": "assets",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/assets"
+  }
+ ],
+ "ctx_packages": {
+  "bash": "bash",
+  "composer": "composer",
+  "php@8.3.29": "php@8.3.29"
+ },
+ "ctx_services": {},
+ "ctx_volumes": [],
+ "cwd": "<SHIPIT_DIR>/local/build/app",
+ "deps": [
+  "php@8.3.29",
+  "bash"
+ ],
+ "env": {
+  "PHP_INI_SCAN_DIR": "<SHIPIT_DIR>/local/build/opt/assets"
+ },
+ "mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/assets",
+   "name": "assets",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/assets"
+  }
+ ],
+ "name": "php-api",
+ "prepare": [],
+ "provider": "php",
+ "services": [],
+ "volumes": []
+}

@@ -1,0 +1,83 @@
+{
+ "build": [
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/opt/temp"
+  },
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "architecture": null,
+     "name": "go",
+     "version": "1.25.5"
+    }
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "GOCACHE": "/tmp/.cache/go-build",
+    "GOPATH": "<SHIPIT_DIR>/local/build/opt/temp"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "go build -o server_server server/server.go",
+   "group": "build",
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "cp <SHIPIT_DIR>/local/build/opt/temp/server_server <SHIPIT_DIR>/local/build/app/server_server",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  }
+ ],
+ "commands": {
+  "start": "<SHIPIT_DIR>/local/build/app/server_server"
+ },
+ "ctx_mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/temp",
+   "name": "temp",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/temp"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  }
+ ],
+ "ctx_packages": {
+  "go@1.25.5": "go@1.25.5"
+ },
+ "ctx_services": {},
+ "ctx_volumes": [],
+ "cwd": "<SHIPIT_DIR>/local/build/app",
+ "deps": [],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  }
+ ],
+ "name": "go-graphql",
+ "prepare": [],
+ "provider": "go",
+ "services": [],
+ "volumes": []
+}

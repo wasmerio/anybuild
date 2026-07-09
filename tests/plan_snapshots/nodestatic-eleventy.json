@@ -1,0 +1,112 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "architecture": null,
+     "name": "node",
+     "version": "24"
+    },
+    {
+     "architecture": null,
+     "name": "npm",
+     "version": null
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/opt/temp"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": null,
+   "source": "package-lock.json",
+   "target": "package-lock.json"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "CI": "true",
+    "NPM_CONFIG_FUND": "false"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm install",
+   "group": "install",
+   "inputs": [
+    "package.json"
+   ],
+   "outputs": null
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    "node_modules",
+    ".git",
+    "package-lock.json"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm run build",
+   "group": "build",
+   "inputs": null,
+   "outputs": [
+    "_site"
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "cp -R _site/* <SHIPIT_DIR>/local/build/opt/static_app/",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  }
+ ],
+ "commands": {
+  "start": "static-web-server --root=<SHIPIT_DIR>/local/build/opt/static_app --log-level=info --port=8080"
+ },
+ "ctx_mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/temp",
+   "name": "temp",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/temp"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/static_app",
+   "name": "static_app",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/static_app"
+  }
+ ],
+ "ctx_packages": {
+  "node@24": "node@24",
+  "npm": "npm",
+  "static-web-server@2.38.0": "static-web-server@2.38.0"
+ },
+ "ctx_services": {},
+ "ctx_volumes": [],
+ "cwd": null,
+ "deps": [
+  "static-web-server@2.38.0"
+ ],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/static_app",
+   "name": "static_app",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/static_app"
+  }
+ ],
+ "name": "nodestatic-eleventy",
+ "prepare": [],
+ "provider": "node-static",
+ "services": [],
+ "volumes": []
+}

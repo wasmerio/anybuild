@@ -1,0 +1,122 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "architecture": null,
+     "name": "node",
+     "version": "24"
+    },
+    {
+     "architecture": null,
+     "name": "pnpm",
+     "version": null
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/opt/build"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git",
+    "node_modules"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/opt/build/apps/dashboard"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "CI": "true",
+    "pnpm_config_dangerously_allow_all_builds": "true",
+    "pnpm_config_inject_workspace_packages": "true",
+    "pnpm_config_minimum_release_age": "0"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "pnpm install --no-frozen-lockfile",
+   "group": "install",
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "pnpm run build",
+   "group": "build",
+   "inputs": null,
+   "outputs": [
+    "."
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/opt/build"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "pnpm deploy --filter @shipit-example/dashboard --prod --config.node-linker=hoisted <SHIPIT_DIR>/local/build/app",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "pnpm dlx optimize-deps@0.1.1 dist --replace",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  }
+ ],
+ "commands": {
+  "start": "node dist/server/entry.mjs"
+ },
+ "ctx_mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/build",
+   "name": "build",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/build"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  }
+ ],
+ "ctx_packages": {
+  "node@24": "node@24",
+  "pnpm": "pnpm"
+ },
+ "ctx_services": {},
+ "ctx_volumes": [],
+ "cwd": "<SHIPIT_DIR>/local/build/app",
+ "deps": [
+  "node@24"
+ ],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  }
+ ],
+ "name": "dashboard",
+ "prepare": [],
+ "provider": "node",
+ "services": [],
+ "volumes": []
+}

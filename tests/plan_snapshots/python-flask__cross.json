@@ -1,0 +1,167 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "architecture": null,
+     "name": "python",
+     "version": "3.13"
+    },
+    {
+     "architecture": null,
+     "name": "uv",
+     "version": "0.8.15"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "UV_PROJECT_ENVIRONMENT": "<SHIPIT_DIR>/local/build/opt/local_venv"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uv init",
+   "group": "install",
+   "inputs": [],
+   "outputs": [
+    "uv.lock"
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uv add -r requirements.txt uvicorn",
+   "group": "install",
+   "inputs": [
+    "requirements.txt"
+   ],
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uv pip compile requirements.txt --python-version=3.13 --universal --extra-index-url None --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt",
+   "group": null,
+   "inputs": [
+    "requirements.txt"
+   ],
+   "outputs": [
+    "cross-requirements.txt"
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uvx pip install -r cross-requirements.txt uvicorn --target <SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "rm cross-requirements.txt",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "PathStep",
+   "path": "<SHIPIT_DIR>/local/build/opt/local_venv/bin"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".venv",
+    ".git",
+    "__pycache__"
+   ],
+   "source": ".",
+   "target": "."
+  }
+ ],
+ "commands": {
+  "start": "uvicorn main:app --interface=wsgi --host 0.0.0.0 --port 8080"
+ },
+ "ctx_mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/venv",
+   "name": "venv",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/venv"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/local_venv",
+   "name": "local_venv",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/local_venv"
+  }
+ ],
+ "ctx_packages": {
+  "python@3.13": "python@3.13",
+  "uv@0.8.15": "uv@0.8.15"
+ },
+ "ctx_services": {},
+ "ctx_volumes": [],
+ "cwd": "<SHIPIT_DIR>/local/build/app",
+ "deps": [
+  "python@3.13"
+ ],
+ "env": {
+  "HOME": "<SHIPIT_DIR>/local/build/app",
+  "PYTHONPATH": "<SHIPIT_DIR>/local/build/app:<SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages"
+ },
+ "mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/venv",
+   "name": "venv",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/venv"
+  }
+ ],
+ "name": "python-flask",
+ "prepare": [
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling Python code...\"",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages || true",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling package code...\"",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/app || true",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  }
+ ],
+ "provider": "python",
+ "services": [],
+ "volumes": []
+}

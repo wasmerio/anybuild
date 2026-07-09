@@ -1,0 +1,78 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "architecture": null,
+     "name": "php",
+     "version": "8.3.29"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "ignore": null,
+   "source": "php/php.ini",
+   "target": "<SHIPIT_DIR>/local/build/opt/assets/php.ini"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git"
+   ],
+   "source": ".",
+   "target": "."
+  }
+ ],
+ "commands": {
+  "start": "php -S localhost:8080 -t <SHIPIT_DIR>/local/build/app"
+ },
+ "ctx_mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/assets",
+   "name": "assets",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/assets"
+  }
+ ],
+ "ctx_packages": {
+  "php@8.3.29": "php@8.3.29"
+ },
+ "ctx_services": {},
+ "ctx_volumes": [],
+ "cwd": "<SHIPIT_DIR>/local/build/app",
+ "deps": [
+  "php@8.3.29"
+ ],
+ "env": {
+  "PHP_INI_SCAN_DIR": "<SHIPIT_DIR>/local/build/opt/assets"
+ },
+ "mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/assets",
+   "name": "assets",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/assets"
+  }
+ ],
+ "name": "php-nobuild",
+ "prepare": [],
+ "provider": "php",
+ "services": [],
+ "volumes": []
+}

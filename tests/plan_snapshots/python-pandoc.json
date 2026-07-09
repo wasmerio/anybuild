@@ -1,0 +1,144 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "architecture": null,
+     "name": "python",
+     "version": "3.13"
+    },
+    {
+     "architecture": null,
+     "name": "uv",
+     "version": "0.8.15"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "UV_PROJECT_ENVIRONMENT": "<SHIPIT_DIR>/local/build/opt/venv"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uv init",
+   "group": "install",
+   "inputs": [],
+   "outputs": [
+    "uv.lock"
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uv add -r requirements.txt uvicorn",
+   "group": "install",
+   "inputs": [
+    "requirements.txt"
+   ],
+   "outputs": null
+  },
+  {
+   "__type__": "PathStep",
+   "path": "<SHIPIT_DIR>/local/build/opt/venv/bin"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".venv",
+    ".git",
+    "__pycache__"
+   ],
+   "source": ".",
+   "target": "."
+  }
+ ],
+ "commands": {
+  "start": "uvicorn main:app --host 0.0.0.0 --port 8080"
+ },
+ "ctx_mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/venv",
+   "name": "venv",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/venv"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/local_venv",
+   "name": "local_venv",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/local_venv"
+  }
+ ],
+ "ctx_packages": {
+  "pandoc": "pandoc",
+  "python@3.13": "python@3.13",
+  "uv@0.8.15": "uv@0.8.15"
+ },
+ "ctx_services": {},
+ "ctx_volumes": [],
+ "cwd": "<SHIPIT_DIR>/local/build/app",
+ "deps": [
+  "python@3.13",
+  "pandoc"
+ ],
+ "env": {
+  "HOME": "<SHIPIT_DIR>/local/build/app",
+  "PYTHONPATH": "<SHIPIT_DIR>/local/build/app:<SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages"
+ },
+ "mounts": [
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "name": "app",
+   "serve_path": "<SHIPIT_DIR>/local/build/app"
+  },
+  {
+   "build_path": "<SHIPIT_DIR>/local/build/opt/venv",
+   "name": "venv",
+   "serve_path": "<SHIPIT_DIR>/local/build/opt/venv"
+  }
+ ],
+ "name": "python-pandoc",
+ "prepare": [
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling Python code...\"",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages || true",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling package code...\"",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/app || true",
+   "group": null,
+   "inputs": null,
+   "outputs": null
+  }
+ ],
+ "provider": "python",
+ "services": [],
+ "volumes": []
+}
