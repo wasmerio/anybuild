@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from shipit.cli import Mount, Step
+    from shipit.shipit_types import Mount, Step
 
 
 class BuildBackend(Protocol):
