@@ -277,9 +277,15 @@ def test_wasmer_prepare_config_enables_node_edge_optimizations(
 
     config = runner.prepare_config(NodeConfig())
 
-    assert config.use_edgejs is True
-    assert config.precompile_edgejs is True
-    assert config.remove_native_binaries is True
+    # Runner metadata (app.yaml/wasmer.toml) sees the edge optimizations...
+    assert runner.provider_config.use_edgejs is True
+    assert runner.provider_config.precompile_edgejs is True
+    assert runner.provider_config.remove_native_binaries is True
+    # ...but the plan config the Shipit file is evaluated with is untouched,
+    # so per-run runner flags cannot silently change the build plan.
+    assert config.use_edgejs is False
+    assert config.precompile_edgejs is None
+    assert config.remove_native_binaries is False
 
 
 def test_wasmer_prepare_config_preserves_node_precompile_override(
@@ -291,9 +297,10 @@ def test_wasmer_prepare_config_preserves_node_precompile_override(
 
     config = runner.prepare_config(NodeConfig(precompile_edgejs=False))
 
-    assert config.use_edgejs is True
+    assert runner.provider_config.use_edgejs is True
+    assert runner.provider_config.precompile_edgejs is False
+    assert runner.provider_config.remove_native_binaries is True
     assert config.precompile_edgejs is False
-    assert config.remove_native_binaries is True
 
 
 def test_wasmer_run_command_enables_napi_for_edgejs(

@@ -187,6 +187,47 @@ def test_plan_equivalence(
     assert loader_plan == legacy_plan
 
 
+@pytest.mark.parametrize(
+    "example_dir", _PORTED_EXAMPLES, ids=[p.name for p in _PORTED_EXAMPLES]
+)
+def test_plan_equivalence_cross_platform(
+    example_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same as test_plan_equivalence, with cross_platform set the way
+    WasmerRunner.prepare_config does — this activates the cross-wheel build
+    paths that plain local evaluation never reaches."""
+    for key, value in EXAMPLE_ENV.get(example_dir.name, {}).items():
+        monkeypatch.setenv(key, value)
+    subdir = SUBDIR_EXAMPLES.get(example_dir.name)
+    app_path = example_dir / subdir if subdir else example_dir
+    base_config = Config()
+    base_config.commands.enrich_from_path(app_path)
+
+    provider_cls = load_provider(app_path, base_config)
+    provider_config = load_provider_config(provider_cls, app_path, base_config)
+    if "cross_platform" not in type(provider_config).model_fields:
+        pytest.skip("provider has no cross_platform config")
+    provider_config.cross_platform = "wasix_wasm32"
+    project_paths = ProjectPaths(example_dir, app_path, subdir)
+    apply_subdir_provider_config(project_paths, provider_config)
+    apply_subdir_workspace_config(project_paths, provider_config)
+    provider = provider_cls(app_path, provider_config)
+
+    legacy_text = generate_shipit_inline(app_path, provider, subdir=subdir)
+    loader_text = generate_shipit_loader(
+        STARLARK_ENTRYPOINTS[provider_cls.name()], subdir=subdir
+    )
+
+    shipit_dir = tmp_path / ".shipit"
+    legacy_plan = _evaluate_text(
+        legacy_text, example_dir, provider_config, tmp_path / "legacy", shipit_dir
+    )
+    loader_plan = _evaluate_text(
+        loader_text, example_dir, provider_config, tmp_path / "loader", shipit_dir
+    )
+    assert loader_plan == legacy_plan
+
+
 def _assert_subdir_equivalence(workspace: Path, app_path: Path, tmp_path: Path) -> None:
     subdir = str(app_path.relative_to(workspace))
     base_config = Config()

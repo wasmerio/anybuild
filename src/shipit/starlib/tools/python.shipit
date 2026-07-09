@@ -118,7 +118,10 @@ def python_build(config, source = None, venv = None, cross_wheels = False, copy_
     steps = [use(tc.python, tc.uv)]
     steps += _stage_steps(config, source)
     steps += _install_steps(config, venv, local_venv)
-    if cross_wheels:
+    # Cross wheels only make sense when an install branch ran (pyproject,
+    # requirements, or extra deps) — a bare script app has nothing to compile.
+    has_install = config.has_pyproject or config.has_requirements or len(config.extra_dependencies) > 0
+    if cross_wheels and has_install:
         steps += _cross_wheel_steps(config, venv, local_venv)
     steps += [
         path((local_venv.path if cross else venv.path) + "/bin"),
