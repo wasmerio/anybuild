@@ -122,7 +122,13 @@ def load_env_files(
         for env_file_name in env_names:
             env_file = env_dir / env_file_name
             if env_file.exists():
-                target.update(dotenv_values(env_file))
+                target.update(
+                    {
+                        key: value
+                        for key, value in dotenv_values(env_file).items()
+                        if value is not None
+                    }
+                )
 
 
 def _rewrite_package_manager_command(
@@ -478,10 +484,10 @@ def auto(
     if temp_shipit:
         if shipit_path:
             raise Exception("Cannot use both --temp-shipit and --shipit-path")
-        temp_shipit = tempfile.NamedTemporaryFile(
+        temp_shipit_file = tempfile.NamedTemporaryFile(
             delete=False, delete_on_close=False, prefix="Shipit"
         )
-        shipit_path = Path(temp_shipit.name)
+        shipit_path = Path(temp_shipit_file.name)
 
     if not regenerate:
         if shipit_path and not shipit_path.exists():
@@ -547,7 +553,7 @@ def auto(
         deploy(
             project_paths.workspace_root,
             subdir=Path(project_paths.subdir) if project_paths.subdir else None,
-            wasmer_deploy=wasmer_deploy,
+            wasmer_deploy=bool(wasmer_deploy),
             wasmer_deploy_config=wasmer_deploy_config,
             wasmer_bin=wasmer_bin,
             wasmer_token=wasmer_token,
@@ -626,10 +632,10 @@ def generate(
     )
     apply_subdir_provider_config(project_paths, provider_config)
     apply_subdir_workspace_config(project_paths, provider_config)
-    provider = provider_cls(project_paths.app_path, provider_config)
+    provider_instance = provider_cls(project_paths.app_path, provider_config)
     content = generate_shipit(
         project_paths.app_path,
-        provider,
+        provider_instance,
         subdir=project_paths.subdir,
     )
     config_json = provider_config.model_dump_json(indent=2, exclude_defaults=True)
@@ -847,7 +853,7 @@ def plan(
         False,
         help="Use Wasmer to evaluate the project.",
     ),
-    wasmer_bin: Optional[Path] = typer.Option(
+    wasmer_bin: Optional[str] = typer.Option(
         None,
         help="The path to the Wasmer binary.",
     ),
@@ -899,10 +905,10 @@ def plan(
     if temp_shipit:
         if shipit_path:
             raise Exception("Cannot use both --temp-shipit and --shipit-path")
-        temp_shipit = tempfile.NamedTemporaryFile(
+        temp_shipit_file = tempfile.NamedTemporaryFile(
             delete=False, delete_on_close=False, prefix="Shipit"
         )
-        shipit_path = Path(temp_shipit.name)
+        shipit_path = Path(temp_shipit_file.name)
 
     if not regenerate:
         if shipit_path and not shipit_path.exists():
@@ -927,7 +933,7 @@ def plan(
         Path(project_paths.subdir) if project_paths.subdir else None,
         shipit_path=shipit_path,
         wasmer=wasmer,
-        wasmer_bin=str(wasmer_bin) if wasmer_bin else None,
+        wasmer_bin=wasmer_bin,
         wasmer_registry=wasmer_registry,
         wasmer_token=wasmer_token,
         docker=docker,
@@ -1019,7 +1025,7 @@ def build(
         False,
         help="Run the prepare command after building (defaults to True).",
     ),
-    wasmer_bin: Optional[Path] = typer.Option(
+    wasmer_bin: Optional[str] = typer.Option(
         None,
         help="The path to the Wasmer binary.",
     ),
@@ -1069,7 +1075,7 @@ def build(
         subdir,
         shipit_path=shipit_path,
         wasmer=wasmer,
-        wasmer_bin=str(wasmer_bin) if wasmer_bin else None,
+        wasmer_bin=wasmer_bin,
         wasmer_registry=wasmer_registry,
         wasmer_token=wasmer_token,
         docker=docker,

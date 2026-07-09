@@ -48,7 +48,7 @@ class GoProvider(Provider):
         return "go"
 
     @classmethod
-    def get_build_file(cls, root_path: Path) -> str:
+    def get_build_file(cls, root_path: Path) -> Optional[str]:
         paths_to_try = ["main.go", "server.go", "serve.go", "api.go", "web.go"]
         for path in paths_to_try:
             if "*" in path:

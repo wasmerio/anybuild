@@ -74,20 +74,5 @@ ignore_missing_imports = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 
-[[tool.mypy.overrides]]
-module = [
-    "shipit.cli",
-    "shipit.generator",
-    "shipit.providers.go",
-    "shipit.providers.hugo",
-    "shipit.providers.jekyll",
-    "shipit.providers.node_static",
-    "shipit.providers.python",
-    "shipit.providers.staticfile",
-    "shipit.runners.wasmer",
-    "tests.test_e2e",
-]
-ignore_errors = true
-
 [tool.uv.workspace]
 exclude = ["examples/*"]

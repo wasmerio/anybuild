@@ -37,9 +37,6 @@ class StaticFileProvider:
     _PARAM_PATTERN = re.compile(r":([A-Za-z][A-Za-z0-9_]*)")
     _SOURCE_TOKEN_PATTERN = re.compile(r":([A-Za-z][A-Za-z0-9_]*)|\*")
 
-    config: Optional[dict] = None
-    path: Path
-
     def __init__(self, path: Path, config: StaticFileConfig):
         self.path = path
         self.config = config

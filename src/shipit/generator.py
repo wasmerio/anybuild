@@ -16,7 +16,7 @@ def _providers() -> list[type[Provider]]:
     return registry_providers()
 
 
-def detect_provider(path: Path, base_config: Config) -> Provider:
+def detect_provider(path: Path, base_config: Config) -> type[Provider]:
     matches: list[tuple[type[Provider], DetectResult]] = []
     for provider_cls in _providers():
         res = provider_cls.detect(path, base_config)

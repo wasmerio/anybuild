@@ -31,6 +31,8 @@ class NodeStaticConfig(NodeConfig, StaticFileConfig):
 
 
 class NodeStaticProvider(NodeProvider, StaticFileProvider):
+    config: NodeStaticConfig
+
     SCRIPT_BUILD_COMMAND = ("build",)
     # Only use this commands if the build command is not found in the package.json
     SCRIPT_BUILD_COMMAND_FALLBACK = ("generate", "export", "docs:build",)
@@ -108,7 +110,10 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
 
     @classmethod
     def load_config(
-        cls, path: Path, base_config: Config
+        cls,
+        path: Path,
+        base_config: Config,
+        infer_start: bool = False,  # accepted for NodeProvider compatibility
     ) -> NodeStaticConfig:
         static_config = StaticFileProvider.load_config(path, base_config)
         config_data = base_config.model_dump() | static_config.model_dump()
@@ -290,10 +295,12 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
 
     @classmethod
     def _script_commands(
-        cls, package_json: Optional[Dict[str, Any]]
+        cls,
+        package_json: Optional[Dict[str, Any]],
+        preferred: tuple[str, ...] = ("build",),
     ) -> list[str]:
         build_script_commands = NodeProvider._script_commands(
-            package_json, preferred=cls.SCRIPT_BUILD_COMMAND
+            package_json, preferred=preferred
         )
         if not build_script_commands:
             # Only use these commands if the build command is not found in the package.json
@@ -606,8 +613,11 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         cls,
         package_json: Optional[Dict[str, Any]],
         package_manager: PackageManager,
-        framework: Optional[NodeFramework],
+        framework: Optional[NodeFramework] = None,
+        explicit_build_command: Optional[str] = None,
     ) -> Optional[str]:
+        if explicit_build_command:
+            return explicit_build_command
         if package_json:
             scripts = package_json.get("scripts", {})
             if not isinstance(scripts, dict):
