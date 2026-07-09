@@ -56,7 +56,11 @@ def _evaluate_generated(
         build_backend, project_dir, shipit_dir=tmp_path / ".shipit"
     )
     return build_backend, *evaluate_shipit(
-        shipit_file, build_backend, local_runner, provider_config
+        shipit_file,
+        build_backend,
+        local_runner,
+        provider_config,
+        project_root=project_dir,
     )
 
 

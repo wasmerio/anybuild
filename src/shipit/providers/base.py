@@ -52,6 +52,8 @@ class Provider(Protocol):
     with the config produced here.
     """
 
+    config: Config
+
     def __init__(self, path: Path, config: Config): ...
     @classmethod
     def name(cls) -> str: ...

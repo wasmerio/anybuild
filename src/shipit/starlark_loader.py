@@ -78,10 +78,14 @@ def eval_module_graph(
     entry_name: str = "Shipit",
 ) -> "sl.Module":
     """Evaluate a Shipit entry file and its load() graph."""
+    # Keyed by resolved path, not label: relative labels resolve per loading
+    # file, so the same label string can name different modules. The stack
+    # carries (key, label) pairs — keys for cycle detection, labels for the
+    # error message.
     frozen: Dict[str, "sl.FrozenModule"] = {}
 
     def loader_for(
-        ast: "sl.AstModule", path: Path, stack: Tuple[str, ...]
+        ast: "sl.AstModule", path: Path, stack: Tuple[Tuple[str, str], ...]
     ) -> Optional["sl.DictFileLoader"]:
         deps = {}
         for load_stmt in ast.loads:
@@ -92,18 +96,20 @@ def eval_module_graph(
         return sl.DictFileLoader(deps) if deps else None
 
     def load_module(
-        label: str, path: Path, stack: Tuple[str, ...]
+        label: str, path: Path, stack: Tuple[Tuple[str, str], ...]
     ) -> "sl.FrozenModule":
-        if label in frozen:
-            return frozen[label]
-        if label in stack:
-            raise ValueError("load() cycle: " + " -> ".join(stack + (label,)))
+        key = str(path.resolve())
+        if key in frozen:
+            return frozen[key]
+        if any(key == seen_key for seen_key, _ in stack):
+            labels = [seen_label for _, seen_label in stack]
+            raise ValueError("load() cycle: " + " -> ".join(labels + [label]))
         if not path.is_file():
             raise FileNotFoundError(
                 f"load({label!r}): no module at {path}"
             )
         ast = sl.AstModule.parse(label, path.read_text(), dialect=DIALECT)
-        loader = loader_for(ast, path, stack + (label,))
+        loader = loader_for(ast, path, stack + ((key, label),))
         module = sl.Module()
         evaluator = sl.Evaluator(module)
         # Catch statically-detectable errors (e.g. wrong arity in branches
@@ -112,8 +118,8 @@ def eval_module_graph(
         if loader is not None:
             evaluator.set_loader(loader)
         evaluator.eval_module(ast, lib_globals)
-        frozen[label] = module.freeze()
-        return frozen[label]
+        frozen[key] = module.freeze()
+        return frozen[key]
 
     ast = sl.AstModule.parse(entry_name, source, dialect=DIALECT)
     loader = loader_for(ast, entry_path, ())

@@ -5,4 +5,4 @@ load("//shipit/tools:php.shipit", "php_build", "php_serve")
 
 build = php_build(config)
 
-php_serve(config, build)
+php_serve(config, build, name = "php-api")

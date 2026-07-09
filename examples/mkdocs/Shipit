@@ -6,4 +6,4 @@ load("//shipit/tools:staticfile.shipit", "staticfile_serve")
 
 build = mkdocs_build(config)
 
-staticfile_serve(config, build, provider = "mkdocs")
+staticfile_serve(config, build, name = "mkdocs", provider = "mkdocs")

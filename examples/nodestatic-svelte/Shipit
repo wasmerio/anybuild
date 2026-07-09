@@ -6,4 +6,4 @@ load("//shipit/tools:staticfile.shipit", "staticfile_serve")
 
 build = nodestatic_build(config)
 
-staticfile_serve(config, build, provider = "node-static")
+staticfile_serve(config, build, name = "nodestatic-svelte", provider = "node-static")

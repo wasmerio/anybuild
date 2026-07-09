@@ -6,4 +6,4 @@ load("//shipit/tools:staticfile.shipit", "staticfile_serve")
 
 build = hugo_build(config)
 
-staticfile_serve(config, build, provider = "hugo")
+staticfile_serve(config, build, name = "hugo", provider = "hugo")

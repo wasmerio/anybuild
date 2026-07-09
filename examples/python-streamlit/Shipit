@@ -5,4 +5,4 @@ load("//shipit/tools:python.shipit", "python_build", "python_serve")
 
 build = python_build(config)
 
-python_serve(config, build)
+python_serve(config, build, name = "python-streamlit")

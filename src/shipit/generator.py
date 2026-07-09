@@ -129,12 +129,15 @@ def generate_shipit(
         raise Exception(
             f"No Starlark provider entrypoint registered for {provider.name()!r}"
         )
-    return generate_shipit_loader(entrypoint, subdir=subdir)
+    return generate_shipit_loader(
+        entrypoint, subdir=subdir, name=provider.config.name
+    )
 
 
 def generate_shipit_loader(
     entrypoint: dict,
     subdir: Optional[str] = None,
+    name: Optional[str] = None,
 ) -> str:
     build_module, build_function = entrypoint["build"]
     serve_module, serve_function = entrypoint["serve"]
@@ -155,9 +158,13 @@ def generate_shipit_loader(
         out.append("")
     out.append(f"build = {build_function}(config)")
     out.append("")
+    serve_args = ["config", "build"]
+    if name:
+        # Baked in so the serve name doesn't drift with the directory the
+        # checkout happens to live in.
+        serve_args.append(f"name = {json.dumps(name)}")
     if provider:
-        out.append(f'{serve_function}(config, build, provider = "{provider}")')
-    else:
-        out.append(f"{serve_function}(config, build)")
+        serve_args.append(f'provider = "{provider}"')
+    out.append(f"{serve_function}({', '.join(serve_args)})")
     out.append("")
     return "\n".join(out)

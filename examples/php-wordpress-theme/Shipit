@@ -5,4 +5,4 @@ load("//shipit/tools:wordpress.shipit", "wordpress_build", "wordpress_serve")
 
 build = wordpress_build(config)
 
-wordpress_serve(config, build)
+wordpress_serve(config, build, name = "php-wordpress-theme")

@@ -68,13 +68,13 @@ class Ctx:
             raise ValueError(
                 f"file_exists() requires a project-relative path, got {path!r}"
             )
-        root = self.source_dir.resolve()
-        target = (root / candidate).resolve()
-        if target != root and root not in target.parents:
+        # The escape check is lexical: in-project symlinks may legitimately
+        # point outside the tree, so the target is never resolved.
+        if ".." in candidate.parts:
             raise ValueError(
                 f"file_exists() path escapes the project: {path!r}"
             )
-        return target.exists()
+        return (self.source_dir / candidate).exists()
 
     # The builtins below return plan objects directly; Starlark passes them
     # around opaquely and serve() receives them back unchanged.
@@ -118,10 +118,10 @@ class Ctx:
             deps=[dep for dep in deps if dep is not None],
             commands=commands,
             prepare=prepare_steps,
-            mounts=[m.mount for m in mounts] if mounts else None,
-            volumes=[v["volume"] for v in volumes] if volumes else None,
+            mounts=[m.mount for m in mounts if m is not None] if mounts else None,
+            volumes=[v["volume"] for v in volumes if v is not None] if volumes else None,
             env=env,
-            services=list(services) if services else None,
+            services=[s for s in services if s is not None] if services else None,
         )
         self.serves[name] = serve
         return serve

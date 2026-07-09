@@ -306,7 +306,10 @@ def resolve_project_context(
         base_config.commands.install = install_command
     if build_command:
         base_config.commands.build = build_command
-    serve_port = serve_port or os.environ.get("PORT")  # type: ignore[assignment]
+    if serve_port is None:
+        env_port = os.environ.get("PORT")
+        if env_port and env_port.isdigit():
+            serve_port = int(env_port)
     if serve_port:
         base_config.port = serve_port
 
@@ -324,7 +327,13 @@ def resolve_project_context(
     apply_subdir_provider_config(project_paths, provider_config)
     apply_subdir_workspace_config(project_paths, provider_config)
     provider_config = runner.prepare_config(provider_config)
-    ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
+    ctx, serve = evaluate_shipit(
+        shipit_file,
+        build_backend,
+        runner,
+        provider_config,
+        project_root=project_paths.workspace_root,
+    )
     return ProjectContext(
         paths=project_paths,
         shipit_file=shipit_file,

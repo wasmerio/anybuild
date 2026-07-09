@@ -5,4 +5,4 @@ load("//shipit/tools:laravel.shipit", "laravel_build", "laravel_serve")
 
 build = laravel_build(config)
 
-laravel_serve(config, build)
+laravel_serve(config, build, name = "php-laravel-react")
