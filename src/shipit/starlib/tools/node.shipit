@@ -102,19 +102,14 @@ def node_install_steps(config):
         steps.append(copy(lockfile))
 
     if manager == "pnpm":
+        pnpm_env = {
+            "pnpm_config_minimum_release_age": "0",
+            "CI": "true",
+        }
         if config.app_subdir:
-            steps.append(env(
-                pnpm_config_minimum_release_age = "0",
-                CI = "true",
-                pnpm_config_inject_workspace_packages = "true",
-                pnpm_config_dangerously_allow_all_builds = "true",
-            ))
-        else:
-            steps.append(env(
-                pnpm_config_minimum_release_age = "0",
-                CI = "true",
-                pnpm_config_dangerously_allow_all_builds = "true",
-            ))
+            pnpm_env["pnpm_config_inject_workspace_packages"] = "true"
+        pnpm_env["pnpm_config_dangerously_allow_all_builds"] = "true"
+        steps.append(env(**pnpm_env))
     elif manager == "npm":
         steps.append(env(CI = "true", NPM_CONFIG_FUND = "false"))
 

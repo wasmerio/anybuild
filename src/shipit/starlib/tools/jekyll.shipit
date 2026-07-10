@@ -31,5 +31,3 @@ def jekyll_build(config, static_app = None):
         static_app = static_app,
         static_config = static_config,
     )
-
-

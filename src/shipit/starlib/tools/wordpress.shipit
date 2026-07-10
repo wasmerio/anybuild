@@ -50,7 +50,7 @@ def _wp_content_seed_steps(config, app, wpcontent_base):
     if config.wp_version:
         steps.append(run("cp -R {}/wp-content/* {}".format(app.path, wpcontent_base.path)))
     if file_exists("wp-content"):
-        steps.append(copy("wp-content", "{}".format(wpcontent_base.path)))
+        steps.append(copy("wp-content", wpcontent_base.path))
     return steps
 
 def _wp_extension_steps(config, app, assets, wpcontent_base):
@@ -87,29 +87,27 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
 
     if config.wp_extension_kind != None:
         tc = php_toolchain(config)
-        return build(
-            steps = [use(*php_use_deps(tc))] + _wp_extension_steps(config, app, assets, wpcontent_base),
-            serve_deps = php_runtime_deps(config, tc) + extra_serve_deps,
-            mounts = [app, assets, wpcontent_base],
-            env = php_env(config, assets),
+        steps = [use(*php_use_deps(tc))] + _wp_extension_steps(config, app, assets, wpcontent_base)
+        serve_deps = php_runtime_deps(config, tc)
+        env_vars = php_env(config, assets)
+    else:
+        php = php_build(
+            config,
             app = app,
             assets = assets,
-            wpcontent_base = wpcontent_base,
+            build_pre = _wp_base_steps(config, app, assets),
+            after_build = _wp_content_seed_steps(config, app, wpcontent_base),
+            extra_ignore = ["wp-content"],
         )
+        steps = php.steps
+        serve_deps = php.serve_deps
+        env_vars = php.env
 
-    php = php_build(
-        config,
-        app = app,
-        assets = assets,
-        build_pre = _wp_base_steps(config, app, assets),
-        after_build = _wp_content_seed_steps(config, app, wpcontent_base),
-        extra_ignore = ["wp-content"],
-    )
     return build(
-        steps = php.steps,
-        serve_deps = php.serve_deps + extra_serve_deps,
+        steps = steps,
+        serve_deps = serve_deps + extra_serve_deps,
         mounts = [app, assets, wpcontent_base],
-        env = php.env,
+        env = env_vars,
         app = app,
         assets = assets,
         wpcontent_base = wpcontent_base,
@@ -127,7 +125,7 @@ def wordpress_commands(config, app, assets):
 def wordpress_env(config, wpcontent_base):
     env_vars = {
         "PAGER": "cat",
-        "WPCONTENT_BASE_PATH": "{}".format(wpcontent_base.serve_path),
+        "WPCONTENT_BASE_PATH": wpcontent_base.serve_path,
     }
     if config.wp_locale:
         env_vars["WP_LOCALE"] = config.wp_locale

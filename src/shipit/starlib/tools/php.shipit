@@ -32,7 +32,7 @@ def php_runtime_deps(config, toolchain):
     return deps
 
 def php_env(config, assets):
-    env_vars = {"PHP_INI_SCAN_DIR": "{}".format(assets.serve_path)}
+    env_vars = {"PHP_INI_SCAN_DIR": assets.serve_path}
     if config.phpix and config.phpix_worker_threads:
         env_vars["PHPIX_PHP_THREADS"] = str(config.phpix_worker_threads)
     return env_vars

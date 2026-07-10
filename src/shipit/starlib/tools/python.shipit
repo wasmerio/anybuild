@@ -11,7 +11,6 @@ in config; simple existence checks use file_exists() directly.
   python_serve(config, build)         wire the Python runtime around a build
 """
 
-load("//shipit:prelude.shipit", "compact", "merged")
 load("//shipit:serve.shipit", "build", "serve")
 
 def python_toolchain(config):
@@ -58,7 +57,7 @@ def _install_steps(config, venv, local_venv):
             ),
             copy(".", ".") if all_files and not in_subdir else None,
             run("uv sync" + lock, inputs = inputs, group = "install"),
-            copy("pyproject.toml", "pyproject.toml") if not in_subdir and not all_files else None,
+            copy("pyproject.toml") if not in_subdir and not all_files else None,
             run("uv add {}".format(extra), group = "install") if extra else None,
         ]
     elif file_exists("requirements.txt") or extra:
@@ -112,18 +111,15 @@ def python_build(config, source = None, app = None, venv = None, serving = True)
     """
     tc = python_toolchain(config)
     in_subdir = config.app_subdir != None
-    copy_output_to = None
+    local_venv = mount("local_venv")
     if serving:
         temp = mount("temp") if in_subdir else None
         app = app or mount("app")
         venv = venv or mount("venv")
         source = source or (temp if in_subdir else app)
-        if in_subdir:
-            copy_output_to = app
     else:
         source = source or mount("temp")
-    local_venv = mount("local_venv")
-    venv = venv or local_venv  # embeddable flavor targets the local venv
+        venv = venv or local_venv  # the embeddable flavor targets the local venv
     cross = config.cross_platform
 
     steps = [use(tc.python, tc.uv)]
@@ -145,8 +141,8 @@ def python_build(config, source = None, app = None, venv = None, serving = True)
         ]
     if config.framework == "django":
         steps.append(run("python manage.py collectstatic --noinput", group = "build"))
-    if copy_output_to != None and in_subdir:
-        steps.append(run("cp -R . {}".format(copy_output_to.path)))
+    if serving and in_subdir:
+        steps.append(run("cp -R . {}".format(app.path)))
 
     return build(
         steps = steps,
