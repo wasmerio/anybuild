@@ -1,0 +1,111 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "php",
+     "version": "8.3.29"
+    }
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "source": "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar",
+   "target": "opt/assets/wp-cli.phar"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "wordpress/install.sh",
+   "target": "opt/assets/setup-wp.sh"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "wordpress/wp-config.php",
+   "target": "app/wp-config.php"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "wordpress/.htaccess",
+   "target": "app/.htaccess"
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "app"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "php/php.ini",
+   "target": "opt/assets/php.ini"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git",
+    "wp-content"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "source": "wp-content",
+   "target": "opt/wpcontent_base"
+  }
+ ],
+ "commands": {
+  "after_deploy": "bash opt/assets/setup-wp.sh",
+  "start": "php -S localhost:8080 -t app",
+  "wp": "php opt/assets/wp-cli.phar --allow-root --path=app"
+ },
+ "cwd": "app",
+ "deps": [
+  "php@8.3.29",
+  "bash"
+ ],
+ "env": {
+  "PAGER": "cat",
+  "PHP_INI_SCAN_DIR": "opt/assets",
+  "WPCONTENT_BASE_PATH": "opt/wpcontent_base"
+ },
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  },
+  {
+   "build_path": "opt/assets",
+   "name": "assets",
+   "serve_path": "opt/assets"
+  },
+  {
+   "build_path": "opt/wpcontent_base",
+   "name": "wpcontent_base",
+   "serve_path": "opt/wpcontent_base"
+  }
+ ],
+ "name": "php-wordpress",
+ "prepare": [],
+ "provider": "wordpress",
+ "services": [
+  {
+   "name": "database",
+   "provider": "mysql"
+  }
+ ],
+ "volumes": [
+  {
+   "name": "wp-content",
+   "path": "<SHIPIT_DIR>/volumes/wp-content",
+   "serve_path": "app/wp-content"
+  }
+ ]
+}

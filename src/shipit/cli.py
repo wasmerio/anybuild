@@ -5,9 +5,8 @@ import json
 import re
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, cast, Literal
+from typing import Any, Dict, List, Optional
 
-import xingque as sl
 import typer
 from rich import box
 from rich.panel import Panel
@@ -15,26 +14,12 @@ from rich.syntax import Syntax
 
 from shipit.generator import generate_shipit, load_provider, load_provider_config
 from shipit.providers.base import Config
+# Re-exported for tests and downstream users of the old import location.
+from shipit.evaluator import Ctx, CtxMount, evaluate_shipit  # noqa: F401
 from dotenv import dotenv_values
 from shipit.builders import BuildBackend, DockerBuildBackend, LocalBuildBackend
 from shipit.runners import Runner, LocalRunner, WasmerRunner
-from shipit.shipit_types import (
-    Build,
-    CopyStep,
-    EnvStep,
-    Mount,
-    Package,
-    PathStep,
-    PrepareStep,
-    RunStep,
-    Serve,
-    Service,
-    Step,
-    UseStep,
-    Volume,
-    WriteFileStep,
-    WorkdirStep,
-)
+from shipit.shipit_types import RunStep
 from shipit.ui import console
 from shipit.version import version as shipit_version
 from shipit.volumes import (
@@ -49,13 +34,6 @@ app = typer.Typer(invoke_without_command=True)
 DIR_PATH = Path(__file__).resolve().parent
 ASSETS_PATH = DIR_PATH / "assets"
 OPTIONAL_RUN_COMMANDS = {"start", "after_deploy"}
-
-
-@dataclass
-class CtxMount:
-    ref: str
-    path: str
-    serve_path: str
 
 
 @dataclass(frozen=True)
@@ -144,7 +122,13 @@ def load_env_files(
         for env_file_name in env_names:
             env_file = env_dir / env_file_name
             if env_file.exists():
-                target.update(dotenv_values(env_file))
+                target.update(
+                    {
+                        key: value
+                        for key, value in dotenv_values(env_file).items()
+                        if value is not None
+                    }
+                )
 
 
 def _rewrite_package_manager_command(
@@ -207,280 +191,160 @@ def apply_subdir_provider_config(
         provider_config.app_subdir = project_paths.subdir
 
 
-class Ctx:
-    def __init__(self, build_backend: BuildBackend, runner: Runner) -> None:
-        self.build_backend = build_backend
-        self.runner = runner
-        self.packages: Dict[str, Package] = {}
-        self.builds: List[Build] = []
-        self.steps: List[Step] = []
-        self.serves: Dict[str, Serve] = {}
-        self.mounts: List[Mount] = []
-        self.volumes: List[Volume] = []
-        self.services: Dict[str, Service] = {}
 
-    def add_package(self, package: Package) -> str:
-        index = f"{package.name}@{package.version}" if package.version else package.name
-        self.packages[index] = package
-        return f"ref:package:{index}"
+@dataclass
+class ProjectContext:
+    """Everything the CLI commands need after resolving and evaluating."""
 
-    def add_service(self, service: Service) -> str:
-        self.services[service.name] = service
-        return f"ref:service:{service.name}"
+    paths: ProjectPaths
+    shipit_file: Path
+    shipit_dir: Path
+    build_backend: BuildBackend
+    runner: Runner
+    provider_cls: Any
+    provider_config: Config
+    ctx: Ctx
+    serve: Any
 
-    def get_ref(self, index: str) -> Any:
-        if index.startswith("ref:package:"):
-            return self.packages[index[len("ref:package:") :]]
-        elif index.startswith("ref:build:"):
-            return self.builds[int(index[len("ref:build:") :])]
-        elif index.startswith("ref:serve:"):
-            return self.serves[index[len("ref:serve:") :]]
-        elif index.startswith("ref:step:"):
-            return self.steps[int(index[len("ref:step:") :])]
-        elif index.startswith("ref:mount:"):
-            return self.mounts[int(index[len("ref:mount:") :])]
-        elif index.startswith("ref:volume:"):
-            return self.volumes[int(index[len("ref:volume:") :])]
-        elif index.startswith("ref:service:"):
-            return self.services[index[len("ref:service:") :]]
-        else:
-            raise Exception(f"Invalid reference: {index}")
 
-    def get_refs(self, indices: List[str]) -> List[Any]:
-        return [self.get_ref(index) for index in indices if index is not None]
-
-    def add_build(self, build: Build) -> str:
-        self.builds.append(build)
-        return f"ref:build:{len(self.builds) - 1}"
-
-    def add_serve(self, serve: Serve) -> str:
-        self.serves[serve.name] = serve
-        return f"ref:serve:{serve.name}"
-
-    def add_step(self, step: Step) -> Optional[str]:
-        if step is None:
-            return None
-        self.steps.append(step)
-        return f"ref:step:{len(self.steps) - 1}"
-
-    def dep(
-        self,
-        name: str,
-        version: Optional[str] = None,
-        architecture: Optional[Literal["64-bit", "32-bit"]] = None,
-    ) -> str:
-        package = Package(name, version, architecture)
-        return self.add_package(package)
-
-    def service(
-        self, name: str, provider: Literal["postgres", "mysql", "redis"]
-    ) -> str:
-        service = Service(name, provider)
-        return self.add_service(service)
-
-    def serve(
-        self,
-        name: str,
-        provider: str,
-        build: List[str],
-        deps: List[str],
-        commands: Dict[str, str],
-        cwd: Optional[str] = None,
-        prepare: Optional[List[str]] = None,
-        workers: Optional[List[str]] = None,
-        mounts: Optional[List[Mount]] = None,
-        volumes: Optional[List[Volume]] = None,
-        env: Optional[Dict[str, str]] = None,
-        services: Optional[List[str]] = None,
-    ) -> str:
-        build_refs = [cast(Step, r) for r in self.get_refs(build)]
-        prepare_steps: Optional[List[PrepareStep]] = None
-        if prepare is not None:
-            # Resolve referenced steps and keep only RunStep for prepare
-            resolved = [cast(Step, r) for r in self.get_refs(prepare)]
-            prepare_steps = [
-                cast(RunStep, s) for s in resolved if isinstance(s, RunStep)
-            ]
-        dep_refs = [cast(Package, r) for r in self.get_refs(deps)]
-        serve = Serve(
-            name=name,
-            provider=provider,
-            build=build_refs,
-            cwd=cwd,
-            deps=dep_refs,
-            commands=commands,
-            prepare=prepare_steps,
-            workers=workers,
-            mounts=self.get_refs([mount.ref for mount in mounts]) if mounts else None,
-            volumes=self.get_refs([volume["ref"] for volume in volumes])
-            if volumes
-            else None,
-            env=env,
-            services=self.get_refs(services) if services else None,
+def resolve_environment(
+    project_paths: ProjectPaths,
+    *,
+    wasmer: bool = False,
+    wasmer_bin: Optional[str] = None,
+    wasmer_registry: Optional[str] = None,
+    wasmer_token: Optional[str] = None,
+    docker: bool = False,
+    docker_client: Optional[str] = None,
+    docker_opts: Optional[str] = None,
+):
+    """Build backend + runner for an already-resolved project."""
+    shipit_dir = default_shipit_dir(project_paths)
+    if docker or docker_client:
+        build_backend: BuildBackend = DockerBuildBackend(
+            project_paths.workspace_root,
+            ASSETS_PATH,
+            docker_client,
+            docker_opts=docker_opts,
+            shipit_dir=shipit_dir,
         )
-        return self.add_serve(serve)
-
-    def path(self, path: str) -> Optional[str]:
-        step = PathStep(path)
-        return self.add_step(step)
-
-    def use(self, *dependencies: str) -> Optional[str]:
-        deps = [cast(Package, r) for r in self.get_refs(list(dependencies))]
-        step = UseStep(deps)
-        return self.add_step(step)
-
-    def run(self, *args: Any, **kwargs: Any) -> Optional[str]:
-        step = RunStep(*args, **kwargs)
-        return self.add_step(step)
-
-    def workdir(self, path: str) -> Optional[str]:
-        step = WorkdirStep(Path(path))
-        return self.add_step(step)
-
-    def copy(
-        self,
-        source: str,
-        target: Optional[str] = None,
-        ignore: Optional[List[str]] = None,
-        base: Optional[Literal["source", "assets"]] = None,
-    ) -> Optional[str]:
-        if target is None:
-            target = source
-        step = CopyStep(source, target, ignore, base or "source")
-        return self.add_step(step)
-
-    def env(self, **env_vars: str) -> Optional[str]:
-        step = EnvStep(env_vars)
-        return self.add_step(step)
-
-    def write(self, path: str, content: str) -> Optional[str]:
-        step = WriteFileStep(path, content)
-        return self.add_step(step)
-
-    def add_mount(self, mount: Mount) -> Optional[str]:
-        self.mounts.append(mount)
-        return f"ref:mount:{len(self.mounts) - 1}"
-
-    def mount(self, name: str) -> Optional[str]:
-        build_path = self.build_backend.get_build_mount_path(name)
-        serve_path = self.runner.get_serve_mount_path(name)
-        mount = Mount(name, build_path, serve_path)
-        ref = self.add_mount(mount)
-
-        return CtxMount(
-            ref=ref,
-            path=str(build_path.absolute()),
-            serve_path=str(serve_path.absolute()),
+    else:
+        build_backend = LocalBuildBackend(
+            project_paths.workspace_root,
+            ASSETS_PATH,
+            shipit_dir=shipit_dir,
         )
-
-    def add_volume(self, volume: Volume) -> Optional[str]:
-        self.volumes.append(volume)
-        return f"ref:volume:{len(self.volumes) - 1}"
-
-    def volume(self, name: str, serve: str) -> Optional[str]:
-        volume = Volume(
-            name=name,
-            path=self.build_backend.get_volume_path(name),
-            serve_path=Path(serve),
+    if wasmer:
+        runner: Runner = WasmerRunner(
+            build_backend,
+            project_paths.workspace_root,
+            registry=wasmer_registry,
+            token=wasmer_token,
+            bin=wasmer_bin,
+            shipit_dir=shipit_dir,
         )
-        ref = self.add_volume(volume)
-        return {
-            "ref": ref,
-            "name": name,
-            "path": str(volume.path.absolute()),
-            "serve": str(volume.serve_path),
-            "serve_path": str(volume.serve_path),
-        }
-
-
-def evaluate_shipit(
-    shipit_file: Path,
-    build_backend: BuildBackend,
-    runner: Runner,
-    provider_config: Config,
-) -> Tuple[Ctx, Serve]:
-    source = shipit_file.read_text()
-    ctx = Ctx(build_backend, runner)
-    glb = sl.GlobalsBuilder.standard()
-
-    glb.set("PORT", str(provider_config.port or "8080"))
-    glb.set("config", provider_config)
-    glb.set("service", ctx.service)
-    glb.set("dep", ctx.dep)
-    glb.set("serve", ctx.serve)
-    glb.set("run", ctx.run)
-    glb.set("mount", ctx.mount)
-    glb.set("volume", ctx.volume)
-    glb.set("workdir", ctx.workdir)
-    glb.set("copy", ctx.copy)
-    glb.set("write", ctx.write)
-    glb.set("path", ctx.path)
-    glb.set("env", ctx.env)
-    glb.set("use", ctx.use)
-
-    dialect = sl.Dialect(enable_keyword_only_arguments=True, enable_f_strings=True)
-
-    ast = sl.AstModule.parse("Shipit", source, dialect=dialect)
-
-    evaluator = sl.Evaluator()
-    evaluator.eval_module(ast, glb.build())
-    if not ctx.serves:
-        raise ValueError(f"No serve definition found in {shipit_file}")
-    assert len(ctx.serves) <= 1, "Only one serve is allowed for now"
-    serve = next(iter(ctx.serves.values()))
-
-    # Now we apply the custom commands (start, after_deploy, build, install)
-    if provider_config.commands.start:
-        serve.commands["start"] = provider_config.commands.start
-
-    if provider_config.commands.after_deploy:
-        serve.commands["after_deploy"] = provider_config.commands.after_deploy
-
-    if provider_config.commands.build or provider_config.commands.install:
-        new_build = []
-        has_done_build = False
-        has_done_install = False
-        for step in serve.build:
-            if isinstance(step, RunStep):
-                if (
-                    step.group == "build"
-                    and not has_done_build
-                    and provider_config.commands.build
-                ):
-                    new_build.append(
-                        RunStep(provider_config.commands.build, group="build")
-                    )
-                    has_done_build = True
-                elif (
-                    step.group == "install"
-                    and not has_done_install
-                    and provider_config.commands.install
-                ):
-                    new_build.append(
-                        RunStep(provider_config.commands.install, group="install")
-                    )
-                    has_done_install = True
-                else:
-                    new_build.append(step)
-            else:
-                new_build.append(step)
-        if not has_done_install and provider_config.commands.install:
-            new_build.append(RunStep(provider_config.commands.install, group="install"))
-        if not has_done_build and provider_config.commands.build:
-            new_build.append(RunStep(provider_config.commands.build, group="build"))
-        serve.build = new_build
-
-    if serve.commands.get("start"):
-        serve.commands["start"] = serve.commands["start"].replace(
-            "$PORT", str(provider_config.port or "8080")
+    else:
+        runner = LocalRunner(
+            build_backend,
+            project_paths.workspace_root,
+            shipit_dir=shipit_dir,
         )
+    return shipit_dir, build_backend, runner
 
-    if serve.commands.get("after_deploy"):
-        serve.commands["after_deploy"] = serve.commands["after_deploy"].replace(
-            "$PORT", str(provider_config.port or "8080")
+
+def resolve_project_context(
+    path: Path,
+    subdir: Optional[Path] = None,
+    *,
+    shipit_path: Optional[Path] = None,
+    wasmer: bool = False,
+    wasmer_bin: Optional[str] = None,
+    wasmer_registry: Optional[str] = None,
+    wasmer_token: Optional[str] = None,
+    docker: bool = False,
+    docker_client: Optional[str] = None,
+    docker_opts: Optional[str] = None,
+    start_command: Optional[str] = None,
+    install_command: Optional[str] = None,
+    build_command: Optional[str] = None,
+    serve_port: Optional[int] = None,
+    use_provider: Optional[str] = None,
+    config: Optional[str] = None,
+) -> ProjectContext:
+    """The shared pipeline behind the CLI commands.
+
+    Resolves paths (including the subdir recorded in the Shipit file), builds
+    the backend/runner pair, loads the provider config, applies the runner's
+    config hook, and evaluates the Shipit file into a plan. Every command
+    that needs a plan goes through here so the flows cannot drift.
+    """
+    if not path.exists():
+        raise Exception(f"The path {path} does not exist")
+    project_paths = resolve_project_paths(path, subdir)
+    shipit_file = get_shipit_path(project_paths, shipit_path)
+    if project_paths.subdir is None:
+        project_paths = resolve_project_paths(
+            project_paths.workspace_root,
+            read_shipit_subdir(shipit_file),
         )
+    shipit_dir, build_backend, runner = resolve_environment(
+        project_paths,
+        wasmer=wasmer,
+        wasmer_bin=wasmer_bin,
+        wasmer_registry=wasmer_registry,
+        wasmer_token=wasmer_token,
+        docker=docker,
+        docker_client=docker_client,
+        docker_opts=docker_opts,
+    )
 
-    return ctx, serve
+    base_config = Config()
+    base_config.commands.enrich_from_path(project_paths.app_path)
+    if start_command:
+        base_config.commands.start = start_command
+    if install_command:
+        base_config.commands.install = install_command
+    if build_command:
+        base_config.commands.build = build_command
+    if serve_port is None:
+        env_port = os.environ.get("PORT")
+        if env_port and env_port.isdigit():
+            serve_port = int(env_port)
+    if serve_port:
+        base_config.port = serve_port
+
+    provider_cls = load_provider(
+        project_paths.app_path,
+        base_config,
+        use_provider=use_provider,
+    )
+    provider_config = load_provider_config(
+        provider_cls,
+        project_paths.app_path,
+        base_config,
+        config=config,
+    )
+    apply_subdir_provider_config(project_paths, provider_config)
+    apply_subdir_workspace_config(project_paths, provider_config)
+    provider_config = runner.prepare_config(provider_config)
+    ctx, serve = evaluate_shipit(
+        shipit_file,
+        build_backend,
+        runner,
+        provider_config,
+        project_root=project_paths.workspace_root,
+    )
+    return ProjectContext(
+        paths=project_paths,
+        shipit_file=shipit_file,
+        shipit_dir=shipit_dir,
+        build_backend=build_backend,
+        runner=runner,
+        provider_cls=provider_cls,
+        provider_config=provider_config,
+        ctx=ctx,
+        serve=serve,
+    )
 
 
 def print_help() -> None:
@@ -629,10 +493,10 @@ def auto(
     if temp_shipit:
         if shipit_path:
             raise Exception("Cannot use both --temp-shipit and --shipit-path")
-        temp_shipit = tempfile.NamedTemporaryFile(
+        temp_shipit_file = tempfile.NamedTemporaryFile(
             delete=False, delete_on_close=False, prefix="Shipit"
         )
-        shipit_path = Path(temp_shipit.name)
+        shipit_path = Path(temp_shipit_file.name)
 
     if not regenerate:
         if shipit_path and not shipit_path.exists():
@@ -698,7 +562,7 @@ def auto(
         deploy(
             project_paths.workspace_root,
             subdir=Path(project_paths.subdir) if project_paths.subdir else None,
-            wasmer_deploy=wasmer_deploy,
+            wasmer_deploy=bool(wasmer_deploy),
             wasmer_deploy_config=wasmer_deploy_config,
             wasmer_bin=wasmer_bin,
             wasmer_token=wasmer_token,
@@ -777,10 +641,10 @@ def generate(
     )
     apply_subdir_provider_config(project_paths, provider_config)
     apply_subdir_workspace_config(project_paths, provider_config)
-    provider = provider_cls(project_paths.app_path, provider_config)
+    provider_instance = provider_cls(project_paths.app_path, provider_config)
     content = generate_shipit(
         project_paths.app_path,
-        provider,
+        provider_instance,
         subdir=project_paths.subdir,
     )
     config_json = provider_config.model_dump_json(indent=2, exclude_defaults=True)
@@ -855,21 +719,14 @@ def deploy(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
     project_paths = resolve_project_paths(path, subdir)
-    shipit_dir = default_shipit_dir(project_paths)
-
-    build_backend = LocalBuildBackend(
-        project_paths.workspace_root,
-        ASSETS_PATH,
-        shipit_dir=shipit_dir,
+    _shipit_dir, _build_backend, runner = resolve_environment(
+        project_paths,
+        wasmer=True,
+        wasmer_bin=wasmer_bin,
+        wasmer_registry=wasmer_registry,
+        wasmer_token=wasmer_token,
     )
-    runner = WasmerRunner(
-        build_backend,
-        project_paths.workspace_root,
-        registry=wasmer_registry,
-        token=wasmer_token,
-        bin=wasmer_bin,
-        shipit_dir=shipit_dir,
-    )
+    assert isinstance(runner, WasmerRunner)
 
     if wasmer_deploy_config:
         runner.deploy_config(wasmer_deploy_config)
@@ -942,37 +799,15 @@ def run(
     if not path.exists():
         raise Exception(f"The path {path} does not exist")
     project_paths = resolve_project_paths(path, subdir)
-    shipit_dir = default_shipit_dir(project_paths)
-
-    if docker or docker_client:
-        build_backend: BuildBackend = DockerBuildBackend(
-            project_paths.workspace_root,
-            ASSETS_PATH,
-            docker_client,
-            docker_opts,
-            shipit_dir=shipit_dir,
-        )
-    else:
-        build_backend = LocalBuildBackend(
-            project_paths.workspace_root,
-            ASSETS_PATH,
-            shipit_dir=shipit_dir,
-        )
-
-    if wasmer:
-        runner: Runner = WasmerRunner(
-            build_backend,
-            project_paths.workspace_root,
-            registry=wasmer_registry,
-            bin=wasmer_bin,
-            shipit_dir=shipit_dir,
-        )
-    else:
-        runner = LocalRunner(
-            build_backend,
-            project_paths.workspace_root,
-            shipit_dir=shipit_dir,
-        )
+    shipit_dir, _build_backend, runner = resolve_environment(
+        project_paths,
+        wasmer=wasmer,
+        wasmer_bin=wasmer_bin,
+        wasmer_registry=wasmer_registry,
+        docker=docker,
+        docker_client=docker_client,
+        docker_opts=docker_opts,
+    )
 
     commands_to_run = resolve_run_commands(
         command_names=command_names,
@@ -1027,7 +862,7 @@ def plan(
         False,
         help="Use Wasmer to evaluate the project.",
     ),
-    wasmer_bin: Optional[Path] = typer.Option(
+    wasmer_bin: Optional[str] = typer.Option(
         None,
         help="The path to the Wasmer binary.",
     ),
@@ -1079,10 +914,10 @@ def plan(
     if temp_shipit:
         if shipit_path:
             raise Exception("Cannot use both --temp-shipit and --shipit-path")
-        temp_shipit = tempfile.NamedTemporaryFile(
+        temp_shipit_file = tempfile.NamedTemporaryFile(
             delete=False, delete_on_close=False, prefix="Shipit"
         )
-        shipit_path = Path(temp_shipit.name)
+        shipit_path = Path(temp_shipit_file.name)
 
     if not regenerate:
         if shipit_path and not shipit_path.exists():
@@ -1102,68 +937,26 @@ def plan(
             config=config,
         )
 
-    shipit_file = get_shipit_path(project_paths, shipit_path)
-    if project_paths.subdir is None:
-        project_paths = resolve_project_paths(
-            project_paths.workspace_root,
-            read_shipit_subdir(shipit_file),
-        )
-    shipit_dir = default_shipit_dir(project_paths)
-
-    if docker or docker_client:
-        build_backend: BuildBackend = DockerBuildBackend(
-            project_paths.workspace_root,
-            ASSETS_PATH,
-            docker_client,
-            shipit_dir=shipit_dir,
-        )
-    else:
-        build_backend = LocalBuildBackend(
-            project_paths.workspace_root,
-            ASSETS_PATH,
-            shipit_dir=shipit_dir,
-        )
-    if wasmer:
-        runner: Runner = WasmerRunner(
-            build_backend,
-            project_paths.workspace_root,
-            registry=wasmer_registry,
-            token=wasmer_token,
-            bin=wasmer_bin,
-            shipit_dir=shipit_dir,
-        )
-    else:
-        runner = LocalRunner(
-            build_backend,
-            project_paths.workspace_root,
-            shipit_dir=shipit_dir,
-        )
-
-    base_config = Config()
-    base_config.commands.enrich_from_path(project_paths.app_path)
-    if install_command:
-        base_config.commands.install = install_command
-    if build_command:
-        base_config.commands.build = build_command
-    if start_command:
-        base_config.commands.start = start_command
-    if serve_port:
-        base_config.port = serve_port
-    provider_cls = load_provider(
-        project_paths.app_path,
-        base_config,
+    context = resolve_project_context(
+        project_paths.workspace_root,
+        Path(project_paths.subdir) if project_paths.subdir else None,
+        shipit_path=shipit_path,
+        wasmer=wasmer,
+        wasmer_bin=wasmer_bin,
+        wasmer_registry=wasmer_registry,
+        wasmer_token=wasmer_token,
+        docker=docker,
+        docker_client=docker_client,
+        start_command=start_command,
+        install_command=install_command,
+        build_command=build_command,
+        serve_port=serve_port,
         use_provider=provider,
-    )
-    provider_config = load_provider_config(
-        provider_cls,
-        project_paths.app_path,
-        base_config,
         config=config,
     )
-    apply_subdir_provider_config(project_paths, provider_config)
-    apply_subdir_workspace_config(project_paths, provider_config)
-    # provider_config = runner.prepare_config(provider_config)
-    ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
+    serve = context.serve
+    provider_cls = context.provider_cls
+    provider_config = context.provider_config
 
     def _collect_group_commands(group: str) -> Optional[str]:
         commands = [
@@ -1241,7 +1034,7 @@ def build(
         False,
         help="Run the prepare command after building (defaults to True).",
     ),
-    wasmer_bin: Optional[Path] = typer.Option(
+    wasmer_bin: Optional[str] = typer.Option(
         None,
         help="The path to the Wasmer binary.",
     ),
@@ -1286,78 +1079,29 @@ def build(
         help="The JSON content to use as input.",
     ),
 ) -> None:
-    if not path.exists():
-        raise Exception(f"The path {path} does not exist")
-
-    project_paths = resolve_project_paths(
+    context = resolve_project_context(
         path,
         subdir,
-    )
-    shipit_file = get_shipit_path(project_paths, shipit_path)
-    if project_paths.subdir is None:
-        project_paths = resolve_project_paths(
-            path,
-            read_shipit_subdir(shipit_file),
-        )
-    shipit_dir = default_shipit_dir(project_paths)
-
-    if docker or docker_client:
-        build_backend: BuildBackend = DockerBuildBackend(
-            project_paths.workspace_root,
-            ASSETS_PATH,
-            docker_client,
-            docker_opts=docker_opts,
-            shipit_dir=shipit_dir,
-        )
-    else:
-        build_backend = LocalBuildBackend(
-            project_paths.workspace_root,
-            ASSETS_PATH,
-            shipit_dir=shipit_dir,
-        )
-    if wasmer:
-        runner: Runner = WasmerRunner(
-            build_backend,
-            project_paths.workspace_root,
-            registry=wasmer_registry,
-            token=wasmer_token,
-            bin=wasmer_bin,
-            shipit_dir=shipit_dir,
-        )
-    else:
-        runner = LocalRunner(
-            build_backend,
-            project_paths.workspace_root,
-            shipit_dir=shipit_dir,
-        )
-
-    base_config = Config()
-    base_config.commands.enrich_from_path(project_paths.app_path)
-    if start_command:
-        base_config.commands.start = start_command
-    if install_command:
-        base_config.commands.install = install_command
-    if build_command:
-        base_config.commands.build = build_command
-    serve_port = serve_port or os.environ.get("PORT")
-    if serve_port:
-        base_config.port = serve_port
-
-    provider_cls = load_provider(
-        project_paths.app_path,
-        base_config,
+        shipit_path=shipit_path,
+        wasmer=wasmer,
+        wasmer_bin=wasmer_bin,
+        wasmer_registry=wasmer_registry,
+        wasmer_token=wasmer_token,
+        docker=docker,
+        docker_client=docker_client,
+        docker_opts=docker_opts,
+        start_command=start_command,
+        install_command=install_command,
+        build_command=build_command,
+        serve_port=serve_port,
         use_provider=provider,
-    )
-    provider_config = load_provider_config(
-        provider_cls,
-        project_paths.app_path,
-        base_config,
         config=config,
     )
-    apply_subdir_provider_config(project_paths, provider_config)
-    apply_subdir_workspace_config(project_paths, provider_config)
-    provider_config = runner.prepare_config(provider_config)
-    ctx, serve = evaluate_shipit(shipit_file, build_backend, runner, provider_config)
+    project_paths = context.paths
+    shipit_dir = context.shipit_dir
+    build_backend = context.build_backend
+    runner = context.runner
+    serve = context.serve
     env = {
         "PATH": "",
         "COLORTERM": os.environ.get("COLORTERM", ""),

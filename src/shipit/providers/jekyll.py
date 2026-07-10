@@ -1,19 +1,9 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 import yaml
 
-from .base import (
-    DetectResult,
-    DependencySpec,
-    Provider,
-    _exists,
-    MountSpec,
-    ServiceSpec,
-    VolumeSpec,
-    CustomCommands,
-    Config,
-)
-from .staticfile import StaticFileProvider, StaticFileConfig
+from .base import DetectResult, _exists, Config
+from .staticfile import StaticFileProvider, StaticFileConfig, compute_redirects_config
 from pydantic_settings import SettingsConfigDict
 
 
@@ -50,6 +40,10 @@ class JekyllProvider(StaticFileProvider):
             jekyll_static_dir = jekyll_static_dir or "_site"
             assert isinstance(jekyll_static_dir, str), "destination in Jekyll config must be a string"
             config.static_dir = jekyll_static_dir
+        # static_dir may have changed since the base load; recompute redirects.
+        config.redirects_config = compute_redirects_config(
+            path, config.static_dir, config.convert_redirects
+        )
         return config
 
     @classmethod
@@ -68,53 +62,3 @@ class JekyllProvider(StaticFileProvider):
             return DetectResult(cls.name(), 85)
         return None
 
-    def dependencies(self) -> list[DependencySpec]:
-        return [
-            DependencySpec(
-                "ruby",
-                var_name="config.ruby_version",
-                use_in_build=True,
-                use_in_serve=False,
-            ),
-            *super().dependencies(),
-        ]
-
-    def build_steps(self) -> list[str]:
-        if _exists(self.path, "Gemfile"):
-            install_deps = ["Gemfile"]
-            install_deps_str = ", ".join([f'"{dep}"' for dep in install_deps])
-            install_commands = [
-                f'run("bundle install", inputs=[{install_deps_str}], group="install")'
-            ]
-            if _exists(self.path, "Gemfile.lock"):
-                install_commands = [
-                    'copy("Gemfile.lock")',
-                    *install_commands,
-                ]
-        else:
-            install_commands = [
-                'run("bundle init", group="install")',
-                'run("bundle add jekyll -v {}".format(config.jekyll_version), group="install")',
-            ]
-        return [
-            'workdir(temp.path)',
-            *install_commands,
-            'copy(".", ignore=[".git"])',
-            'run("jekyll build", group="build")',
-            'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
-        ]
-
-    def prepare_steps(self) -> Optional[list[str]]:
-        return None
-
-    def mounts(self) -> list[MountSpec]:
-        return [MountSpec("temp", attach_to_serve=False), *super().mounts()]
-
-    def volumes(self) -> list[VolumeSpec]:
-        return []
-
-    def env(self) -> Optional[Dict[str, str]]:
-        return None
-
-    def services(self) -> list[ServiceSpec]:
-        return []

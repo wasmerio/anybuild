@@ -1,0 +1,46 @@
+{
+ "build": [
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/static_app"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git"
+   ],
+   "source": "site",
+   "target": "."
+  },
+  {
+   "__type__": "WriteFileStep",
+   "content": "[[advanced.redirects]]\nsource = \"/docs/{**}\"\ndestination = \"/guides/$1/\"\nkind = 301\n",
+   "path": "opt/static_config/sws.toml"
+  }
+ ],
+ "commands": {
+  "start": "static-web-server --root=opt/static_app --log-level=info --config-file=opt/static_config/sws.toml --port=8080"
+ },
+ "deps": [
+  "static-web-server@2.38.0"
+ ],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "opt/static_app",
+   "name": "static_app",
+   "serve_path": "opt/static_app"
+  },
+  {
+   "build_path": "opt/static_config",
+   "name": "static_config",
+   "serve_path": "opt/static_config"
+  }
+ ],
+ "name": "staticfile-redirects",
+ "prepare": [],
+ "provider": "staticfile",
+ "services": [],
+ "volumes": []
+}

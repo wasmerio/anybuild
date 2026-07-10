@@ -3,13 +3,12 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 from shipit.providers.base import (
-    DependencySpec,
     Provider,
-    ProviderPlan,
     DetectResult,
     Config,
 )
 from shipit.providers.registry import providers as registry_providers
+from shipit.version import version as shipit_version
 
 
 def _providers() -> list[type[Provider]]:
@@ -17,7 +16,7 @@ def _providers() -> list[type[Provider]]:
     return registry_providers()
 
 
-def detect_provider(path: Path, base_config: Config) -> Provider:
+def detect_provider(path: Path, base_config: Config) -> type[Provider]:
     matches: list[tuple[type[Provider], DetectResult]] = []
     for provider_cls in _providers():
         res = provider_cls.detect(path, base_config)
@@ -28,52 +27,6 @@ def detect_provider(path: Path, base_config: Config) -> Provider:
     # Highest score wins; tie-breaker by order
     matches.sort(key=lambda x: x[1].score, reverse=True)
     return matches[0][0]
-
-
-def _sanitize_alias(name: str) -> str:
-    # Keep it predictable and valid in Starlark: letters, numbers, underscore
-    # Remove dashes to keep prior style (e.g., staticwebserver)
-    allowed = [c if c.isalnum() or c == "_" else "" for c in name]
-    alias = "".join(allowed)
-    return alias.replace("-", "")
-
-
-def _emit_dependencies_declarations(
-    deps: List[DependencySpec],
-) -> tuple[str, List[str], List[str]]:
-    lines: List[str] = []
-    declared: set[str] = set()
-    serve_vars: List[str] = []
-    build_vars: List[str] = []
-
-    for dep in deps:
-        alias = dep.alias or _sanitize_alias(dep.name)
-
-        # Track serve variables in order of appearance (deduped)
-        if dep.use_in_serve and alias not in serve_vars:
-            serve_vars.append(alias)
-        if dep.use_in_build and alias not in build_vars:
-            build_vars.append(alias)
-
-        # Only declare each dependency once
-        if alias in declared:
-            continue
-        declared.add(alias)
-
-        version_var = None
-        architecture_env_var = None
-        if dep.var_name:
-            version_var = dep.var_name
-        if dep.architecture_var_name:
-            architecture_env_var = dep.architecture_var_name
-        vars = [f'"{dep.name}"']
-        if version_var:
-            vars.append(version_var)
-        if architecture_env_var:
-            vars.append(f"architecture={architecture_env_var}")
-        lines.append(f"{alias} = dep({', '.join(vars)})")
-
-    return "\n".join(lines), serve_vars, build_vars
 
 
 def load_provider(
@@ -94,14 +47,76 @@ def load_provider_config(
     path: Path,
     base_config: Config,
     config: Optional[Union[dict, str]] = None,
-) -> dict:
+) -> Config:
     provider_config = provider_cls.load_config(path, base_config)
     if config:
         if isinstance(config, str):
             config = json.loads(config)
         assert isinstance(config, dict), "Config must be a dictionary, got %s" % type(config)
         provider_config = provider_config.__class__.model_validate({**(provider_config.model_dump() | config)})
+    if not provider_config.name:
+        provider_config.name = path.absolute().name
     return provider_config
+
+
+_STATICFILE_SERVE = ("//shipit/tools:staticfile.shipit", "staticfile_serve")
+
+# Starlark stdlib entrypoints per provider: a (module, function) pair for the
+# build and one for the serve. The generated Shipit file loads both and calls
+# them in sequence, keeping the build/serve seam users compose on explicit —
+# static-site builders pair their own build with the shared staticfile serve.
+# The optional "provider" key is the deployment identity the generated file
+# passes to the serve when it differs from the serve function's default.
+STARLARK_ENTRYPOINTS: dict[str, dict] = {
+    "python": {
+        "build": ("//shipit/tools:python.shipit", "python_build"),
+        "serve": ("//shipit/tools:python.shipit", "python_serve"),
+    },
+    "staticfile": {
+        "build": ("//shipit/tools:staticfile.shipit", "staticfile_build"),
+        "serve": _STATICFILE_SERVE,
+    },
+    "hugo": {
+        "build": ("//shipit/tools:hugo.shipit", "hugo_build"),
+        "serve": _STATICFILE_SERVE,
+        "provider": "hugo",
+    },
+    "mkdocs": {
+        "build": ("//shipit/tools:mkdocs.shipit", "mkdocs_build"),
+        "serve": _STATICFILE_SERVE,
+        "provider": "mkdocs",
+    },
+    "jekyll": {
+        "build": ("//shipit/tools:jekyll.shipit", "jekyll_build"),
+        "serve": _STATICFILE_SERVE,
+        "provider": "jekyll",
+    },
+    "node-static": {
+        "build": ("//shipit/tools:node_static.shipit", "nodestatic_build"),
+        "serve": _STATICFILE_SERVE,
+        "provider": "node-static",
+    },
+    "go": {
+        "build": ("//shipit/tools:go.shipit", "go_build"),
+        "serve": ("//shipit/tools:go.shipit", "go_serve"),
+    },
+    "php": {
+        "build": ("//shipit/tools:php.shipit", "php_build"),
+        "serve": ("//shipit/tools:php.shipit", "php_serve"),
+    },
+    "wordpress": {
+        "build": ("//shipit/tools:wordpress.shipit", "wordpress_build"),
+        "serve": ("//shipit/tools:wordpress.shipit", "wordpress_serve"),
+    },
+    "node": {
+        "build": ("//shipit/tools:node.shipit", "node_build"),
+        "serve": ("//shipit/tools:node.shipit", "node_serve"),
+    },
+    "laravel": {
+        "build": ("//shipit/tools:laravel.shipit", "laravel_build"),
+        "serve": ("//shipit/tools:laravel.shipit", "laravel_serve"),
+    },
+}
 
 
 def generate_shipit(
@@ -109,135 +124,47 @@ def generate_shipit(
     provider: Provider,
     subdir: Optional[str] = None,
 ) -> str:
-    default_serve_name = path.absolute().name
-
-    # Collect parts
-    plan = ProviderPlan(
-        serve_name=default_serve_name,
-        provider=provider.name(),
-        mounts=provider.mounts(),
-        volumes=provider.volumes(),
-        declarations=provider.declarations(),
-        dependencies=provider.dependencies(),
-        build_steps=provider.build_steps(),
-        prepare=provider.prepare_steps(),
-        services=provider.services(),
-        commands=provider.commands(),
-        env=provider.env(),
-    )
-
-    # Declare dependency variables (combined) and collect serve deps
-    dep_block, serve_dep_vars, build_dep_vars = _emit_dependencies_declarations(
-        plan.dependencies
-    )
-
-    # Compose serve(...) body
-    # Auto-insert a use(...) step at the beginning if not explicitly provided
-    build_steps: List[str] = list(plan.build_steps)
-    if build_dep_vars and not any("use(" in s for s in build_steps):
-        build_steps.insert(0, f"use({', '.join(build_dep_vars)})")
-
-    build_steps_block = ",\n".join([f"    {s}" for s in build_steps])
-    deps_array = ", ".join(serve_dep_vars)
-
-    def format_command(k: str, v: str) -> str:
-        return f'    "{k}": {v}'
-
-    commands = plan.commands
-    commands_lines = ",\n".join([format_command(k, v) for k, v in commands.items()])
-    env_lines = None
-    env = plan.env
-    if env is not None:
-        if len(env) == 0:
-            env_lines = "{}"
-        else:
-            env_lines = ",\n".join([f'    "{k}": {v}' for k, v in env.items()])
-    mounts_block = None
-    volumes_block = None
-    attach_serve_names: list[str] = []
-
-    if plan.mounts:
-        mounts = list(filter(lambda m: m.attach_to_serve, plan.mounts))
-        attach_serve_names = [m.name for m in mounts]
-        mounts_block = ",\n".join([f"    {m.name}" for m in mounts])
-
-    if plan.volumes:
-        volumes_block = ",\n".join(
-            [f"    {v.var_name or v.name}" for v in plan.volumes]
+    entrypoint = STARLARK_ENTRYPOINTS.get(provider.name())
+    if not entrypoint:
+        raise Exception(
+            f"No Starlark provider entrypoint registered for {provider.name()!r}"
         )
+    return generate_shipit_loader(
+        entrypoint, subdir=subdir, name=provider.config.name
+    )
 
-    out: List[str] = []
 
-    if dep_block:
-        out.append(dep_block)
-        out.append("")
-
-    if plan.mounts:
-        for m in plan.mounts:
-            out.append(f'{m.name} = mount("{m.name}")')
-        out.append("")
-
+def generate_shipit_loader(
+    entrypoint: dict,
+    subdir: Optional[str] = None,
+    name: Optional[str] = None,
+) -> str:
+    build_module, build_function = entrypoint["build"]
+    serve_module, serve_function = entrypoint["serve"]
+    provider = entrypoint.get("provider")
+    out: List[str] = [
+        f"# Generated by Shipit v{shipit_version} — https://github.com/wasmerio/shipit",
+        "# This file is yours to edit: add steps or override the serve below.",
+        "",
+    ]
+    if build_module == serve_module:
+        out.append(f'load("{build_module}", "{build_function}", "{serve_function}")')
+    else:
+        out.append(f'load("{build_module}", "{build_function}")')
+        out.append(f'load("{serve_module}", "{serve_function}")')
+    out.append("")
     if subdir:
         out.append(f"app_subdir = {json.dumps(subdir)}")
         out.append("")
-
-    if plan.volumes:
-        for v in plan.volumes:
-            out.append(f'{v.var_name or v.name} = volume("{v.name}", {v.serve_path})')
-        out.append("")
-
-    if plan.services:
-        for s in plan.services:
-            out.append(
-                f'{s.name} = service(\n  name="{s.name}",\n  provider="{s.provider}"\n)'
-            )
-        out.append("")
-
-    if plan.declarations:
-        out.append(plan.declarations)
-        out.append("")
-
-    out.append("serve(")
-    out.append(f'  name="{plan.serve_name}",')
-    out.append(f'  provider="{plan.provider}",')
-    # If app is mounted for serve, set cwd to the app serve path
-    if "app" in attach_serve_names:
-        out.append('  cwd=app.serve_path,')
-    out.append("  build=[")
-    out.append(build_steps_block)
-    out.append("  ],")
-    out.append(f"  deps=[{deps_array}],")
-    if plan.prepare:
-        prepare_steps_block = ",\n".join([f"    {s}" for s in plan.prepare])
-        out.append("  prepare=[")
-        out.append(prepare_steps_block)
-        out.append("  ],")
-    if env_lines is not None:
-        if env_lines == "{}":
-            out.append("  env = {},")
-        else:
-            out.append("  env = {")
-            out.append(env_lines)
-            out.append("  },")
-    if commands_lines:
-        out.append("  commands = {")
-        out.append(commands_lines)
-        out.append("  },")
-    else:
-        out.append("  commands = {},")
-    if plan.services:
-        out.append("  services=[")
-        for s in plan.services:
-            out.append(f"    {s.name},")
-        out.append("  ],")
-    if mounts_block:
-        out.append("  mounts=[")
-        out.append(mounts_block)
-        out.append("  ],")
-    if volumes_block:
-        out.append("  volumes=[")
-        out.append(volumes_block)
-        out.append("  ],")
-    out.append(")")
+    out.append(f"build = {build_function}(config)")
+    out.append("")
+    serve_args = ["config", "build"]
+    if name:
+        # Baked in so the serve name doesn't drift with the directory the
+        # checkout happens to live in.
+        serve_args.append(f"name = {json.dumps(name)}")
+    if provider:
+        serve_args.append(f'provider = "{provider}"')
+    out.append(f"{serve_function}({', '.join(serve_args)})")
     out.append("")
     return "\n".join(out)

@@ -1,0 +1,69 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "ruby",
+     "version": "3.4.7"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/temp"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "bundle init",
+   "group": "install"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "bundle add jekyll -v 4.3.0",
+   "group": "install"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "RunStep",
+   "command": "jekyll build",
+   "group": "build"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "cp -R out/* opt/static_app/"
+  }
+ ],
+ "commands": {
+  "start": "static-web-server --root=opt/static_app --log-level=info --config-file=opt/static_config/sws.toml --port=8080"
+ },
+ "deps": [
+  "static-web-server@2.38.0"
+ ],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "opt/static_app",
+   "name": "static_app",
+   "serve_path": "opt/static_app"
+  },
+  {
+   "build_path": "opt/static_config",
+   "name": "static_config",
+   "serve_path": "opt/static_config"
+  }
+ ],
+ "name": "workspace",
+ "prepare": [],
+ "provider": "jekyll",
+ "services": [],
+ "volumes": []
+}

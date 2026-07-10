@@ -1,18 +1,13 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 from pydantic_settings import SettingsConfigDict
 
 from .base import (
     Config,
     DetectResult,
-    DependencySpec,
-    MountSpec,
     Provider,
-    ServiceSpec,
-    VolumeSpec,
     _exists,
-    subdir_build_context_steps,
 )
 
 
@@ -53,7 +48,7 @@ class GoProvider(Provider):
         return "go"
 
     @classmethod
-    def get_build_file(cls, root_path: Path) -> str:
+    def get_build_file(cls, root_path: Path) -> Optional[str]:
         paths_to_try = ["main.go", "server.go", "serve.go", "api.go", "web.go"]
         for path in paths_to_try:
             if "*" in path:
@@ -76,65 +71,3 @@ class GoProvider(Provider):
             return DetectResult(cls.name(), 80)
         return None
 
-    def dependencies(self) -> list[DependencySpec]:
-        return [
-            DependencySpec(
-                "go",
-                var_name="config.go_version",
-                use_in_build=True,
-            ),
-        ]
-
-    def build_steps(self) -> list[str]:
-        gopath = (
-            '"{}/{}".format(temp.path, app_subdir)'
-            if self.config.app_subdir
-            else "temp.path"
-        )
-        copy_binary = (
-            'run("cp {} {}/{}".format(config.serve_binary, app.path, '
-            'config.serve_binary))'
-            if self.config.app_subdir
-            else (
-                'run("cp {}/{} {}/{}".format(temp.path, '
-                'config.serve_binary, app.path, config.serve_binary))'
-            )
-        )
-        return list(
-            filter(
-                None,
-                [
-                    *subdir_build_context_steps(
-                        "temp", self.config.app_subdir
-                    ),
-                    "use(go)",
-                    'copy(".", ".", ignore=[".git"])'
-                    if not self.config.app_subdir
-                    else None,
-                    f'env(GOCACHE="/tmp/.cache/go-build", GOPATH={gopath})',
-                    (
-                        'run("go build -o {} {}".format('
-                        "config.serve_binary, config.go_build_file), "
-                        'group="build")'
-                    ),
-                    copy_binary,
-                ],
-            )
-        )
-
-    def mounts(self) -> list[MountSpec]:
-        return [
-            MountSpec("temp", attach_to_serve=False),
-            MountSpec("app", attach_to_serve=True),
-        ]
-
-    def commands(self) -> Dict[str, str]:
-        return {
-            "start": '"{}/{}".format(app.serve_path, config.serve_binary)',
-        }
-
-    def services(self) -> list[ServiceSpec]:
-        return []
-
-    def volumes(self) -> list[VolumeSpec]:
-        return []

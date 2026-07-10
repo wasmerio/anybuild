@@ -1,0 +1,123 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "python",
+     "version": "3.13"
+    },
+    {
+     "name": "uv",
+     "version": "0.8.15"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "app"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "UV_PROJECT_ENVIRONMENT": "opt/local_venv"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uv init",
+   "group": "install",
+   "inputs": [],
+   "outputs": [
+    "uv.lock"
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uv add -r requirements.txt uvicorn",
+   "group": "install",
+   "inputs": [
+    "requirements.txt"
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uv pip compile requirements.txt --python-version=3.13 --universal --extra-index-url None --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt",
+   "inputs": [
+    "requirements.txt"
+   ],
+   "outputs": [
+    "cross-requirements.txt"
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uvx pip install -r cross-requirements.txt uvicorn --target opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "rm cross-requirements.txt"
+  },
+  {
+   "__type__": "PathStep",
+   "path": "opt/local_venv/bin"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".venv",
+    ".git",
+    "__pycache__"
+   ],
+   "source": ".",
+   "target": "."
+  }
+ ],
+ "commands": {
+  "start": "uvicorn main:app --host 0.0.0.0 --port 8080"
+ },
+ "cwd": "app",
+ "deps": [
+  "python@3.13",
+  "ffmpeg"
+ ],
+ "env": {
+  "HOME": "app",
+  "PYTHONPATH": "app:opt/venv/lib/python3.13/site-packages"
+ },
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  },
+  {
+   "build_path": "opt/venv",
+   "name": "venv",
+   "serve_path": "opt/venv"
+  }
+ ],
+ "name": "python-ffmpeg",
+ "prepare": [
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling Python code...\""
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling package code...\""
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 app || true"
+  }
+ ],
+ "provider": "python",
+ "services": [],
+ "volumes": []
+}

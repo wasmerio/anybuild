@@ -1,0 +1,92 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "node",
+     "version": "24"
+    },
+    {
+     "name": "pnpm"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/build"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git",
+    "node_modules"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/build/apps/dashboard"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "CI": "true",
+    "pnpm_config_dangerously_allow_all_builds": "true",
+    "pnpm_config_inject_workspace_packages": "true",
+    "pnpm_config_minimum_release_age": "0"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "pnpm install --no-frozen-lockfile",
+   "group": "install"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "pnpm run build",
+   "group": "build",
+   "outputs": [
+    "."
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/build"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "pnpm deploy --filter @shipit-example/dashboard --prod --config.node-linker=hoisted app"
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "app"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "pnpm dlx optimize-deps@0.1.1 dist --replace"
+  }
+ ],
+ "commands": {
+  "start": "node dist/server/entry.mjs"
+ },
+ "cwd": "app",
+ "deps": [
+  "node@24"
+ ],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  }
+ ],
+ "name": "dashboard",
+ "prepare": [],
+ "provider": "node",
+ "services": [],
+ "volumes": []
+}

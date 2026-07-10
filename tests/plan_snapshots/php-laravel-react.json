@@ -1,0 +1,148 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "php",
+     "version": "8.3.29"
+    },
+    {
+     "name": "composer"
+    },
+    {
+     "name": "node",
+     "version": "24"
+    },
+    {
+     "name": "npm"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "app"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "php/php.ini",
+   "target": "opt/assets/php.ini"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "COMPOSER_ALLOW_SUPERUSER": "1",
+    "COMPOSER_FUND": "0",
+    "COMPOSER_HOME": "/tmp"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction",
+   "group": "install",
+   "inputs": [
+    "composer.json",
+    "composer.lock"
+   ],
+   "outputs": [
+    "."
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "source": "package-lock.json",
+   "target": "package-lock.json"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "CI": "true",
+    "NPM_CONFIG_FUND": "false"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm install",
+   "group": "install",
+   "inputs": [
+    "package.json"
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git",
+    "node_modules",
+    "vendor"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "RunStep",
+   "command": "composer run-script post-update-cmd",
+   "group": "build",
+   "outputs": [
+    "."
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm run build",
+   "group": "build"
+  }
+ ],
+ "commands": {
+  "after_deploy": "php artisan migrate",
+  "start": "php -S localhost:8080 -t public"
+ },
+ "cwd": "app",
+ "deps": [
+  "php@8.3.29",
+  "bash"
+ ],
+ "env": {
+  "PHP_INI_SCAN_DIR": "opt/assets"
+ },
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  },
+  {
+   "build_path": "opt/assets",
+   "name": "assets",
+   "serve_path": "opt/assets"
+  }
+ ],
+ "name": "php-laravel-react",
+ "prepare": [
+  {
+   "__type__": "RunStep",
+   "command": "mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "php artisan config:cache"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "php artisan event:cache"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "php artisan route:cache"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "php artisan view:cache"
+  }
+ ],
+ "provider": "laravel",
+ "services": [],
+ "volumes": []
+}

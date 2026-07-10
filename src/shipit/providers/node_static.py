@@ -7,17 +7,14 @@ from typing import Any, ClassVar, Dict, Optional, Set
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
-from .base import (
-    Config,
-    DetectResult,
-    DependencySpec,
-    MountSpec,
-    ServiceSpec,
-    VolumeSpec,
-    _exists,
-)
+from .base import Config, DetectResult, _exists
+from .install_context import discover_js_install_context
 from .node import NodeConfig, NodeFramework, NodeProvider, PackageManager
-from .staticfile import StaticFileConfig, StaticFileProvider
+from .staticfile import (
+    StaticFileConfig,
+    StaticFileProvider,
+    compute_redirects_config,
+)
 
 
 class NodeStaticConfig(NodeConfig, StaticFileConfig):
@@ -34,7 +31,8 @@ class NodeStaticConfig(NodeConfig, StaticFileConfig):
 
 
 class NodeStaticProvider(NodeProvider, StaticFileProvider):
-    only_build: bool = False
+    config: NodeStaticConfig
+
     SCRIPT_BUILD_COMMAND = ("build",)
     # Only use this commands if the build command is not found in the package.json
     SCRIPT_BUILD_COMMAND_FALLBACK = ("generate", "export", "docs:build",)
@@ -107,14 +105,15 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         r"\boutput\s*:\s*['\"]export['\"]"
     )
 
-    def __init__(
-        self, path: Path, config: NodeStaticConfig, only_build: bool = False
-    ):
-        NodeProvider.__init__(self, path, config, only_build=only_build)
+    def __init__(self, path: Path, config: NodeStaticConfig):
+        NodeProvider.__init__(self, path, config)
 
     @classmethod
     def load_config(
-        cls, path: Path, base_config: Config
+        cls,
+        path: Path,
+        base_config: Config,
+        infer_start: bool = False,  # accepted for NodeProvider compatibility
     ) -> NodeStaticConfig:
         static_config = StaticFileProvider.load_config(path, base_config)
         config_data = base_config.model_dump() | static_config.model_dump()
@@ -144,6 +143,15 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
                 )
             else:
                 config.static_dir = "dist"
+
+        install_context = discover_js_install_context(path)
+        if install_context.requires_all_files:
+            config.install_requires_all_files = True
+        NodeProvider.apply_static_snapshot(config, path, package_json, install_context)
+        # static_dir may have changed since the base load; recompute redirects.
+        config.redirects_config = compute_redirects_config(
+            path, config.static_dir, config.convert_redirects
+        )
 
         return config
 
@@ -287,10 +295,12 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
 
     @classmethod
     def _script_commands(
-        cls, package_json: Optional[Dict[str, Any]]
+        cls,
+        package_json: Optional[Dict[str, Any]],
+        preferred: tuple[str, ...] = ("build",),
     ) -> list[str]:
         build_script_commands = NodeProvider._script_commands(
-            package_json, preferred=cls.SCRIPT_BUILD_COMMAND
+            package_json, preferred=preferred
         )
         if not build_script_commands:
             # Only use these commands if the build command is not found in the package.json
@@ -598,20 +608,16 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
             return DetectResult(cls.name(), 20)
         return None
 
-    def dependencies(self) -> list[DependencySpec]:
-        node_provider = NodeProvider(self.path, self.config, only_build=True)
-        return [
-            *node_provider.dependencies(),
-            *(StaticFileProvider.dependencies(self) if not self.only_build else []),
-        ]
-
     @classmethod
     def get_build_command(
         cls,
         package_json: Optional[Dict[str, Any]],
         package_manager: PackageManager,
-        framework: Optional[NodeFramework],
+        framework: Optional[NodeFramework] = None,
+        explicit_build_command: Optional[str] = None,
     ) -> Optional[str]:
+        if explicit_build_command:
+            return explicit_build_command
         if package_json:
             scripts = package_json.get("scripts", {})
             if not isinstance(scripts, dict):
@@ -636,43 +642,3 @@ class NodeStaticProvider(NodeProvider, StaticFileProvider):
         command = framework.build_static_command()
         return package_manager.run_execute_command(command)
 
-    def build_steps(self) -> list[str]:
-        return filter(
-            None,
-            [
-                *(
-                    self.build_workdir_steps("temp")
-                    if not self.only_build
-                    else []
-                ),
-                *self.build_steps_install(),
-                self.build_steps_copy(),
-                *self.build_steps_build(output="config.static_dir"),
-                'run("cp -R {}/* {}/".format(config.static_dir, static_app.path))'
-                if not self.only_build
-                else None,
-            ] + self.build_steps_redirects(),
-        )
-
-    def prepare_steps(self) -> Optional[list[str]]:
-        return None
-
-    def mounts(self) -> list[MountSpec]:
-        if self.only_build:
-            return []
-        return [
-            MountSpec("temp", attach_to_serve=False),
-            *StaticFileProvider.mounts(self),
-        ]
-
-    def volumes(self) -> list[VolumeSpec]:
-        return []
-
-    def env(self) -> Optional[Dict[str, str]]:
-        return None
-
-    def commands(self) -> Dict[str, str]:
-        return StaticFileProvider.commands(self)
-
-    def services(self) -> list[ServiceSpec]:
-        return []

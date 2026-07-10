@@ -86,10 +86,6 @@ _DEPENDENCY_SECTIONS = (
 )
 
 
-def starlark_string_list(values: Iterable[str]) -> str:
-    return ", ".join(json.dumps(value) for value in values)
-
-
 def discover_python_install_context(
     root: Path,
     *,

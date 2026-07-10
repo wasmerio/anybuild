@@ -10,10 +10,32 @@ from shipit.cli import evaluate_shipit
 from shipit.generator import load_provider, load_provider_config
 from shipit.providers.base import Config
 from shipit.runners.local import LocalRunner
-from shipit.shipit_types import CopyStep, RunStep, WorkdirStep
+from shipit.shipit_types import CopyStep, EnvStep, RunStep, UseStep, WorkdirStep
 
 
 runner = CliRunner()
+
+
+def _evaluate_subdir_shipit(tmp_path: Path, app_path: Path, subdir: str = "apps/site"):
+    """Evaluate the generated Shipit.<subdir> file the way the CLI would."""
+    shipit_file = _subdir_shipit_file(tmp_path, subdir)
+    base_config = Config()
+    base_config.commands.enrich_from_path(app_path)
+    provider_cls = load_provider(app_path, base_config)
+    provider_config = load_provider_config(provider_cls, app_path, base_config)
+    project_paths = cli.ProjectPaths(tmp_path, app_path, subdir)
+    cli.apply_subdir_provider_config(project_paths, provider_config)
+    cli.apply_subdir_workspace_config(project_paths, provider_config)
+    build_backend = LocalBuildBackend(tmp_path, tmp_path / "assets")
+    local_runner = LocalRunner(build_backend, tmp_path)
+    ctx, serve = evaluate_shipit(
+        shipit_file, build_backend, local_runner, provider_config
+    )
+    return build_backend, ctx, serve, provider_config
+
+
+def _run_commands(serve) -> list[str]:
+    return [step.command for step in serve.build if isinstance(step, RunStep)]
 
 
 def _subdir_shipit_file(path: Path, subdir: str = "apps/site") -> Path:
@@ -236,21 +258,40 @@ def test_generate_subdir_shipit_uses_plain_mounts(tmp_path: Path) -> None:
     assert shipit_file.name == "Shipit.apps-site"
     assert not (tmp_path / "Shipit").exists()
     assert not (tmp_path / "apps" / "site" / "Shipit").exists()
-    assert 'app = mount("app")' in shipit
-    assert "subdir=" not in shipit
     assert 'app_subdir = "apps/site"' in shipit
-    assert 'cwd=app.serve_path,' in shipit
-    assert 'workdir("{}/{}".format(build.path, app_subdir))' in shipit
-    assert 'copy(".", ".", ignore=[".git", "node_modules"])' in shipit
-    assert 'inputs=["package.json"]' not in shipit
-    assert (
-        'copy("{}/package-lock.json".format(app_subdir), "package-lock.json")'
-        in shipit
+
+    build_backend, _ctx, serve, _config = _evaluate_subdir_shipit(
+        tmp_path, tmp_path / "apps" / "site"
     )
-    assert 'copy(app_subdir, ".", ignore=[' not in shipit
-    assert 'run("cp -RL . {}".format(app.path))' in shipit
-    assert '"{}/{}".format(app.path, app_subdir)' not in shipit
-    assert '"{}/{}".format(app.serve_path, app_subdir)' not in shipit
+    build_path = build_backend.get_build_mount_path("build")
+    app_path = build_backend.get_build_mount_path("app")
+
+    # Staged in the build mount, entering the subdir; served from the flat app.
+    workdirs = [step.path for step in serve.build if isinstance(step, WorkdirStep)]
+    assert workdirs == [build_path, build_path / "apps" / "site"]
+    assert any(
+        isinstance(step, CopyStep)
+        and step.source == "."
+        and step.ignore == [".git", "node_modules"]
+        for step in serve.build
+    )
+    # The workspace lockfile is staged from the subdir path.
+    assert any(
+        isinstance(step, CopyStep)
+        and step.source == "apps/site/package-lock.json"
+        and step.target == "package-lock.json"
+        for step in serve.build
+    )
+    install_step = next(
+        step
+        for step in serve.build
+        if isinstance(step, RunStep) and step.command.startswith("npm install")
+    )
+    assert install_step.inputs is None
+    assert f"cp -RL . {app_path}" in _run_commands(serve)
+    assert serve.cwd
+    assert serve.cwd.endswith("/app")
+    assert [mount.name for mount in (serve.mounts or [])] == ["app"]
 
 
 def test_generate_subdir_shipit_files_do_not_overwrite(
@@ -288,14 +329,24 @@ def test_generate_subdir_inherits_workspace_package_manager(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = _subdir_shipit_file(tmp_path).read_text()
-    assert 'pnpm = dep("pnpm", config.pnpm_version)' in shipit
-    assert 'run("pnpm install' in shipit
-    assert (
-        'run("pnpm run build", outputs=[config.static_dir], group="build")'
-        in shipit
+
+    _backend, _ctx, serve, config = _evaluate_subdir_shipit(
+        tmp_path, tmp_path / "apps" / "site"
     )
-    assert 'run("npm install"' not in shipit
+    # The workspace package manager (pnpm) wins over the app-level default.
+    use_steps = [step for step in serve.build if isinstance(step, UseStep)]
+    assert any(
+        pkg.name == "pnpm" for step in use_steps for pkg in step.dependencies
+    )
+    commands = _run_commands(serve)
+    assert any(command.startswith("pnpm install") for command in commands)
+    assert not any(command.startswith("npm install") for command in commands)
+    build_step = next(
+        step
+        for step in serve.build
+        if isinstance(step, RunStep) and step.command == "pnpm run build"
+    )
+    assert build_step.outputs == [config.static_dir]
 
 
 def test_generate_pnpm_node_subdir_uses_deploy_export(
@@ -309,28 +360,46 @@ def test_generate_pnpm_node_subdir_uses_deploy_export(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = _subdir_shipit_file(tmp_path, "apps/api").read_text()
-    assert 'workdir("{}/{}".format(build.path, app_subdir))' in shipit
-    assert 'run("pnpm install' in shipit
-    assert 'pnpm_config_inject_workspace_packages="true"' in shipit
-    assert "pnpm_config_dedupe_injected_deps" not in shipit
-    assert 'pnpm_config_dangerously_allow_all_builds="true"' in shipit
-    assert 'run("pnpm run build", outputs=["."], group="build")' in shipit
-    assert 'workdir(build.path)' in shipit
+
+    build_backend, _ctx, serve, _config = _evaluate_subdir_shipit(
+        tmp_path, tmp_path / "apps" / "api", subdir="apps/api"
+    )
+    build_path = build_backend.get_build_mount_path("build")
+    app_path = build_backend.get_build_mount_path("app")
+    commands = _run_commands(serve)
+
+    assert any(command.startswith("pnpm install") for command in commands)
+    env_step = next(step for step in serve.build if isinstance(step, EnvStep))
+    assert env_step.variables.get("pnpm_config_inject_workspace_packages") == "true"
+    assert env_step.variables.get("pnpm_config_dangerously_allow_all_builds") == "true"
+    assert "pnpm_config_dedupe_injected_deps" not in env_step.variables
+    build_step = next(
+        step
+        for step in serve.build
+        if isinstance(step, RunStep) and step.command == "pnpm run build"
+    )
+    assert build_step.outputs == ["."]
+    # pnpm deploy exports the app instead of cp; prune is skipped.
+    workdirs = [step.path for step in serve.build if isinstance(step, WorkdirStep)]
+    assert workdirs == [
+        build_path,
+        build_path / "apps" / "api",
+        build_path,
+        app_path,
+    ]
     assert (
-        'run("pnpm deploy --filter @workspace/api --prod '
-        '--config.node-linker=hoisted {}".format(app.path))'
-    ) in shipit
-    assert 'run("pnpm prune --prod", group="prune")' not in shipit
-    assert 'run("pnpm dlx optimize-deps@0.1.1 dist --replace")' in shipit
-    assert 'run("cp -R .' not in shipit
-    assert 'run("cp -RL .' not in shipit
+        f"pnpm deploy --filter @workspace/api --prod --config.node-linker=hoisted {app_path}"
+        in commands
+    )
+    assert "pnpm prune --prod" not in commands
+    assert "pnpm dlx optimize-deps@0.1.1 dist --replace" in commands
+    assert not any(command.startswith("cp -R") for command in commands)
 
 
 def test_generate_subdir_static_provider_keeps_serve_mount_flat(
     tmp_path: Path,
 ) -> None:
-    _write_static_workspace(tmp_path)
+    app_path = _write_static_workspace(tmp_path)
 
     result = runner.invoke(
         cli.app,
@@ -338,11 +407,32 @@ def test_generate_subdir_static_provider_keeps_serve_mount_flat(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = _subdir_shipit_file(tmp_path).read_text()
-    assert 'workdir(static_app.path)' in shipit
-    assert 'copy("{}/public".format(app_subdir), ".", ignore=[".git"])' in shipit
-    assert '"{}/{}".format(static_app.serve_path, app_subdir)' not in shipit
-    assert 'static_"{}/{}".format(app.serve_path' not in shipit
+    shipit_file = _subdir_shipit_file(tmp_path)
+    shipit = shipit_file.read_text()
+    assert "build = staticfile_build(config)" in shipit
+    assert 'staticfile_serve(config, build, name = "site")' in shipit
+    assert 'app_subdir = "apps/site"' in shipit
+
+    base_config = Config()
+    provider_cls = load_provider(app_path, base_config)
+    provider_config = load_provider_config(provider_cls, app_path, base_config)
+    provider_config.app_subdir = "apps/site"
+    build_backend = LocalBuildBackend(tmp_path, tmp_path / "assets")
+    local_runner = LocalRunner(build_backend, tmp_path)
+
+    _ctx, serve = evaluate_shipit(
+        shipit_file, build_backend, local_runner, provider_config
+    )
+
+    # The site is copied from the subdir into the flat static_app mount.
+    assert isinstance(serve.build[0], WorkdirStep)
+    assert serve.build[0].path == build_backend.get_build_mount_path("static_app")
+    copy_step = serve.build[1]
+    assert isinstance(copy_step, CopyStep)
+    assert copy_step.source == "apps/site/public"
+    assert copy_step.target == "."
+    assert copy_step.ignore == [".git"]
+    assert [mount.name for mount in (serve.mounts or [])] == ["static_app"]
 
 
 def test_generate_subdir_rewrites_active_build_mount_paths(
@@ -356,21 +446,32 @@ def test_generate_subdir_rewrites_active_build_mount_paths(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = _subdir_shipit_file(tmp_path).read_text()
-    assert 'copy(".", ".", ignore=[".git"])' in shipit
-    assert "node_modules" not in shipit
-    assert 'GOPATH="{}/{}".format(temp.path, app_subdir)' in shipit
+
+    build_backend, _ctx, serve, config = _evaluate_subdir_shipit(
+        tmp_path, tmp_path / "apps" / "site"
+    )
+    temp_path = build_backend.get_build_mount_path("temp")
+    app_path = build_backend.get_build_mount_path("app")
+
+    assert any(
+        isinstance(step, CopyStep) and step.source == "." and step.ignore == [".git"]
+        for step in serve.build
+    )
+    # The Go build runs inside the subdir of the temp mount...
+    env_step = next(step for step in serve.build if isinstance(step, EnvStep))
+    assert env_step.variables.get("GOPATH") == f"{temp_path}/apps/site"
+    # ...and only the binary is copied into the flat app mount.
     assert (
-        'run("cp {} {}/{}".format(config.serve_binary, app.path, '
-        'config.serve_binary))'
-    ) in shipit
-    assert '"{}/{}".format(app.path, app_subdir)' not in shipit
+        f"cp {config.serve_binary} {app_path}/{config.serve_binary}"
+        in _run_commands(serve)
+    )
+    assert serve.commands["start"].endswith(f"/app/{config.serve_binary}")
 
 
 def test_generate_python_subdir_uses_temp_build_mount(
     tmp_path: Path,
 ) -> None:
-    _write_python_workspace(tmp_path)
+    app_path = _write_python_workspace(tmp_path)
 
     result = runner.invoke(
         cli.app,
@@ -378,16 +479,46 @@ def test_generate_python_subdir_uses_temp_build_mount(
     )
 
     assert result.exit_code == 0, result.output
-    shipit = _subdir_shipit_file(tmp_path).read_text()
-    assert 'temp = mount("temp")' in shipit
-    assert 'app = mount("app")' in shipit
-    assert 'cwd=app.serve_path,' in shipit
-    assert 'workdir(temp.path)' in shipit
-    assert 'workdir("{}/{}".format(temp.path, app_subdir))' in shipit
-    assert 'run("uv add -r requirements.txt ' in shipit
-    assert "inputs=[\"requirements.txt\"]" not in shipit
-    assert 'run("cp -R . {}".format(app.path))' in shipit
-    assert '"{}/{}".format(app.path, app_subdir)' not in shipit
+    shipit_file = _subdir_shipit_file(tmp_path)
+    shipit = shipit_file.read_text()
+    assert "build = python_build(config)" in shipit
+    assert 'python_serve(config, build, name = "site")' in shipit
+    assert 'app_subdir = "apps/site"' in shipit
+
+    base_config = Config()
+    provider_cls = load_provider(app_path, base_config)
+    provider_config = load_provider_config(provider_cls, app_path, base_config)
+    provider_config.app_subdir = "apps/site"
+    build_backend = LocalBuildBackend(tmp_path, tmp_path / "assets")
+    local_runner = LocalRunner(build_backend, tmp_path)
+
+    _ctx, serve = evaluate_shipit(
+        shipit_file, build_backend, local_runner, provider_config
+    )
+
+    # Build stages in the temp mount and enters the subdir...
+    temp_path = build_backend.get_build_mount_path("temp")
+    workdirs = [
+        step.path for step in serve.build if isinstance(step, WorkdirStep)
+    ]
+    assert workdirs == [temp_path, temp_path / "apps" / "site"]
+    # ...installs without narrowing inputs (subdir builds need all files)...
+    install_step = next(
+        step
+        for step in serve.build
+        if isinstance(step, RunStep)
+        and step.command.startswith("uv add -r requirements.txt")
+    )
+    assert install_step.inputs is None
+    # ...and copies the built app into the flat app mount that is served.
+    app_mount_path = build_backend.get_build_mount_path("app")
+    assert any(
+        isinstance(step, RunStep) and step.command == f"cp -R . {app_mount_path}"
+        for step in serve.build
+    )
+    assert serve.cwd
+    assert serve.cwd.endswith("/app")
+    assert [mount.name for mount in (serve.mounts or [])] == ["app", "venv"]
 
 
 def test_subdir_shipit_evaluates_to_subdir_build_and_runtime_paths(

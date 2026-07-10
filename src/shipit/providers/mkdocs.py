@@ -1,17 +1,7 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
-from .base import (
-    DetectResult,
-    DependencySpec,
-    Provider,
-    _exists,
-    MountSpec,
-    ServiceSpec,
-    VolumeSpec,
-    CustomCommands,
-    Config,
-)
+from .base import DetectResult, _exists, Config
 from .staticfile import StaticFileProvider, StaticFileConfig
 from .python import PythonProvider, PythonConfig
 from pydantic_settings import SettingsConfigDict
@@ -24,10 +14,6 @@ class MkdocsConfig(PythonConfig, StaticFileConfig):
 
 
 class MkdocsProvider(StaticFileProvider):
-    def __init__(self, path: Path, config: MkdocsConfig):
-        super().__init__(path, config)
-        self.python_provider = PythonProvider(path, config, only_build=True)
-
     @classmethod
     def load_config(cls, path: Path, base_config: Config) -> MkdocsConfig:
         python_config = PythonProvider.load_config(
@@ -55,32 +41,3 @@ class MkdocsProvider(StaticFileProvider):
             return DetectResult(cls.name(), 85)
         return None
 
-    def dependencies(self) -> list[DependencySpec]:
-        return [
-            *self.python_provider.dependencies(),
-            *super().dependencies(),
-        ]
-
-    def declarations(self) -> Optional[str]:
-        return self.python_provider.declarations() or ""
-
-    def build_steps(self) -> list[str]:
-        return [
-            *self.python_provider.build_steps(),
-            'run("uv run mkdocs build --site-dir={}".format(static_app.path), outputs=["."], group="build")',
-        ]
-
-    def prepare_steps(self) -> Optional[list[str]]:
-        return self.python_provider.prepare_steps()
-
-    def mounts(self) -> list[MountSpec]:
-        return [*self.python_provider.mounts(), *super().mounts()]
-
-    def volumes(self) -> list[VolumeSpec]:
-        return []
-
-    def env(self) -> Optional[Dict[str, str]]:
-        return self.python_provider.env()
-
-    def services(self) -> list[ServiceSpec]:
-        return []

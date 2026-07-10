@@ -1,0 +1,76 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "node",
+     "version": "24"
+    },
+    {
+     "name": "npm"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/temp"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "CI": "true",
+    "NPM_CONFIG_FUND": "false"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm install",
+   "group": "install",
+   "inputs": [
+    "package.json"
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    "node_modules",
+    ".git"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm run build",
+   "group": "build",
+   "outputs": [
+    "dist"
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "cp -R dist/* opt/static_app/"
+  }
+ ],
+ "commands": {
+  "start": "static-web-server --root=opt/static_app --log-level=info --port=8080"
+ },
+ "deps": [
+  "static-web-server@2.38.0"
+ ],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "opt/static_app",
+   "name": "static_app",
+   "serve_path": "opt/static_app"
+  }
+ ],
+ "name": "nodestatic-vite-react",
+ "prepare": [],
+ "provider": "node-static",
+ "services": [],
+ "volumes": []
+}

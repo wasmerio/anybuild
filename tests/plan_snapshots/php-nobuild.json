@@ -1,0 +1,59 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "php",
+     "version": "8.3.29"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "app"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "php/php.ini",
+   "target": "opt/assets/php.ini"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git"
+   ],
+   "source": ".",
+   "target": "."
+  }
+ ],
+ "commands": {
+  "start": "php -S localhost:8080 -t app"
+ },
+ "cwd": "app",
+ "deps": [
+  "php@8.3.29"
+ ],
+ "env": {
+  "PHP_INI_SCAN_DIR": "opt/assets"
+ },
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  },
+  {
+   "build_path": "opt/assets",
+   "name": "assets",
+   "serve_path": "opt/assets"
+  }
+ ],
+ "name": "php-nobuild",
+ "prepare": [],
+ "provider": "php",
+ "services": [],
+ "volumes": []
+}

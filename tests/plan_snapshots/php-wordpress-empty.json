@@ -1,0 +1,120 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "php",
+     "version": "8.3.29"
+    }
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "source": "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar",
+   "target": "opt/assets/wp-cli.phar"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "wordpress/install.sh",
+   "target": "opt/assets/setup-wp.sh"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "php -d memory_limit=512M opt/assets/wp-cli.phar core download --allow-root --path=app --version=latest"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "wordpress/start.php",
+   "target": "opt/assets/start-wp.php"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "wordpress/wp-config.php",
+   "target": "app/wp-config.php"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "wordpress/.htaccess",
+   "target": "app/.htaccess"
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "app"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "php/php.ini",
+   "target": "opt/assets/php.ini"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git",
+    "wp-content"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "RunStep",
+   "command": "cp -R app/wp-content/* opt/wpcontent_base"
+  }
+ ],
+ "commands": {
+  "after_deploy": "bash opt/assets/setup-wp.sh",
+  "start": "phpix --startup-script=opt/assets/start-wp.php -S localhost:8080 -t app",
+  "wp": "php opt/assets/wp-cli.phar --allow-root --path=app"
+ },
+ "cwd": "app",
+ "deps": [
+  "phpix@8.3.29",
+  "bash"
+ ],
+ "env": {
+  "PAGER": "cat",
+  "PHPIX_PHP_THREADS": "4",
+  "PHP_INI_SCAN_DIR": "opt/assets",
+  "WPCONTENT_BASE_PATH": "opt/wpcontent_base"
+ },
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  },
+  {
+   "build_path": "opt/assets",
+   "name": "assets",
+   "serve_path": "opt/assets"
+  },
+  {
+   "build_path": "opt/wpcontent_base",
+   "name": "wpcontent_base",
+   "serve_path": "opt/wpcontent_base"
+  }
+ ],
+ "name": "php-wordpress-empty",
+ "prepare": [],
+ "provider": "wordpress",
+ "services": [
+  {
+   "name": "database",
+   "provider": "mysql"
+  }
+ ],
+ "volumes": [
+  {
+   "name": "wp-content",
+   "path": "<SHIPIT_DIR>/volumes/wp-content",
+   "serve_path": "app/wp-content"
+  }
+ ]
+}

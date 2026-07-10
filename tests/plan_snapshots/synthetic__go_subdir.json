@@ -1,0 +1,64 @@
+{
+ "build": [
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/temp"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/temp/apps/site"
+  },
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "go",
+     "version": "1.25.5"
+    }
+   ]
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "GOCACHE": "/tmp/.cache/go-build",
+    "GOPATH": "opt/temp/apps/site"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "go build -o main main.go",
+   "group": "build"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "cp main app/main"
+  }
+ ],
+ "commands": {
+  "start": "app/main"
+ },
+ "cwd": "app",
+ "deps": [],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  }
+ ],
+ "name": "site",
+ "prepare": [],
+ "provider": "go",
+ "services": [],
+ "volumes": []
+}

@@ -259,20 +259,29 @@ class WasmerRunner:
         from shipit.providers.php import PhpConfig
         from shipit.providers.node import NodeConfig
 
+        # Plan-visible overrides: the Shipit plan intentionally reacts to
+        # these at evaluation time (cross-platform wheel builds etc.).
         if isinstance(provider_config, PythonConfig):
             provider_config.python_extra_index_url = (
                 "https://pythonindex.wasix.org/simple"
             )
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
-        if isinstance(provider_config, PhpConfig):
-            provider_config.phpix = True
-        if isinstance(provider_config, NodeConfig):
-            provider_config.use_edgejs = True
-            if provider_config.precompile_edgejs is None:
-                provider_config.precompile_edgejs = True
-            provider_config.remove_native_binaries = True
-        self.provider_config = provider_config
+
+        # Runner-only overrides: these feed app.yaml/wasmer.toml metadata
+        # (app kind, memory caps, runtime selection) but must NOT change the
+        # evaluated plan — with providers evaluated from config, a shared
+        # mutation here would silently flip e.g. php serving to phpix.
+        # phpix stays opt-in via project config/SHIPIT_PHPIX.
+        runner_config = provider_config.model_copy(deep=True)
+        if isinstance(runner_config, PhpConfig):
+            runner_config.phpix = True
+        if isinstance(runner_config, NodeConfig):
+            runner_config.use_edgejs = True
+            if runner_config.precompile_edgejs is None:
+                runner_config.precompile_edgejs = True
+            runner_config.remove_native_binaries = True
+        self.provider_config = runner_config
         return provider_config
 
     def prepare_build_steps(self, build_steps: List["Step"]) -> List["Step"]:
@@ -319,10 +328,9 @@ class WasmerRunner:
                 if dep_env is not None:
                     env.update(dep_env)
         if env:
-            env_lines = [f"export {k}={v}" for k, v in env.items()]
-            env_lines = "\n".join(env_lines)
+            env_block = "\n".join(f"export {k}={v}" for k, v in env.items())
         else:
-            env_lines = ""
+            env_block = ""
 
         commands: List[str] = []
         if serve.cwd:
@@ -332,7 +340,7 @@ class WasmerRunner:
             for step in serve.prepare:
                 commands.append(step.command)
 
-        body = "\n".join(filter(None, [env_lines, *commands]))
+        body = "\n".join(filter(None, [env_block, *commands]))
         content = f"#!/bin/bash\n\n{body}"
         console.print(
             "\n[bold]Created prepare.sh script to run before packaging ✅[/bold]"
@@ -360,7 +368,7 @@ class WasmerRunner:
             "bash /prepare/prepare.sh",
             volume_mappings={
                 **load_volume_mappings(self.src_dir, shipit_dir=self.shipit_dir),
-                "/prepare": prepare_dir,
+                "/prepare": str(prepare_dir),
             },
         )
 
@@ -384,7 +392,7 @@ class WasmerRunner:
         dependencies = table()
         doc.add("dependencies", dependencies)
 
-        binaries: Dict[str, Dict[str, Optional[Dict[str, str]]]] = {}
+        binaries: Dict[str, Dict[str, Any]] = {}
 
         deps = serve.deps or []
         if serve.prepare and not any(dep.name == "bash" for dep in deps):
@@ -411,7 +419,7 @@ class WasmerRunner:
                     )
                     package_name, version = mapped_dependency.split("@")
                     dependencies.add(package_name, version)
-                    scripts = self.mapper[dep.name].get("scripts") or []
+                    scripts = self.mapper[dep.name].get("scripts") or set()
                     for script in scripts:
                         binaries[script] = {
                             "script": f"{package_name}:{script}",
@@ -453,7 +461,7 @@ class WasmerRunner:
                 commands.append(command)
                 parts = shlex.split(command_line)
                 program = parts[0]
-                command_env = {}
+                command_env: Dict[str, str] = {}
                 command_module = None
                 if program in self.rewrite_binaries:
                     rewritten_program = shlex.split(self.rewrite_binaries[program])
@@ -503,13 +511,14 @@ class WasmerRunner:
                 if serve.cwd:
                     wasi_args.add("cwd", serve.cwd)
                 main_args = self.main_args_for_module(command_module, parts[1:])
-                wasi_args.add("main-args", array(main_args).multiline(True))
+                # tomlkit's stubs say array() takes a string; it accepts
+                # sequences at runtime (how every manifest here is built).
+                wasi_args.add("main-args", array(main_args).multiline(True))  # type: ignore[arg-type]
                 if serve.env:
                     command_env.update(serve.env)
                 if command_env:
-                    arr = array([f"{k}={v}" for k, v in command_env.items()]).multiline(
-                        True
-                    )
+                    env_items = [f"{k}={v}" for k, v in command_env.items()]
+                    arr = array(env_items).multiline(True)  # type: ignore[arg-type]
                     wasi_args.add("env", arr)
                 title = string("annotations.wasi", literal=False)
                 command.add(title, wasi_args)
@@ -581,8 +590,8 @@ class WasmerRunner:
 
         has_php = any(dep.name == "php" for dep in serve.deps)
         has_phpix = any(dep.name == "phpix" for dep in serve.deps)
-        build_deps = reduce(
-            lambda acc, dep: acc + dep.dependencies,
+        build_deps: List[Package] = reduce(
+            lambda acc, step: acc + step.dependencies,
             [step for step in serve.build if isinstance(step, UseStep)],
             [],
         )
@@ -669,7 +678,7 @@ class WasmerRunner:
 
         command_name = parsed_command[0]
         command_args = parsed_command[1:]
-        extra_args = []
+        extra_args: List[str] = []
         run_args = ["run"]
 
         # if self.command_uses_edgejs(command_name):
@@ -785,7 +794,7 @@ class WasmerRunner:
             "deploy",
             "--publish-package",
             "--dir",
-            self.wasmer_dir_path,
+            str(self.wasmer_dir_path),
             "--non-interactive",
             *extra_args,
         ]
@@ -796,7 +805,7 @@ class WasmerRunner:
         package_webc_path.parent.mkdir(parents=True, exist_ok=True)
         self.run_command(
             self.bin,
-            ["package", "build", self.wasmer_dir_path, "--out", package_webc_path],
+            ["package", "build", str(self.wasmer_dir_path), "--out", str(package_webc_path)],
         )
         config_path.write_text(
             json.dumps(

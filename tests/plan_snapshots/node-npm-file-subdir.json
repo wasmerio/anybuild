@@ -1,0 +1,87 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "node",
+     "version": "24"
+    },
+    {
+     "name": "npm"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/build"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git",
+    "node_modules"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/build/apps/dashboard"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "CI": "true",
+    "NPM_CONFIG_FUND": "false"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm install",
+   "group": "install"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm run build",
+   "group": "build",
+   "outputs": [
+    "."
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm prune --omit=dev --ignore-scripts",
+   "group": "prune"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npx -y optimize-deps@0.1.1 dist --replace"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "cp -RL . app"
+  }
+ ],
+ "commands": {
+  "start": "node dist/server/entry.mjs"
+ },
+ "cwd": "app",
+ "deps": [
+  "node@24"
+ ],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  }
+ ],
+ "name": "dashboard",
+ "prepare": [],
+ "provider": "node",
+ "services": [],
+ "volumes": []
+}

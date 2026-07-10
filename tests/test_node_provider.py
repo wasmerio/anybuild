@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -6,6 +7,9 @@ import pytest
 
 from shipit.generator import load_provider
 from shipit.providers.base import Config
+from shipit.shipit_types import CopyStep, RunStep, UseStep
+
+from plan_helpers import evaluate_project_plan
 from shipit.providers.laravel import LaravelProvider
 from shipit.providers.node import (
     NodeConfig,
@@ -67,23 +71,6 @@ def test_node_package_manager_uses_pnpm_workspace(tmp_path: Path) -> None:
     provider_config = NodeProvider.load_config(tmp_path, Config())
 
     assert provider_config.package_manager == PackageManager.PNPM
-
-
-def test_pnpm_install_sets_minimum_release_age_env(tmp_path: Path) -> None:
-    (tmp_path / "package.json").write_text("{}\n")
-    (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
-    provider_config = NodeProvider.load_config(tmp_path, Config())
-    provider = NodeProvider(tmp_path, provider_config)
-
-    assert provider.build_steps_install() == [
-        'copy("pnpm-lock.yaml")',
-        (
-            'env(pnpm_config_minimum_release_age="0", '
-            'CI="true", '
-            'pnpm_config_dangerously_allow_all_builds="true")'
-        ),
-        'run("pnpm install", inputs=["package.json"], group="install")',
-    ]
 
 
 def test_node_check_deps_returns_matching_dependencies(tmp_path: Path) -> None:
@@ -374,80 +361,96 @@ def test_node_build_steps_optimize_deps_prunes_then_node_modules(
 ) -> None:
     (tmp_path / "package.json").write_text("{}\n")
     (tmp_path / "package-lock.json").write_text("{}\n")
-    provider_config = NodeProvider.load_config(tmp_path, Config())
-    provider_config.remove_native_binaries = True
-    provider = NodeProvider(tmp_path, provider_config)
 
-    optimize_deps_steps = provider.build_steps_optimize_deps()
-    build_steps = provider.build_steps()
-    assert build_steps[-1] == 'run("cp -R . {}".format(app.path))'
-    assert optimize_deps_steps == build_steps[
-        -len(optimize_deps_steps) - 1 : -1
-    ]
-    prune_index = next(
-        index for index, step in enumerate(build_steps) if 'group="prune"' in step
+    backend, _ctx, serve, _config = evaluate_project_plan(
+        tmp_path, tmp_path, config_overrides={"remove_native_binaries": True}
     )
-    copy_index = next(
-        index
-        for index, step in enumerate(build_steps)
-        if "optimize-node-modules.sh" in step and "copy(" in step
-    )
-    mkdir_index = next(
-        index
-        for index, step in enumerate(build_steps)
-        if "mkdir -p" in step and 'group="optimize"' in step
-    )
-    optimize_index = next(
-        index
-        for index, step in enumerate(build_steps)
-        if "bash {}/optimize-node-modules.sh" in step
-    )
+    steps = serve.build
+    app_path = backend.get_build_mount_path("app")
+    assets_path = backend.get_build_mount_path("assets")
 
+    # The app is exported last, after the node_modules optimizations.
+    assert isinstance(steps[-1], RunStep)
+    assert steps[-1].command == f"cp -R . {app_path}"
+
+    def index_of(predicate):
+        return next(i for i, step in enumerate(steps) if predicate(step))
+
+    prune_index = index_of(
+        lambda s: isinstance(s, RunStep) and s.group == "prune"
+    )
+    mkdir_index = index_of(
+        lambda s: isinstance(s, RunStep)
+        and s.group == "optimize"
+        and s.command == f"mkdir -p {assets_path}"
+    )
+    copy_index = index_of(
+        lambda s: isinstance(s, CopyStep)
+        and s.source == "node/optimize-node-modules.sh"
+        and s.base == "assets"
+    )
+    optimize_index = index_of(
+        lambda s: isinstance(s, RunStep)
+        and s.command == f"bash {assets_path}/optimize-node-modules.sh node_modules"
+    )
     assert prune_index < mkdir_index < copy_index < optimize_index
-    assert "assets.path" in build_steps[mkdir_index]
-    assert 'base="assets"' in build_steps[copy_index]
-    assert "bash {}/optimize-node-modules.sh" in build_steps[optimize_index]
 
 
 def test_node_provider_skips_native_binary_optimizer_by_default(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "package.json").write_text("{}\n")
-    provider_config = NodeProvider.load_config(tmp_path, Config())
-    provider = NodeProvider(tmp_path, provider_config)
 
-    assert provider_config.remove_native_binaries is False
+    _backend, _ctx, serve, config = evaluate_project_plan(tmp_path, tmp_path)
+    assert config.remove_native_binaries is False
     assert all(
-        "optimize-node-modules.sh" not in step
-        for step in provider.build_steps()
+        "optimize-node-modules.sh" not in getattr(step, "command", "")
+        for step in serve.build
+        if isinstance(step, RunStep)
     )
-    assert all(dep.name != "bash" for dep in provider.dependencies())
-    assert all(mount.name != "assets" for mount in provider.mounts())
+    use_steps = [step for step in serve.build if isinstance(step, UseStep)]
+    assert all(
+        pkg.name != "bash" for step in use_steps for pkg in step.dependencies
+    )
+    assert all(dep.name != "bash" for dep in serve.deps)
+    assert all(mount.name != "assets" for mount in (serve.mounts or []))
 
 
 def test_node_prepare_steps_use_precompile_edgejs_flag(tmp_path: Path) -> None:
-    config = NodeConfig()
-    provider = NodeProvider(tmp_path, config)
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"start": "node server.js"}})
+    )
+    (tmp_path / "server.js").write_text("console.log('ok')\n")
 
+    _b, _ctx, serve, config = evaluate_project_plan(tmp_path, tmp_path / "default")
     assert config.precompile_edgejs is None
-    assert provider.prepare_steps() == []
+    assert not serve.prepare
 
-    config.precompile_edgejs = True
-    assert provider.prepare_steps() == [
-        'run("edgejs --precompile {}".format(app.serve_path))',
+    _b, _ctx, serve, _config = evaluate_project_plan(
+        tmp_path,
+        tmp_path / "precompile",
+        config_overrides={"precompile_edgejs": True},
+    )
+    assert serve.prepare is not None
+    assert [step.command for step in serve.prepare] == [
+        f"edgejs --precompile {serve.cwd}"
     ]
 
 
 def test_node_provider_uses_build_only_assets_mount(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text("{}\n")
-    provider_config = NodeProvider.load_config(tmp_path, Config())
-    provider_config.remove_native_binaries = True
-    provider = NodeProvider(tmp_path, provider_config)
 
-    assets_mount = next(mount for mount in provider.mounts() if mount.name == "assets")
-
-    assert assets_mount.attach_to_build is True
-    assert assets_mount.attach_to_serve is False
+    backend, _ctx, serve, _config = evaluate_project_plan(
+        tmp_path, tmp_path, config_overrides={"remove_native_binaries": True}
+    )
+    # The assets mount serves the build (the optimizer stages into it) but is
+    # not attached to the serve.
+    assets_path = backend.get_build_mount_path("assets")
+    assert any(
+        isinstance(step, RunStep) and step.command == f"mkdir -p {assets_path}"
+        for step in serve.build
+    )
+    assert all(mount.name != "assets" for mount in (serve.mounts or []))
 
 
 def test_node_modules_binary_optimizer_removes_executable_binaries(
@@ -492,12 +495,19 @@ def test_node_modules_binary_optimizer_removes_executable_binaries(
     assert non_executable_binary.exists()
 
 
-def test_laravel_reuses_node_provider_without_static_serving() -> None:
+def test_laravel_reuses_node_provider_without_static_serving(
+    tmp_path: Path,
+) -> None:
     path = REPO_ROOT / "examples" / "php-laravel-react"
     provider_config = LaravelProvider.load_config(path, Config())
-    provider = LaravelProvider(path, provider_config)
-
-    assert isinstance(provider, NodeProvider)
     assert provider_config.framework == PhpFramework.Laravel
-    assert all("static_app" not in step for step in provider.build_steps())
-    assert provider.commands()["start"].startswith('f"php ')
+
+    backend, _ctx, serve, _config = evaluate_project_plan(path, tmp_path)
+    assert serve.provider == "laravel"
+    assert all(mount.name != "static_app" for mount in (serve.mounts or []))
+    static_app_path = str(backend.get_build_mount_path("static_app"))
+    assert all(
+        static_app_path not in str(getattr(step, "command", ""))
+        for step in serve.build
+    )
+    assert serve.commands["start"].startswith("php -S localhost:")

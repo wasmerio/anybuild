@@ -1,0 +1,81 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "python",
+     "version": "3.13"
+    },
+    {
+     "name": "uv",
+     "version": "0.8.15"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "app"
+  },
+  {
+   "__type__": "PathStep",
+   "path": "opt/venv/bin"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".venv",
+    ".git",
+    "__pycache__"
+   ],
+   "source": ".",
+   "target": "."
+  }
+ ],
+ "commands": {
+  "start": "python -m http.server 8080 -d public"
+ },
+ "cwd": "app",
+ "deps": [
+  "python@3.13"
+ ],
+ "env": {
+  "HOME": "app",
+  "PYTHONPATH": "app:opt/venv/lib/python3.13/site-packages"
+ },
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  },
+  {
+   "build_path": "opt/venv",
+   "name": "venv",
+   "serve_path": "opt/venv"
+  }
+ ],
+ "name": "python-procfile",
+ "prepare": [
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling Python code...\""
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling package code...\""
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 app || true"
+  }
+ ],
+ "provider": "python",
+ "services": [],
+ "volumes": []
+}

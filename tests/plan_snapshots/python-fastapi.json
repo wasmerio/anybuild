@@ -1,0 +1,105 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "python",
+     "version": "3.13"
+    },
+    {
+     "name": "uv",
+     "version": "0.8.15"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "app"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "UV_PROJECT_ENVIRONMENT": "opt/venv",
+    "UV_PYTHON": "python3.13",
+    "UV_PYTHON_PREFERENCE": "only-system"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "uv sync --locked",
+   "group": "install",
+   "inputs": [
+    "pyproject.toml",
+    "uv.lock",
+    "README.md"
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "source": "pyproject.toml",
+   "target": "pyproject.toml"
+  },
+  {
+   "__type__": "PathStep",
+   "path": "opt/venv/bin"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".venv",
+    ".git",
+    "__pycache__"
+   ],
+   "source": ".",
+   "target": "."
+  }
+ ],
+ "commands": {
+  "start": "uvicorn src.main:app --host 0.0.0.0 --port 8080"
+ },
+ "cwd": "app",
+ "deps": [
+  "python@3.13"
+ ],
+ "env": {
+  "HOME": "app",
+  "PYTHONPATH": "app:app/src:opt/venv/lib/python3.13/site-packages"
+ },
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  },
+  {
+   "build_path": "opt/venv",
+   "name": "venv",
+   "serve_path": "opt/venv"
+  }
+ ],
+ "name": "python-fastapi",
+ "prepare": [
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling Python code...\""
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "echo \"Precompiling package code...\""
+  },
+  {
+   "__type__": "RunStep",
+   "command": "python -m compileall -o 2 app || true"
+  }
+ ],
+ "provider": "python",
+ "services": [],
+ "volumes": []
+}

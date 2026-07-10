@@ -1,0 +1,89 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "node",
+     "version": "24"
+    },
+    {
+     "name": "npm"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "opt/build"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "source": "package-lock.json",
+   "target": "package-lock.json"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "CI": "true",
+    "NPM_CONFIG_FUND": "false"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm install",
+   "group": "install",
+   "inputs": [
+    "package.json"
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    "node_modules",
+    ".git",
+    "package-lock.json"
+   ],
+   "source": ".",
+   "target": "."
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
+   "group": "build",
+   "outputs": [
+    "."
+   ]
+  },
+  {
+   "__type__": "RunStep",
+   "command": "npm prune --omit=dev --ignore-scripts",
+   "group": "prune"
+  },
+  {
+   "__type__": "RunStep",
+   "command": "cp -R .next-bundle/* app"
+  }
+ ],
+ "commands": {
+  "start": "node server.mjs"
+ },
+ "cwd": "app",
+ "deps": [
+  "node@24"
+ ],
+ "env": {},
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  }
+ ],
+ "name": "node-next",
+ "prepare": [],
+ "provider": "node",
+ "services": [],
+ "volumes": []
+}
