@@ -7,18 +7,15 @@ use indexmap::IndexMap;
 use shipit_build::local::ui::console_print;
 use shipit_plan::Step;
 
+use crate::args::{ProjectArgs, WasmerConnArgs};
 use crate::context::{resolve_project_context, CommandOverrides, EnvironmentOptions};
 use crate::paths::ProjectPaths;
 use crate::volumes::build_volumes;
 
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct BuildArgs {
-    /// Project path (defaults to current directory).
-    #[arg(default_value = ".")]
-    pub path: PathBuf,
-    /// App subdirectory relative to the project path.
-    #[arg(long)]
-    pub subdir: Option<String>,
+    #[command(flatten)]
+    pub project: ProjectArgs,
     /// The path to the Shipit file (defaults to Shipit or Shipit.<subdir>).
     #[arg(long)]
     pub shipit_path: Option<PathBuf>,
@@ -37,15 +34,8 @@ pub struct BuildArgs {
     /// Run the prepare command after building (defaults to True).
     #[arg(long)]
     pub skip_prepare: bool,
-    /// The path to the Wasmer binary.
-    #[arg(long)]
-    pub wasmer_bin: Option<String>,
-    /// Wasmer registry.
-    #[arg(long)]
-    pub wasmer_registry: Option<String>,
-    /// Wasmer token.
-    #[arg(long)]
-    pub wasmer_token: Option<String>,
+    #[command(flatten)]
+    pub wasmer_conn: WasmerConnArgs,
     /// Use Docker to build the project.
     #[arg(long)]
     pub docker: bool,
@@ -122,14 +112,14 @@ pub fn run(args: BuildArgs) -> Result<()> {
         config: args.config.clone(),
     };
 
-    let mut path = args.path.clone();
-    let mut subdir = args.subdir.clone();
+    let mut path = args.project.path.clone();
+    let mut subdir = args.project.subdir.clone();
     let mut skip_docker_if_safe_build = args.effective_skip_docker_if_safe_build();
     let mut env_options = EnvironmentOptions {
         wasmer: args.wasmer,
-        wasmer_bin: args.wasmer_bin.clone(),
-        wasmer_registry: args.wasmer_registry.clone(),
-        wasmer_token: args.wasmer_token.clone(),
+        wasmer_bin: args.wasmer_conn.wasmer_bin.clone(),
+        wasmer_registry: args.wasmer_conn.wasmer_registry.clone(),
+        wasmer_token: args.wasmer_conn.wasmer_token.clone(),
         docker: args.docker,
         docker_client: args.docker_client.clone(),
         docker_opts: args.docker_opts.clone(),

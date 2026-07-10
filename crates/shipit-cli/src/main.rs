@@ -3,6 +3,7 @@
 //! Rust port of the Python CLI; command surface and output strings track
 //! `src/shipit/cli.py`.
 
+mod args;
 mod commands;
 mod context;
 mod generator;
@@ -173,5 +174,16 @@ fn main() {
     if let Err(err) = result {
         eprintln!("Error: {err:#}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// clap's built-in definition validation: catches flatten collisions,
+    /// duplicate flags, and bad override references at test time.
+    #[test]
+    fn cli_definition_is_valid() {
+        use clap::CommandFactory;
+        super::Cli::command().debug_assert();
     }
 }
