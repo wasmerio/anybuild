@@ -12,14 +12,14 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/app"
+   "path": "app"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
    "ignore": null,
    "source": "php/php.ini",
-   "target": "<SHIPIT_DIR>/local/build/opt/assets/php.ini"
+   "target": "opt/assets/php.ini"
   },
   {
    "__type__": "CopyStep",
@@ -32,25 +32,25 @@
   }
  ],
  "commands": {
-  "start": "php -S localhost:8080 -t <SHIPIT_DIR>/local/build/app"
+  "start": "php -S localhost:8080 -t app"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [
   "php@8.3.29"
  ],
  "env": {
-  "PHP_INI_SCAN_DIR": "<SHIPIT_DIR>/local/build/opt/assets"
+  "PHP_INI_SCAN_DIR": "opt/assets"
  },
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   },
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/assets",
+   "build_path": "opt/assets",
    "name": "assets",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/assets"
+   "serve_path": "opt/assets"
   }
  ],
  "name": "php-nobuild",

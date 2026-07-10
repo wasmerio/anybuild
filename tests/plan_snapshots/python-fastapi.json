@@ -17,12 +17,12 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/app"
+   "path": "app"
   },
   {
    "__type__": "EnvStep",
    "variables": {
-    "UV_PROJECT_ENVIRONMENT": "<SHIPIT_DIR>/local/build/opt/venv",
+    "UV_PROJECT_ENVIRONMENT": "opt/venv",
     "UV_PYTHON": "python3.13",
     "UV_PYTHON_PREFERENCE": "only-system"
    }
@@ -47,7 +47,7 @@
   },
   {
    "__type__": "PathStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/venv/bin"
+   "path": "opt/venv/bin"
   },
   {
    "__type__": "CopyStep",
@@ -64,24 +64,24 @@
  "commands": {
   "start": "uvicorn src.main:app --host 0.0.0.0 --port 8080"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [
   "python@3.13"
  ],
  "env": {
-  "HOME": "<SHIPIT_DIR>/local/build/app",
-  "PYTHONPATH": "<SHIPIT_DIR>/local/build/app:<SHIPIT_DIR>/local/build/app/src:<SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages"
+  "HOME": "app",
+  "PYTHONPATH": "app:app/src:opt/venv/lib/python3.13/site-packages"
  },
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   },
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/venv",
+   "build_path": "opt/venv",
    "name": "venv",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/venv"
+   "serve_path": "opt/venv"
   }
  ],
  "name": "python-fastapi",
@@ -95,7 +95,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages || true",
+   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -109,7 +109,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/app || true",
+   "command": "python -m compileall -o 2 app || true",
    "group": null,
    "inputs": null,
    "outputs": null

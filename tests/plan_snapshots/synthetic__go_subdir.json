@@ -2,7 +2,7 @@
  "build": [
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/temp"
+   "path": "opt/temp"
   },
   {
    "__type__": "CopyStep",
@@ -15,7 +15,7 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/temp/apps/site"
+   "path": "opt/temp/apps/site"
   },
   {
    "__type__": "UseStep",
@@ -31,7 +31,7 @@
    "__type__": "EnvStep",
    "variables": {
     "GOCACHE": "/tmp/.cache/go-build",
-    "GOPATH": "<SHIPIT_DIR>/local/build/opt/temp/apps/site"
+    "GOPATH": "opt/temp/apps/site"
    }
   },
   {
@@ -43,23 +43,23 @@
   },
   {
    "__type__": "RunStep",
-   "command": "cp main <SHIPIT_DIR>/local/build/app/main",
+   "command": "cp main app/main",
    "group": null,
    "inputs": null,
    "outputs": null
   }
  ],
  "commands": {
-  "start": "<SHIPIT_DIR>/local/build/app/main"
+  "start": "app/main"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [],
  "env": {},
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   }
  ],
  "name": "site",

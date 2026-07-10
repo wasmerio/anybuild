@@ -2,7 +2,7 @@
  "build": [
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/static_app"
+   "path": "opt/static_app"
   },
   {
    "__type__": "CopyStep",
@@ -16,11 +16,11 @@
   {
    "__type__": "WriteFileStep",
    "content": "[[advanced.redirects]]\nsource = \"/docs/{**}\"\ndestination = \"/guides/$1/\"\nkind = 301\n",
-   "path": "<SHIPIT_DIR>/local/build/opt/static_config/sws.toml"
+   "path": "opt/static_config/sws.toml"
   }
  ],
  "commands": {
-  "start": "static-web-server --root=<SHIPIT_DIR>/local/build/opt/static_app --log-level=info --config-file=<SHIPIT_DIR>/local/build/opt/static_config/sws.toml --port=8080"
+  "start": "static-web-server --root=opt/static_app --log-level=info --config-file=opt/static_config/sws.toml --port=8080"
  },
  "cwd": null,
  "deps": [
@@ -29,14 +29,14 @@
  "env": {},
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/static_app",
+   "build_path": "opt/static_app",
    "name": "static_app",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/static_app"
+   "serve_path": "opt/static_app"
   },
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/static_config",
+   "build_path": "opt/static_config",
    "name": "static_config",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/static_config"
+   "serve_path": "opt/static_config"
   }
  ],
  "name": "staticfile-redirects",

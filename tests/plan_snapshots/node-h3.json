@@ -17,7 +17,7 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/build"
+   "path": "opt/build"
   },
   {
    "__type__": "EnvStep",
@@ -54,7 +54,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R . <SHIPIT_DIR>/local/build/app",
+   "command": "cp -R . app",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -63,16 +63,16 @@
  "commands": {
   "start": "node server.js"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [
   "node@24"
  ],
  "env": {},
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   }
  ],
  "name": "node-h3",

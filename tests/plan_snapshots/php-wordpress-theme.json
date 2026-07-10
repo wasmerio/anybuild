@@ -15,18 +15,18 @@
    "base": "source",
    "ignore": null,
    "source": "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar",
-   "target": "<SHIPIT_DIR>/local/build/opt/assets/wp-cli.phar"
+   "target": "opt/assets/wp-cli.phar"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
    "ignore": null,
    "source": "wordpress/install.sh",
-   "target": "<SHIPIT_DIR>/local/build/opt/assets/setup-wp.sh"
+   "target": "opt/assets/setup-wp.sh"
   },
   {
    "__type__": "RunStep",
-   "command": "php -d memory_limit=512M <SHIPIT_DIR>/local/build/opt/assets/wp-cli.phar core download --allow-root --path=<SHIPIT_DIR>/local/build/app --version=latest",
+   "command": "php -d memory_limit=512M opt/assets/wp-cli.phar core download --allow-root --path=app --version=latest",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -36,29 +36,29 @@
    "base": "assets",
    "ignore": null,
    "source": "wordpress/wp-config.php",
-   "target": "<SHIPIT_DIR>/local/build/app/wp-config.php"
+   "target": "app/wp-config.php"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
    "ignore": null,
    "source": "wordpress/.htaccess",
-   "target": "<SHIPIT_DIR>/local/build/app/.htaccess"
+   "target": "app/.htaccess"
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/app"
+   "path": "app"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
    "ignore": null,
    "source": "php/php.ini",
-   "target": "<SHIPIT_DIR>/local/build/opt/assets/php.ini"
+   "target": "opt/assets/php.ini"
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R <SHIPIT_DIR>/local/build/app/wp-content/* <SHIPIT_DIR>/local/build/opt/wpcontent_base",
+   "command": "cp -R app/wp-content/* opt/wpcontent_base",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -71,40 +71,40 @@
     ".source"
    ],
    "source": ".",
-   "target": "<SHIPIT_DIR>/local/build/opt/wpcontent_base/themes/shipit-example-theme"
+   "target": "opt/wpcontent_base/themes/shipit-example-theme"
   }
  ],
  "commands": {
-  "after_deploy": "bash <SHIPIT_DIR>/local/build/opt/assets/setup-wp.sh",
-  "start": "php -S localhost:8080 -t <SHIPIT_DIR>/local/build/app",
-  "wp": "php <SHIPIT_DIR>/local/build/opt/assets/wp-cli.phar --allow-root --path=<SHIPIT_DIR>/local/build/app"
+  "after_deploy": "bash opt/assets/setup-wp.sh",
+  "start": "php -S localhost:8080 -t app",
+  "wp": "php opt/assets/wp-cli.phar --allow-root --path=app"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [
   "php@8.3.29",
   "bash"
  ],
  "env": {
   "PAGER": "cat",
-  "PHP_INI_SCAN_DIR": "<SHIPIT_DIR>/local/build/opt/assets",
-  "WPCONTENT_BASE_PATH": "<SHIPIT_DIR>/local/build/opt/wpcontent_base",
+  "PHP_INI_SCAN_DIR": "opt/assets",
+  "WPCONTENT_BASE_PATH": "opt/wpcontent_base",
   "WP_DEFAULT_THEME": "shipit-example-theme"
  },
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   },
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/assets",
+   "build_path": "opt/assets",
    "name": "assets",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/assets"
+   "serve_path": "opt/assets"
   },
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/wpcontent_base",
+   "build_path": "opt/wpcontent_base",
    "name": "wpcontent_base",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/wpcontent_base"
+   "serve_path": "opt/wpcontent_base"
   }
  ],
  "name": "php-wordpress-theme",
@@ -120,7 +120,7 @@
   {
    "name": "wp-content",
    "path": "<SHIPIT_DIR>/volumes/wp-content",
-   "serve_path": "<SHIPIT_DIR>/local/build/app/wp-content"
+   "serve_path": "app/wp-content"
   }
  ]
 }

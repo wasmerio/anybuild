@@ -2,7 +2,7 @@
  "build": [
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/temp"
+   "path": "opt/temp"
   },
   {
    "__type__": "UseStep",
@@ -27,7 +27,7 @@
    "__type__": "EnvStep",
    "variables": {
     "GOCACHE": "/tmp/.cache/go-build",
-    "GOPATH": "<SHIPIT_DIR>/local/build/opt/temp"
+    "GOPATH": "opt/temp"
    }
   },
   {
@@ -39,23 +39,23 @@
   },
   {
    "__type__": "RunStep",
-   "command": "cp <SHIPIT_DIR>/local/build/opt/temp/server <SHIPIT_DIR>/local/build/app/server",
+   "command": "cp opt/temp/server app/server",
    "group": null,
    "inputs": null,
    "outputs": null
   }
  ],
  "commands": {
-  "start": "<SHIPIT_DIR>/local/build/app/server"
+  "start": "app/server"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [],
  "env": {},
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   }
  ],
  "name": "go-simple",

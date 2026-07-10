@@ -147,7 +147,11 @@ def _evaluate_plan(
     )
     plan = _normalize(serve)
     # Tokenize machine-specific roots so snapshots are stable everywhere.
+    # Mount paths shed the local build prefix entirely so they read as the
+    # mount layout ("app", "opt/venv") — the same shape the wasmer runner
+    # serves them at — instead of machine-specific build directories.
     text = json.dumps(plan, indent=1, sort_keys=True)
+    text = text.replace(str(backend.build_path) + "/", "")
     text = text.replace(str(shipit_dir), "<SHIPIT_DIR>")
     text = text.replace(str(workspace), "<WORKSPACE>")
     return text + "\n"

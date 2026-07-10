@@ -17,12 +17,12 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/app"
+   "path": "app"
   },
   {
    "__type__": "EnvStep",
    "variables": {
-    "UV_PROJECT_ENVIRONMENT": "<SHIPIT_DIR>/local/build/opt/local_venv"
+    "UV_PROJECT_ENVIRONMENT": "opt/local_venv"
    }
   },
   {
@@ -56,7 +56,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "uvx pip install -r cross-requirements.txt  --target <SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile",
+   "command": "uvx pip install -r cross-requirements.txt  --target opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -70,7 +70,7 @@
   },
   {
    "__type__": "PathStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/local_venv/bin"
+   "path": "opt/local_venv/bin"
   },
   {
    "__type__": "CopyStep",
@@ -87,25 +87,25 @@
  "commands": {
   "start": "streamlit run streamlit_app.py --server.port 8080 --server.address 0.0.0.0 --server.headless true"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [
   "python@3.13"
  ],
  "env": {
-  "HOME": "<SHIPIT_DIR>/local/build/app",
-  "PYTHONPATH": "<SHIPIT_DIR>/local/build/app:<SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages",
+  "HOME": "app",
+  "PYTHONPATH": "app:opt/venv/lib/python3.13/site-packages",
   "STREAMLIT_SERVER_HEADLESS": "true"
  },
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   },
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/venv",
+   "build_path": "opt/venv",
    "name": "venv",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/venv"
+   "serve_path": "opt/venv"
   }
  ],
  "name": "python-streamlit",
@@ -119,7 +119,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages || true",
+   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -133,7 +133,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/app || true",
+   "command": "python -m compileall -o 2 app || true",
    "group": null,
    "inputs": null,
    "outputs": null

@@ -17,7 +17,7 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/build"
+   "path": "opt/build"
   },
   {
    "__type__": "CopyStep",
@@ -31,7 +31,7 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/build/apps/dashboard"
+   "path": "opt/build/apps/dashboard"
   },
   {
    "__type__": "EnvStep",
@@ -72,7 +72,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "cp -RL . <SHIPIT_DIR>/local/build/app",
+   "command": "cp -RL . app",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -81,16 +81,16 @@
  "commands": {
   "start": "node dist/server/entry.mjs"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [
   "node@24"
  ],
  "env": {},
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   }
  ],
  "name": "dashboard",

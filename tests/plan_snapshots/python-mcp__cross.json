@@ -17,12 +17,12 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/app"
+   "path": "app"
   },
   {
    "__type__": "EnvStep",
    "variables": {
-    "UV_PROJECT_ENVIRONMENT": "<SHIPIT_DIR>/local/build/opt/local_venv",
+    "UV_PROJECT_ENVIRONMENT": "opt/local_venv",
     "UV_PYTHON": "python3.13",
     "UV_PYTHON_PREFERENCE": "only-system"
    }
@@ -63,7 +63,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "uvx pip install -r cross-requirements.txt mcp[cli] --target <SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile",
+   "command": "uvx pip install -r cross-requirements.txt mcp[cli] --target opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -77,7 +77,7 @@
   },
   {
    "__type__": "PathStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/local_venv/bin"
+   "path": "opt/local_venv/bin"
   },
   {
    "__type__": "CopyStep",
@@ -92,14 +92,14 @@
   },
   {
    "__type__": "RunStep",
-   "command": "mkdir -p <SHIPIT_DIR>/local/build/opt/venv/bin",
+   "command": "mkdir -p opt/venv/bin",
    "group": null,
    "inputs": null,
    "outputs": null
   },
   {
    "__type__": "RunStep",
-   "command": "cp <SHIPIT_DIR>/local/build/opt/local_venv/bin/mcp <SHIPIT_DIR>/local/build/opt/venv/bin/mcp",
+   "command": "cp opt/local_venv/bin/mcp opt/venv/bin/mcp",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -108,26 +108,26 @@
  "commands": {
   "start": "python main.py"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [
   "python@3.13"
  ],
  "env": {
   "FASTMCP_HOST": "0.0.0.0",
   "FASTMCP_PORT": "8080",
-  "HOME": "<SHIPIT_DIR>/local/build/app",
-  "PYTHONPATH": "<SHIPIT_DIR>/local/build/app:<SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages"
+  "HOME": "app",
+  "PYTHONPATH": "app:opt/venv/lib/python3.13/site-packages"
  },
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   },
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/venv",
+   "build_path": "opt/venv",
    "name": "venv",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/venv"
+   "serve_path": "opt/venv"
   }
  ],
  "name": "python-mcp",
@@ -141,7 +141,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages || true",
+   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -155,7 +155,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/app || true",
+   "command": "python -m compileall -o 2 app || true",
    "group": null,
    "inputs": null,
    "outputs": null

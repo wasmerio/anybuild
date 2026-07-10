@@ -17,7 +17,7 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/temp"
+   "path": "opt/temp"
   },
   {
    "__type__": "EnvStep",
@@ -56,14 +56,14 @@
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R dist/* <SHIPIT_DIR>/local/build/opt/static_app/",
+   "command": "cp -R dist/* opt/static_app/",
    "group": null,
    "inputs": null,
    "outputs": null
   }
  ],
  "commands": {
-  "start": "static-web-server --root=<SHIPIT_DIR>/local/build/opt/static_app --log-level=info --port=8080"
+  "start": "static-web-server --root=opt/static_app --log-level=info --port=8080"
  },
  "cwd": null,
  "deps": [
@@ -72,9 +72,9 @@
  "env": {},
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/static_app",
+   "build_path": "opt/static_app",
    "name": "static_app",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/static_app"
+   "serve_path": "opt/static_app"
   }
  ],
  "name": "nodestatic-ember",

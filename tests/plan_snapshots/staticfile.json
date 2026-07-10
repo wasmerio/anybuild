@@ -2,7 +2,7 @@
  "build": [
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/static_app"
+   "path": "opt/static_app"
   },
   {
    "__type__": "CopyStep",
@@ -15,7 +15,7 @@
   }
  ],
  "commands": {
-  "start": "static-web-server --root=<SHIPIT_DIR>/local/build/opt/static_app --log-level=info --port=8080"
+  "start": "static-web-server --root=opt/static_app --log-level=info --port=8080"
  },
  "cwd": null,
  "deps": [
@@ -24,9 +24,9 @@
  "env": {},
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/static_app",
+   "build_path": "opt/static_app",
    "name": "static_app",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/static_app"
+   "serve_path": "opt/static_app"
   }
  ],
  "name": "staticfile",

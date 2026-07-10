@@ -17,7 +17,7 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/temp"
+   "path": "opt/temp"
   },
   {
    "__type__": "CopyStep",
@@ -32,12 +32,12 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/temp/apps/site"
+   "path": "opt/temp/apps/site"
   },
   {
    "__type__": "EnvStep",
    "variables": {
-    "UV_PROJECT_ENVIRONMENT": "<SHIPIT_DIR>/local/build/opt/venv"
+    "UV_PROJECT_ENVIRONMENT": "opt/venv"
    }
   },
   {
@@ -58,11 +58,11 @@
   },
   {
    "__type__": "PathStep",
-   "path": "<SHIPIT_DIR>/local/build/opt/venv/bin"
+   "path": "opt/venv/bin"
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R . <SHIPIT_DIR>/local/build/app",
+   "command": "cp -R . app",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -71,24 +71,24 @@
  "commands": {
   "start": "python main.py"
  },
- "cwd": "<SHIPIT_DIR>/local/build/app",
+ "cwd": "app",
  "deps": [
   "python@3.13"
  ],
  "env": {
-  "HOME": "<SHIPIT_DIR>/local/build/app",
-  "PYTHONPATH": "<SHIPIT_DIR>/local/build/app:<SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages"
+  "HOME": "app",
+  "PYTHONPATH": "app:opt/venv/lib/python3.13/site-packages"
  },
  "mounts": [
   {
-   "build_path": "<SHIPIT_DIR>/local/build/app",
+   "build_path": "app",
    "name": "app",
-   "serve_path": "<SHIPIT_DIR>/local/build/app"
+   "serve_path": "app"
   },
   {
-   "build_path": "<SHIPIT_DIR>/local/build/opt/venv",
+   "build_path": "opt/venv",
    "name": "venv",
-   "serve_path": "<SHIPIT_DIR>/local/build/opt/venv"
+   "serve_path": "opt/venv"
   }
  ],
  "name": "site",
@@ -102,7 +102,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/opt/venv/lib/python3.13/site-packages || true",
+   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true",
    "group": null,
    "inputs": null,
    "outputs": null
@@ -116,7 +116,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 <SHIPIT_DIR>/local/build/app || true",
+   "command": "python -m compileall -o 2 app || true",
    "group": null,
    "inputs": null,
    "outputs": null
