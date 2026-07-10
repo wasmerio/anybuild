@@ -1,0 +1,19 @@
+[package]
+name = "shipit-build"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shipit build backends: local and docker step executors"
+
+[dependencies]
+anyhow.workspace = true
+base64 = "0.22"
+indexmap.workspace = true
+shipit-plan = { path = "../shipit-plan" }
+globset = "0.4"
+shell-words = "1"
+walkdir = "2"
+ureq = "2"
+
+[dev-dependencies]
+tempfile = "3"

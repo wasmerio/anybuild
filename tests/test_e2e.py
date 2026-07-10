@@ -1282,16 +1282,22 @@ def _create_wp_content_volume(project_path: Path) -> Path:
     return host_dir
 
 
+def _shipit_base_command() -> list[str]:
+    """The shipit invocation under test. SHIPIT_BIN lets the same suite
+    drive the Rust binary (e.g. SHIPIT_BIN=target/release/shipit)."""
+    override = os.environ.get("SHIPIT_BIN")
+    if override:
+        return override.split()
+    return ["uv", "run", "shipit"]
+
+
 def _shipit_auto_command(
     project_path: Path,
     build_mode: BuildMode,
     port: int,
     run_after_deploy: bool,
 ) -> list[str]:
-    cmd = [
-        "uv",
-        "run",
-        "shipit",
+    cmd = _shipit_base_command() + [
         str(project_path),
         "--skip-prepare",
         "--start",
@@ -1309,10 +1315,7 @@ def _shipit_build_command(
     build_mode: BuildMode,
     port: int,
 ) -> list[str]:
-    cmd = [
-        "uv",
-        "run",
-        "shipit",
+    cmd = _shipit_base_command() + [
         str(project_path),
         "--skip-prepare",
         "--regenerate",
@@ -1331,10 +1334,7 @@ def _shipit_run_command(
     command: str | None = None,
     volume_specs: list[str] | None = None,
 ) -> list[str]:
-    cmd = [
-        "uv",
-        "run",
-        "shipit",
+    cmd = _shipit_base_command() + [
         "run",
         str(project_path),
     ]

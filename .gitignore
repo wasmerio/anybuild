@@ -11,3 +11,4 @@ __pycache__
 .env.development.local
 .env.test.local
 .env.production.local
+/target

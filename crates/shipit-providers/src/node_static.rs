@@ -1,0 +1,1079 @@
+//! Port of `src/shipit/providers/node_static.py`.
+//!
+//! `NodeStaticConfig(NodeConfig, StaticFileConfig)` in Python — the
+//! staticfile-side fields and the slice of `StaticFileProvider` behavior
+//! it consumes (`_load_static_config`, `compute_redirects_config`) are
+//! carried privately here so this module stays self-contained.
+
+use std::collections::BTreeSet;
+use std::path::Path;
+use std::sync::LazyLock;
+
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::base::{env_bool, env_str, BaseConfig, DetectResult, HasBase};
+use crate::node::{self, JsonMap, NodeConfig, NodeFramework, PackageManager};
+
+// ---------------------------------------------------------------------------
+// Config
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NodeStaticConfig {
+    #[serde(flatten)]
+    pub base: BaseConfig,
+    // StaticFileConfig fields.
+    pub convert_redirects: bool,
+    pub sws_version: Option<String>,
+    pub static_dir: Option<String>,
+    /// Rendered sws.toml redirects (from a _redirects file), computed at
+    /// load time so the Starlark provider stays filesystem-free.
+    pub redirects_config: Option<String>,
+    // NodeConfig fields.
+    pub use_edgejs: Option<bool>,
+    pub precompile_edgejs: Option<bool>,
+    pub package_manager: Option<PackageManager>,
+    pub framework: Option<NodeFramework>,
+    pub extra_dependencies: BTreeSet<String>,
+    pub build_command: Option<String>,
+    pub node_version: Option<String>,
+    pub npm_version: Option<String>,
+    pub pnpm_version: Option<String>,
+    pub yarn_version: Option<String>,
+    pub bun_version: Option<String>,
+    pub optimize_node_dependencies: Option<bool>,
+    pub remove_native_binaries: Option<bool>,
+    pub install_requires_all_files: bool,
+    pub install_inputs: Option<Vec<String>>,
+    pub package_name: Option<String>,
+}
+
+impl Default for NodeStaticConfig {
+    fn default() -> Self {
+        let node = NodeConfig::default();
+        Self {
+            base: node.base,
+            convert_redirects: true,
+            sws_version: Some("2.38.0".to_owned()),
+            static_dir: None,
+            redirects_config: None,
+            use_edgejs: node.use_edgejs,
+            precompile_edgejs: node.precompile_edgejs,
+            package_manager: node.package_manager,
+            framework: node.framework,
+            extra_dependencies: node.extra_dependencies,
+            build_command: node.build_command,
+            node_version: node.node_version,
+            npm_version: node.npm_version,
+            pnpm_version: node.pnpm_version,
+            yarn_version: node.yarn_version,
+            bun_version: node.bun_version,
+            optimize_node_dependencies: node.optimize_node_dependencies,
+            remove_native_binaries: node.remove_native_binaries,
+            install_requires_all_files: node.install_requires_all_files,
+            install_inputs: node.install_inputs,
+            package_name: node.package_name,
+        }
+    }
+}
+
+impl NodeStaticConfig {
+    /// pydantic-settings construction: node fields plus the staticfile
+    /// fields, each overlaid from `SHIPIT_<FIELD>`.
+    fn from_env(base: BaseConfig) -> Self {
+        let node = NodeConfig::from_env(base);
+        Self {
+            base: node.base,
+            convert_redirects: env_bool("convert_redirects").unwrap_or(true),
+            sws_version: env_str("sws_version").or_else(|| Some("2.38.0".to_owned())),
+            static_dir: env_str("static_dir"),
+            redirects_config: env_str("redirects_config"),
+            use_edgejs: node.use_edgejs,
+            precompile_edgejs: node.precompile_edgejs,
+            package_manager: node.package_manager,
+            framework: node.framework,
+            extra_dependencies: node.extra_dependencies,
+            build_command: node.build_command,
+            node_version: node.node_version,
+            npm_version: node.npm_version,
+            pnpm_version: node.pnpm_version,
+            yarn_version: node.yarn_version,
+            bun_version: node.bun_version,
+            optimize_node_dependencies: node.optimize_node_dependencies,
+            remove_native_binaries: node.remove_native_binaries,
+            install_requires_all_files: node.install_requires_all_files,
+            install_inputs: node.install_inputs,
+            package_name: node.package_name,
+        }
+    }
+}
+
+impl HasBase for NodeStaticConfig {
+    fn base(&self) -> &BaseConfig {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut BaseConfig {
+        &mut self.base
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dependency lists
+
+const SCRIPT_BUILD_COMMAND: &[&str] = &["build"];
+// Only use these commands if the build command is not found in the
+// package.json.
+const SCRIPT_BUILD_COMMAND_FALLBACK: &[&str] = &["generate", "export", "docs:build"];
+
+const PURE_STATIC_DEPENDENCIES: &[&str] = &[
+    "@angular/cli",
+    "@11ty/eleventy",
+    "@ionic/angular",
+    "@ionic/react",
+    "@stencil/core",
+    "@vue/cli-service",
+    "brunch",
+    "ember-cli",
+    "ember-source",
+    "vitepress",
+    "vuepress",
+    "hexo",
+    "hexo-cli",
+    "metalsmith",
+    "assemble",
+    "grunt-assemble",
+    "harp",
+    "parcel",
+    "polymer-cli",
+    "preact-cli",
+    "docusaurus",
+    "@docusaurus/core",
+    "react-scripts",
+    "umi",
+    "@sveltejs/kit",
+    "sanity",
+    "storybook",
+];
+
+const STATIC_DEPENDENCIES: &[&str] = &[
+    "astro",
+    "vite",
+    "next",
+    "nuxt",
+    "gatsby",
+    "svelte",
+    "@remix-run/dev",
+];
+
+static STATIC_FRAMEWORK_DEPENDENCIES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    PURE_STATIC_DEPENDENCIES
+        .iter()
+        .chain(STATIC_DEPENDENCIES.iter())
+        .copied()
+        .chain(["@remix-run/vite"])
+        .collect()
+});
+
+const RUNTIME_DEPENDENCIES: &[&str] = &[
+    "@astrojs/node",
+    "@sveltejs/adapter-node",
+    "@react-router/dev",
+    "@react-router/serve",
+    "@remix-run/serve",
+    "@tanstack/react-start",
+    "@solidjs/start",
+    "solid-start",
+    "nitropack",
+    "@shopify/hydrogen",
+    "@shopify/remix-oxygen",
+    "@redwoodjs/core",
+    "@elysia/node",
+    "elysia",
+];
+
+static STATIC_DETECT_DEPENDENCIES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    STATIC_FRAMEWORK_DEPENDENCIES
+        .iter()
+        .chain(RUNTIME_DEPENDENCIES.iter())
+        .copied()
+        .chain(["@remix-run/node"])
+        .collect()
+});
+
+static ASSEMBLE_DEST_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bdest\s*:\s*['"]([^'"]+)['"]"#).expect("valid regex"));
+
+static NEXT_STATIC_EXPORT_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\boutput\s*:\s*['"]export['"]"#).expect("valid regex"));
+
+// ---------------------------------------------------------------------------
+// load_config
+
+pub fn load_config(path: &Path, base: BaseConfig) -> NodeStaticConfig {
+    // StaticFileProvider.load_config(path, base_config), whose dump is
+    // merged into the NodeStaticConfig construction.
+    let static_parts = load_static_parts(path);
+    let mut config = NodeStaticConfig::from_env(base);
+    config.convert_redirects = static_parts.convert_redirects;
+    config.sws_version = static_parts.sws_version;
+    config.static_dir = static_parts.static_dir;
+    config.redirects_config = static_parts.redirects_config;
+
+    let package_manager = config
+        .package_manager
+        .unwrap_or_else(|| node::detect_package_manager(path));
+    config.package_manager = Some(package_manager);
+
+    let package_json = node::parse_package_json(path);
+    let found_deps =
+        node::check_package_json_deps(package_json.as_ref(), &STATIC_FRAMEWORK_DEPENDENCIES);
+
+    if config.framework.is_none() {
+        config.framework = detect_static_framework(path, package_json.as_ref(), &found_deps);
+    }
+
+    if node::non_empty(&config.build_command).is_none() {
+        config.build_command =
+            get_build_command(package_json.as_ref(), package_manager, config.framework, None);
+    }
+
+    if node::non_empty(&config.static_dir).is_none() {
+        config.static_dir = Some(match config.framework {
+            Some(framework) => get_static_dir(path, package_json.as_ref(), framework),
+            None => "dist".to_owned(),
+        });
+    }
+
+    let install_context = node::discover_js_install_context(path);
+    if install_context.requires_all_files {
+        config.install_requires_all_files = true;
+    }
+    // NodeProvider.apply_static_snapshot
+    config.install_inputs = Some(install_context.inputs);
+    if let Some(name) = node::package_json_name(package_json.as_ref()) {
+        config.package_name = Some(name);
+    }
+
+    // static_dir may have changed since the base load; recompute redirects.
+    config.redirects_config =
+        compute_redirects_config(path, config.static_dir.as_deref(), config.convert_redirects);
+
+    config
+}
+
+/// The staticfile-side fields produced by `StaticFileProvider.load_config`
+/// (env overlay included, masked where Python passes explicit kwargs).
+struct StaticParts {
+    convert_redirects: bool,
+    sws_version: Option<String>,
+    static_dir: Option<String>,
+    redirects_config: Option<String>,
+}
+
+fn load_static_parts(path: &Path) -> StaticParts {
+    let mut parts = StaticParts {
+        convert_redirects: env_bool("convert_redirects").unwrap_or(true),
+        sws_version: env_str("sws_version").or_else(|| Some("2.38.0".to_owned())),
+        static_dir: env_str("static_dir"),
+        redirects_config: env_str("redirects_config"),
+    };
+
+    // StaticFileProvider._load_static_config
+    let staticfile_path = path.join("Staticfile");
+    let mut handled = false;
+    if staticfile_path.exists() {
+        if let Some(root) = staticfile_config_root(&staticfile_path) {
+            // StaticFileConfig(**base, static_dir=config.get("root")) —
+            // the explicit kwarg masks the env overlay, even when None.
+            parts.static_dir = root;
+            handled = true;
+        }
+    }
+    if !handled
+        && (path.join("public/index.html").exists() || path.join("public/index.htm").exists())
+    {
+        parts.static_dir = Some("public".to_owned());
+    }
+
+    parts.redirects_config =
+        compute_redirects_config(path, parts.static_dir.as_deref(), parts.convert_redirects);
+    parts
+}
+
+/// Minimal Staticfile (YAML mapping) read: `Some(root)` when the file
+/// parses to a truthy config, carrying its optional `root:` value.
+fn staticfile_config_root(path: &Path) -> Option<Option<String>> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let mut any_key = false;
+    let mut root: Option<String> = None;
+    for raw_line in text.lines() {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = trimmed.split_once(':') {
+            any_key = true;
+            if key.trim() == "root" {
+                let value = node::yaml_scalar(value).unwrap_or_default();
+                root = if value.is_empty() { None } else { Some(value) };
+            }
+        }
+    }
+    if any_key {
+        Some(root)
+    } else {
+        None
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Framework detection
+
+fn detect_static_framework(
+    path: &Path,
+    package_json: Option<&JsonMap>,
+    found_deps: &BTreeSet<&'static str>,
+) -> Option<NodeFramework> {
+    let any = |deps: &[&str]| deps.iter().any(|dep| found_deps.contains(dep));
+
+    if found_deps.contains("harp") {
+        return Some(NodeFramework::Harp);
+    }
+    if found_deps.contains("gatsby") {
+        return Some(NodeFramework::Gatsby);
+    }
+    if found_deps.contains("astro") {
+        return Some(NodeFramework::Astro);
+    }
+    if found_deps.contains("next") {
+        return Some(NodeFramework::Next);
+    }
+    if found_deps.contains("nuxt") {
+        if node::has_dependency(package_json, "nuxt", Some("2"))
+            || node::has_dependency(package_json, "nuxt", Some("1"))
+        {
+            return Some(NodeFramework::NuxtOld);
+        }
+        return Some(NodeFramework::NuxtV3);
+    }
+    if found_deps.contains("vitepress") {
+        return Some(NodeFramework::Vitepress);
+    }
+    if found_deps.contains("vuepress") {
+        return Some(NodeFramework::Vuepress);
+    }
+    if any(&["hexo", "hexo-cli"]) {
+        return Some(NodeFramework::Hexo);
+    }
+    if found_deps.contains("metalsmith") {
+        return Some(NodeFramework::Metalsmith);
+    }
+    if any(&["assemble", "grunt-assemble"]) {
+        return Some(NodeFramework::Assemble);
+    }
+    if found_deps.contains("docusaurus") {
+        return Some(NodeFramework::DocusaurusOld);
+    }
+    if found_deps.contains("@docusaurus/core") {
+        return Some(NodeFramework::Docusaurus);
+    }
+    if found_deps.contains("sanity") {
+        if node::has_dependency_major(package_json, "sanity", 3) {
+            return Some(NodeFramework::SanityV3);
+        }
+        return Some(NodeFramework::Sanity);
+    }
+    if found_deps.contains("@ionic/angular") {
+        return Some(NodeFramework::IonicAngular);
+    }
+    if found_deps.contains("@ionic/react") {
+        return Some(NodeFramework::IonicReact);
+    }
+    if found_deps.contains("@angular/cli") {
+        return Some(NodeFramework::Angular);
+    }
+    if found_deps.contains("react-scripts") {
+        return Some(NodeFramework::CreateReactApp);
+    }
+    if found_deps.contains("brunch") {
+        return Some(NodeFramework::Brunch);
+    }
+    if any(&["ember-cli", "ember-source"]) {
+        return Some(NodeFramework::Ember);
+    }
+    if found_deps.contains("parcel") {
+        return Some(NodeFramework::Parcel);
+    }
+    if found_deps.contains("polymer-cli") {
+        return Some(NodeFramework::Polymer);
+    }
+    if found_deps.contains("preact-cli") {
+        return Some(NodeFramework::Preact);
+    }
+    if found_deps.contains("@stencil/core") {
+        return Some(NodeFramework::Stencil);
+    }
+    if found_deps.contains("umi") {
+        return Some(NodeFramework::Umijs);
+    }
+    if found_deps.contains("@vue/cli-service") {
+        return Some(NodeFramework::Vue);
+    }
+    if found_deps.contains("@11ty/eleventy") {
+        return Some(NodeFramework::Eleventy);
+    }
+    if found_deps.contains("@sveltejs/kit") {
+        return Some(NodeFramework::Sveltekit);
+    }
+    if found_deps.contains("svelte") {
+        return Some(NodeFramework::Svelte);
+    }
+    if found_deps.contains("@remix-run/dev") {
+        if node::has_dependency(package_json, "@remix-run/dev", Some("1"))
+            || node::has_dependency(package_json, "@remix-run/dev", Some("0"))
+        {
+            return Some(NodeFramework::RemixOld);
+        }
+        if has_vite_remix(path, found_deps) {
+            return Some(NodeFramework::RemixV2);
+        }
+        return Some(NodeFramework::RemixV2Classic);
+    }
+    if found_deps.contains("vite") {
+        return Some(NodeFramework::Vite);
+    }
+    if found_deps.contains("storybook") {
+        return Some(NodeFramework::Storybook);
+    }
+    None
+}
+
+fn has_vite_remix(path: &Path, found_deps: &BTreeSet<&'static str>) -> bool {
+    found_deps.contains("@remix-run/vite")
+        || found_deps.contains("vite")
+        || [
+            "vite.config.js",
+            "vite.config.ts",
+            "vite.config.mjs",
+            "vite.config.cjs",
+        ]
+        .iter()
+        .any(|file| path.join(file).exists())
+}
+
+// ---------------------------------------------------------------------------
+// Static dir resolution
+
+fn get_static_dir(
+    path: &Path,
+    package_json: Option<&JsonMap>,
+    framework: NodeFramework,
+) -> String {
+    let default_dir = || {
+        framework
+            .get_static_output_dir()
+            .expect("static-capable framework has an output dir")
+            .to_owned()
+    };
+
+    match framework {
+        NodeFramework::Angular | NodeFramework::IonicAngular => {
+            angular_output_dir(path).unwrap_or_else(default_dir)
+        }
+        NodeFramework::Vitepress => {
+            let root = script_build_root(package_json, "vitepress")
+                .unwrap_or_else(|| default_docs_root(path, ".vitepress"));
+            rooted_output_dir(&root, ".vitepress/dist")
+        }
+        NodeFramework::Vuepress => {
+            let root = script_build_root(package_json, "vuepress")
+                .unwrap_or_else(|| default_docs_root(path, ".vuepress"));
+            rooted_output_dir(&root, ".vuepress/dist")
+        }
+        NodeFramework::Metalsmith => metalsmith_output_dir(path).unwrap_or_else(default_dir),
+        NodeFramework::Assemble => assemble_output_dir(path).unwrap_or_else(default_dir),
+        NodeFramework::Harp => harp_output_dir(package_json).unwrap_or_else(default_dir),
+        _ => default_dir(),
+    }
+}
+
+/// node_static's `_script_commands` override: build scripts first, then
+/// the generate/export/docs:build fallback.
+fn static_script_commands<'a>(
+    package_json: Option<&'a JsonMap>,
+    preferred: &[&str],
+) -> Vec<&'a str> {
+    let commands = node::script_commands(package_json, preferred);
+    if commands.is_empty() {
+        // Only use these commands if the build command is not found in
+        // the package.json.
+        return node::script_commands(package_json, SCRIPT_BUILD_COMMAND_FALLBACK);
+    }
+    commands
+}
+
+fn detect_script_commands<'a>(package_json: Option<&'a JsonMap>) -> Vec<&'a str> {
+    let mut commands = static_script_commands(package_json, SCRIPT_BUILD_COMMAND);
+    for command in node::script_commands(package_json, SCRIPT_BUILD_COMMAND_FALLBACK) {
+        if !commands.contains(&command) {
+            commands.push(command);
+        }
+    }
+    commands
+}
+
+fn args_after_command(command: &str, executable: &str) -> Vec<String> {
+    let tokens = node::split_command(command);
+    for (index, token) in tokens.iter().enumerate() {
+        if token == executable {
+            return tokens[index + 1..].to_vec();
+        }
+    }
+    Vec::new()
+}
+
+fn script_build_root(package_json: Option<&JsonMap>, executable: &str) -> Option<String> {
+    for command in static_script_commands(package_json, SCRIPT_BUILD_COMMAND) {
+        let args = args_after_command(command, executable);
+        if args.first().map(String::as_str) != Some("build") {
+            continue;
+        }
+        for arg in &args[1..] {
+            if !arg.starts_with('-') {
+                return Some(clean_output_dir(arg));
+            }
+        }
+    }
+    None
+}
+
+fn default_docs_root(path: &Path, config_dir: &str) -> String {
+    let docs_path = path.join("docs");
+    if docs_path.join(config_dir).exists() || docs_path.exists() {
+        "docs".to_owned()
+    } else {
+        ".".to_owned()
+    }
+}
+
+fn rooted_output_dir(root: &str, output_dir: &str) -> String {
+    let root = clean_output_dir(root);
+    if root == "." {
+        output_dir.to_owned()
+    } else {
+        format!("{root}/{output_dir}")
+    }
+}
+
+fn clean_output_dir(output_dir: &str) -> String {
+    let mut output_dir = output_dir.trim().trim_end_matches('/');
+    if let Some(rest) = output_dir.strip_prefix("./") {
+        output_dir = rest;
+    }
+    if output_dir.is_empty() {
+        ".".to_owned()
+    } else {
+        output_dir.to_owned()
+    }
+}
+
+fn metalsmith_output_dir(path: &Path) -> Option<String> {
+    for config_name in ["metalsmith.json", ".metalsmith.json"] {
+        let config_path = path.join(config_name);
+        if !config_path.is_file() {
+            continue;
+        }
+        let Some(config) = node::read_json_object(&config_path) else {
+            continue;
+        };
+        for key in ["destination", "dest"] {
+            if let Some(output_dir) = config.get(key).and_then(Value::as_str) {
+                if !output_dir.is_empty() {
+                    return Some(clean_output_dir(output_dir));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn assemble_output_dir(path: &Path) -> Option<String> {
+    for config_name in ["Gruntfile.js", "Gruntfile.cjs"] {
+        let config_path = path.join(config_name);
+        if !config_path.is_file() {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&config_path) else {
+            continue;
+        };
+        if let Some(captures) = ASSEMBLE_DEST_PATTERN.captures(&text) {
+            return Some(clean_output_dir(&captures[1]));
+        }
+    }
+    None
+}
+
+fn harp_output_dir(package_json: Option<&JsonMap>) -> Option<String> {
+    for command in static_script_commands(package_json, SCRIPT_BUILD_COMMAND) {
+        let mut args = args_after_command(command, "harp");
+        if args.is_empty() {
+            continue;
+        }
+        if args[0] == "compile" {
+            args.remove(0);
+        }
+        let mut positional_args: Vec<&str> = Vec::new();
+        for (index, arg) in args.iter().enumerate() {
+            if (arg == "--output" || arg == "-o") && index + 1 < args.len() {
+                return Some(clean_output_dir(&args[index + 1]));
+            }
+            if !arg.starts_with('-') {
+                positional_args.push(arg);
+            }
+        }
+        if positional_args.len() >= 2 {
+            return Some(clean_output_dir(positional_args[1]));
+        }
+    }
+    None
+}
+
+fn angular_output_dir(path: &Path) -> Option<String> {
+    let config_path = path.join("angular.json");
+    if !config_path.is_file() {
+        return None;
+    }
+    let config = node::read_json_object(&config_path)?;
+
+    let Some(Value::Object(projects)) = config.get("projects") else {
+        return None;
+    };
+
+    let mut project_names: Vec<&str> = Vec::new();
+    if let Some(default_project) = config.get("defaultProject").and_then(Value::as_str) {
+        if projects.contains_key(default_project) {
+            project_names.push(default_project);
+        }
+    }
+    for name in projects.keys() {
+        if !project_names.contains(&name.as_str()) {
+            project_names.push(name);
+        }
+    }
+
+    for project_name in project_names {
+        let Some(Value::Object(project)) = projects.get(project_name) else {
+            continue;
+        };
+        for target_root in ["architect", "targets"] {
+            let Some(Value::Object(targets)) = project.get(target_root) else {
+                continue;
+            };
+            let Some(Value::Object(build_target)) = targets.get("build") else {
+                continue;
+            };
+            let Some(Value::Object(options)) = build_target.get("options") else {
+                continue;
+            };
+            if let Some(output_dir) = angular_output_path(options.get("outputPath")) {
+                return Some(output_dir);
+            }
+        }
+    }
+    None
+}
+
+fn angular_output_path(output_path: Option<&Value>) -> Option<String> {
+    match output_path {
+        Some(Value::String(value)) if !value.is_empty() => Some(clean_output_dir(value)),
+        Some(Value::Object(map)) => {
+            for key in ["browser", "base"] {
+                if let Some(value) = map.get(key).and_then(Value::as_str) {
+                    if !value.is_empty() {
+                        return Some(clean_output_dir(value));
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Detection
+
+fn has_runtime_dependency(found_deps: &BTreeSet<&'static str>) -> bool {
+    found_deps
+        .iter()
+        .any(|dep| RUNTIME_DEPENDENCIES.contains(dep))
+}
+
+fn has_next_static_export_config(path: &Path) -> bool {
+    for config_name in [
+        "next.config.js",
+        "next.config.cjs",
+        "next.config.mjs",
+        "next.config.ts",
+    ] {
+        let config_path = path.join(config_name);
+        if !config_path.is_file() {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&config_path) else {
+            continue;
+        };
+        if NEXT_STATIC_EXPORT_PATTERN.is_match(&text) {
+            return true;
+        }
+    }
+    false
+}
+
+fn has_static_remix_output(path: &Path, package_json: Option<&JsonMap>) -> bool {
+    let scripts = node::package_scripts(package_json);
+    let start_command = scripts.get("start").copied().unwrap_or("");
+    path.join("public").join("index.html").is_file()
+        && start_command.contains("serve")
+        && start_command.contains("public")
+}
+
+pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
+    let package_json = node::parse_package_json(path);
+    let found_deps =
+        node::check_package_json_deps(package_json.as_ref(), &STATIC_DETECT_DEPENDENCIES);
+
+    if has_runtime_dependency(&found_deps) || node::has_hydrogen_config(Some(path)) {
+        return None;
+    }
+    if found_deps.contains("@remix-run/node")
+        && !has_static_remix_output(path, package_json.as_ref())
+    {
+        return None;
+    }
+
+    let result = |score: i32| {
+        Some(DetectResult {
+            name: "node-static",
+            score,
+        })
+    };
+
+    let mut has_package_manager_build_command = false;
+    if let Some(build) = node::non_empty(&base.commands.build) {
+        // Iterate over all generators and check if the build command
+        // matches.
+        for framework in NodeFramework::ALL {
+            if !framework.can_be_static() {
+                continue;
+            }
+            let command = framework
+                .build_static_command()
+                .expect("static frameworks have build commands");
+            if build.contains(command) {
+                return result(60);
+            }
+        }
+
+        let frameworks = NodeFramework::detect_from_command(build);
+        if !frameworks.is_empty() && !frameworks.contains(&NodeFramework::Next) {
+            return result(60);
+        }
+
+        has_package_manager_build_command = node::is_package_manager_build_command(build);
+    }
+
+    if found_deps.contains("next") && has_next_static_export_config(path) {
+        return result(60);
+    }
+
+    for build_command in detect_script_commands(package_json.as_ref()) {
+        for framework in NodeFramework::ALL {
+            if !framework.can_be_static() {
+                continue;
+            }
+            let command = framework
+                .build_static_command()
+                .expect("static frameworks have build commands");
+            if build_command.contains(command) {
+                return result(60);
+            }
+        }
+        let all_frameworks = NodeFramework::detect_from_command(build_command);
+        if !all_frameworks.is_empty()
+            && all_frameworks
+                .iter()
+                .all(|framework| framework.is_pure_static())
+        {
+            return result(60);
+        }
+    }
+
+    let pure_static_deps: BTreeSet<&str> = found_deps
+        .iter()
+        .copied()
+        .filter(|dep| PURE_STATIC_DEPENDENCIES.contains(dep))
+        .collect();
+    let static_deps: BTreeSet<&str> = found_deps
+        .iter()
+        .copied()
+        .filter(|dep| STATIC_DEPENDENCIES.contains(dep))
+        .collect();
+
+    if !pure_static_deps.is_empty() && static_deps.difference(&pure_static_deps).next().is_none()
+    {
+        return result(60);
+    }
+
+    if !static_deps.is_empty() {
+        return result(20);
+    }
+    if has_package_manager_build_command {
+        return result(20);
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// Build command
+
+fn get_build_command(
+    package_json: Option<&JsonMap>,
+    package_manager: PackageManager,
+    framework: Option<NodeFramework>,
+    explicit_build_command: Option<&str>,
+) -> Option<String> {
+    if let Some(explicit) = explicit_build_command {
+        return Some(explicit.to_owned());
+    }
+    if let Some(package_json) = package_json {
+        let scripts = match package_json.get("scripts") {
+            Some(Value::Object(scripts)) => Some(scripts),
+            _ => None,
+        };
+        let script_truthy = |name: &str| {
+            scripts
+                .and_then(|scripts| scripts.get(name))
+                .is_some_and(value_truthy)
+        };
+        let docs_build = script_truthy("docs:build");
+        if matches!(
+            framework,
+            Some(NodeFramework::Vitepress) | Some(NodeFramework::Vuepress)
+        ) && docs_build
+        {
+            return Some(package_manager.run_command("docs:build"));
+        }
+        if script_truthy("generate") {
+            return Some(package_manager.run_command("generate"));
+        }
+        if script_truthy("build") {
+            return Some(package_manager.run_command("build"));
+        }
+        if docs_build {
+            return Some(package_manager.run_command("docs:build"));
+        }
+    }
+    let framework = framework?;
+    let command = framework.build_static_command()?;
+    Some(package_manager.run_execute_command(command))
+}
+
+fn value_truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::String(s) => !s.is_empty(),
+        Value::Number(n) => n.as_f64().is_none_or(|f| f != 0.0),
+        Value::Array(a) => !a.is_empty(),
+        Value::Object(o) => !o.is_empty(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Redirects (`compute_redirects_config` from staticfile.py, private copy)
+
+struct RedirectRule {
+    source: String,
+    destination: String,
+    kind: i64,
+}
+
+/// Render a `_redirects` file into sws.toml redirect rules (or None).
+/// Errors that would raise in Python yield None here (no fixture hits
+/// them; load_config cannot fail).
+fn compute_redirects_config(
+    path: &Path,
+    static_dir: Option<&str>,
+    convert_redirects: bool,
+) -> Option<String> {
+    if !convert_redirects {
+        return None;
+    }
+
+    let mut redirects_path = path.join("_redirects");
+    if let Some(static_dir) = static_dir.filter(|dir| !dir.is_empty()) {
+        let static_dir_redirects = path.join(static_dir).join("_redirects");
+        if static_dir_redirects.is_file() {
+            redirects_path = static_dir_redirects;
+        }
+    }
+    if !redirects_path.is_file() {
+        return None;
+    }
+
+    let rules = load_redirect_rules(&redirects_path).ok()?;
+    if rules.is_empty() {
+        return None;
+    }
+
+    // tomlkit rendering: the [advanced] super-table collapses into the
+    // [[advanced.redirects]] array-of-tables blocks, separated by blank
+    // lines.
+    let blocks: Vec<String> = rules
+        .iter()
+        .map(|rule| {
+            format!(
+                "[[advanced.redirects]]\nsource = {}\ndestination = {}\nkind = {}\n",
+                toml_string(&rule.source),
+                toml_string(&rule.destination),
+                rule.kind
+            )
+        })
+        .collect();
+    Some(blocks.join("\n"))
+}
+
+fn load_redirect_rules(redirects_path: &Path) -> Result<Vec<RedirectRule>, ()> {
+    let text = std::fs::read_to_string(redirects_path).map_err(|_| ())?;
+    let mut rules = Vec::new();
+    for raw_line in text.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let parts = node::shlex_split(line)?;
+        if parts.len() < 2 {
+            return Err(());
+        }
+
+        let source = &parts[0];
+        let destination = &parts[1];
+        let mut rest: &[String] = &parts[2..];
+        let mut kind: i64 = 301;
+        if let Some(first) = rest.first() {
+            if !first.is_empty() && first.chars().all(|c| c.is_ascii_digit()) {
+                kind = first.parse().map_err(|_| ())?;
+                rest = &rest[1..];
+            }
+        }
+
+        if kind != 301 && kind != 302 {
+            return Err(());
+        }
+        if !rest.is_empty() {
+            return Err(());
+        }
+
+        let (sws_source, replacements) = translate_source(source)?;
+        let sws_destination = translate_destination(destination, &replacements)?;
+        rules.push(RedirectRule {
+            source: sws_source,
+            destination: sws_destination,
+            kind,
+        });
+    }
+    Ok(rules)
+}
+
+static SOURCE_TOKEN_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r":([A-Za-z][A-Za-z0-9_]*)|\*").expect("valid regex"));
+
+static PARAM_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r":([A-Za-z][A-Za-z0-9_]*)").expect("valid regex"));
+
+type Replacements = Vec<(String, usize)>;
+
+fn translate_source(source: &str) -> Result<(String, Replacements), ()> {
+    if source.contains("://") || source.contains('?') || !source.starts_with('/') {
+        return Err(());
+    }
+
+    let mut translated = String::new();
+    let mut replacements: Replacements = Vec::new();
+    let mut last_index = 0;
+    let mut next_index = 1;
+
+    for captures in SOURCE_TOKEN_PATTERN.captures_iter(source) {
+        let matched = captures.get(0).expect("match exists");
+        translated.push_str(&source[last_index..matched.start()]);
+        if let Some(param_name) = captures.get(1) {
+            if replacements
+                .iter()
+                .any(|(name, _)| name == param_name.as_str())
+            {
+                return Err(()); // duplicate source parameter
+            }
+            replacements.push((param_name.as_str().to_owned(), next_index));
+            translated.push_str("{*}");
+        } else {
+            if replacements.iter().any(|(name, _)| name == "splat") {
+                return Err(()); // only one splat segment is supported
+            }
+            replacements.push(("splat".to_owned(), next_index));
+            translated.push_str("{**}");
+        }
+        next_index += 1;
+        last_index = matched.end();
+    }
+
+    translated.push_str(&source[last_index..]);
+    Ok((translated, replacements))
+}
+
+fn translate_destination(destination: &str, replacements: &Replacements) -> Result<String, ()> {
+    if destination.contains('*') {
+        return Err(()); // destination splats must use :splat
+    }
+
+    let mut translated = String::new();
+    let mut last_index = 0;
+    for captures in PARAM_PATTERN.captures_iter(destination) {
+        let matched = captures.get(0).expect("match exists");
+        let param_name = captures.get(1).expect("group exists").as_str();
+        let Some((_, index)) = replacements.iter().find(|(name, _)| name == param_name) else {
+            return Err(()); // destination references unknown parameter
+        };
+        translated.push_str(&destination[last_index..matched.start()]);
+        translated.push_str(&format!("${index}"));
+        last_index = matched.end();
+    }
+    translated.push_str(&destination[last_index..]);
+    Ok(translated)
+}
+
+/// tomlkit-compatible basic string rendering.
+fn toml_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for c in value.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            c if (c as u32) < 0x20 || c == '\u{7f}' => {
+                out.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}

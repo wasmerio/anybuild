@@ -1,0 +1,196 @@
+//! Port of `src/shipit/runners/local.py` (LocalRunner).
+//!
+//! Console strings are verbatim (plain-text) ports of the Python
+//! `console.print` calls; they go to stderr like rich's
+//! `Console(stderr=True)`.
+
+use std::cell::RefCell;
+use std::path::PathBuf;
+use std::process::Command;
+use std::rc::Rc;
+
+use anyhow::{bail, Context, Result};
+use indexmap::IndexMap;
+
+use shipit_build::local::ui::{console_print, print_panel};
+use shipit_build::BuildBackend;
+use shipit_plan::{RunStep, Serve, Step};
+use shipit_providers::ProviderConfig;
+
+use crate::Runner;
+
+pub struct LocalRunner {
+    build_backend: Rc<RefCell<dyn BuildBackend>>,
+    #[allow(dead_code)]
+    src_dir: PathBuf,
+    #[allow(dead_code)]
+    shipit_dir: PathBuf,
+    runner_path: PathBuf,
+    serve_bin_path: PathBuf,
+    prepare_bash_script: PathBuf,
+}
+
+impl LocalRunner {
+    pub fn new(
+        build_backend: Rc<RefCell<dyn BuildBackend>>,
+        src_dir: PathBuf,
+        shipit_dir: Option<PathBuf>,
+    ) -> Self {
+        let shipit_dir = shipit_dir.unwrap_or_else(|| src_dir.join(".shipit"));
+        let runner_path = shipit_dir.join("runner").join("local");
+        let serve_bin_path = runner_path.join("bin");
+        let prepare_bash_script = runner_path.join("prepare").join("prepare.sh");
+        Self {
+            build_backend,
+            src_dir,
+            shipit_dir,
+            runner_path,
+            serve_bin_path,
+            prepare_bash_script,
+        }
+    }
+
+    fn build_prepare(&mut self, serve: &Serve) -> Result<()> {
+        let prepare = match &serve.prepare {
+            Some(steps) if !steps.is_empty() => steps,
+            _ => return Ok(()),
+        };
+        std::fs::create_dir_all(self.prepare_bash_script.parent().unwrap())?;
+        let mut commands: Vec<String> = Vec::new();
+        if let Some(cwd) = &serve.cwd {
+            commands.push(format!("cd {cwd}"));
+        }
+        for step in prepare {
+            commands.push(step.command.clone());
+        }
+        let content = format!("#!/bin/bash\n{}", commands.join("\n"));
+        console_print("\nCreated prepare.sh script to run before packaging ✅");
+        print_panel(&content);
+        std::fs::write(&self.prepare_bash_script, &content)?;
+        set_executable(&self.prepare_bash_script)?;
+        Ok(())
+    }
+
+    fn build_serve(&mut self, serve: &Serve) -> Result<()> {
+        console_print("\nBuilding serve");
+        // NB: faithful to Python, this clears the whole runner dir —
+        // including the prepare script written just before.
+        let _ = std::fs::remove_dir_all(&self.runner_path);
+        std::fs::create_dir_all(&self.serve_bin_path)?;
+        let runtime_path = self
+            .build_backend
+            .borrow()
+            .get_runtime_path()
+            .unwrap_or_default();
+        let path_prefix = if runtime_path.is_empty() {
+            String::new()
+        } else {
+            format!("PATH={runtime_path}:$PATH ")
+        };
+        console_print("Serve Commands:");
+        for (command, command_body) in &serve.commands {
+            console_print(&format!("* {command}"));
+            let command_path = self.serve_bin_path.join(command);
+            let env_vars = match &serve.env {
+                Some(env) if !env.is_empty() => env
+                    .iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                _ => String::new(),
+            };
+            let mut lines: Vec<String> = vec!["#!/bin/bash".to_owned()];
+            if let Some(cwd) = &serve.cwd {
+                lines.push(format!("cd {cwd}"));
+            }
+            let cmd_body = format!("{path_prefix}{env_vars} {command_body}")
+                .trim()
+                .to_owned();
+            lines.push(cmd_body);
+            let content = format!("{}\n", lines.join("\n"));
+            std::fs::write(&command_path, &content)?;
+            print_panel(content.trim());
+            set_executable(&command_path)?;
+        }
+        Ok(())
+    }
+}
+
+fn set_executable(path: &std::path::Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
+    Ok(())
+}
+
+impl Runner for LocalRunner {
+    fn as_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn prepare_config(&mut self, config: ProviderConfig) -> ProviderConfig {
+        config
+    }
+
+    fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step> {
+        steps
+    }
+
+    fn build(&mut self, serve: &Serve) -> Result<()> {
+        self.build_prepare(serve)?;
+        self.build_serve(serve)?;
+        Ok(())
+    }
+
+    fn prepare(
+        &mut self,
+        _env: &IndexMap<String, String>,
+        _prepare: &[RunStep],
+    ) -> Result<()> {
+        let status = Command::new(&self.prepare_bash_script)
+            .status()
+            .with_context(|| {
+                format!(
+                    "Failed to run {}",
+                    self.prepare_bash_script.display()
+                )
+            })?;
+        if !status.success() {
+            bail!(
+                "Prepare script failed with exit code {}",
+                status.code().unwrap_or(-1)
+            );
+        }
+        Ok(())
+    }
+
+    fn has_serve_command(&self, command: &str) -> bool {
+        self.serve_bin_path.join(command).is_file()
+    }
+
+    fn run_serve_command(
+        &mut self,
+        command: &str,
+        _volume_mappings: Option<&IndexMap<String, String>>,
+        env: Option<&IndexMap<String, String>>,
+    ) -> Result<()> {
+        let command_path = self.serve_bin_path.join(command);
+        let mut process = Command::new(&command_path);
+        if let Some(env) = env {
+            process.envs(env.iter());
+        }
+        let status = process
+            .status()
+            .with_context(|| format!("Failed to run {}", command_path.display()))?;
+        if !status.success() {
+            bail!(
+                "Command {command} failed with exit code {}",
+                status.code().unwrap_or(-1)
+            );
+        }
+        Ok(())
+    }
+
+    fn get_serve_mount_path(&self, name: &str) -> PathBuf {
+        self.build_backend.borrow().get_artifact_mount_path(name)
+    }
+}
