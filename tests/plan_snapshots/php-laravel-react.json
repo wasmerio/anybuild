@@ -4,24 +4,18 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "php",
      "version": "8.3.29"
     },
     {
-     "architecture": null,
-     "name": "composer",
-     "version": null
+     "name": "composer"
     },
     {
-     "architecture": null,
      "name": "node",
      "version": "24"
     },
     {
-     "architecture": null,
-     "name": "npm",
-     "version": null
+     "name": "npm"
     }
    ]
   },
@@ -32,7 +26,6 @@
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "php/php.ini",
    "target": "opt/assets/php.ini"
   },
@@ -59,7 +52,6 @@
   {
    "__type__": "CopyStep",
    "base": "source",
-   "ignore": null,
    "source": "package-lock.json",
    "target": "package-lock.json"
   },
@@ -76,8 +68,7 @@
    "group": "install",
    "inputs": [
     "package.json"
-   ],
-   "outputs": null
+   ]
   },
   {
    "__type__": "CopyStep",
@@ -94,7 +85,6 @@
    "__type__": "RunStep",
    "command": "composer run-script post-update-cmd",
    "group": "build",
-   "inputs": null,
    "outputs": [
     "."
    ]
@@ -102,9 +92,7 @@
   {
    "__type__": "RunStep",
    "command": "npm run build",
-   "group": "build",
-   "inputs": null,
-   "outputs": null
+   "group": "build"
   }
  ],
  "commands": {
@@ -135,38 +123,23 @@
  "prepare": [
   {
    "__type__": "RunStep",
-   "command": "mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache"
   },
   {
    "__type__": "RunStep",
-   "command": "php artisan config:cache",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "php artisan config:cache"
   },
   {
    "__type__": "RunStep",
-   "command": "php artisan event:cache",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "php artisan event:cache"
   },
   {
    "__type__": "RunStep",
-   "command": "php artisan route:cache",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "php artisan route:cache"
   },
   {
    "__type__": "RunStep",
-   "command": "php artisan view:cache",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "php artisan view:cache"
   }
  ],
  "provider": "laravel",

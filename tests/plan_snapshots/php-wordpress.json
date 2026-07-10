@@ -4,7 +4,6 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "php",
      "version": "8.3.29"
     }
@@ -13,28 +12,24 @@
   {
    "__type__": "CopyStep",
    "base": "source",
-   "ignore": null,
    "source": "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar",
    "target": "opt/assets/wp-cli.phar"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "wordpress/install.sh",
    "target": "opt/assets/setup-wp.sh"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "wordpress/wp-config.php",
    "target": "app/wp-config.php"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "wordpress/.htaccess",
    "target": "app/.htaccess"
   },
@@ -45,7 +40,6 @@
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "php/php.ini",
    "target": "opt/assets/php.ini"
   },
@@ -62,7 +56,6 @@
   {
    "__type__": "CopyStep",
    "base": "source",
-   "ignore": null,
    "source": "wp-content",
    "target": "opt/wpcontent_base"
   }

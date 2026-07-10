@@ -8,7 +8,6 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "go",
      "version": "1.25.5"
     }
@@ -33,16 +32,11 @@
   {
    "__type__": "RunStep",
    "command": "go build -o server server.go",
-   "group": "build",
-   "inputs": null,
-   "outputs": null
+   "group": "build"
   },
   {
    "__type__": "RunStep",
-   "command": "cp opt/temp/server app/server",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "cp opt/temp/server app/server"
   }
  ],
  "commands": {

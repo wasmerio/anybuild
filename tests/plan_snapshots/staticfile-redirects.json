@@ -22,7 +22,6 @@
  "commands": {
   "start": "static-web-server --root=opt/static_app --log-level=info --config-file=opt/static_config/sws.toml --port=8080"
  },
- "cwd": null,
  "deps": [
   "static-web-server@2.38.0"
  ],

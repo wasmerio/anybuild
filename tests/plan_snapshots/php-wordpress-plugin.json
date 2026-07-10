@@ -4,7 +4,6 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "php",
      "version": "8.3.29"
     }
@@ -13,35 +12,28 @@
   {
    "__type__": "CopyStep",
    "base": "source",
-   "ignore": null,
    "source": "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar",
    "target": "opt/assets/wp-cli.phar"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "wordpress/install.sh",
    "target": "opt/assets/setup-wp.sh"
   },
   {
    "__type__": "RunStep",
-   "command": "php -d memory_limit=512M opt/assets/wp-cli.phar core download --allow-root --path=app --version=latest",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "php -d memory_limit=512M opt/assets/wp-cli.phar core download --allow-root --path=app --version=latest"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "wordpress/wp-config.php",
    "target": "app/wp-config.php"
   },
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "wordpress/.htaccess",
    "target": "app/.htaccess"
   },
@@ -52,16 +44,12 @@
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "php/php.ini",
    "target": "opt/assets/php.ini"
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R app/wp-content/* opt/wpcontent_base",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "cp -R app/wp-content/* opt/wpcontent_base"
   },
   {
    "__type__": "CopyStep",

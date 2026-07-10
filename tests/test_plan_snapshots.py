@@ -92,8 +92,16 @@ _ALL_EXAMPLES = _all_examples()
 
 
 def _jsonable(value: Any) -> Any:
+    # None-valued keys are dropped for readability: dataclass fields always
+    # exist, so absent unambiguously means None. Empty lists stay ([] is
+    # meaningful, e.g. RunStep.inputs), and None *entries* inside lists stay
+    # visible so a plan regression cannot hide in the rendering.
     if isinstance(value, dict):
-        return {key: _jsonable(item) for key, item in value.items()}
+        return {
+            key: _jsonable(item)
+            for key, item in value.items()
+            if item is not None
+        }
     if isinstance(value, (list, tuple)):
         return [_jsonable(item) for item in value]
     if isinstance(value, Path):
@@ -108,7 +116,7 @@ def _norm_step(step: Any) -> Any:
 
 
 def _normalize(serve: Any) -> dict:
-    return {
+    return _jsonable({
         "name": serve.name,
         "provider": serve.provider,
         "cwd": serve.cwd,
@@ -126,7 +134,7 @@ def _normalize(serve: Any) -> dict:
         "services": _jsonable(
             [dataclasses.asdict(service) for service in (serve.services or [])]
         ),
-    }
+    })
 
 
 def _evaluate_plan(

@@ -4,14 +4,11 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "node",
      "version": "24"
     },
     {
-     "architecture": null,
-     "name": "npm",
-     "version": null
+     "name": "npm"
     }
    ]
   },
@@ -22,7 +19,6 @@
   {
    "__type__": "CopyStep",
    "base": "source",
-   "ignore": null,
    "source": "package-lock.json",
    "target": "package-lock.json"
   },
@@ -39,8 +35,7 @@
    "group": "install",
    "inputs": [
     "package.json"
-   ],
-   "outputs": null
+   ]
   },
   {
    "__type__": "CopyStep",
@@ -57,23 +52,18 @@
    "__type__": "RunStep",
    "command": "npm run docs:build",
    "group": "build",
-   "inputs": null,
    "outputs": [
     "docs/.vuepress/dist"
    ]
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R docs/.vuepress/dist/* opt/static_app/",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "cp -R docs/.vuepress/dist/* opt/static_app/"
   }
  ],
  "commands": {
   "start": "static-web-server --root=opt/static_app --log-level=info --port=8080"
  },
- "cwd": null,
  "deps": [
   "static-web-server@2.38.0"
  ],

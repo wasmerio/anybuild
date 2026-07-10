@@ -4,14 +4,11 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "node",
      "version": "24"
     },
     {
-     "architecture": null,
-     "name": "npm",
-     "version": null
+     "name": "npm"
     }
    ]
   },
@@ -32,8 +29,7 @@
    "group": "install",
    "inputs": [
     "package.json"
-   ],
-   "outputs": null
+   ]
   },
   {
    "__type__": "CopyStep",
@@ -48,16 +44,11 @@
   {
    "__type__": "RunStep",
    "command": "npm prune --omit=dev --ignore-scripts",
-   "group": "prune",
-   "inputs": null,
-   "outputs": null
+   "group": "prune"
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R . app",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "cp -R . app"
   }
  ],
  "commands": {

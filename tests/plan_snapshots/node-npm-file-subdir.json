@@ -4,14 +4,11 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "node",
      "version": "24"
     },
     {
-     "architecture": null,
-     "name": "npm",
-     "version": null
+     "name": "npm"
     }
    ]
   },
@@ -43,15 +40,12 @@
   {
    "__type__": "RunStep",
    "command": "npm install",
-   "group": "install",
-   "inputs": null,
-   "outputs": null
+   "group": "install"
   },
   {
    "__type__": "RunStep",
    "command": "npm run build",
    "group": "build",
-   "inputs": null,
    "outputs": [
     "."
    ]
@@ -59,23 +53,15 @@
   {
    "__type__": "RunStep",
    "command": "npm prune --omit=dev --ignore-scripts",
-   "group": "prune",
-   "inputs": null,
-   "outputs": null
+   "group": "prune"
   },
   {
    "__type__": "RunStep",
-   "command": "npx -y optimize-deps@0.1.1 dist --replace",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "npx -y optimize-deps@0.1.1 dist --replace"
   },
   {
    "__type__": "RunStep",
-   "command": "cp -RL . app",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "cp -RL . app"
   }
  ],
  "commands": {

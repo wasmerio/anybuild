@@ -4,14 +4,11 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "php",
      "version": "8.3.29"
     },
     {
-     "architecture": null,
-     "name": "composer",
-     "version": null
+     "name": "composer"
     }
    ]
   },
@@ -22,7 +19,6 @@
   {
    "__type__": "CopyStep",
    "base": "assets",
-   "ignore": null,
    "source": "php/php.ini",
    "target": "opt/assets/php.ini"
   },

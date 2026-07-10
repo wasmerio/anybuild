@@ -4,14 +4,11 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "node",
      "version": "24"
     },
     {
-     "architecture": null,
-     "name": "npm",
-     "version": null
+     "name": "npm"
     }
    ]
   },
@@ -22,7 +19,6 @@
   {
    "__type__": "CopyStep",
    "base": "source",
-   "ignore": null,
    "source": "package-lock.json",
    "target": "package-lock.json"
   },
@@ -39,8 +35,7 @@
    "group": "install",
    "inputs": [
     "package.json"
-   ],
-   "outputs": null
+   ]
   },
   {
    "__type__": "CopyStep",
@@ -57,7 +52,6 @@
    "__type__": "RunStep",
    "command": "npm run build",
    "group": "build",
-   "inputs": null,
    "outputs": [
     "."
    ]
@@ -65,23 +59,15 @@
   {
    "__type__": "RunStep",
    "command": "npm prune --omit=dev --ignore-scripts",
-   "group": "prune",
-   "inputs": null,
-   "outputs": null
+   "group": "prune"
   },
   {
    "__type__": "RunStep",
-   "command": "npx -y optimize-deps@0.1.1 dist --replace",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "npx -y optimize-deps@0.1.1 dist --replace"
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R . app",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "cp -R . app"
   }
  ],
  "commands": {

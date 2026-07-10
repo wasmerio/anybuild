@@ -4,12 +4,10 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "python",
      "version": "3.13"
     },
     {
-     "architecture": null,
      "name": "uv",
      "version": "0.8.15"
     }
@@ -35,45 +33,33 @@
     "pyproject.toml",
     "uv.lock",
     "README.md"
-   ],
-   "outputs": null
+   ]
   },
   {
    "__type__": "CopyStep",
    "base": "source",
-   "ignore": null,
    "source": "pyproject.toml",
    "target": "pyproject.toml"
   },
   {
    "__type__": "RunStep",
    "command": "uv add uvicorn",
-   "group": "install",
-   "inputs": null,
-   "outputs": null
+   "group": "install"
   },
   {
    "__type__": "RunStep",
    "command": "uv pip compile pyproject.toml --universal --extra-index-url None --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt",
-   "group": null,
-   "inputs": null,
    "outputs": [
     "cross-requirements.txt"
    ]
   },
   {
    "__type__": "RunStep",
-   "command": "uvx pip install -r cross-requirements.txt uvicorn --target opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "uvx pip install -r cross-requirements.txt uvicorn --target opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile"
   },
   {
    "__type__": "RunStep",
-   "command": "rm cross-requirements.txt",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "rm cross-requirements.txt"
   },
   {
    "__type__": "PathStep",
@@ -93,9 +79,7 @@
   {
    "__type__": "RunStep",
    "command": "python manage.py collectstatic --noinput",
-   "group": "build",
-   "inputs": null,
-   "outputs": null
+   "group": "build"
   }
  ],
  "commands": {
@@ -126,31 +110,19 @@
  "prepare": [
   {
    "__type__": "RunStep",
-   "command": "echo \"Precompiling Python code...\"",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "echo \"Precompiling Python code...\""
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true"
   },
   {
    "__type__": "RunStep",
-   "command": "echo \"Precompiling package code...\"",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "echo \"Precompiling package code...\""
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 app || true",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "python -m compileall -o 2 app || true"
   }
  ],
  "provider": "python",

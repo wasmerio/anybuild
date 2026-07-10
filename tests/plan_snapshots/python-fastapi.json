@@ -4,12 +4,10 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "python",
      "version": "3.13"
     },
     {
-     "architecture": null,
      "name": "uv",
      "version": "0.8.15"
     }
@@ -35,13 +33,11 @@
     "pyproject.toml",
     "uv.lock",
     "README.md"
-   ],
-   "outputs": null
+   ]
   },
   {
    "__type__": "CopyStep",
    "base": "source",
-   "ignore": null,
    "source": "pyproject.toml",
    "target": "pyproject.toml"
   },
@@ -88,31 +84,19 @@
  "prepare": [
   {
    "__type__": "RunStep",
-   "command": "echo \"Precompiling Python code...\"",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "echo \"Precompiling Python code...\""
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "python -m compileall -o 2 opt/venv/lib/python3.13/site-packages || true"
   },
   {
    "__type__": "RunStep",
-   "command": "echo \"Precompiling package code...\"",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "echo \"Precompiling package code...\""
   },
   {
    "__type__": "RunStep",
-   "command": "python -m compileall -o 2 app || true",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "python -m compileall -o 2 app || true"
   }
  ],
  "provider": "python",

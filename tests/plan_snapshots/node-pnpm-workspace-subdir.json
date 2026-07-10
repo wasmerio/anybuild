@@ -4,14 +4,11 @@
    "__type__": "UseStep",
    "dependencies": [
     {
-     "architecture": null,
      "name": "node",
      "version": "24"
     },
     {
-     "architecture": null,
-     "name": "pnpm",
-     "version": null
+     "name": "pnpm"
     }
    ]
   },
@@ -45,15 +42,12 @@
   {
    "__type__": "RunStep",
    "command": "pnpm install --no-frozen-lockfile",
-   "group": "install",
-   "inputs": null,
-   "outputs": null
+   "group": "install"
   },
   {
    "__type__": "RunStep",
    "command": "pnpm run build",
    "group": "build",
-   "inputs": null,
    "outputs": [
     "."
    ]
@@ -64,10 +58,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "pnpm deploy --filter @shipit-example/dashboard --prod --config.node-linker=hoisted app",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "pnpm deploy --filter @shipit-example/dashboard --prod --config.node-linker=hoisted app"
   },
   {
    "__type__": "WorkdirStep",
@@ -75,10 +66,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "pnpm dlx optimize-deps@0.1.1 dist --replace",
-   "group": null,
-   "inputs": null,
-   "outputs": null
+   "command": "pnpm dlx optimize-deps@0.1.1 dist --replace"
   }
  ],
  "commands": {
