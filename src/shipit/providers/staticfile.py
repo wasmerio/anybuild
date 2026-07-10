@@ -30,8 +30,6 @@ class RedirectRule:
 
 
 class StaticFileProvider:
-    REDIRECTS_CONFIG_FILE = "sws.toml"
-    REDIRECTS_CONFIG_MOUNT = "static_config"
     REDIRECTS_SOURCE = "_redirects"
     REDIRECT_STATUS_CODES = {301, 302}
     _PARAM_PATTERN = re.compile(r":([A-Za-z][A-Za-z0-9_]*)")

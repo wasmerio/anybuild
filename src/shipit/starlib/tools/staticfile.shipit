@@ -7,17 +7,29 @@ staticfile_serve() for the serve wiring.
 Static-family build structs carry two extra fields:
 
   static_app     the mount holding the site to serve
-  static_config  mount with the sws.toml redirects file, or None
+  static_config  mount holding the static-web-server config, or None
 """
 
 load("//shipit:serve.shipit", "build", "serve")
 
-REDIRECTS_FILE = "sws.toml"
+# static-web-server reads its config from this file inside the static_config
+# mount; it carries the redirect rules rendered from the project's
+# _redirects file (config.redirects_config).
+SWS_CONFIG_FILE = "sws.toml"
+
+def sws_config_mount(config):
+    """The mount for the static-web-server config, or None when unneeded."""
+    return mount("static_config") if config.redirects_config else None
+
+def sws_config_step(config, static_config):
+    """Write the rendered static-web-server config into its mount."""
+    sws_config_path = "{}/{}".format(static_config.path, SWS_CONFIG_FILE)
+    return write(sws_config_path, config.redirects_config)
 
 def staticfile_build(config, static_app = None):
     """Copy the static site into the static_app mount."""
     static_app = static_app or mount("static_app")
-    static_config = mount("static_config") if config.redirects_config else None
+    static_config = sws_config_mount(config)
 
     source = config.static_dir or "."
     if config.app_subdir:
@@ -31,7 +43,7 @@ def staticfile_build(config, static_app = None):
         copy(source, ".", ignore = [".git"]),
     ]
     if static_config != None:
-        steps.append(write("{}/{}".format(static_config.path, REDIRECTS_FILE), config.redirects_config))
+        steps.append(sws_config_step(config, static_config))
 
     return build(
         steps = steps,
@@ -52,8 +64,9 @@ def staticfile_serve(config, build, name = None, provider = "staticfile", **over
     static_config = build.static_config
 
     if static_config != None:
-        start = "static-web-server --root={} --log-level=info --config-file={}/{} --port={}".format(
-            static_app.serve_path, static_config.serve_path, REDIRECTS_FILE, PORT,
+        sws_config_path = "{}/{}".format(static_config.serve_path, SWS_CONFIG_FILE)
+        start = "static-web-server --root={} --log-level=info --config-file={} --port={}".format(
+            static_app.serve_path, sws_config_path, PORT,
         )
     else:
         start = "static-web-server --root={} --log-level=info --port={}".format(

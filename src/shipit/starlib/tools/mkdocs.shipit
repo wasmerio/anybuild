@@ -7,13 +7,13 @@ providers together through emitted source strings.
 
 load("//shipit:serve.shipit", "build")
 load("//shipit/tools:python.shipit", "python_build")
-load("//shipit/tools:staticfile.shipit", "staticfile_serve")
+load("//shipit/tools:staticfile.shipit", "staticfile_serve", "sws_config_mount")
 
 def mkdocs_build(config, static_app = None):
     """Install mkdocs with uv, then build the site into static_app."""
     py = python_build(config, serving = False)
     static_app = static_app or mount("static_app")
-    static_config = mount("static_config") if config.redirects_config else None
+    static_config = sws_config_mount(config)
 
     return build(
         steps = py.steps + [

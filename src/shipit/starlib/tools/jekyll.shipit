@@ -1,14 +1,14 @@
 """Jekyll sites: build with ruby/bundler, serve with static-web-server."""
 
 load("//shipit:serve.shipit", "build")
-load("//shipit/tools:staticfile.shipit", "staticfile_serve")
+load("//shipit/tools:staticfile.shipit", "staticfile_serve", "sws_config_mount")
 
 def jekyll_build(config, static_app = None):
     """Build the site with jekyll into the static_app mount."""
     ruby = dep("ruby", config.ruby_version)
     temp = mount("temp")
     static_app = static_app or mount("static_app")
-    static_config = mount("static_config") if config.redirects_config else None
+    static_config = sws_config_mount(config)
 
     if file_exists("Gemfile"):
         install = []
