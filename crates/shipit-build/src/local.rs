@@ -16,47 +16,9 @@ use crate::BuildBackend;
 
 /// Console/stream helpers shared by the build backends and runners
 /// (port of `ui.py` + the rich Rule/Panel rendering used by them).
-pub mod ui {
-    /// `console.print(...)` — rich writes to stderr (`Console(stderr=True)`).
-    pub fn console_print(text: &str) {
-        eprintln!("{text}");
-    }
+pub use crate::ui;
 
-    /// `Rule(characters="-")` at rich's piped-output width (80).
-    pub fn rule() {
-        eprintln!("{}", "-".repeat(80));
-    }
-
-    /// Rich `Panel(Syntax(..., line_numbers=True), box=box.SQUARE,
-    /// expand=False)` as rendered to a non-terminal: a square box around
-    /// line-numbered content, capped at width 80 (long lines cropped).
-    pub fn print_panel(content: &str) {
-        let lines: Vec<&str> = content.split('\n').collect();
-        // rich Syntax: len(str(start_line + newline_count)) + 2
-        let num_width = lines.len().to_string().len() + 2;
-        let max_code = lines
-            .iter()
-            .map(|l| l.chars().count())
-            .max()
-            .unwrap_or(0);
-        let inner = (num_width + 1 + max_code + 2).min(78);
-        let code_width = inner - num_width - 3;
-        eprintln!("┌{}┐", "─".repeat(inner));
-        for (i, line) in lines.iter().enumerate() {
-            let cropped: String = line.chars().take(code_width).collect();
-            eprintln!(
-                "│ {:>nw$} {:<cw$} │",
-                i + 1,
-                cropped,
-                nw = num_width,
-                cw = code_width
-            );
-        }
-        eprintln!("└{}┘", "─".repeat(inner));
-    }
-}
-
-use ui::{console_print, rule};
+use crate::ui::{console_print, rule};
 
 /// Port of `utils.py::download_file`.
 pub fn download_file(url: &str, path: &Path) -> Result<()> {

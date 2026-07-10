@@ -14,9 +14,13 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 shlex = "1"
 toml_edit = "0.22"
-shipit-build = { path = "../shipit-build" }
+shipit-build = { path = "../shipit-build", default-features = false }
 shipit-plan = { path = "../shipit-plan" }
 shipit-providers = { path = "../shipit-providers" }
 
 [dev-dependencies]
 tempfile = "3"
+
+[features]
+default = ["syntax-highlighting"]
+syntax-highlighting = ["shipit-build/syntax-highlighting"]

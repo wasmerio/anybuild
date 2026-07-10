@@ -142,10 +142,9 @@ impl DockerBuildBackend {
         self.docker_client == "depot"
     }
 
-    /// Port of `print_dockerfile` (rich Panel(Syntax(...)) stand-in:
-    /// plain contents — the e2e suite greps plain phrases).
+    /// Port of `print_dockerfile` (rich Panel(Syntax(..., "dockerfile"))).
     fn print_dockerfile(&self, contents: &str) {
-        println!("{contents}");
+        crate::ui::print_syntax_panel(contents, "dockerfile");
     }
 
     /// Port of `build_dockerfile`: write the Dockerfile and run the

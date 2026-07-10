@@ -33,7 +33,7 @@ pub fn run(shared: SharedProjectArgs, out: Option<PathBuf>) -> Result<()> {
     let config_json = crate::commands::plan::exclude_defaults_json(&provider_config);
     let config_json = serde_json::to_string_pretty(&config_json)?;
     if !config_json.is_empty() && config_json != "{}" {
-        shipit_build::local::ui::print_panel(&config_json);
+        shipit_build::ui::print_syntax_panel(&config_json, "json");
     }
     if let Some(parent) = out.parent() {
         std::fs::create_dir_all(parent)?;

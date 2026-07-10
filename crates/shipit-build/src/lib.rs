@@ -9,6 +9,7 @@ use shipit_plan::{Mount, Step};
 
 pub mod docker;
 pub mod local;
+pub mod ui;
 
 /// Port of `builders/base.py::BuildBackend`.
 pub trait BuildBackend {

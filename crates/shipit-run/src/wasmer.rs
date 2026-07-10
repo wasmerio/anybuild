@@ -415,11 +415,7 @@ fn apply_runner_flips(provider: &str, config_json: &mut JsonValue) {
     }
 }
 
-/// Rich `Panel(Syntax(...))` stand-in: plain content (the e2e suite greps
-/// plain phrases, not panel chrome).
-fn print_panel(content: &str) {
-    println!("{content}");
-}
+use shipit_build::ui::print_syntax_panel;
 
 #[cfg(test)]
 #[derive(Debug, Clone)]
@@ -509,7 +505,7 @@ impl WasmerRunner {
             .join("\n");
         let content = format!("#!/bin/bash\n\n{body}");
         println!("\nCreated prepare.sh script to run before packaging ✅");
-        print_panel(&content);
+        print_syntax_panel(&content, "bash");
 
         let script_path = prepare_dir.join("prepare.sh");
         std::fs::write(&script_path, &content)?;
@@ -746,7 +742,7 @@ impl WasmerRunner {
             "[command.annotations.wasi]",
         );
         println!("\nCreated wasmer.toml manifest ✅");
-        print_panel(manifest.trim());
+        print_syntax_panel(manifest.trim(), "toml");
         std::fs::write(self.wasmer_dir_path.join("wasmer.toml"), &manifest)?;
 
         // ---- app.yaml ----
@@ -909,7 +905,7 @@ impl WasmerRunner {
         let app_yaml = dump_yaml_sorted(&YamlValue::Mapping(yaml_config))?;
 
         println!("\nCreated app.yaml manifest ✅");
-        print_panel(app_yaml.trim());
+        print_syntax_panel(app_yaml.trim(), "yaml");
         std::fs::write(self.wasmer_dir_path.join("app.yaml"), &app_yaml)?;
         Ok(())
     }
