@@ -50,8 +50,8 @@ sketches below where they differ:
 - Stdlib: `src/shipit/starlib/` — `prelude.shipit`, `serve.shipit`, and
   `tools/{python,staticfile,hugo,mkdocs}.shipit`.
 - **Convention**: each provider exposes exactly two functions —
-  `X_build(config, ...)` returning a `build_struct(provider, steps,
-  serve_deps, mounts, env, **extra)`, and `X_serve(config, build, ...)`
+  `X_build(config, ...)` returning a `build(steps,
+  serve_deps, mounts, env, **extra)` struct, and `X_serve(config, build, ...)`
   wiring a serve around any build struct. The generated file calls both, so
   the seam users compose on is explicit; static-site builders (hugo, jekyll,
   mkdocs, node-static) pair their own build with the shared
@@ -62,7 +62,7 @@ sketches below where they differ:
   so mixed compositions never inherit a stale identity from a build.
   Bare `python_build(config)`/`node_build(config)` produce the full serving
   build; `serving=False` gives the embeddable flavor composing providers use.
-  The generic assembler `build_and_serve()` in `//shipit:serve.shipit`
+  The generic assembler `serve()` in `//shipit:serve.shipit`
   defines the uniform override surface (`build_pre`, `build_post`,
   `extra_deps`, `extra_env`, `extra_commands`).
 - Generator dispatch: `STARLARK_ENTRYPOINTS` in `generator.py` maps each
@@ -200,17 +200,19 @@ load("//shipit/tools:python.shipit", "python_build", "python_serve")
 
 build = python_build(config)
 
-python_serve(config, build)
+python_serve(config, build, name = "my-app")
 ```
 
 With a subdir, the marker line stays (keeps `read_shipit_subdir()` working):
 
 ```python
-load("//shipit/tools:node.shipit", "node_build_and_serve")
+load("//shipit/tools:node.shipit", "node_build", "node_serve")
 
 app_subdir = "apps/dashboard"
 
-node_build_and_serve(config)
+build = node_build(config)
+
+node_serve(config, build, name = "dashboard")
 ```
 
 The file is still the user's: it is real Starlark, and every knob is an

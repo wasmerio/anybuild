@@ -12,7 +12,7 @@ in config; simple existence checks use file_exists() directly.
 """
 
 load("//shipit:prelude.shipit", "compact", "merged")
-load("//shipit:serve.shipit", "build_and_serve", "build_struct")
+load("//shipit:serve.shipit", "build", "serve")
 
 def python_toolchain(config):
     return struct(
@@ -148,7 +148,7 @@ def python_build(config, source = None, app = None, venv = None, serving = True)
     if copy_output_to != None and in_subdir:
         steps.append(run("cp -R . {}".format(copy_output_to.path)))
 
-    return build_struct(
+    return build(
         steps = steps,
         serve_deps = python_runtime_deps(config, tc),
         python = tc.python,
@@ -253,7 +253,7 @@ def python_serve(
     venv = build.venv
     site_packages = "{}/lib/python{}/site-packages".format(venv.serve_path, config.python_version)
 
-    return build_and_serve(
+    return serve(
         config,
         build,
         provider = provider,

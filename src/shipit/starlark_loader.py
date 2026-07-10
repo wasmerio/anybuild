@@ -2,7 +2,7 @@
 
 Shipit files can load provider libraries with Bazel-style labels:
 
-    load("//shipit/tools:python.shipit", "python_build_and_serve")
+    load("//shipit/tools:python.shipit", "python_build", "python_serve")
 
 Label resolution rules:
   //shipit/...:file.shipit   bundled stdlib (ships with the CLI, `starlib/`)

@@ -6,7 +6,7 @@ php_build() exposes the hook points downstream providers compose on:
 around these.
 """
 
-load("//shipit:serve.shipit", "build_and_serve", "build_struct")
+load("//shipit:serve.shipit", "build", "serve")
 
 def php_toolchain(config):
     return struct(
@@ -81,7 +81,7 @@ def php_build(
         steps.append(run("composer run-script {}".format(config.composer_build_script), outputs = ["."], group = "build"))
     steps += after_build
 
-    return build_struct(
+    return build(
         steps = steps,
         serve_deps = php_runtime_deps(config, tc),
         mounts = [app, assets],
@@ -102,7 +102,7 @@ def php_commands(config, app):
 def php_serve(config, build, name = None, provider = "php", commands = None, **overrides):
     """Serve a PHP build with the php (or phpix) dev server."""
     app = build.app
-    return build_and_serve(
+    return serve(
         config,
         build,
         provider = provider,

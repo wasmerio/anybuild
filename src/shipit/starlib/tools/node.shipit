@@ -6,7 +6,7 @@ laravel) can reuse exactly the fragments they need.
 """
 
 load("//shipit:prelude.shipit", "compact")
-load("//shipit:serve.shipit", "build_and_serve", "build_struct")
+load("//shipit:serve.shipit", "build", "serve")
 
 _LOCKFILES = {
     "npm": "package-lock.json",
@@ -193,7 +193,7 @@ def node_build(config, build_mount = None, app = None):
     steps += node_build_step(config)
     steps += tail
 
-    return build_struct(
+    return build(
         steps = compact(steps),
         serve_deps = [tc.node],
         mounts = [app],
@@ -214,7 +214,7 @@ def node_serve(config, build, name = None, provider = "node", prepare = None, **
             prepare = [run("edgejs --precompile {}".format(app.serve_path))]
         else:
             prepare = []
-    return build_and_serve(
+    return serve(
         config,
         build,
         provider = provider,

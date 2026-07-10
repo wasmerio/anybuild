@@ -1,6 +1,6 @@
 """Hugo sites: build with hugo, serve with static-web-server."""
 
-load("//shipit:serve.shipit", "build_struct")
+load("//shipit:serve.shipit", "build")
 load("//shipit/tools:staticfile.shipit", "staticfile_serve")
 
 def hugo_build(config, static_app = None):
@@ -10,7 +10,7 @@ def hugo_build(config, static_app = None):
     static_app = static_app or mount("static_app")
     static_config = mount("static_config") if config.redirects_config else None
 
-    return build_struct(
+    return build(
         steps = [
             use(hugo),
             workdir(temp.path),

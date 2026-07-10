@@ -6,7 +6,7 @@ an extension project builds into the wp-content mount instead.
 """
 
 load("//shipit:prelude.shipit", "merged")
-load("//shipit:serve.shipit", "build_and_serve", "build_struct")
+load("//shipit:serve.shipit", "build", "serve")
 load(
     "//shipit/tools:php.shipit",
     "php_build",
@@ -87,7 +87,7 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
 
     if config.wp_extension_kind != None:
         tc = php_toolchain(config)
-        return build_struct(
+        return build(
             steps = [use(*php_use_deps(tc))] + _wp_extension_steps(config, app, assets, wpcontent_base),
             serve_deps = php_runtime_deps(config, tc) + extra_serve_deps,
             mounts = [app, assets, wpcontent_base],
@@ -105,7 +105,7 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
         after_build = _wp_content_seed_steps(config, app, wpcontent_base),
         extra_ignore = ["wp-content"],
     )
-    return build_struct(
+    return build(
         steps = php.steps,
         serve_deps = php.serve_deps + extra_serve_deps,
         mounts = [app, assets, wpcontent_base],
@@ -143,7 +143,7 @@ def wordpress_serve(config, build, name = None, provider = "wordpress", **overri
     wpcontent_base = build.wpcontent_base
     wp_content = volume("wp-content", "{}/wp-content/".format(app.serve_path))
 
-    return build_and_serve(
+    return serve(
         config,
         build,
         provider = provider,

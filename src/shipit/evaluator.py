@@ -201,6 +201,9 @@ def evaluate_shipit(
         glb.set("service", ctx.service)
         glb.set("dep", ctx.dep)
         glb.set("serve", ctx.serve)
+        # The stdlib's serve() assembler (//shipit:serve.shipit) shadows the
+        # builtin by design; it reaches the raw builtin through this alias.
+        glb.set("_serve", ctx.serve)
         glb.set("run", ctx.run)
         glb.set("mount", ctx.mount)
         glb.set("volume", ctx.volume)

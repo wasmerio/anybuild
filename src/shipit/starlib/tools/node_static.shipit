@@ -5,7 +5,7 @@ node toolchain never reaches the serve environment.
 """
 
 load("//shipit:prelude.shipit", "compact")
-load("//shipit:serve.shipit", "build_struct")
+load("//shipit:serve.shipit", "build")
 load(
     "//shipit/tools:node.shipit",
     "node_build_step",
@@ -32,7 +32,7 @@ def nodestatic_build(config, static_app = None):
     if static_config != None:
         steps.append(write("{}/{}".format(static_config.path, REDIRECTS_FILE), config.redirects_config))
 
-    return build_struct(
+    return build(
         steps = compact(steps),
         mounts = [static_app] + ([static_config] if static_config != None else []),
         static_app = static_app,

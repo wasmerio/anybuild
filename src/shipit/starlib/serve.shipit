@@ -2,7 +2,7 @@
 
 Provider libraries follow a two-function convention:
 
-  <provider>_build(config, ...)         -> build struct (see build_struct)
+  <provider>_build(config, ...)         -> build struct (see build())
   <provider>_serve(config, build, ...)  -> wire a serve around any build
 
 The generated Shipit file calls both, making the seam users compose on
@@ -28,7 +28,7 @@ plus any provider-specific fields (mount handles etc.) for downstream serves.
 
 load("//shipit:prelude.shipit", "compact", "merged")
 
-def build_struct(steps, serve_deps = [], mounts = [], env = {}, **extra):
+def build(steps, serve_deps = [], mounts = [], env = {}, **extra):
     """Create a build struct with the convention fields defaulted."""
     return struct(
         steps = steps,
@@ -79,7 +79,7 @@ def _override_serve_commands(config, commands):
             result[key] = result[key].replace("$PORT", PORT)
     return result
 
-def build_and_serve(
+def serve(
         config,
         build,
         provider,
@@ -104,7 +104,8 @@ def build_and_serve(
     evaluated plan is complete — the CLI does not edit it afterwards.
     """
     steps = compact(list(build_pre) + list(build.steps) + list(build_post))
-    return serve(
+    # This module's serve() shadows the raw builtin, so call its alias.
+    return _serve(
         name = name or config.name,
         provider = provider,
         cwd = cwd,

@@ -1,6 +1,6 @@
 """User command overrides are applied by the Starlark stdlib.
 
-build_and_serve() honors config.commands.* inside evaluation, and the CLI's
+The stdlib serve() assembler honors config.commands.* inside evaluation, and the CLI's
 legacy post-eval pass (kept for old fully-inlined Shipit files) re-applies
 the same overrides — these tests pin that the combination stays idempotent:
 each override lands exactly once.

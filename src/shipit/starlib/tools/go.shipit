@@ -1,6 +1,6 @@
 """Go apps: compile a static binary, serve it directly."""
 
-load("//shipit:serve.shipit", "build_and_serve", "build_struct")
+load("//shipit:serve.shipit", "build", "serve")
 
 def go_build(config, app = None, temp = None):
     """Compile the Go binary in the temp mount and copy it into app."""
@@ -29,7 +29,7 @@ def go_build(config, app = None, temp = None):
     else:
         steps.append(run("cp {}/{} {}/{}".format(temp.path, config.serve_binary, app.path, config.serve_binary)))
 
-    return build_struct(
+    return build(
         steps = steps,
         mounts = [app],
         app = app,
@@ -39,7 +39,7 @@ def go_build(config, app = None, temp = None):
 def go_serve(config, build, name = None, provider = "go", **overrides):
     """Serve the compiled binary from the app mount."""
     app = build.app
-    return build_and_serve(
+    return serve(
         config,
         build,
         provider = provider,

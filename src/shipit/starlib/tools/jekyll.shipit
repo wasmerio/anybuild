@@ -1,6 +1,6 @@
 """Jekyll sites: build with ruby/bundler, serve with static-web-server."""
 
-load("//shipit:serve.shipit", "build_struct")
+load("//shipit:serve.shipit", "build")
 load("//shipit/tools:staticfile.shipit", "staticfile_serve")
 
 def jekyll_build(config, static_app = None):
@@ -21,7 +21,7 @@ def jekyll_build(config, static_app = None):
             run("bundle add jekyll -v {}".format(config.jekyll_version), group = "install"),
         ]
 
-    return build_struct(
+    return build(
         steps = [use(ruby), workdir(temp.path)] + install + [
             copy(".", ignore = [".git"]),
             run("jekyll build", group = "build"),

@@ -10,7 +10,7 @@ Static-family build structs carry two extra fields:
   static_config  mount with the sws.toml redirects file, or None
 """
 
-load("//shipit:serve.shipit", "build_and_serve", "build_struct")
+load("//shipit:serve.shipit", "build", "serve")
 
 REDIRECTS_FILE = "sws.toml"
 
@@ -33,7 +33,7 @@ def staticfile_build(config, static_app = None):
     if static_config != None:
         steps.append(write("{}/{}".format(static_config.path, REDIRECTS_FILE), config.redirects_config))
 
-    return build_struct(
+    return build(
         steps = steps,
         mounts = [static_app] + ([static_config] if static_config != None else []),
         static_app = static_app,
@@ -60,7 +60,7 @@ def staticfile_serve(config, build, name = None, provider = "staticfile", **over
             static_app.serve_path, PORT,
         )
 
-    return build_and_serve(
+    return serve(
         config,
         build,
         provider = provider,
