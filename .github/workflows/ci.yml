@@ -17,33 +17,3 @@ jobs:
   test_and_e2e:
     name: Test + E2E
     uses: ./.github/workflows/reusable-test-e2e.yml
-
-  package:
-    name: Build package
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs:
-      - test_and_e2e
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Build distribution
-        run: uv build
-
-      # - name: Upload artifacts
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: dist
-      #     path: dist/

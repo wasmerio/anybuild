@@ -212,3 +212,141 @@ fn slugify(value: &str) -> String {
         slug.to_owned()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Port of `tests/test_wordpress_phpix.py` (the config-level halves).
+    //!
+    //! The plan-level assertions of the Python suite (the `--version=latest`
+    //! install step, the `wpcontent_base/{plugins,themes}/<slug>` copy with
+    //! `[".git", ".source"]` ignores, the WP_PLUGINS_ACTIVATE /
+    //! WP_DEFAULT_THEME env, and the phpix `--startup-script=…/start-wp.php`
+    //! start command with the `wordpress/start.php` asset copy and the phpix
+    //! dep) are pinned byte-for-byte by the php-wordpress-plugin,
+    //! php-wordpress-theme, and php-wordpress-empty plan snapshots
+    //! (`crates/shipit-starlark/tests/snapshots.rs`); the config fields that
+    //! drive them are asserted here.
+
+    use std::path::{Path, PathBuf};
+
+    use crate::{
+        load_provider, load_provider_config, merge_config_json, BaseConfig,
+        ProviderConfig,
+    };
+
+    fn write_plugin(project_dir: &Path, filename: &str) {
+        std::fs::create_dir_all(project_dir).unwrap();
+        std::fs::write(
+            project_dir.join(filename),
+            "<?php\n/**\n * Plugin Name: My Plugin\n */\n",
+        )
+        .unwrap();
+    }
+
+    fn write_theme(project_dir: &Path) {
+        std::fs::create_dir_all(project_dir).unwrap();
+        std::fs::write(project_dir.join("style.css"), "/*\nTheme Name: My Theme\n*/\n")
+            .unwrap();
+        std::fs::write(project_dir.join("index.php"), "<?php\n").unwrap();
+    }
+
+    fn load_for_path(project_dir: &Path) -> (&'static str, ProviderConfig) {
+        let mut base = BaseConfig::default();
+        base.commands.enrich_from_path(project_dir);
+        let provider = load_provider(project_dir, &base, None).unwrap();
+        let config = load_provider_config(provider, project_dir, base).unwrap();
+        (provider, config)
+    }
+
+    fn wordpress(config: &ProviderConfig) -> &super::WordPressConfig {
+        match config {
+            ProviderConfig::Wordpress(config) => config,
+            other => panic!("expected a wordpress config, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_wordpress_provider_detects_plugin_and_generates_activation() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path().join("my-plugin");
+        write_plugin(&project_dir, "my-plugin.php");
+
+        let (provider, config) = load_for_path(&project_dir);
+        assert_eq!(provider, "wordpress");
+        let config = wordpress(&config);
+        assert_eq!(config.wp_version.as_deref(), Some("latest"));
+        // These feed the plugin copy target and WP_PLUGINS_ACTIVATE.
+        assert_eq!(config.wp_extension_kind.as_deref(), Some("plugin"));
+        assert_eq!(config.wp_extension_slug.as_deref(), Some("my-plugin"));
+        assert_eq!(
+            config.wp_extension_activate_target.as_deref(),
+            Some("my-plugin/my-plugin.php")
+        );
+    }
+
+    #[test]
+    fn test_wordpress_provider_detects_theme_and_generates_activation() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path().join("my-theme");
+        write_theme(&project_dir);
+
+        let (provider, config) = load_for_path(&project_dir);
+        assert_eq!(provider, "wordpress");
+        let config = wordpress(&config);
+        assert_eq!(config.wp_version.as_deref(), Some("latest"));
+        // These feed the theme copy target and WP_DEFAULT_THEME.
+        assert_eq!(config.wp_extension_kind.as_deref(), Some("theme"));
+        assert_eq!(config.wp_extension_slug.as_deref(), Some("my-theme"));
+        assert_eq!(
+            config.wp_extension_activate_target.as_deref(),
+            Some("my-theme")
+        );
+    }
+
+    #[test]
+    fn test_wordpress_extension_keeps_user_wp_version() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path().join("my-plugin");
+        write_plugin(&project_dir, "my-plugin.php");
+
+        // `load_provider_config(..., {"wp_version": "6.8.3"})` in Python:
+        // load, then merge the user config over the model dump.
+        let config =
+            load_provider_config("wordpress", &project_dir, BaseConfig::default())
+                .unwrap();
+        let config = merge_config_json(
+            "wordpress",
+            &config,
+            &serde_json::json!({"wp_version": "6.8.3"}),
+        )
+        .unwrap();
+
+        assert_eq!(wordpress(&config).wp_version.as_deref(), Some("6.8.3"));
+    }
+
+    #[test]
+    fn test_wordpress_phpix_mode_config() {
+        // Python's test_generate_shipit_wordpress_phpix_mode drives
+        // examples/php-wordpress with {"phpix": True}; the resulting plan is
+        // pinned by the php-wordpress-empty snapshot (phpix via env there).
+        // Here: the example detects as a full wordpress site and the phpix
+        // flag survives the user-config merge.
+        let example_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/php-wordpress")
+            .canonicalize()
+            .unwrap();
+
+        let (provider, config) = load_for_path(&example_dir);
+        assert_eq!(provider, "wordpress");
+        assert!(!wordpress(&config).php.phpix);
+
+        let config =
+            merge_config_json("wordpress", &config, &serde_json::json!({"phpix": true}))
+                .unwrap();
+        let config = wordpress(&config);
+        assert!(config.php.phpix);
+        // A full site (not an extension) keeps wp_version unset unless the
+        // user provides one.
+        assert_eq!(config.wp_extension_kind, None);
+    }
+}

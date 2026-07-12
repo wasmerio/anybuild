@@ -117,42 +117,50 @@ Shipit works with three execution environments:
 
 ## Development
 
-Clone the repository and use the `uv` project environment.
+Shipit is a Rust workspace. Build and run the CLI with:
 
 ```bash
-uv run shipit . --start
+cargo run -- . --start
 ```
 
-Use any other subcommand during development by prefixing with `uv run shipit`,
-for example `uv run shipit build . --wasmer`. This keeps changes local while
-matching the published CLI behaviour.
+Use any subcommand during development by prefixing with `cargo run --`,
+for example `cargo run -- build . --wasmer`.
 
 ### Tests
 
-Run the test suite with:
+Run the gate suites (plan snapshots, config fixtures, generated-file
+goldens, unit tests) with:
 
 ```bash
-uv run pytest
+cargo nextest run --workspace
 ```
 
-You can run the e2e tests in parallel (`-n 8`) with:
+The end-to-end suite builds and serves the `examples/` projects with the
+real binary. Run a wasmer-mode slice with:
 
 ```bash
-uv run pytest -m e2e -v "tests/test_e2e.py" -s -n 8
+cargo build && cargo nextest run --profile e2e -p shipit-e2e \
+  --run-ignored all -E 'test(/^node__wasmer__/)'
 ```
 
-You can also run one technology slice at a time with `e2e_static`,
-`e2e_staticpython`, `e2e_staticnode1`, `e2e_staticnode2`, `e2e_python`,
-`e2e_node`, or `e2e_php`, for example:
+Suites are sliced by test-name prefix (`static`, `staticpython`,
+`staticnode1`, `staticnode2`, `python`, `node`, `php`) and build mode
+(`__local__`, `__wasmer__`, `__wasmer_and_docker__`). The full gate
+stack, including the CLI smoke check, is:
 
 ```bash
-uv run pytest -m "e2e and e2e_staticnode1" -v "tests/test_e2e.py" -s -n 4
+scripts/verify_rust.sh          # gates
+scripts/verify_rust.sh --e2e    # + wasmer-mode e2e
 ```
 
-The e2e tests will:
-* Build the project (locally, or with docker)
-* Run the project (locally or with Wasmer)
-* Test that the project output (via http requests) is the correct one
+Plan snapshots (`tests/plan_snapshots/`) and the cross-implementation
+fixtures (`fixtures/`) are committed; refresh them only for intentional
+plan changes and review the diff like any golden.
+
+The legacy Python implementation is kept at `src/shipit/` during the
+transition. It is not exercised by CI and the Rust workspace does not
+depend on it; check it against the Rust binary with
+`uv run python scripts/cli_differential.py`.
 
 ### Release Automation
 

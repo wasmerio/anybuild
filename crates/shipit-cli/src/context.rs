@@ -26,8 +26,8 @@ use crate::paths::{
     ProjectPaths,
 };
 
-/// The bundled assets dir (`src/shipit/assets`), the Python `ASSETS_PATH`.
-/// Overridable with SHIPIT_ASSETS while the two implementations coexist.
+/// The bundled assets dir (shared with the legacy Python tree).
+/// Overridable with SHIPIT_ASSETS.
 pub fn assets_dir() -> PathBuf {
     if let Ok(path) = std::env::var("SHIPIT_ASSETS") {
         return PathBuf::from(path);
@@ -249,4 +249,191 @@ pub fn resolve_project_context(
         build_backend,
         runner,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use shipit_plan::layout::LocalLayout;
+    use shipit_plan::{RunStep, Serve, Step};
+    use shipit_providers::{
+        load_provider, load_provider_config, merge_config_json, BaseConfig,
+    };
+    use shipit_starlark::eval::{evaluate_shipit, EvaluateOptions};
+    use shipit_starlark::loader::StdlibSource;
+
+    use super::*;
+    use crate::generator::{entrypoint, generate_shipit_loader, starlib_dir};
+
+    fn no_overrides() -> CommandOverrides {
+        CommandOverrides {
+            start_command: None,
+            install_command: None,
+            build_command: None,
+            serve_port: None,
+            use_provider: None,
+            config: None,
+        }
+    }
+
+    fn run_commands(serve: &Serve) -> Vec<&str> {
+        serve
+            .build
+            .iter()
+            .filter_map(|step| match step {
+                Step::Run(run) => Some(run.command.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn group_commands<'a>(serve: &'a Serve, group: &str) -> Vec<&'a str> {
+        serve
+            .build
+            .iter()
+            .filter_map(|step| match step {
+                Step::Run(run) if run.group.as_deref() == Some(group) => {
+                    Some(run.command.as_str())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Port of tests/test_project_context.py::
+    /// test_out_of_tree_shipit_path_probes_the_workspace — file_exists()
+    /// must target the workspace even when the Shipit file lives elsewhere
+    /// (--shipit-path, --temp-shipit).
+    #[test]
+    fn out_of_tree_shipit_path_probes_the_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let workspace = tmp.path().join("app");
+        std::fs::create_dir(&workspace).unwrap();
+        std::fs::write(
+            workspace.join("package.json"),
+            r#"{"name": "app", "scripts": {"start": "node index.js"}}"#,
+        )
+        .unwrap();
+        std::fs::write(workspace.join("package-lock.json"), "{}").unwrap();
+        std::fs::write(workspace.join("index.js"), "console.log('hi')\n").unwrap();
+
+        let elsewhere = tmp.path().join("elsewhere");
+        std::fs::create_dir(&elsewhere).unwrap();
+        let shipit_file = elsewhere.join("Shipit");
+        std::fs::write(
+            &shipit_file,
+            generate_shipit_loader(&entrypoint("node").unwrap(), None, None),
+        )
+        .unwrap();
+
+        let context = resolve_project_context(
+            &workspace,
+            None,
+            Some(&shipit_file),
+            &no_overrides(),
+            &EnvironmentOptions::default(),
+        )
+        .unwrap();
+
+        let commands = run_commands(&context.serve);
+        assert!(
+            commands.iter().any(|c| c.contains("npm install")),
+            "{commands:?}"
+        );
+    }
+
+    /// Port of tests/plan_helpers.py::evaluate_project_plan — detect the
+    /// provider, load its config (with the JSON patch, the `--config`
+    /// merge), generate the two-line loader Shipit, and evaluate it
+    /// through the Starlark stdlib.
+    fn evaluate_project_plan(
+        workspace: &Path,
+        tmp: &Path,
+        config_patch: serde_json::Value,
+    ) -> Serve {
+        let mut base = BaseConfig::default();
+        base.commands.enrich_from_path(workspace);
+        let provider = load_provider(workspace, &base, None).unwrap();
+        let config = load_provider_config(provider, workspace, base).unwrap();
+        let config = merge_config_json(provider, &config, &config_patch).unwrap();
+        let shipit_file = tmp.join("Shipit.plan");
+        std::fs::write(
+            &shipit_file,
+            generate_shipit_loader(&entrypoint(provider).unwrap(), None, None),
+        )
+        .unwrap();
+        evaluate_shipit(EvaluateOptions {
+            shipit_file,
+            project_root: Some(workspace.to_path_buf()),
+            config: config.to_json(),
+            layout: Box::new(LocalLayout::new(tmp.join(".shipit"))),
+            stdlib: StdlibSource::Dir(starlib_dir()),
+        })
+        .unwrap()
+    }
+
+    /// Port of tests/test_command_overrides.py::
+    /// test_build_and_install_overrides_replace_group_steps.
+    #[test]
+    fn build_and_install_overrides_replace_group_steps() {
+        let tmp = tempfile::tempdir().unwrap();
+        let workspace = tmp.path().join("app");
+        std::fs::create_dir(&workspace).unwrap();
+        std::fs::write(workspace.join("requirements.txt"), "flask==3.0.0\n").unwrap();
+        std::fs::write(workspace.join("main.py"), "print('ok')\n").unwrap();
+
+        let serve = evaluate_project_plan(
+            &workspace,
+            tmp.path(),
+            serde_json::json!({
+                "commands": {
+                    "install": "make install",
+                    "build": "make assets",
+                    "start": "make serve --port $PORT",
+                }
+            }),
+        );
+
+        // The FIRST step of each group is replaced (later same-group steps
+        // are kept — long-standing CLI semantics) and nothing is applied
+        // twice.
+        assert_eq!(
+            group_commands(&serve, "install"),
+            ["make install", "uv add -r requirements.txt uvicorn"]
+        );
+        assert_eq!(group_commands(&serve, "build"), ["make assets"]);
+        // start override wins and $PORT is substituted.
+        assert_eq!(serve.commands.get("start").unwrap(), "make serve --port 8080");
+    }
+
+    /// Port of tests/test_command_overrides.py::
+    /// test_build_override_appends_when_no_group_step_exists.
+    #[test]
+    fn build_override_appends_when_no_group_step_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let workspace = tmp.path().join("site");
+        let public = workspace.join("public");
+        std::fs::create_dir_all(&public).unwrap();
+        std::fs::write(public.join("index.html"), "<h1>ok</h1>\n").unwrap();
+
+        let serve = evaluate_project_plan(
+            &workspace,
+            tmp.path(),
+            serde_json::json!({"commands": {"build": "make site"}}),
+        );
+
+        // Static builds have no build-group step; the override is appended
+        // once, as the last build step.
+        assert_eq!(group_commands(&serve, "build"), ["make site"]);
+        assert_eq!(
+            serve.build.last().unwrap(),
+            &Step::Run(RunStep {
+                command: "make site".to_owned(),
+                inputs: None,
+                outputs: None,
+                group: Some("build".to_owned()),
+            })
+        );
+    }
 }

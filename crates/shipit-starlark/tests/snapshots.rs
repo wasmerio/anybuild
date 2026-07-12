@@ -36,7 +36,7 @@ fn plan_snapshots_match() {
         Ok(path) => PathBuf::from(path),
         Err(_) => {
             let default = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../target/rust-fixtures/manifest.json");
+                .join("../../fixtures/manifest.json");
             if !default.is_file() {
                 eprintln!(
                     "skipping: no fixtures (run scripts/dump_rust_fixtures.py \
@@ -47,10 +47,23 @@ fn plan_snapshots_match() {
             default
         }
     };
-    let manifest: Manifest = serde_json::from_str(
+    let mut manifest: Manifest = serde_json::from_str(
         &std::fs::read_to_string(&manifest_path).expect("manifest readable"),
     )
     .expect("manifest parses");
+    // Committed fixtures carry repo-relative paths.
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if manifest.starlib.is_relative() {
+        manifest.starlib = repo_root.join(&manifest.starlib);
+    }
+    if manifest.snapshots.is_relative() {
+        manifest.snapshots = repo_root.join(&manifest.snapshots);
+    }
+    for case in &mut manifest.cases {
+        if case.workspace.is_relative() {
+            case.workspace = repo_root.join(&case.workspace);
+        }
+    }
 
     let mut failures: Vec<String> = Vec::new();
     let mut passed = 0usize;

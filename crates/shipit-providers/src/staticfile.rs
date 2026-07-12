@@ -464,3 +464,68 @@ fn shlex_split(line: &str) -> Option<Vec<String>> {
     }
     Some(parts)
 }
+
+#[cfg(test)]
+mod tests {
+    //! Port of `tests/test_staticfile_provider.py`.
+
+    use super::compute_redirects_config;
+
+    #[test]
+    fn test_staticfile_redirects_generate_sws_config_from_static_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let static_dir = tmp.path().join("site");
+        std::fs::create_dir_all(&static_dir).unwrap();
+        std::fs::write(
+            static_dir.join("_redirects"),
+            "/docs/* /guides/:splat/ 301\n/blog/:slug /posts/:slug 302\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            compute_redirects_config(tmp.path(), Some("site"), true).as_deref(),
+            Some(
+                "[[advanced.redirects]]\n\
+                 source = \"/docs/{**}\"\n\
+                 destination = \"/guides/$1/\"\n\
+                 kind = 301\n\
+                 \n\
+                 [[advanced.redirects]]\n\
+                 source = \"/blog/{*}\"\n\
+                 destination = \"/posts/$1\"\n\
+                 kind = 302\n"
+            )
+        );
+    }
+
+    #[test]
+    fn test_staticfile_redirects_fall_back_to_project_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("site")).unwrap();
+        std::fs::write(tmp.path().join("_redirects"), "/docs/* /guides/:splat/ 301\n")
+            .unwrap();
+
+        assert_eq!(
+            compute_redirects_config(tmp.path(), Some("site"), true).as_deref(),
+            Some(
+                "[[advanced.redirects]]\n\
+                 source = \"/docs/{**}\"\n\
+                 destination = \"/guides/$1/\"\n\
+                 kind = 301\n"
+            )
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "conditions and forced redirects are not supported")]
+    fn test_staticfile_redirects_reject_unsupported_conditions() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("_redirects"),
+            "/docs/* /guides/:splat/ 301 Country=us\n",
+        )
+        .unwrap();
+
+        compute_redirects_config(tmp.path(), None, true);
+    }
+}

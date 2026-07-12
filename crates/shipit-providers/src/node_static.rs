@@ -1077,3 +1077,437 @@ fn toml_string(value: &str) -> String {
     out.push('"');
     out
 }
+
+#[cfg(test)]
+mod tests {
+    //! Port of `tests/test_node_static_provider.py`.
+    //!
+    //! Not ported:
+    //! - `test_node_static_rejects_non_static_framework_config` and
+    //!   `test_node_static_rejects_non_static_framework_config_override`:
+    //!   pydantic's `framework` validator ("<x> cannot be generated
+    //!   statically") has no counterpart in the Rust config layer —
+    //!   `NodeStaticConfig` construction / `config_from_json` perform no
+    //!   such validation.
+
+    use std::path::PathBuf;
+
+    use super::*;
+    use crate::base::BaseConfig;
+
+    fn example(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples")
+            .join(name)
+    }
+
+    fn write(path: &Path, contents: &str) {
+        std::fs::write(path, contents).unwrap();
+    }
+
+    #[test]
+    fn test_new_static_builder_examples_are_pure_static() {
+        for (example_name, framework, static_dir, build_command) in [
+            ("nodestatic-astro", NodeFramework::Astro, "dist", "npm run build"),
+            ("nodestatic-gatsby", NodeFramework::Gatsby, "public", "npm run build"),
+            ("nodestatic-next", NodeFramework::Next, "out", "npm run build"),
+            (
+                "nodestatic-nuxt",
+                NodeFramework::NuxtV3,
+                ".output/public",
+                "npm run generate",
+            ),
+            (
+                "nodestatic-docusaurus",
+                NodeFramework::Docusaurus,
+                "build",
+                "npm run build",
+            ),
+            ("nodestatic-svelte", NodeFramework::Sveltekit, "build", "npm run build"),
+            (
+                "nodestatic-sveltekit",
+                NodeFramework::Sveltekit,
+                "build",
+                "npm run build",
+            ),
+            (
+                "nodestatic-remix",
+                NodeFramework::RemixV2Classic,
+                "public",
+                "npm run build",
+            ),
+            ("nodestatic-eleventy", NodeFramework::Eleventy, "_site", "npm run build"),
+            (
+                "nodestatic-vitepress",
+                NodeFramework::Vitepress,
+                "docs/.vitepress/dist",
+                "npm run docs:build",
+            ),
+            (
+                "nodestatic-vuepress",
+                NodeFramework::Vuepress,
+                "docs/.vuepress/dist",
+                "npm run docs:build",
+            ),
+            ("nodestatic-hexo", NodeFramework::Hexo, "public", "npm run generate"),
+            (
+                "nodestatic-metalsmith",
+                NodeFramework::Metalsmith,
+                "build",
+                "npm run build",
+            ),
+            ("nodestatic-assemble", NodeFramework::Assemble, "dist", "npm run build"),
+            ("nodestatic-harp", NodeFramework::Harp, "www", "npm run build"),
+            (
+                "nodestatic-angular",
+                NodeFramework::Angular,
+                "dist/angular-test",
+                "npm run build",
+            ),
+            ("nodestatic-brunch", NodeFramework::Brunch, "public", "npm run build"),
+            (
+                "nodestatic-create-react-app",
+                NodeFramework::CreateReactApp,
+                "build",
+                "npm run build",
+            ),
+            (
+                "nodestatic-docusaurus-old",
+                NodeFramework::DocusaurusOld,
+                "build",
+                "npm run build",
+            ),
+            ("nodestatic-ember", NodeFramework::Ember, "dist", "npm run build"),
+            (
+                "nodestatic-ionic-angular",
+                NodeFramework::IonicAngular,
+                "www",
+                "npm run build",
+            ),
+            (
+                "nodestatic-ionic-react",
+                NodeFramework::IonicReact,
+                "dist",
+                "npm run build",
+            ),
+            ("nodestatic-parcel", NodeFramework::Parcel, "dist", "npm run build"),
+            (
+                "nodestatic-polymer",
+                NodeFramework::Polymer,
+                "build/default",
+                "npm run build",
+            ),
+            ("nodestatic-preact", NodeFramework::Preact, "build", "npm run build"),
+            ("nodestatic-stencil", NodeFramework::Stencil, "www", "npm run build"),
+            ("nodestatic-umijs", NodeFramework::Umijs, "dist", "npm run build"),
+            ("nodestatic-vite", NodeFramework::Vite, "dist", "npm run build"),
+            ("nodestatic-vite-react", NodeFramework::Vite, "dist", "npm run build"),
+            ("nodestatic-vue", NodeFramework::Vue, "dist", "npm run build"),
+            ("nodestatic-sanity", NodeFramework::SanityV3, "dist", "npm run build"),
+            (
+                "nodestatic-storybook",
+                NodeFramework::Storybook,
+                "storybook-static",
+                "npm run build",
+            ),
+        ] {
+            let path = example(example_name);
+            let base = BaseConfig::default();
+
+            let detect_result = detect(&path, &base).expect(example_name);
+
+            assert_eq!(detect_result.score, 60, "{example_name}");
+            assert_eq!(
+                crate::load_provider(&path, &base, None).unwrap(),
+                "node-static",
+                "{example_name}"
+            );
+
+            let config = load_config(&path, base);
+            assert_eq!(config.framework, Some(framework), "{example_name}");
+            assert_eq!(config.static_dir.as_deref(), Some(static_dir), "{example_name}");
+            assert_eq!(
+                config.build_command.as_deref(),
+                Some(build_command),
+                "{example_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_pure_static_dependency_keeps_priority_with_package_script_command() {
+        let path = example("nodestatic-vitepress");
+        let mut base = BaseConfig::default();
+        base.commands.build = Some("npm run docs:build".to_owned());
+
+        let detect_result = detect(&path, &base).expect("detects");
+
+        assert_eq!(detect_result.score, 60);
+    }
+
+    #[test]
+    fn test_explicit_next_build_command_uses_node_provider() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"next build\"\n  },\n  \"dependencies\": {\n    \"next\": \"^14.2.14\"\n  }\n}\n",
+        );
+        let mut base = BaseConfig::default();
+        base.commands.build = Some("next build".to_owned());
+
+        let detect_result = detect(tmp.path(), &base).expect("detects");
+
+        assert_eq!(detect_result.score, 20);
+        assert_ne!(
+            crate::load_provider(tmp.path(), &base, None).unwrap(),
+            "node-static"
+        );
+    }
+
+    #[test]
+    fn test_explicit_next_export_command_stays_node_static() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"next export\"\n  },\n  \"dependencies\": {\n    \"next\": \"^14.2.14\"\n  }\n}\n",
+        );
+        let mut base = BaseConfig::default();
+        base.commands.build = Some("next export".to_owned());
+
+        let detect_result = detect(tmp.path(), &base).expect("detects");
+
+        assert_eq!(detect_result.score, 60);
+        assert_eq!(
+            crate::load_provider(tmp.path(), &base, None).unwrap(),
+            "node-static"
+        );
+    }
+
+    #[test]
+    fn test_next_output_export_config_uses_node_static() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"next export\"\n  },\n  \"dependencies\": {\n    \"next\": \"^14.2.14\"\n  }\n}\n",
+        );
+        write(
+            &tmp.path().join("next.config.mjs"),
+            "const nextConfig = {\n  output: \"export\",\n};\n\nexport default nextConfig;\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+            "node-static"
+        );
+        assert_eq!(config.framework, Some(NodeFramework::Next));
+        assert_eq!(config.static_dir.as_deref(), Some("out"));
+        assert_eq!(config.build_command.as_deref(), Some("npm run build"));
+    }
+
+    #[test]
+    fn test_elysia_dependency_uses_node_provider() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"start\": \"node server.js\"\n  },\n  \"dependencies\": {\n    \"@elysia/node\": \"^1.4.6\",\n    \"elysia\": \"^1.4.28\",\n    \"vite\": \"^7.2.4\"\n  }\n}\n",
+        );
+
+        assert!(detect(tmp.path(), &BaseConfig::default()).is_none());
+        assert_ne!(
+            crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+            "node-static"
+        );
+    }
+
+    #[test]
+    fn test_nuxt_generate_fallback_uses_node_static() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"nuxt build\",\n    \"generate\": \"nuxt generate\"\n  },\n  \"dependencies\": {\n    \"nuxt\": \"^3.8.1\"\n  }\n}\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+            "node-static"
+        );
+        assert_eq!(config.framework, Some(NodeFramework::NuxtV3));
+        assert_eq!(config.static_dir.as_deref(), Some(".output/public"));
+        assert_eq!(config.build_command.as_deref(), Some("npm run generate"));
+    }
+
+    #[test]
+    fn test_static_remix_output_can_use_node_static_with_node_dep() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("public")).unwrap();
+        write(&tmp.path().join("public/index.html"), "Remix static\n");
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"remix build\",\n    \"start\": \"serve -l 3000 public\"\n  },\n  \"dependencies\": {\n    \"@remix-run/node\": \"^2.2.0\"\n  },\n  \"devDependencies\": {\n    \"@remix-run/dev\": \"^2.2.0\"\n  }\n}\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+            "node-static"
+        );
+        assert_eq!(config.framework, Some(NodeFramework::RemixV2Classic));
+        assert_eq!(config.static_dir.as_deref(), Some("public"));
+        assert_eq!(config.build_command.as_deref(), Some("npm run build"));
+    }
+
+    #[test]
+    fn test_runtime_vite_like_frameworks_are_not_node_static() {
+        for dependencies in [
+            serde_json::json!({"@react-router/dev": "^7.1.5", "vite": "^5.0.0"}),
+            serde_json::json!({"@remix-run/node": "^2.10.0", "@remix-run/dev": "^2.10.0"}),
+            serde_json::json!({"@tanstack/react-start": "^1.0.0", "vite": "^5.0.0"}),
+            serde_json::json!({"@solidjs/start": "^1.0.0", "vite": "^5.0.0"}),
+            serde_json::json!({"@sveltejs/adapter-node": "^5.0.0", "@sveltejs/kit": "^2.16.1"}),
+            serde_json::json!({"nitropack": "^2.11.0", "vite": "^5.0.0"}),
+            serde_json::json!({"@shopify/hydrogen": "^2026.4.2", "vite": "^7.0.0"}),
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            let package_json = serde_json::json!({
+                "scripts": {
+                    "build": "vite build",
+                    "start": "node server.js",
+                },
+                "dependencies": dependencies,
+            });
+            write(
+                &tmp.path().join("package.json"),
+                &format!("{package_json}\n"),
+            );
+            write(&tmp.path().join("server.js"), "console.log('ok')\n");
+
+            assert!(
+                detect(tmp.path(), &BaseConfig::default()).is_none(),
+                "{dependencies}"
+            );
+            assert_ne!(
+                crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+                "node-static",
+                "{dependencies}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_hydrogen_config_is_not_node_static() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"start\": \"node server.js\"\n  },\n  \"dependencies\": {\n    \"vite\": \"^7.0.0\"\n  }\n}\n",
+        );
+        write(&tmp.path().join("hydrogen.config.js"), "export default {}\n");
+        write(&tmp.path().join("server.js"), "console.log('ok')\n");
+
+        assert!(detect(tmp.path(), &BaseConfig::default()).is_none());
+        assert_ne!(
+            crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+            "node-static"
+        );
+    }
+
+    #[test]
+    fn test_node_static_defaults_to_npm_without_lockfile() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"vitepress build docs\"\n  },\n  \"dependencies\": {\n    \"vitepress\": \"^1.6.4\"\n  }\n}\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.package_manager, Some(PackageManager::Npm));
+        assert_eq!(config.build_command.as_deref(), Some("npm run build"));
+    }
+
+    #[test]
+    fn test_node_static_uses_pnpm_when_lockfile_is_present() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"vitepress build docs\"\n  },\n  \"dependencies\": {\n    \"vitepress\": \"^1.6.4\"\n  }\n}\n",
+        );
+        write(
+            &tmp.path().join("pnpm-lock.yaml"),
+            "lockfileVersion: '9.0'\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.package_manager, Some(PackageManager::Pnpm));
+        assert_eq!(config.build_command.as_deref(), Some("pnpm run build"));
+    }
+
+    #[test]
+    fn test_node_static_script_commands_prefers_build_over_fallbacks() {
+        let package_json = match serde_json::json!({
+            "scripts": {
+                "build": "vite build",
+                "generate": "vite generate",
+                "docs:build": "vitepress build docs",
+            },
+        }) {
+            Value::Object(map) => map,
+            _ => unreachable!(),
+        };
+
+        // NodeStaticProvider._script_commands defaults to
+        // preferred=SCRIPT_BUILD_COMMAND.
+        assert_eq!(
+            static_script_commands(Some(&package_json), SCRIPT_BUILD_COMMAND),
+            vec!["vite build"]
+        );
+    }
+
+    #[test]
+    fn test_new_static_builder_commands_are_detected() {
+        use NodeFramework::*;
+        let cases: &[(&str, &[NodeFramework])] = &[
+            ("npx @11ty/eleventy", &[Eleventy]),
+            ("vitepress build docs", &[Vitepress]),
+            ("vuepress build docs", &[Vuepress]),
+            ("hexo g", &[Hexo]),
+            ("metalsmith", &[Metalsmith]),
+            ("grunt assemble", &[Assemble]),
+            ("harp compile src www", &[Harp]),
+            ("ng build", &[IonicAngular, Angular]),
+            ("brunch build --production", &[Brunch]),
+            ("react-scripts build", &[IonicReact, CreateReactApp]),
+            ("ember build --environment=production", &[Ember]),
+            ("parcel build src/index.html", &[Parcel]),
+            ("polymer build", &[Polymer]),
+            ("preact build", &[Preact]),
+            ("stencil build", &[Stencil]),
+            ("svelte-kit build", &[Sveltekit]),
+            ("umi build", &[Umijs]),
+            ("vue-cli-service build", &[Vue]),
+            ("nuxt generate", &[NuxtOld]),
+            ("sanity build", &[Sanity]),
+            ("storybook build", &[Storybook]),
+        ];
+
+        for (command, frameworks) in cases {
+            assert_eq!(
+                NodeFramework::detect_from_command(command),
+                *frameworks,
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_node_framework_static_capability_is_explicit() {
+        assert!(NodeFramework::Next.can_be_static());
+        assert!(NodeFramework::Eleventy.can_be_static());
+        assert!(!NodeFramework::Express.can_be_static());
+    }
+}

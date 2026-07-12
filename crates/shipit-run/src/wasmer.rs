@@ -37,19 +37,8 @@ pub const PHPIX_VERSION: &str = "0.3.0-rc.1";
 
 /// The bundled Python version file is the single version source while the
 /// two implementations coexist (same trick as shipit-cli/src/generator.rs).
-const VERSION_PY: &str = include_str!("../../../src/shipit/version.py");
-
 pub fn shipit_version() -> &'static str {
-    static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    VERSION.get_or_init(|| {
-        VERSION_PY
-            .lines()
-            .find_map(|line| {
-                let rest = line.trim().strip_prefix("version = \"")?;
-                rest.split('"').next().map(str::to_owned)
-            })
-            .unwrap_or_else(|| "0.0.0".to_owned())
-    })
+    env!("CARGO_PKG_VERSION")
 }
 
 /// Port of `_phpix_dependency`.
@@ -1522,7 +1511,7 @@ mod tests {
     #[test]
     fn test_wasmer_app_yaml_updates_existing_volume_with_same_mount() {
         let tmp = tempfile::tempdir().unwrap();
-        let mut runner = make_runner(tmp.path());
+        let runner = make_runner(tmp.path());
         std::fs::write(
             runner.src_dir.join("app.yaml"),
             concat!(
@@ -1900,5 +1889,81 @@ mod tests {
             }
             other => panic!("expected EnvStep, got {other:?}"),
         }
+    }
+
+    /// Port of test_wordpress_phpix.py::
+    /// test_wasmer_app_yaml_sets_memory_limit_for_wordpress_phpix.
+    #[test]
+    fn test_wasmer_app_yaml_sets_memory_limit_for_wordpress_phpix() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_runner(tmp.path());
+
+        let mut config = shipit_providers::wordpress::WordPressConfig::default();
+        config.php.phpix = true;
+        runner.prepare_config(ProviderConfig::Wordpress(config));
+
+        let mut serve = serve(
+            "wordpress",
+            "wordpress",
+            vec![package("phpix", None, None), package("bash", None, None)],
+            Some("/app"),
+            &[
+                ("start", "phpix -S localhost:8080 -t /app"),
+                ("after_deploy", "bash /opt/assets/setup-wp.sh"),
+            ],
+        );
+        serve.env = Some(
+            [("PHPIX_PHP_THREADS".to_owned(), "4".to_owned())]
+                .into_iter()
+                .collect(),
+        );
+        serve.services = Some(vec![shipit_plan::Service {
+            name: "database".to_owned(),
+            provider: "mysql".to_owned(),
+        }]);
+
+        runner.build_serve(&serve).unwrap();
+
+        let app_yaml = read_yaml(&runner.wasmer_dir_path.join("app.yaml"));
+        let capabilities = app_yaml
+            .get(&yaml_str("capabilities"))
+            .and_then(YamlValue::as_mapping)
+            .unwrap();
+        assert_eq!(
+            capabilities
+                .get(&yaml_str("database"))
+                .and_then(YamlValue::as_mapping)
+                .and_then(|db| db.get(&yaml_str("engine")))
+                .cloned(),
+            Some(yaml_str("mysql"))
+        );
+        assert_eq!(
+            capabilities
+                .get(&yaml_str("memory"))
+                .and_then(YamlValue::as_mapping)
+                .and_then(|memory| memory.get(&yaml_str("limit")))
+                .cloned(),
+            Some(yaml_str("2Gb"))
+        );
+        assert_eq!(
+            app_yaml.get(&yaml_str("enable_email")),
+            Some(&YamlValue::Bool(true))
+        );
+        let env = app_yaml
+            .get(&yaml_str("env"))
+            .and_then(YamlValue::as_mapping)
+            .unwrap();
+        assert_eq!(
+            env.get(&yaml_str("PHPIX_PHP_THREADS")),
+            Some(&yaml_str("4"))
+        );
+        let annotations = app_yaml
+            .get(&yaml_str("annotations"))
+            .and_then(YamlValue::as_mapping)
+            .unwrap();
+        assert_eq!(
+            annotations.get(&yaml_str("wasmer.io/app-kind")),
+            Some(&yaml_str("wordpress"))
+        );
     }
 }

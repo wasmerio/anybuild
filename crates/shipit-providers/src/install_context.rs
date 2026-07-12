@@ -727,3 +727,119 @@ fn looks_like_file_dependency(path: &Path) -> bool {
         ".whl" | ".zip" | ".tar" | ".tar.gz" | ".tgz" | ".tar.bz2" | ".tar.xz"
     )
 }
+
+#[cfg(test)]
+mod tests {
+    //! Port of the Python-side half of `tests/test_install_context.py`.
+    //! (The JS-side tests live with `discover_js_install_context` in
+    //! `node.rs`.)
+
+    use super::*;
+
+    fn write(path: &Path, contents: &str) {
+        std::fs::write(path, contents).unwrap();
+    }
+
+    #[test]
+    fn test_python_requirements_context_follows_recursive_includes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let deps_dir = root.join("deps");
+        std::fs::create_dir(&deps_dir).unwrap();
+        write(
+            &root.join("requirements.txt"),
+            "-r deps/base.txt\nflask==3.0.0\n",
+        );
+        write(
+            &deps_dir.join("base.txt"),
+            "--constraint ../constraints.txt\nfastapi==0.115.0\n",
+        );
+        write(&root.join("constraints.txt"), "anyio<5\n");
+
+        let context = discover_python_install_context(root, false, true);
+
+        assert_eq!(
+            context.inputs,
+            ["requirements.txt", "deps/base.txt", "constraints.txt"]
+        );
+        assert!(!context.requires_all_files);
+    }
+
+    #[test]
+    fn test_python_requirements_context_detects_external_local_package() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app_dir = tmp.path().join("app");
+        let shared_dir = tmp.path().join("shared");
+        std::fs::create_dir(&app_dir).unwrap();
+        std::fs::create_dir(&shared_dir).unwrap();
+        write(&app_dir.join("requirements.txt"), "-e ../shared\n");
+        write(
+            &shared_dir.join("pyproject.toml"),
+            "[project]\nname = 'shared'\n",
+        );
+
+        let context = discover_python_install_context(&app_dir, false, true);
+
+        assert!(context.requires_all_files);
+        // local_paths stores resolved paths (tempdirs may sit behind
+        // symlinks, e.g. /var -> /private/var on macOS).
+        assert!(context.local_paths.contains(&resolve_non_strict(&shared_dir)));
+    }
+
+    /// Python's `test_python_provider_uses_context_for_requirements_inputs`
+    /// asserts the `uv add` RunStep's inputs on an evaluated plan; the
+    /// decisive provider-level fact is the discovered inputs list (the
+    /// plan wiring is covered by the snapshot suite).
+    #[test]
+    fn test_python_provider_uses_context_for_requirements_inputs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let deps_dir = root.join("deps");
+        std::fs::create_dir(&deps_dir).unwrap();
+        write(&root.join("requirements.txt"), "-r deps/base.txt\n");
+        write(&deps_dir.join("base.txt"), "fastapi==0.115.0\n");
+
+        let context = discover_python_install_context(root, false, true);
+
+        assert_eq!(context.inputs, ["requirements.txt", "deps/base.txt"]);
+        assert!(!context.requires_all_files);
+    }
+
+    #[test]
+    fn test_python_pyproject_context_detects_uv_path_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let package_dir = root.join("packages").join("shared");
+        std::fs::create_dir_all(&package_dir).unwrap();
+        write(
+            &package_dir.join("pyproject.toml"),
+            "[project]\nname = 'shared'\n",
+        );
+        write(
+            &root.join("pyproject.toml"),
+            "[project]\nname = \"app\"\ndependencies = [\"shared\"]\n\n[tool.uv.sources]\nshared = { path = \"packages/shared\" }\n",
+        );
+
+        let context = discover_python_install_context(root, true, false);
+
+        assert!(context.requires_all_files);
+        assert!(context
+            .local_paths
+            .contains(&resolve_non_strict(&package_dir)));
+    }
+
+    #[test]
+    fn test_python_pyproject_context_ignores_remote_direct_url() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(
+            &root.join("pyproject.toml"),
+            "[project]\nname = \"app\"\ndependencies = [\"shared @ https://example.com/shared.whl\"]\n",
+        );
+
+        let context = discover_python_install_context(root, true, false);
+
+        assert!(!context.requires_all_files);
+        assert!(context.local_paths.is_empty());
+    }
+}

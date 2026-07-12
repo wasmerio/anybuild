@@ -1765,7 +1765,7 @@ checksum = "dc6fe69c597f9c37bfeeeeeb33da3530379845f10be461a66d16d03eca2ded77"
 
 [[package]]
 name = "shipit-build"
-version = "0.1.0"
+version = "0.21.7"
 dependencies = [
  "anyhow",
  "base64",
@@ -1782,7 +1782,7 @@ dependencies = [
 
 [[package]]
 name = "shipit-cli"
-version = "0.1.0"
+version = "0.21.7"
 dependencies = [
  "anyhow",
  "clap",
@@ -1799,8 +1799,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "shipit-e2e"
+version = "0.21.7"
+dependencies = [
+ "anyhow",
+ "libc",
+ "regex",
+ "ureq",
+]
+
+[[package]]
 name = "shipit-plan"
-version = "0.1.0"
+version = "0.21.7"
 dependencies = [
  "indexmap",
  "serde",
@@ -1809,7 +1819,7 @@ dependencies = [
 
 [[package]]
 name = "shipit-providers"
-version = "0.1.0"
+version = "0.21.7"
 dependencies = [
  "anyhow",
  "globset",
@@ -1824,7 +1834,7 @@ dependencies = [
 
 [[package]]
 name = "shipit-run"
-version = "0.1.0"
+version = "0.21.7"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -1842,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "shipit-starlark"
-version = "0.1.0"
+version = "0.21.7"
 dependencies = [
  "allocative",
  "anyhow",

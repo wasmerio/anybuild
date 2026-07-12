@@ -105,7 +105,7 @@ def _example_case(example_dir: Path, cross_platform=None):
     name = example_dir.name + ("__cross" if cross_platform else "")
     case = {
         "name": name,
-        "workspace": str(example_dir),
+        "workspace": str(example_dir.relative_to(ROOT)),
         "subdir": subdir,
         "shipit": loader_text,
         "config": config_json(provider_config),
@@ -172,7 +172,7 @@ def _workspace_case(name: str, workspace: Path, app_path: Path):
     )
     return {
         "name": name,
-        "workspace": str(workspace),
+        "workspace": str(workspace.relative_to(ROOT)),
         "subdir": subdir,
         "shipit": loader_text,
         "config": config_json(provider_config),
@@ -225,7 +225,7 @@ def _synthetic_cases(fixtures: Path):
 
 
 def main() -> None:
-    out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "target" / "rust-fixtures"
+    out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "fixtures"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cases = []
@@ -242,8 +242,8 @@ def main() -> None:
     cases.extend(_synthetic_cases(out_dir))
 
     manifest = {
-        "starlib": str(ROOT / "src" / "shipit" / "starlib"),
-        "snapshots": str(ROOT / "tests" / "plan_snapshots"),
+        "starlib": "src/shipit/starlib",
+        "snapshots": "tests/plan_snapshots",
         "cases": cases,
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=1))

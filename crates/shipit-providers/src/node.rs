@@ -1992,3 +1992,554 @@ fn fnmatch_regex(pattern: &str) -> Option<Regex> {
     re.push('$');
     Regex::new(&re).ok()
 }
+
+#[cfg(test)]
+mod tests {
+    //! Port of `tests/test_node_provider.py` plus the JS-side half of
+    //! `tests/test_install_context.py` (`discover_js_install_context`
+    //! lives here).
+    //!
+    //! Not ported (plan-level / out of scope for this crate):
+    //! - `test_node_build_steps_optimize_deps_prunes_then_node_modules`,
+    //!   `test_node_provider_uses_build_only_assets_mount`: assert build
+    //!   step/mount ordering on evaluated plans — snapshot-gated.
+    //! - `test_node_modules_binary_optimizer_removes_executable_binaries`:
+    //!   exercises the `optimize-node-modules.sh` bash asset, not provider
+    //!   logic ported to Rust.
+    //! - `test_laravel_reuses_node_provider_without_static_serving`:
+    //!   laravel provider + evaluated plan (laravel.rs is covered
+    //!   elsewhere; plan behavior is snapshot-gated).
+
+    use super::*;
+    use crate::base::BaseConfig;
+
+    fn example(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples")
+            .join(name)
+    }
+
+    fn write(path: &Path, contents: &str) {
+        std::fs::write(path, contents).unwrap();
+    }
+
+    fn json_map(value: Value) -> JsonMap {
+        match value {
+            Value::Object(map) => map,
+            _ => panic!("expected object"),
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // tests/test_node_provider.py
+
+    #[test]
+    fn test_node_package_manager_lockfile_selection() {
+        for (lockfile, package_manager) in [
+            ("package-lock.json", PackageManager::Npm),
+            ("pnpm-lock.yaml", PackageManager::Pnpm),
+            ("yarn.lock", PackageManager::Yarn),
+            ("bun.lockb", PackageManager::Bun),
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            write(&tmp.path().join("package.json"), "{}\n");
+            write(&tmp.path().join(lockfile), "\n");
+
+            let config = load_config(tmp.path(), BaseConfig::default());
+
+            assert_eq!(config.package_manager, Some(package_manager), "{lockfile}");
+        }
+    }
+
+    #[test]
+    fn test_node_package_manager_defaults_to_npm() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("package.json"), "{}\n");
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.package_manager, Some(PackageManager::Npm));
+    }
+
+    #[test]
+    fn test_node_package_manager_uses_package_manager_field() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\"packageManager\": \"pnpm@10.0.0\"}\n",
+        );
+        write(&tmp.path().join("package-lock.json"), "{}\n");
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.package_manager, Some(PackageManager::Pnpm));
+    }
+
+    #[test]
+    fn test_node_package_manager_uses_pnpm_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("package.json"), "{}\n");
+        write(&tmp.path().join("package-lock.json"), "{}\n");
+        write(
+            &tmp.path().join("pnpm-workspace.yaml"),
+            "packages:\n  - apps/*\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.package_manager, Some(PackageManager::Pnpm));
+    }
+
+    #[test]
+    fn test_node_check_deps_returns_matching_dependencies() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"dependencies\": {\n    \"express\": \"5.1.0\"\n  },\n  \"devDependencies\": {\n    \"hono\": \"^4.12.23\"\n  }\n}\n",
+        );
+
+        let package_json = parse_package_json(tmp.path());
+        let found_deps =
+            check_package_json_deps(package_json.as_ref(), &["express", "elysia", "hono"]);
+
+        assert_eq!(found_deps, BTreeSet::from(["express", "hono"]));
+    }
+
+    #[test]
+    fn test_node_detection_does_not_beat_node_static() {
+        let path = example("nodestatic-vitepress");
+        let base = BaseConfig::default();
+
+        let node_static_result = crate::node_static::detect(&path, &base);
+        let node_result = detect(&path, &base);
+
+        let node_static_result = node_static_result.expect("node-static detects");
+        let node_result = node_result.expect("node detects");
+        assert!(node_static_result.score > node_result.score);
+        assert_eq!(
+            crate::load_provider(&path, &base, None).unwrap(),
+            "node-static"
+        );
+    }
+
+    #[test]
+    fn test_node_provider_detects_generic_node_example() {
+        let path = example("node");
+
+        assert_eq!(
+            crate::load_provider(&path, &BaseConfig::default(), None).unwrap(),
+            "node"
+        );
+    }
+
+    #[test]
+    fn test_common_entry_without_package_json_needs_node_evidence() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("app.js"),
+            "import http from \"node:http\";\n\nhttp.createServer((_req, res) => {\n  res.end(\"ok\");\n}).listen(process.env.PORT || 8080);\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+            "node"
+        );
+        assert_eq!(config.base.commands.start.as_deref(), Some("node app.js"));
+    }
+
+    #[test]
+    fn test_node_provider_detects_node_runtime_examples() {
+        for (example_name, framework) in [
+            ("node-fastify", NodeFramework::Fastify),
+            ("node-hono", NodeFramework::Hono),
+            ("node-express", NodeFramework::Express),
+            ("node-koa", NodeFramework::Koa),
+            ("node-h3", NodeFramework::H3),
+            ("node-elysia", NodeFramework::Elysia),
+            ("node-nestjs", NodeFramework::Nestjs),
+            ("node-nitro", NodeFramework::Nitro),
+            ("node-hydrogen", NodeFramework::Hydrogen),
+            ("node-react-router", NodeFramework::ReactRouter),
+            ("node-remix", NodeFramework::Remix),
+            ("node-solidstart", NodeFramework::Solidstart),
+            ("node-tanstack-start", NodeFramework::TanstackStart),
+            ("node-xmcp", NodeFramework::Xmcp),
+            ("node-mastra", NodeFramework::Mastra),
+        ] {
+            let path = example(example_name);
+
+            assert_eq!(
+                crate::load_provider(&path, &BaseConfig::default(), None).unwrap(),
+                "node",
+                "{example_name}"
+            );
+            let config = load_config(&path, BaseConfig::default());
+            assert_eq!(config.framework, Some(framework), "{example_name}");
+            assert_eq!(
+                config.base.commands.start.as_deref(),
+                Some("node server.js"),
+                "{example_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_node_provider_detects_astro_runtime_example() {
+        let path = example("node-astro");
+
+        assert_eq!(
+            crate::load_provider(&path, &BaseConfig::default(), None).unwrap(),
+            "node"
+        );
+    }
+
+    #[test]
+    fn test_node_provider_detects_hydrogen_config_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("package.json"), "{}\n");
+        write(&tmp.path().join("hydrogen.config.ts"), "export default {}\n");
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+            "node"
+        );
+        assert_eq!(config.framework, Some(NodeFramework::Hydrogen));
+    }
+
+    #[test]
+    fn test_node_provider_detects_elysia_runtime_example() {
+        let path = example("node-elysia");
+
+        assert_eq!(
+            crate::load_provider(&path, &BaseConfig::default(), None).unwrap(),
+            "node"
+        );
+        let config = load_config(&path, BaseConfig::default());
+        assert_eq!(config.framework, Some(NodeFramework::Elysia));
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node server.js")
+        );
+    }
+
+    #[test]
+    fn test_node_provider_detects_nextjs_runtime_app() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"next build\",\n    \"start\": \"next start\"\n  },\n  \"dependencies\": {\n    \"next\": \"^14.2.14\",\n    \"react\": \"^18.3.1\",\n    \"react-dom\": \"^18.3.1\"\n  }\n}\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+            "node"
+        );
+        assert_eq!(config.framework, Some(NodeFramework::Next));
+        assert_eq!(
+            config.build_command.as_deref(),
+            Some("npx -y next-bundle@1.0.0 --build-command 'npm run build'")
+        );
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node server.mjs")
+        );
+    }
+
+    #[test]
+    fn test_nextjs_build_command_uses_package_manager() {
+        for (lockfile, build_command) in [
+            (
+                "package-lock.json",
+                "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
+            ),
+            (
+                "pnpm-lock.yaml",
+                "pnpm dlx next-bundle@1.0.0 --build-command 'pnpm run build'",
+            ),
+            (
+                "yarn.lock",
+                "yarn dlx next-bundle@1.0.0 --build-command 'yarn run build'",
+            ),
+            (
+                "bun.lockb",
+                "bunx next-bundle@1.0.0 --build-command 'bun run build'",
+            ),
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            write(
+                &tmp.path().join("package.json"),
+                "{\n  \"scripts\": {\n    \"build\": \"next build\"\n  },\n  \"dependencies\": {\n    \"next\": \"^14.2.14\"\n  }\n}\n",
+            );
+            write(&tmp.path().join(lockfile), "\n");
+
+            let config = load_config(tmp.path(), BaseConfig::default());
+
+            assert_eq!(config.build_command.as_deref(), Some(build_command), "{lockfile}");
+        }
+    }
+
+    #[test]
+    fn test_nextjs_build_command_wraps_explicit_build_command() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"dependencies\": {\n    \"next\": \"^14.2.14\"\n  }\n}\n",
+        );
+        let mut base = BaseConfig::default();
+        base.commands.build = Some("next build --debug".to_owned());
+
+        let config = load_config(tmp.path(), base);
+
+        assert_eq!(
+            config.build_command.as_deref(),
+            Some("npx -y next-bundle@1.0.0 --build-command 'next build --debug'")
+        );
+        assert_eq!(config.base.commands.build, config.build_command);
+    }
+
+    #[test]
+    fn test_nextjs_start_command_prefers_explicit_command() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"scripts\": {\n    \"build\": \"next build\",\n    \"start\": \"next start\"\n  },\n  \"dependencies\": {\n    \"next\": \"^14.2.14\"\n  }\n}\n",
+        );
+        let mut base = BaseConfig::default();
+        base.commands.start = Some("node custom-next-server.js".to_owned());
+
+        let config = load_config(tmp.path(), base);
+
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node custom-next-server.js")
+        );
+    }
+
+    #[test]
+    fn test_node_script_commands_uses_build_by_default() {
+        let package_json = json_map(serde_json::json!({
+            "scripts": {
+                "generate": "node generate.js",
+                "build": "node build.js",
+            },
+        }));
+
+        // NodeProvider._script_commands defaults to preferred=("build",).
+        assert_eq!(
+            script_commands(Some(&package_json), &["build"]),
+            vec!["node build.js"]
+        );
+    }
+
+    #[test]
+    fn test_node_start_command_prefers_explicit_command() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\"scripts\": {\"start\": \"node server.js\"}}\n",
+        );
+        let mut base = BaseConfig::default();
+        base.commands.start = Some("node custom.js".to_owned());
+
+        let config = load_config(tmp.path(), base);
+
+        assert_eq!(config.base.commands.start.as_deref(), Some("node custom.js"));
+    }
+
+    #[test]
+    fn test_node_start_command_uses_package_script() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\"scripts\": {\"start\": \"node server.js\"}}\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node server.js")
+        );
+    }
+
+    #[test]
+    fn test_node_start_command_uses_package_main() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("package.json"), "{\"main\": \"src/server.js\"}\n");
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node src/server.js")
+        );
+    }
+
+    #[test]
+    fn test_node_start_command_uses_common_entry_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("server.js"),
+            "const http = require(\"http\");\n\nhttp.createServer((_req, res) => {\n  res.end(\"ok\");\n}).listen(8080);\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node server.js")
+        );
+    }
+
+    /// Python's `test_node_provider_skips_native_binary_optimizer_by_default`
+    /// asserts on an evaluated plan; the decisive provider-level fact is the
+    /// `remove_native_binaries=False` default (the absence of optimizer
+    /// steps/mounts is snapshot-gated).
+    #[test]
+    fn test_node_provider_skips_native_binary_optimizer_by_default() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("package.json"), "{}\n");
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.remove_native_binaries, Some(false));
+    }
+
+    /// Python's `test_node_prepare_steps_use_precompile_edgejs_flag`
+    /// evaluates two plans; the provider-level fact is the
+    /// `precompile_edgejs=None` default (the prepare-step rendering is
+    /// snapshot-gated).
+    #[test]
+    fn test_node_prepare_steps_use_precompile_edgejs_flag() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\"scripts\": {\"start\": \"node server.js\"}}",
+        );
+        write(&tmp.path().join("server.js"), "console.log('ok')\n");
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.precompile_edgejs, None);
+    }
+
+    // -----------------------------------------------------------------
+    // tests/test_install_context.py (JS side)
+
+    #[test]
+    fn test_js_context_detects_recursive_external_file_dependency() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app_dir = tmp.path().join("app");
+        let shared_dir = tmp.path().join("shared");
+        let core_dir = tmp.path().join("core");
+        std::fs::create_dir(&app_dir).unwrap();
+        std::fs::create_dir(&shared_dir).unwrap();
+        std::fs::create_dir(&core_dir).unwrap();
+        write(
+            &app_dir.join("package.json"),
+            "{\"dependencies\": {\"shared\": \"file:../shared\"}}",
+        );
+        write(
+            &shared_dir.join("package.json"),
+            "{\"name\": \"shared\", \"dependencies\": {\"core\": \"file:../core\"}}",
+        );
+        write(&core_dir.join("package.json"), "{\"name\": \"core\"}");
+
+        let context = discover_js_install_context(&app_dir);
+
+        // Python also asserts local_paths == [shared, core]; the Rust
+        // context only carries the consumed facts (inputs +
+        // requires_all_files).
+        assert!(context.requires_all_files);
+    }
+
+    #[test]
+    fn test_js_context_detects_in_root_file_dependency() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let package_dir = root.join("packages").join("shared");
+        std::fs::create_dir_all(&package_dir).unwrap();
+        write(
+            &root.join("package.json"),
+            "{\"dependencies\": {\"shared\": \"file:packages/shared\"}}",
+        );
+        write(&package_dir.join("package.json"), "{\"name\": \"shared\"}");
+
+        let context = discover_js_install_context(root);
+
+        assert!(context.requires_all_files);
+        // The in-root local package's manifest is walked into the inputs
+        // (Python asserts local_paths == [package_dir]).
+        assert_eq!(
+            context.inputs,
+            ["package.json", "packages/shared/package.json"]
+        );
+    }
+
+    /// Python also asserts the evaluated plan's copy/env/install steps
+    /// (`npm install` with `inputs=None`); those are snapshot-gated. The
+    /// decisive provider fact is the escape hatch flag.
+    #[test]
+    fn test_node_provider_uses_escape_hatch_for_external_local_dependency() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app_dir = tmp.path().join("app");
+        let shared_dir = tmp.path().join("shared");
+        std::fs::create_dir(&app_dir).unwrap();
+        std::fs::create_dir(&shared_dir).unwrap();
+        write(
+            &app_dir.join("package.json"),
+            "{\"dependencies\": {\"shared\": \"file:../shared\"}}",
+        );
+        write(&shared_dir.join("package.json"), "{\"name\": \"shared\"}");
+
+        let config = load_config(&app_dir, BaseConfig::default());
+
+        assert!(config.install_requires_all_files);
+    }
+
+    /// Python also asserts the narrow lockfile copy + `pnpm install` with
+    /// `inputs == ["package.json"]` on the plan; snapshot-gated. The
+    /// provider-level facts are the package manager and install inputs.
+    #[test]
+    fn test_node_provider_keeps_narrow_install_without_local_deps() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("package.json"), "{}\n");
+        write(
+            &tmp.path().join("pnpm-lock.yaml"),
+            "lockfileVersion: '9.0'\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.package_manager, Some(PackageManager::Pnpm));
+        assert!(!config.install_requires_all_files);
+        assert_eq!(
+            config.install_inputs,
+            Some(vec!["package.json".to_owned()])
+        );
+    }
+
+    #[test]
+    fn test_js_context_detects_package_json_workspaces() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let package_dir = root.join("packages").join("ui");
+        std::fs::create_dir_all(&package_dir).unwrap();
+        write(
+            &root.join("package.json"),
+            "{\"workspaces\": [\"packages/*\"]}",
+        );
+        write(&package_dir.join("package.json"), "{\"name\": \"@app/ui\"}");
+
+        let context = discover_js_install_context(root);
+
+        // Python also asserts package_dir in local_paths; see above.
+        assert!(context.requires_all_files);
+    }
+}

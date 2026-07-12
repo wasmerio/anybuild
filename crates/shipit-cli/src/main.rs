@@ -186,4 +186,55 @@ mod tests {
         use clap::CommandFactory;
         super::Cli::command().debug_assert();
     }
+
+    // Port of test_cli_after_deploy.py's test_auto_passes_* quartet. The
+    // Python tests monkeypatch cli.run and inspect the kwargs auto passes
+    // along; in Rust auto.rs forwards `selection` / `serve_port` to
+    // run::run by direct struct construction, so the observable seam is
+    // the parsed AutoArgs.
+    fn parse_auto(args: &[&str]) -> crate::commands::auto::AutoArgs {
+        use clap::Parser;
+        let mut argv = vec!["shipit"];
+        argv.extend_from_slice(args);
+        match super::Cli::try_parse_from(argv).expect("parses").command {
+            super::Command::Auto(args) => args,
+            _ => panic!("expected the auto command"),
+        }
+    }
+
+    #[test]
+    fn auto_passes_after_deploy_to_run() {
+        let args = parse_auto(&["auto", "proj", "--start", "--after-deploy"]);
+        assert!(args.selection.effective_after_deploy());
+        assert!(args.selection.effective_start());
+    }
+
+    #[test]
+    fn auto_passes_serve_port_to_run() {
+        let args = parse_auto(&["auto", "proj", "--start", "--serve-port=34567"]);
+        assert!(args.selection.effective_start());
+        assert_eq!(args.build.serve_port, Some(34567));
+    }
+
+    #[test]
+    fn auto_passes_commands_to_run() {
+        let args = parse_auto(&["auto", "proj", "--command=prepare-db", "-c", "warm-cache"]);
+        assert_eq!(args.selection.command_names, ["prepare-db", "warm-cache"]);
+    }
+
+    #[test]
+    fn auto_passes_volume_specs_to_run() {
+        let args = parse_auto(&[
+            "auto",
+            "proj",
+            "--volume",
+            "uploads:/app/uploads",
+            "--volume",
+            "cache:/app/cache",
+        ]);
+        assert_eq!(
+            args.selection.volume_specs,
+            ["uploads:/app/uploads", "cache:/app/cache"]
+        );
+    }
 }

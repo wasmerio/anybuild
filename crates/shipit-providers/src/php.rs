@@ -278,3 +278,82 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    //! Port of `tests/test_php_provider.py`.
+
+    use std::path::Path;
+
+    use super::PhpFramework;
+    use crate::{load_provider, load_provider_config, BaseConfig, ProviderConfig};
+
+    fn write(path: &Path, contents: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+    }
+
+    fn load_php_config(project_dir: &Path) -> super::PhpConfig {
+        let base = BaseConfig::default();
+        let provider = load_provider(project_dir, &base, None).unwrap();
+        assert_eq!(provider, "php");
+        match load_provider_config(provider, project_dir, base).unwrap() {
+            ProviderConfig::Php(config) => config,
+            other => panic!("expected a php config, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_php_provider_detects_moodle_from_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path().join("moodle");
+        std::fs::create_dir_all(project_dir.join("admin/cli")).unwrap();
+        std::fs::create_dir_all(project_dir.join("lib")).unwrap();
+        std::fs::create_dir_all(project_dir.join("mod")).unwrap();
+        write(&project_dir.join("index.php"), "<?php\n");
+        write(&project_dir.join("version.php"), "<?php\n");
+        write(&project_dir.join("lib/setup.php"), "<?php\n");
+        write(&project_dir.join("admin/cli/install.php"), "<?php\n");
+
+        let config = load_php_config(&project_dir);
+        assert_eq!(config.framework, Some(PhpFramework::Moodle));
+    }
+
+    #[test]
+    fn test_php_provider_detects_drupal_from_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path().join("drupal");
+        write(&project_dir.join("web/index.php"), "<?php\n");
+        write(&project_dir.join("web/core/lib/Drupal.php"), "<?php\n");
+        write(
+            &project_dir.join("composer.json"),
+            &serde_json::json!({
+                "name": "drupal/recommended-project",
+                "require": {"drupal/core-recommended": "^11.0"},
+            })
+            .to_string(),
+        );
+
+        let config = load_php_config(&project_dir);
+        assert_eq!(config.framework, Some(PhpFramework::Drupal));
+        assert_eq!(config.public_dir.as_deref(), Some("web"));
+        // Drupal serves with plain php (phpix disabled) from the web/
+        // docroot. The Python test asserts the evaluated start command
+        // (`php -S localhost:… -t …/web`); the command rendering from
+        // `phpix`/`public_dir` is pinned byte-for-byte by the php-nobuild
+        // and php-api plan snapshots, so the config bits that drive it are
+        // asserted here.
+        assert!(!config.phpix);
+    }
+
+    #[test]
+    fn test_php_provider_detects_drupal_from_source_layout() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path().join("drupal-source");
+        write(&project_dir.join("index.php"), "<?php\n");
+        write(&project_dir.join("core/lib/Drupal.php"), "<?php\n");
+
+        let config = load_php_config(&project_dir);
+        assert_eq!(config.framework, Some(PhpFramework::Drupal));
+    }
+}

@@ -1,10 +1,14 @@
 name: Reusable Test + E2E
 
-# The CLI under test is the Rust binary: the `test` job builds it (debug)
-# and runs the migration gate stack, then every e2e job downloads that
-# binary and drives it through the pytest harness via SHIPIT_BIN. The
-# Python implementation is no longer tested on CI; it only serves as the
-# oracle for the cross-implementation fixtures and the CLI differential.
+# Fully Rust-based testing: the gate job builds the workspace, runs the
+# nextest gate suites against the committed fixtures (fixtures/,
+# tests/plan_snapshots/ — no Python oracle needed at test time), and
+# archives the e2e test binaries. The e2e matrix runs slices of the
+# shipit-e2e crate against the debug binary.
+#
+# uv/Python appear in the e2e jobs only as the runtime toolchain of the
+# example apps being built (uv/python for python examples), not as a test
+# harness.
 
 on:
   workflow_call:
@@ -28,51 +32,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Verify lockfile is up to date
-        run: uv lock --check
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
 
-      - name: Install dependencies (fixture oracle + e2e harness)
-        run: uv sync --locked --dev
-
-      - name: Build shipit (debug)
+      - name: Build workspace (deny warnings)
         run: cargo build --workspace
         env:
           RUSTFLAGS: -D warnings
 
-      - name: Dump cross-implementation fixtures
-        # The Rust snapshot/config tests *skip* when the manifest is
-        # absent — fail here instead so a broken dump can't green-wash CI.
-        run: |
-          uv run python scripts/dump_rust_fixtures.py
-          test -f target/rust-fixtures/manifest.json
+      - name: Run gate suites
+        run: cargo nextest run --workspace
 
-      - name: Rust tests (snapshots, legacy files, config differential, units)
-        run: cargo test --workspace
-
-      - name: CLI differential (generate + plan, Rust vs Python oracle)
-        run: uv run python scripts/cli_differential.py
+      - name: Archive e2e test binaries
+        run: cargo nextest archive -p shipit-e2e --archive-file shipit-e2e.tar.zst
 
       - name: Upload shipit binary
         uses: actions/upload-artifact@v4
         with:
           name: shipit-debug
           path: target/debug/shipit
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload e2e archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: shipit-e2e-archive
+          path: shipit-e2e.tar.zst
           retention-days: 1
           if-no-files-found: error
 
@@ -111,6 +103,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      # Toolchains for the example apps the suite builds (not a harness).
       - name: Set up uv
         uses: astral-sh/setup-uv@v8.3.2
         with:
@@ -137,6 +136,11 @@ jobs:
           name: shipit-debug
           path: shipit-bin
 
+      - name: Download e2e archive
+        uses: actions/download-artifact@v4
+        with:
+          name: shipit-e2e-archive
+
       - name: Verify toolchain
         run: |
           chmod +x shipit-bin/shipit
@@ -146,13 +150,12 @@ jobs:
           docker --version
           ./shipit-bin/shipit generate --help > /dev/null
 
-      - name: Install dependencies (pytest harness)
-        run: uv sync --locked --dev
-
-      - name: Run e2e tests (Rust binary via SHIPIT_BIN)
+      - name: Run e2e tests (Rust binary, wasmer mode)
         env:
           SHIPIT_BIN: ${{ github.workspace }}/shipit-bin/shipit
         run: |
-          uv run pytest -m "e2e and e2e_${{ matrix.suite }}" \
-            -v tests/test_e2e.py -n 4 \
-            -k "(BuildMode.Wasmer and not cdn and not hugo and not python-streamlit and not BuildMode.WasmerAndDocker)"
+          cargo nextest run \
+            --archive-file shipit-e2e.tar.zst \
+            --workspace-remap "$GITHUB_WORKSPACE" \
+            --profile e2e --run-ignored all \
+            -E 'test(/^${{ matrix.suite }}__wasmer__/) and not test(/cdn|hugo|python_streamlit/)'
