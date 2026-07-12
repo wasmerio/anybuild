@@ -69,7 +69,7 @@ jobs:
           if-no-files-found: error
 
   e2e:
-    name: E2E ${{ matrix.suite }} (Rust binary)
+    name: E2E ${{ matrix.suite }} ${{ matrix.mode }}
     if: ${{ inputs.run_e2e }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -85,6 +85,18 @@ jobs:
           - python
           - node
           - php
+        mode:
+          - wasmer
+        # Docker-mode slices, only for the suites that have such cases.
+        include:
+          - suite: static
+            mode: wasmer_and_docker
+          - suite: staticpython
+            mode: wasmer_and_docker
+          - suite: python
+            mode: wasmer_and_docker
+          - suite: php
+            mode: wasmer_and_docker
     services:
       mysql:
         image: mysql:8.0
@@ -120,10 +132,11 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install MySQL client
+      - name: Install MySQL client + hugo
+        # hugo builds run the local binary even in wasmer mode.
         run: |
           sudo apt-get update
-          sudo apt-get install -y default-mysql-client
+          sudo apt-get install -y default-mysql-client hugo
 
       - name: Set up Wasmer
         uses: wasmerio/setup-wasmer@v3.1
@@ -150,7 +163,7 @@ jobs:
           docker --version
           ./shipit-bin/shipit generate --help > /dev/null
 
-      - name: Run e2e tests (Rust binary, wasmer mode)
+      - name: Run e2e tests (Rust binary)
         env:
           SHIPIT_BIN: ${{ github.workspace }}/shipit-bin/shipit
         run: |
@@ -158,4 +171,4 @@ jobs:
             --archive-file shipit-e2e.tar.zst \
             --workspace-remap "$GITHUB_WORKSPACE" \
             --profile e2e --run-ignored all \
-            -E 'test(/^${{ matrix.suite }}__wasmer__/) and not test(/cdn|hugo|python_streamlit/)'
+            -E 'test(/^${{ matrix.suite }}__${{ matrix.mode }}__/) and not test(/cdn|python_streamlit/)'
