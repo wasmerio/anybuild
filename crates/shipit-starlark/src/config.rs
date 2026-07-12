@@ -12,8 +12,8 @@ use serde_json::Value as Json;
 use starlark::any::ProvidesStaticType;
 use starlark::values::dict::AllocDict;
 use starlark::values::list::AllocList;
-use starlark::values::{Heap, NoSerialize, StarlarkValue, Value};
 use starlark::values::starlark_value;
+use starlark::values::{Heap, NoSerialize, StarlarkValue, Value};
 
 #[derive(Debug, Clone, ProvidesStaticType, NoSerialize, Allocative)]
 pub struct ConfigValue(#[allocative(skip)] pub serde_json::Map<String, Json>);
@@ -74,10 +74,7 @@ starlark::starlark_simple_value!(ConfigValue);
 /// Unused helper kept close to the bridge: dict allocation for maps when a
 /// plain dict (not a namespace) is ever needed.
 #[allow(dead_code)]
-pub fn json_object_to_dict<'v>(
-    heap: Heap<'v>,
-    map: &serde_json::Map<String, Json>,
-) -> Value<'v> {
+pub fn json_object_to_dict<'v>(heap: Heap<'v>, map: &serde_json::Map<String, Json>) -> Value<'v> {
     let entries: Vec<(Value<'v>, Value<'v>)> = map
         .iter()
         .map(|(k, v)| (heap.alloc(k.as_str()), json_to_value(heap, v)))

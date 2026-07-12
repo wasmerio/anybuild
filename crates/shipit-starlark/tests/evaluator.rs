@@ -13,7 +13,9 @@ use starlark::environment::{Globals, GlobalsBuilder};
 /// (backend/runner in Python), so a throwaway layout is fine.
 fn ctx(source_dir: Option<&Path>) -> Ctx {
     Ctx::new(
-        Box::new(LocalLayout::new(std::env::temp_dir().join("shipit-test-unused"))),
+        Box::new(LocalLayout::new(
+            std::env::temp_dir().join("shipit-test-unused"),
+        )),
         source_dir.map(Path::to_path_buf),
     )
 }
@@ -32,7 +34,12 @@ fn eval_source(ctx: &Ctx, root: &Path, source: &str) -> anyhow::Result<()> {
         globals(),
         ctx,
     );
-    graph.eval_entry(source.to_owned(), &root.join("Shipit"), "Shipit", &globals())?;
+    graph.eval_entry(
+        source.to_owned(),
+        &root.join("Shipit"),
+        "Shipit",
+        &globals(),
+    )?;
     Ok(())
 }
 

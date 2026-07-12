@@ -119,8 +119,7 @@ pub fn run_case(test_id: &str, build_mode: BuildMode) -> Result<()> {
                 }
             }
             Err(err) => {
-                let message =
-                    format!("Failed to run mysql to drop database {name}: {err:#}");
+                let message = format!("Failed to run mysql to drop database {name}: {err:#}");
                 if result.is_ok() {
                     drop_error = Some(message);
                 } else {
@@ -167,12 +166,8 @@ fn run_case_inner(
         // Build first, then serve via `shipit run --start`, then execute
         // each RunCommand via `shipit run --command=...`.
         let build_cmd = shipit_build_command(repo_root, project_path, build_mode, port)?;
-        let build_result = run_completed_command(
-            &build_cmd,
-            repo_root,
-            envs,
-            Duration::from_secs(180),
-        )?;
+        let build_result =
+            run_completed_command(&build_cmd, repo_root, envs, Duration::from_secs(180))?;
         let build_output = build_result.output();
         if build_result.returncode != Some(0) || !build_output.contains(BUILD_PHRASE) {
             bail!(
@@ -207,8 +202,7 @@ fn run_case_inner(
                 Some(command.command),
                 &volume_specs,
             )?;
-            let result =
-                run_completed_command(&cmd, repo_root, envs, Duration::from_secs(180))?;
+            let result = run_completed_command(&cmd, repo_root, envs, Duration::from_secs(180))?;
             print_run_command_output(command, &cmd, &result);
             assert_run_command(command, &cmd, &result)?;
         }
@@ -713,12 +707,7 @@ fn assert_run_command(
 // HTTP polling (port of `_wait_for_http_response`)
 // ---------------------------------------------------------------------------
 
-fn wait_for_http_response(
-    host: &str,
-    port: u16,
-    request: &HttpRequest,
-    timeout_secs: f64,
-) -> bool {
+fn wait_for_http_response(host: &str, port: u16, request: &HttpRequest, timeout_secs: f64) -> bool {
     let url = format!("http://{host}:{port}{}", request.path);
     let deadline = Instant::now() + Duration::from_secs_f64(timeout_secs);
     let request_timeout = timeout_secs.clamp(0.2, 5.0);
@@ -897,11 +886,7 @@ fn materialize_case(case: &Case, repo_root: &Path) -> Result<PathBuf> {
     let Some(url) = case.download else {
         bail!("E2ECase requires either path or download");
     };
-    let tmp = std::env::temp_dir().join(format!(
-        "shipit-e2e-{}-{:016x}",
-        case.test_id,
-        rand_u64()
-    ));
+    let tmp = std::env::temp_dir().join(format!("shipit-e2e-{}-{:016x}", case.test_id, rand_u64()));
     fs::create_dir_all(&tmp)?;
     download_and_extract_archive(url, &tmp)
 }
@@ -949,7 +934,7 @@ fn download_and_extract_archive(url: &str, tmp_path: &Path) -> Result<PathBuf> {
     let mut children: Vec<PathBuf> = fs::read_dir(&extract_dir)?
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
-        .filter(|path| path.file_name().map_or(true, |name| name != "__MACOSX"))
+        .filter(|path| path.file_name().is_none_or(|name| name != "__MACOSX"))
         .collect();
     if children.len() == 1 && children[0].is_dir() {
         return Ok(children.remove(0));
@@ -997,10 +982,7 @@ fn drop_mysql_database(
     repo_root: &Path,
     name: &str,
 ) -> Result<CompletedCommand> {
-    let sql = format!(
-        "DROP DATABASE IF EXISTS {}",
-        quote_mysql_identifier(name)?
-    );
+    let sql = format!("DROP DATABASE IF EXISTS {}", quote_mysql_identifier(name)?);
     run_mysql_sql(envs, repo_root, &sql)
 }
 
@@ -1040,10 +1022,7 @@ fn mysql_command(envs: &[(String, String)], sql: &str) -> Result<Vec<String>> {
 
 fn quote_mysql_identifier(name: &str) -> Result<String> {
     ensure!(
-        !name.is_empty()
-            && name
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_'),
+        !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
         "Invalid MySQL identifier: {name:?}"
     );
     Ok(format!("`{name}`"))
@@ -1064,10 +1043,7 @@ fn lookup_env(envs: &[(String, String)], key: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 fn create_wp_content_volume(project_path: &Path) -> Result<PathBuf> {
-    let host_dir = PathBuf::from(format!(
-        "/tmp/shipit-e2e-wp-content-{:016x}",
-        rand_u64()
-    ));
+    let host_dir = PathBuf::from(format!("/tmp/shipit-e2e-wp-content-{:016x}", rand_u64()));
     fs::create_dir_all(&host_dir)?;
     let volume_path = project_path
         .join(".shipit")
@@ -1196,9 +1172,9 @@ fn shell_join(cmd: &[String]) -> String {
     cmd.iter()
         .map(|arg| {
             let needs_quotes = arg.is_empty()
-                || arg.chars().any(|c| {
-                    c.is_whitespace() || "'\"\\$&|;<>()`!*?[]{}~#".contains(c)
-                });
+                || arg
+                    .chars()
+                    .any(|c| c.is_whitespace() || "'\"\\$&|;<>()`!*?[]{}~#".contains(c));
             if needs_quotes {
                 format!("'{}'", arg.replace('\'', "'\\''"))
             } else {
@@ -1257,12 +1233,7 @@ pub fn verify_test_list(generated: &[(&str, &str, BuildMode)]) {
             case.structural_modes().contains(mode),
             "test {name}: case {test_id:?} is not structurally enabled for {mode:?}"
         );
-        let expected_name = format!(
-            "{}__{}__{}",
-            case.suite.slug(),
-            mode.slug(),
-            case.test_id
-        );
+        let expected_name = format!("{}__{}__{}", case.suite.slug(), mode.slug(), case.test_id);
         assert_eq!(
             *name, expected_name,
             "test fn name must be <suite>__<mode>__<example> for case {test_id:?}"
@@ -1300,14 +1271,12 @@ mod tests {
     #[test]
     fn case_regexes_compile() {
         for case in CASES {
-            Regex::new(case.serve_pattern).unwrap_or_else(|err| {
-                panic!("bad serve_pattern for {}: {err}", case.test_id)
-            });
+            Regex::new(case.serve_pattern)
+                .unwrap_or_else(|err| panic!("bad serve_pattern for {}: {err}", case.test_id));
             for req in case.http {
                 if let Some(pattern) = req.body_match {
-                    Regex::new(pattern).unwrap_or_else(|err| {
-                        panic!("bad body_match for {}: {err}", case.test_id)
-                    });
+                    Regex::new(pattern)
+                        .unwrap_or_else(|err| panic!("bad body_match for {}: {err}", case.test_id));
                 }
                 if let Some(pattern) = req.location_match {
                     Regex::new(pattern).unwrap_or_else(|err| {
@@ -1373,16 +1342,13 @@ mod tests {
                     return Suite::Php;
                 }
             }
-            if identifier.starts_with("wordpress")
-                || identifier.starts_with("examples/php-")
-            {
+            if identifier.starts_with("wordpress") || identifier.starts_with("examples/php-") {
                 return Suite::Php;
             }
             if identifier.starts_with("examples/python-") {
                 return Suite::Python;
             }
-            if identifier == "examples/node" || identifier.starts_with("examples/node-")
-            {
+            if identifier == "examples/node" || identifier.starts_with("examples/node-") {
                 return Suite::Node;
             }
             if STATIC_E2E_PATHS.contains(&identifier) {
@@ -1437,10 +1403,7 @@ mod tests {
             let duplicates = base_ids.iter().filter(|id| *id == base).count();
             let mut pytest_id = base.clone();
             if duplicates > 1 {
-                let occurrence = base_ids[..index]
-                    .iter()
-                    .filter(|id| *id == base)
-                    .count();
+                let occurrence = base_ids[..index].iter().filter(|id| *id == base).count();
                 pytest_id = format!("{base}{occurrence}");
             }
             let sanitized: String = pytest_id
@@ -1460,15 +1423,9 @@ mod tests {
         let yaml = "kind: wasmer.io/App.v0\n\
                     capabilities:\n  memory:\n    limit: 2Gb\n\
                     name: something\n";
-        assert_eq!(
-            extract_phpix_memory_limit(yaml).as_deref(),
-            Some("2Gb")
-        );
+        assert_eq!(extract_phpix_memory_limit(yaml).as_deref(), Some("2Gb"));
         let quoted = "capabilities:\n  memory:\n    limit: \"2Gb\"\n";
-        assert_eq!(
-            extract_phpix_memory_limit(quoted).as_deref(),
-            Some("2Gb")
-        );
+        assert_eq!(extract_phpix_memory_limit(quoted).as_deref(), Some("2Gb"));
         let none = "capabilities:\n  instaboot:\n    enabled: true\n";
         assert_eq!(extract_phpix_memory_limit(none), None);
         let other_limit = "scaling:\n  memory:\n    limit: 9Gb\ncapabilities:\n  memory: {}\n";

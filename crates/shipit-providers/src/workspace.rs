@@ -78,12 +78,18 @@ fn apply_node_workspace_config(
     // load_config always sets package_manager; a None here would raise in
     // Python's _rewrite_package_manager_command for non-empty commands.
     if let Some(current_manager) = current_manager {
-        *build_command =
-            rewrite_package_manager_command(build_command.take(), current_manager, workspace_manager);
+        *build_command = rewrite_package_manager_command(
+            build_command.take(),
+            current_manager,
+            workspace_manager,
+        );
         // `if provider_config.commands:` — pydantic models are always
         // truthy, so the rewrite always runs.
-        commands.build =
-            rewrite_package_manager_command(commands.build.take(), current_manager, workspace_manager);
+        commands.build = rewrite_package_manager_command(
+            commands.build.take(),
+            current_manager,
+            workspace_manager,
+        );
     }
 }
 
@@ -93,9 +99,7 @@ fn rewrite_package_manager_command(
     old_manager: PackageManager,
     new_manager: PackageManager,
 ) -> Option<String> {
-    let Some(command) = command else {
-        return None;
-    };
+    let command = command?;
     if command.is_empty() {
         return Some(command); // Python: falsy commands returned unchanged
     }

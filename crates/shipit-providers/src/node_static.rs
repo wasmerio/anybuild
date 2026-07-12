@@ -9,12 +9,14 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::LazyLock;
 
+use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::base::{env_bool, env_str, BaseConfig, DetectResult, HasBase};
 use crate::node::{self, JsonMap, NodeConfig, NodeFramework, PackageManager};
+use crate::staticfile::compute_redirects_config;
 
 // ---------------------------------------------------------------------------
 // Config
@@ -211,10 +213,10 @@ static NEXT_STATIC_EXPORT_PATTERN: LazyLock<Regex> =
 // ---------------------------------------------------------------------------
 // load_config
 
-pub fn load_config(path: &Path, base: BaseConfig) -> NodeStaticConfig {
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<NodeStaticConfig> {
     // StaticFileProvider.load_config(path, base_config), whose dump is
     // merged into the NodeStaticConfig construction.
-    let static_parts = load_static_parts(path);
+    let static_parts = load_static_parts(path)?;
     let mut config = NodeStaticConfig::from_env(base);
     config.convert_redirects = static_parts.convert_redirects;
     config.sws_version = static_parts.sws_version;
@@ -235,8 +237,12 @@ pub fn load_config(path: &Path, base: BaseConfig) -> NodeStaticConfig {
     }
 
     if node::non_empty(&config.build_command).is_none() {
-        config.build_command =
-            get_build_command(package_json.as_ref(), package_manager, config.framework, None);
+        config.build_command = get_build_command(
+            package_json.as_ref(),
+            package_manager,
+            config.framework,
+            None,
+        );
     }
 
     if node::non_empty(&config.static_dir).is_none() {
@@ -258,9 +264,9 @@ pub fn load_config(path: &Path, base: BaseConfig) -> NodeStaticConfig {
 
     // static_dir may have changed since the base load; recompute redirects.
     config.redirects_config =
-        compute_redirects_config(path, config.static_dir.as_deref(), config.convert_redirects);
+        compute_redirects_config(path, config.static_dir.as_deref(), config.convert_redirects)?;
 
-    config
+    Ok(config)
 }
 
 /// The staticfile-side fields produced by `StaticFileProvider.load_config`
@@ -272,7 +278,7 @@ struct StaticParts {
     redirects_config: Option<String>,
 }
 
-fn load_static_parts(path: &Path) -> StaticParts {
+fn load_static_parts(path: &Path) -> Result<StaticParts> {
     let mut parts = StaticParts {
         convert_redirects: env_bool("convert_redirects").unwrap_or(true),
         sws_version: env_str("sws_version").or_else(|| Some("2.38.0".to_owned())),
@@ -298,8 +304,8 @@ fn load_static_parts(path: &Path) -> StaticParts {
     }
 
     parts.redirects_config =
-        compute_redirects_config(path, parts.static_dir.as_deref(), parts.convert_redirects);
-    parts
+        compute_redirects_config(path, parts.static_dir.as_deref(), parts.convert_redirects)?;
+    Ok(parts)
 }
 
 /// Minimal Staticfile (YAML mapping) read: `Some(root)` when the file
@@ -466,11 +472,7 @@ fn has_vite_remix(path: &Path, found_deps: &BTreeSet<&'static str>) -> bool {
 // ---------------------------------------------------------------------------
 // Static dir resolution
 
-fn get_static_dir(
-    path: &Path,
-    package_json: Option<&JsonMap>,
-    framework: NodeFramework,
-) -> String {
+fn get_static_dir(path: &Path, package_json: Option<&JsonMap>, framework: NodeFramework) -> String {
     let default_dir = || {
         framework
             .get_static_output_dir()
@@ -514,7 +516,7 @@ fn static_script_commands<'a>(
     commands
 }
 
-fn detect_script_commands<'a>(package_json: Option<&'a JsonMap>) -> Vec<&'a str> {
+fn detect_script_commands(package_json: Option<&JsonMap>) -> Vec<&str> {
     let mut commands = static_script_commands(package_json, SCRIPT_BUILD_COMMAND);
     for command in node::script_commands(package_json, SCRIPT_BUILD_COMMAND_FALLBACK) {
         if !commands.contains(&command) {
@@ -822,8 +824,7 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         .filter(|dep| STATIC_DEPENDENCIES.contains(dep))
         .collect();
 
-    if !pure_static_deps.is_empty() && static_deps.difference(&pure_static_deps).next().is_none()
-    {
+    if !pure_static_deps.is_empty() && static_deps.difference(&pure_static_deps).next().is_none() {
         return result(60);
     }
 
@@ -892,192 +893,6 @@ fn value_truthy(value: &Value) -> bool {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Redirects (`compute_redirects_config` from staticfile.py, private copy)
-
-struct RedirectRule {
-    source: String,
-    destination: String,
-    kind: i64,
-}
-
-/// Render a `_redirects` file into sws.toml redirect rules (or None).
-/// Errors that would raise in Python yield None here (no fixture hits
-/// them; load_config cannot fail).
-fn compute_redirects_config(
-    path: &Path,
-    static_dir: Option<&str>,
-    convert_redirects: bool,
-) -> Option<String> {
-    if !convert_redirects {
-        return None;
-    }
-
-    let mut redirects_path = path.join("_redirects");
-    if let Some(static_dir) = static_dir.filter(|dir| !dir.is_empty()) {
-        let static_dir_redirects = path.join(static_dir).join("_redirects");
-        if static_dir_redirects.is_file() {
-            redirects_path = static_dir_redirects;
-        }
-    }
-    if !redirects_path.is_file() {
-        return None;
-    }
-
-    let rules = load_redirect_rules(&redirects_path).ok()?;
-    if rules.is_empty() {
-        return None;
-    }
-
-    // tomlkit rendering: the [advanced] super-table collapses into the
-    // [[advanced.redirects]] array-of-tables blocks, separated by blank
-    // lines.
-    let blocks: Vec<String> = rules
-        .iter()
-        .map(|rule| {
-            format!(
-                "[[advanced.redirects]]\nsource = {}\ndestination = {}\nkind = {}\n",
-                toml_string(&rule.source),
-                toml_string(&rule.destination),
-                rule.kind
-            )
-        })
-        .collect();
-    Some(blocks.join("\n"))
-}
-
-fn load_redirect_rules(redirects_path: &Path) -> Result<Vec<RedirectRule>, ()> {
-    let text = std::fs::read_to_string(redirects_path).map_err(|_| ())?;
-    let mut rules = Vec::new();
-    for raw_line in text.lines() {
-        let line = raw_line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-
-        let parts = node::shlex_split(line)?;
-        if parts.len() < 2 {
-            return Err(());
-        }
-
-        let source = &parts[0];
-        let destination = &parts[1];
-        let mut rest: &[String] = &parts[2..];
-        let mut kind: i64 = 301;
-        if let Some(first) = rest.first() {
-            if !first.is_empty() && first.chars().all(|c| c.is_ascii_digit()) {
-                kind = first.parse().map_err(|_| ())?;
-                rest = &rest[1..];
-            }
-        }
-
-        if kind != 301 && kind != 302 {
-            return Err(());
-        }
-        if !rest.is_empty() {
-            return Err(());
-        }
-
-        let (sws_source, replacements) = translate_source(source)?;
-        let sws_destination = translate_destination(destination, &replacements)?;
-        rules.push(RedirectRule {
-            source: sws_source,
-            destination: sws_destination,
-            kind,
-        });
-    }
-    Ok(rules)
-}
-
-static SOURCE_TOKEN_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r":([A-Za-z][A-Za-z0-9_]*)|\*").expect("valid regex"));
-
-static PARAM_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r":([A-Za-z][A-Za-z0-9_]*)").expect("valid regex"));
-
-type Replacements = Vec<(String, usize)>;
-
-fn translate_source(source: &str) -> Result<(String, Replacements), ()> {
-    if source.contains("://") || source.contains('?') || !source.starts_with('/') {
-        return Err(());
-    }
-
-    let mut translated = String::new();
-    let mut replacements: Replacements = Vec::new();
-    let mut last_index = 0;
-    let mut next_index = 1;
-
-    for captures in SOURCE_TOKEN_PATTERN.captures_iter(source) {
-        let matched = captures.get(0).expect("match exists");
-        translated.push_str(&source[last_index..matched.start()]);
-        if let Some(param_name) = captures.get(1) {
-            if replacements
-                .iter()
-                .any(|(name, _)| name == param_name.as_str())
-            {
-                return Err(()); // duplicate source parameter
-            }
-            replacements.push((param_name.as_str().to_owned(), next_index));
-            translated.push_str("{*}");
-        } else {
-            if replacements.iter().any(|(name, _)| name == "splat") {
-                return Err(()); // only one splat segment is supported
-            }
-            replacements.push(("splat".to_owned(), next_index));
-            translated.push_str("{**}");
-        }
-        next_index += 1;
-        last_index = matched.end();
-    }
-
-    translated.push_str(&source[last_index..]);
-    Ok((translated, replacements))
-}
-
-fn translate_destination(destination: &str, replacements: &Replacements) -> Result<String, ()> {
-    if destination.contains('*') {
-        return Err(()); // destination splats must use :splat
-    }
-
-    let mut translated = String::new();
-    let mut last_index = 0;
-    for captures in PARAM_PATTERN.captures_iter(destination) {
-        let matched = captures.get(0).expect("match exists");
-        let param_name = captures.get(1).expect("group exists").as_str();
-        let Some((_, index)) = replacements.iter().find(|(name, _)| name == param_name) else {
-            return Err(()); // destination references unknown parameter
-        };
-        translated.push_str(&destination[last_index..matched.start()]);
-        translated.push_str(&format!("${index}"));
-        last_index = matched.end();
-    }
-    translated.push_str(&destination[last_index..]);
-    Ok(translated)
-}
-
-/// tomlkit-compatible basic string rendering.
-fn toml_string(value: &str) -> String {
-    let mut out = String::with_capacity(value.len() + 2);
-    out.push('"');
-    for c in value.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{c}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 || c == '\u{7f}' => {
-                out.push_str(&format!("\\u{:04x}", c as u32));
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
 #[cfg(test)]
 mod tests {
     //! Port of `tests/test_node_static_provider.py`.
@@ -1108,9 +923,24 @@ mod tests {
     #[test]
     fn test_new_static_builder_examples_are_pure_static() {
         for (example_name, framework, static_dir, build_command) in [
-            ("nodestatic-astro", NodeFramework::Astro, "dist", "npm run build"),
-            ("nodestatic-gatsby", NodeFramework::Gatsby, "public", "npm run build"),
-            ("nodestatic-next", NodeFramework::Next, "out", "npm run build"),
+            (
+                "nodestatic-astro",
+                NodeFramework::Astro,
+                "dist",
+                "npm run build",
+            ),
+            (
+                "nodestatic-gatsby",
+                NodeFramework::Gatsby,
+                "public",
+                "npm run build",
+            ),
+            (
+                "nodestatic-next",
+                NodeFramework::Next,
+                "out",
+                "npm run build",
+            ),
             (
                 "nodestatic-nuxt",
                 NodeFramework::NuxtV3,
@@ -1123,7 +953,12 @@ mod tests {
                 "build",
                 "npm run build",
             ),
-            ("nodestatic-svelte", NodeFramework::Sveltekit, "build", "npm run build"),
+            (
+                "nodestatic-svelte",
+                NodeFramework::Sveltekit,
+                "build",
+                "npm run build",
+            ),
             (
                 "nodestatic-sveltekit",
                 NodeFramework::Sveltekit,
@@ -1136,7 +971,12 @@ mod tests {
                 "public",
                 "npm run build",
             ),
-            ("nodestatic-eleventy", NodeFramework::Eleventy, "_site", "npm run build"),
+            (
+                "nodestatic-eleventy",
+                NodeFramework::Eleventy,
+                "_site",
+                "npm run build",
+            ),
             (
                 "nodestatic-vitepress",
                 NodeFramework::Vitepress,
@@ -1149,22 +989,42 @@ mod tests {
                 "docs/.vuepress/dist",
                 "npm run docs:build",
             ),
-            ("nodestatic-hexo", NodeFramework::Hexo, "public", "npm run generate"),
+            (
+                "nodestatic-hexo",
+                NodeFramework::Hexo,
+                "public",
+                "npm run generate",
+            ),
             (
                 "nodestatic-metalsmith",
                 NodeFramework::Metalsmith,
                 "build",
                 "npm run build",
             ),
-            ("nodestatic-assemble", NodeFramework::Assemble, "dist", "npm run build"),
-            ("nodestatic-harp", NodeFramework::Harp, "www", "npm run build"),
+            (
+                "nodestatic-assemble",
+                NodeFramework::Assemble,
+                "dist",
+                "npm run build",
+            ),
+            (
+                "nodestatic-harp",
+                NodeFramework::Harp,
+                "www",
+                "npm run build",
+            ),
             (
                 "nodestatic-angular",
                 NodeFramework::Angular,
                 "dist/angular-test",
                 "npm run build",
             ),
-            ("nodestatic-brunch", NodeFramework::Brunch, "public", "npm run build"),
+            (
+                "nodestatic-brunch",
+                NodeFramework::Brunch,
+                "public",
+                "npm run build",
+            ),
             (
                 "nodestatic-create-react-app",
                 NodeFramework::CreateReactApp,
@@ -1177,7 +1037,12 @@ mod tests {
                 "build",
                 "npm run build",
             ),
-            ("nodestatic-ember", NodeFramework::Ember, "dist", "npm run build"),
+            (
+                "nodestatic-ember",
+                NodeFramework::Ember,
+                "dist",
+                "npm run build",
+            ),
             (
                 "nodestatic-ionic-angular",
                 NodeFramework::IonicAngular,
@@ -1190,20 +1055,60 @@ mod tests {
                 "dist",
                 "npm run build",
             ),
-            ("nodestatic-parcel", NodeFramework::Parcel, "dist", "npm run build"),
+            (
+                "nodestatic-parcel",
+                NodeFramework::Parcel,
+                "dist",
+                "npm run build",
+            ),
             (
                 "nodestatic-polymer",
                 NodeFramework::Polymer,
                 "build/default",
                 "npm run build",
             ),
-            ("nodestatic-preact", NodeFramework::Preact, "build", "npm run build"),
-            ("nodestatic-stencil", NodeFramework::Stencil, "www", "npm run build"),
-            ("nodestatic-umijs", NodeFramework::Umijs, "dist", "npm run build"),
-            ("nodestatic-vite", NodeFramework::Vite, "dist", "npm run build"),
-            ("nodestatic-vite-react", NodeFramework::Vite, "dist", "npm run build"),
-            ("nodestatic-vue", NodeFramework::Vue, "dist", "npm run build"),
-            ("nodestatic-sanity", NodeFramework::SanityV3, "dist", "npm run build"),
+            (
+                "nodestatic-preact",
+                NodeFramework::Preact,
+                "build",
+                "npm run build",
+            ),
+            (
+                "nodestatic-stencil",
+                NodeFramework::Stencil,
+                "www",
+                "npm run build",
+            ),
+            (
+                "nodestatic-umijs",
+                NodeFramework::Umijs,
+                "dist",
+                "npm run build",
+            ),
+            (
+                "nodestatic-vite",
+                NodeFramework::Vite,
+                "dist",
+                "npm run build",
+            ),
+            (
+                "nodestatic-vite-react",
+                NodeFramework::Vite,
+                "dist",
+                "npm run build",
+            ),
+            (
+                "nodestatic-vue",
+                NodeFramework::Vue,
+                "dist",
+                "npm run build",
+            ),
+            (
+                "nodestatic-sanity",
+                NodeFramework::SanityV3,
+                "dist",
+                "npm run build",
+            ),
             (
                 "nodestatic-storybook",
                 NodeFramework::Storybook,
@@ -1223,9 +1128,13 @@ mod tests {
                 "{example_name}"
             );
 
-            let config = load_config(&path, base);
+            let config = load_config(&path, base).unwrap();
             assert_eq!(config.framework, Some(framework), "{example_name}");
-            assert_eq!(config.static_dir.as_deref(), Some(static_dir), "{example_name}");
+            assert_eq!(
+                config.static_dir.as_deref(),
+                Some(static_dir),
+                "{example_name}"
+            );
             assert_eq!(
                 config.build_command.as_deref(),
                 Some(build_command),
@@ -1295,7 +1204,7 @@ mod tests {
             "const nextConfig = {\n  output: \"export\",\n};\n\nexport default nextConfig;\n",
         );
 
-        let config = load_config(tmp.path(), BaseConfig::default());
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
 
         assert_eq!(
             crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
@@ -1329,7 +1238,7 @@ mod tests {
             "{\n  \"scripts\": {\n    \"build\": \"nuxt build\",\n    \"generate\": \"nuxt generate\"\n  },\n  \"dependencies\": {\n    \"nuxt\": \"^3.8.1\"\n  }\n}\n",
         );
 
-        let config = load_config(tmp.path(), BaseConfig::default());
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
 
         assert_eq!(
             crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
@@ -1350,7 +1259,7 @@ mod tests {
             "{\n  \"scripts\": {\n    \"build\": \"remix build\",\n    \"start\": \"serve -l 3000 public\"\n  },\n  \"dependencies\": {\n    \"@remix-run/node\": \"^2.2.0\"\n  },\n  \"devDependencies\": {\n    \"@remix-run/dev\": \"^2.2.0\"\n  }\n}\n",
         );
 
-        let config = load_config(tmp.path(), BaseConfig::default());
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
 
         assert_eq!(
             crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
@@ -1405,7 +1314,10 @@ mod tests {
             &tmp.path().join("package.json"),
             "{\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"start\": \"node server.js\"\n  },\n  \"dependencies\": {\n    \"vite\": \"^7.0.0\"\n  }\n}\n",
         );
-        write(&tmp.path().join("hydrogen.config.js"), "export default {}\n");
+        write(
+            &tmp.path().join("hydrogen.config.js"),
+            "export default {}\n",
+        );
         write(&tmp.path().join("server.js"), "console.log('ok')\n");
 
         assert!(detect(tmp.path(), &BaseConfig::default()).is_none());
@@ -1423,7 +1335,7 @@ mod tests {
             "{\n  \"scripts\": {\n    \"build\": \"vitepress build docs\"\n  },\n  \"dependencies\": {\n    \"vitepress\": \"^1.6.4\"\n  }\n}\n",
         );
 
-        let config = load_config(tmp.path(), BaseConfig::default());
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
 
         assert_eq!(config.package_manager, Some(PackageManager::Npm));
         assert_eq!(config.build_command.as_deref(), Some("npm run build"));
@@ -1441,7 +1353,7 @@ mod tests {
             "lockfileVersion: '9.0'\n",
         );
 
-        let config = load_config(tmp.path(), BaseConfig::default());
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
 
         assert_eq!(config.package_manager, Some(PackageManager::Pnpm));
         assert_eq!(config.build_command.as_deref(), Some("pnpm run build"));

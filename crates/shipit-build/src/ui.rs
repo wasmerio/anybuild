@@ -105,8 +105,7 @@ mod highlight {
 
     /// bat's extended syntax set (adds TOML and Dockerfile over syntect's
     /// defaults; the newlines variant matches line-based highlighting).
-    static SYNTAXES: LazyLock<SyntaxSet> =
-        LazyLock::new(two_face::syntax::extra_newlines);
+    static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
     /// rich's `theme="monokai"` equivalent.
     static THEME: LazyLock<Theme> = LazyLock::new(|| {
         two_face::theme::extra()
@@ -116,11 +115,7 @@ mod highlight {
 
     /// Highlight every line (stateful across the whole text, cropped to
     /// `width` visible chars). None when the lexer token is unknown.
-    pub fn highlight_lines(
-        lines: &[&str],
-        lang: &str,
-        width: usize,
-    ) -> Option<Vec<String>> {
+    pub fn highlight_lines(lines: &[&str], lang: &str, width: usize) -> Option<Vec<String>> {
         let syntax = SYNTAXES.find_syntax_by_token(lang).or_else(|| {
             SYNTAXES
                 .syntaxes()
@@ -141,10 +136,7 @@ mod highlight {
 
     /// Cut styled regions at `width` visible characters (crop before any
     /// escape codes exist, so widths never count ANSI bytes).
-    fn crop_regions<'a>(
-        regions: &[(Style, &'a str)],
-        width: usize,
-    ) -> Vec<(Style, &'a str)> {
+    fn crop_regions<'a>(regions: &[(Style, &'a str)], width: usize) -> Vec<(Style, &'a str)> {
         let mut out = Vec::new();
         let mut used = 0usize;
         for (style, text) in regions {
@@ -174,11 +166,7 @@ mod highlight {
 mod highlight {
     /// Built without the `syntax-highlighting` feature: no highlighter, the
     /// panel falls back to plain content (geometry unchanged).
-    pub fn highlight_lines(
-        _lines: &[&str],
-        _lang: &str,
-        _width: usize,
-    ) -> Option<Vec<String>> {
+    pub fn highlight_lines(_lines: &[&str], _lang: &str, _width: usize) -> Option<Vec<String>> {
         None
     }
 }

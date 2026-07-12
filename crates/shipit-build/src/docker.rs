@@ -268,10 +268,8 @@ impl DockerBuildBackend {
                             }
                             _ => String::new(),
                         };
-                        docker_file_contents.push_str(&format!(
-                            "COPY{exclude} {} {}\n",
-                            step.source, step.target
-                        ));
+                        docker_file_contents
+                            .push_str(&format!("COPY{exclude} {} {}\n", step.source, step.target));
                     }
                 }
                 Step::Env(step) => {
@@ -289,7 +287,10 @@ impl DockerBuildBackend {
                     docker_file_contents.push_str(&format!("ENV PATH={}:$PATH\n", step.path));
                     let pathsep = if cfg!(windows) { ';' } else { ':' };
                     let current = env.get("PATH").cloned().unwrap_or_default();
-                    env.insert("PATH".to_owned(), format!("{}{pathsep}{current}", step.path));
+                    env.insert(
+                        "PATH".to_owned(),
+                        format!("{}{pathsep}{current}", step.path),
+                    );
                 }
                 Step::WriteFile(step) => {
                     let content_base64 = b64(step.content.as_bytes());
@@ -418,14 +419,7 @@ mod tests {
     };
 
     fn backend(root: &Path) -> DockerBuildBackend {
-        DockerBuildBackend::new(
-            root.join("src"),
-            root.join("assets"),
-            None,
-            None,
-            None,
-        )
-        .unwrap()
+        DockerBuildBackend::new(root.join("src"), root.join("assets"), None, None, None).unwrap()
     }
 
     #[test]
@@ -517,13 +511,16 @@ mod tests {
             }),
         ];
 
-        let mut env: IndexMap<String, String> =
-            [("HOME".to_owned(), "/root".to_owned())].into_iter().collect();
+        let mut env: IndexMap<String, String> = [("HOME".to_owned(), "/root".to_owned())]
+            .into_iter()
+            .collect();
         let contents = backend
             .dockerfile_contents(&mut env, &mounts, &steps)
             .unwrap();
 
-        assert!(contents.starts_with("# syntax=docker/dockerfile:1.7-labs\nFROM debian:trixie-slim AS build\n"));
+        assert!(contents.starts_with(
+            "# syntax=docker/dockerfile:1.7-labs\nFROM debian:trixie-slim AS build\n"
+        ));
         assert!(contents.contains("RUN curl https://mise.run | sh\n"));
         assert!(contents.contains("RUN mkdir -p /app\n"));
         assert!(contents.contains("WORKDIR /app\n"));

@@ -76,9 +76,7 @@ pub fn run(
             .build
             .iter()
             .filter_map(|step| match step {
-                Step::Run(run) if run.group.as_deref() == Some(group) => {
-                    Some(run.command.as_str())
-                }
+                Step::Run(run) if run.group.as_deref() == Some(group) => Some(run.command.as_str()),
                 _ => None,
             })
             .collect();
@@ -146,9 +144,7 @@ pub(crate) fn exclude_defaults_json(
     }
 }
 
-fn defaults_for(
-    config: &shipit_providers::ProviderConfig,
-) -> Option<serde_json::Value> {
+fn defaults_for(config: &shipit_providers::ProviderConfig) -> Option<serde_json::Value> {
     shipit_providers::defaults_json(config.provider_name()).ok()
 }
 

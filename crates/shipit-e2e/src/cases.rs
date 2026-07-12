@@ -74,11 +74,7 @@ const fn body(path: &'static str, body_match: &'static str) -> HttpRequest {
     }
 }
 
-const fn body_status(
-    path: &'static str,
-    status: u16,
-    body_match: &'static str,
-) -> HttpRequest {
+const fn body_status(path: &'static str, status: u16, body_match: &'static str) -> HttpRequest {
     HttpRequest {
         path,
         body_match: Some(body_match),
@@ -100,11 +96,7 @@ const fn status(path: &'static str, status: u16) -> HttpRequest {
     }
 }
 
-const fn redirect(
-    path: &'static str,
-    status: u16,
-    location_match: &'static str,
-) -> HttpRequest {
+const fn redirect(path: &'static str, status: u16, location_match: &'static str) -> HttpRequest {
     HttpRequest {
         path,
         body_match: None,
@@ -133,10 +125,7 @@ const fn run(command: &'static str) -> RunCommand {
     }
 }
 
-const fn run_stdout(
-    command: &'static str,
-    stdout_match: &'static str,
-) -> RunCommand {
+const fn run_stdout(command: &'static str, stdout_match: &'static str) -> RunCommand {
     RunCommand {
         command,
         stdout_match: Some(stdout_match),
@@ -183,8 +172,7 @@ impl Case {
             .iter()
             .copied()
             .filter(|mode| {
-                if (self.expected_memory_limit.is_some()
-                    || self.expect_no_memory_limit)
+                if (self.expected_memory_limit.is_some() || self.expect_no_memory_limit)
                     && *mode != BuildMode::Wasmer
                 {
                     return false;
@@ -218,7 +206,8 @@ const BASE: Case = Case {
     build_modes: None,
 };
 
-const PHP_DEV_SERVER: &str = r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started";
+const PHP_DEV_SERVER: &str =
+    r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started";
 const SWS_LISTENING: &str = r"server is listening on";
 const UVICORN: &str = r"Uvicorn running on .*";
 

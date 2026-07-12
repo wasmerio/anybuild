@@ -6,18 +6,26 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "=== [1/3] Build (deny warnings) ==="
+echo "=== [1/5] Formatting ==="
+cargo fmt --all -- --check
+echo "workspace is formatted"
+
+echo "=== [2/5] Build (deny warnings) ==="
 RUSTFLAGS="-D warnings" cargo build --workspace --quiet
 echo "workspace builds clean"
 
-echo "=== [2/3] Gates (snapshots, legacy, configs, goldens, units) ==="
+echo "=== [3/5] Clippy (deny warnings) ==="
+cargo clippy --workspace --all-targets -- -D warnings
+echo "clippy clean"
+
+echo "=== [4/5] Gates (snapshots, legacy, configs, goldens, units) ==="
 if command -v cargo-nextest >/dev/null; then
   cargo nextest run --workspace
 else
   cargo test --workspace
 fi
 
-echo "=== [3/3] CLI smoke ==="
+echo "=== [5/5] CLI smoke ==="
 version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
 target/debug/shipit generate /nonexistent-shipit-banner-check \
   >/dev/null 2>/tmp/shipit-banner.txt || true

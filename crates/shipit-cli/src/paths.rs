@@ -32,7 +32,7 @@ fn regex_lite(_pattern: &str) -> SlugRe {
 struct SlugRe;
 
 impl SlugRe {
-    fn replace_all<'a>(&self, text: &'a str, replacement: &str) -> String {
+    fn replace_all(&self, text: &str, replacement: &str) -> String {
         let mut out = String::with_capacity(text.len());
         let mut in_run = false;
         for ch in text.chars() {
@@ -130,6 +130,36 @@ pub fn read_shipit_subdir(shipit_file: &Path) -> Option<String> {
         }
     }
     None
+}
+
+pub fn get_shipit_path(paths: &ProjectPaths, shipit_path: Option<&Path>) -> Result<PathBuf> {
+    match shipit_path {
+        None => {
+            let default = default_shipit_path(paths);
+            if !default.exists() {
+                let mut command = format!("shipit generate {}", paths.workspace_root.display());
+                if let Some(subdir) = &paths.subdir {
+                    command = format!("{command} --subdir={subdir}");
+                }
+                bail!(
+                    "Shipit file not found at {}. Run `{command}` to create it.",
+                    default.display()
+                );
+            }
+            Ok(default)
+        }
+        Some(path) => {
+            if !path.exists() {
+                bail!(
+                    "Shipit file not found at {}. Run `shipit generate {} -o {}` to create it.",
+                    path.display(),
+                    paths.workspace_root.display(),
+                    path.display()
+                );
+            }
+            Ok(path.to_path_buf())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -355,9 +385,11 @@ mod subdir_tests {
             })
             .expect("npm install step");
         assert_eq!(install_step.inputs, None);
-        assert!(run_commands(serve)
-            .contains(&format!("cp -RL . {}", app_path.display()).as_str()));
-        assert!(serve.cwd.as_deref().is_some_and(|cwd| cwd.ends_with("/app")));
+        assert!(run_commands(serve).contains(&format!("cp -RL . {}", app_path.display()).as_str()));
+        assert!(serve
+            .cwd
+            .as_deref()
+            .is_some_and(|cwd| cwd.ends_with("/app")));
         assert_eq!(mount_names(serve), vec!["app"]);
     }
 
@@ -373,8 +405,7 @@ mod subdir_tests {
             generate(workspace, subdir);
         }
 
-        let dashboard =
-            std::fs::read_to_string(workspace.join("Shipit.apps-dashboard")).unwrap();
+        let dashboard = std::fs::read_to_string(workspace.join("Shipit.apps-dashboard")).unwrap();
         let site = std::fs::read_to_string(workspace.join("Shipit.apps-site")).unwrap();
         let docs = std::fs::read_to_string(workspace.join("Shipit.apps-docs")).unwrap();
 
@@ -402,8 +433,12 @@ mod subdir_tests {
                 if use_step.dependencies.iter().any(|pkg| pkg.name == "pnpm")
         )));
         let commands = run_commands(serve);
-        assert!(commands.iter().any(|command| command.starts_with("pnpm install")));
-        assert!(!commands.iter().any(|command| command.starts_with("npm install")));
+        assert!(commands
+            .iter()
+            .any(|command| command.starts_with("pnpm install")));
+        assert!(!commands
+            .iter()
+            .any(|command| command.starts_with("npm install")));
         let static_dir = match &ctx.provider_config {
             ProviderConfig::NodeStatic(config) => {
                 config.static_dir.clone().expect("static_dir set")
@@ -425,12 +460,14 @@ mod subdir_tests {
     fn test_generate_subdir_static_provider_shipit_shape() {
         let tmp = tempfile::tempdir().unwrap();
         let workspace = tmp.path();
-        write(&workspace.join("apps/site/public/index.html"), "<h1>ok</h1>\n");
+        write(
+            &workspace.join("apps/site/public/index.html"),
+            "<h1>ok</h1>\n",
+        );
 
         generate(workspace, "apps/site");
 
-        let shipit =
-            std::fs::read_to_string(workspace.join("Shipit.apps-site")).unwrap();
+        let shipit = std::fs::read_to_string(workspace.join("Shipit.apps-site")).unwrap();
         assert!(shipit.contains("build = staticfile_build(config)"));
         assert!(shipit.contains("staticfile_serve(config, build, name = \"site\")"));
         assert!(shipit.contains("app_subdir = \"apps/site\""));
@@ -458,7 +495,10 @@ mod subdir_tests {
             ctx.paths.workspace_root.join(".shipit").join("apps-site")
         );
         let serve = &ctx.serve;
-        assert!(serve.cwd.as_deref().is_some_and(|cwd| cwd.ends_with("/app")));
+        assert!(serve
+            .cwd
+            .as_deref()
+            .is_some_and(|cwd| cwd.ends_with("/app")));
         let build_path = build_mount(&ctx, "build");
         match &serve.build[1] {
             Step::Workdir(workdir) => assert_eq!(workdir.path, build_path),
@@ -541,8 +581,14 @@ mod subdir_tests {
             &workspace.join(".env.production"),
             "SHARED=root-prod\nROOT_PROD=root-prod\nGENERIC=workspace-prod\n",
         );
-        write(&app_path.join(".env"), "SHARED=app\nAPP_ONLY=app\nGENERIC=app\n");
-        write(&app_path.join(".env.production"), "SHARED=app-prod\nAPP_PROD=app-prod\n");
+        write(
+            &app_path.join(".env"),
+            "SHARED=app\nAPP_ONLY=app\nGENERIC=app\n",
+        );
+        write(
+            &app_path.join(".env.production"),
+            "SHARED=app-prod\nAPP_PROD=app-prod\n",
+        );
         let paths = resolve_project_paths(workspace, Some("apps/site")).unwrap();
         let mut env: IndexMap<String, String> = IndexMap::new();
 
@@ -567,40 +613,6 @@ mod subdir_tests {
                 resolve_project_paths(workspace, Some(subdir)).is_err(),
                 "subdir {subdir:?} should be rejected"
             );
-        }
-    }
-}
-
-pub fn get_shipit_path(
-    paths: &ProjectPaths,
-    shipit_path: Option<&Path>,
-) -> Result<PathBuf> {
-    match shipit_path {
-        None => {
-            let default = default_shipit_path(paths);
-            if !default.exists() {
-                let mut command =
-                    format!("shipit generate {}", paths.workspace_root.display());
-                if let Some(subdir) = &paths.subdir {
-                    command = format!("{command} --subdir={subdir}");
-                }
-                bail!(
-                    "Shipit file not found at {}. Run `{command}` to create it.",
-                    default.display()
-                );
-            }
-            Ok(default)
-        }
-        Some(path) => {
-            if !path.exists() {
-                bail!(
-                    "Shipit file not found at {}. Run `shipit generate {} -o {}` to create it.",
-                    path.display(),
-                    paths.workspace_root.display(),
-                    path.display()
-                );
-            }
-            Ok(path.to_path_buf())
         }
     }
 }

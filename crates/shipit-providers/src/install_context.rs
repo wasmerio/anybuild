@@ -783,7 +783,9 @@ mod tests {
         assert!(context.requires_all_files);
         // local_paths stores resolved paths (tempdirs may sit behind
         // symlinks, e.g. /var -> /private/var on macOS).
-        assert!(context.local_paths.contains(&resolve_non_strict(&shared_dir)));
+        assert!(context
+            .local_paths
+            .contains(&resolve_non_strict(&shared_dir)));
     }
 
     /// Python's `test_python_provider_uses_context_for_requirements_inputs`

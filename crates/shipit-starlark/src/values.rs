@@ -9,8 +9,8 @@ use std::fmt;
 use allocative::Allocative;
 use starlark::any::ProvidesStaticType;
 use starlark::values::list::AllocList;
-use starlark::values::{Heap, NoSerialize, StarlarkValue, Value};
 use starlark::values::starlark_value;
+use starlark::values::{Heap, NoSerialize, StarlarkValue, Value};
 
 use shipit_plan::{Mount, Package, Step, Volume};
 
@@ -87,9 +87,7 @@ impl<'v> StarlarkValue<'v> for StepValue {
             (Step::Use(s), "dependencies") => Some(heap.alloc(AllocList(
                 s.dependencies.iter().map(|d| PackageValue(d.clone())),
             ))),
-            (Step::Workdir(s), "path") => {
-                Some(heap.alloc(s.path.to_string_lossy().into_owned()))
-            }
+            (Step::Workdir(s), "path") => Some(heap.alloc(s.path.to_string_lossy().into_owned())),
             (Step::Path(s), "path") => Some(heap.alloc(s.path.as_str())),
             (Step::WriteFile(s), "path") => Some(heap.alloc(s.path.as_str())),
             (Step::WriteFile(s), "content") => Some(heap.alloc(s.content.as_str())),

@@ -551,8 +551,7 @@ impl NodeConfig {
             base,
             use_edgejs: env_bool("use_edgejs").or(Some(false)),
             precompile_edgejs: env_bool("precompile_edgejs"),
-            package_manager: env_str("package_manager")
-                .and_then(|v| PackageManager::from_name(&v)),
+            package_manager: env_str("package_manager").and_then(|v| PackageManager::from_name(&v)),
             framework: env_str("framework").and_then(|v| NodeFramework::from_value(&v)),
             extra_dependencies: env_string_set("extra_dependencies"),
             build_command: env_str("build_command"),
@@ -926,7 +925,13 @@ pub(crate) fn script_commands<'a>(
 
 pub(crate) fn is_package_manager_build_command(command: &str) -> bool {
     const PREFIXES: &[&str] = &[
-        "npm run ", "pnpm run ", "pnpm ", "yarn run ", "yarn ", "bun run ", "bun ",
+        "npm run ",
+        "pnpm run ",
+        "pnpm ",
+        "yarn run ",
+        "yarn ",
+        "bun run ",
+        "bun ",
     ];
     PREFIXES.iter().any(|prefix| command.starts_with(prefix))
 }
@@ -966,7 +971,11 @@ pub(crate) fn detect_framework(
     if any(&["@shopify/hydrogen", "@shopify/remix-oxygen"]) || has_hydrogen_config(path) {
         return Some(NodeFramework::Hydrogen);
     }
-    if any(&["@react-router/dev", "@react-router/node", "@react-router/serve"]) {
+    if any(&[
+        "@react-router/dev",
+        "@react-router/node",
+        "@react-router/serve",
+    ]) {
         return Some(NodeFramework::ReactRouter);
     }
     if any(&[
@@ -1082,11 +1091,7 @@ pub(crate) fn has_dependency(
     false
 }
 
-pub(crate) fn has_dependency_major(
-    package_json: Option<&JsonMap>,
-    dep: &str,
-    major: u64,
-) -> bool {
+pub(crate) fn has_dependency_major(package_json: Option<&JsonMap>, dep: &str, major: u64) -> bool {
     let Some(version) = dependency_version(package_json, dep) else {
         return false;
     };
@@ -1221,9 +1226,7 @@ fn comparator_matches(version: (u64, u64, u64), token: &str) -> Option<bool> {
         "" | "=" => match (partial.major, partial.minor, partial.patch) {
             (None, _, _) => true,
             (Some(major), None, _) => version >= floor && version < (major + 1, 0, 0),
-            (Some(major), Some(minor), None) => {
-                version >= floor && version < (major, minor + 1, 0)
-            }
+            (Some(major), Some(minor), None) => version >= floor && version < (major, minor + 1, 0),
             _ => version == floor,
         },
         "^" => {
@@ -1357,7 +1360,9 @@ pub fn load_config(path: &Path, base: BaseConfig) -> NodeConfig {
             package_json.as_ref(),
             package_manager,
             config.framework,
-            non_empty(&config.base.commands.build).map(str::to_owned).as_deref(),
+            non_empty(&config.base.commands.build)
+                .map(str::to_owned)
+                .as_deref(),
         );
     }
 
@@ -1447,8 +1452,7 @@ pub(crate) fn shlex_split(s: &str) -> Result<Vec<String>, ()> {
 /// shlex.split with the `except ValueError: command.split()` fallback used
 /// throughout node.py.
 pub(crate) fn split_command(command: &str) -> Vec<String> {
-    shlex_split(command)
-        .unwrap_or_else(|_| command.split_whitespace().map(str::to_owned).collect())
+    shlex_split(command).unwrap_or_else(|_| command.split_whitespace().map(str::to_owned).collect())
 }
 
 /// `shlex.quote`.
@@ -1514,7 +1518,13 @@ pub(crate) fn discover_js_install_context(root: &Path) -> InstallContext {
 
     let workspace_packages = find_js_workspace_packages(&root);
     let mut visited: BTreeSet<PathBuf> = BTreeSet::new();
-    visit_js_package(&root, &root, &mut context, &workspace_packages, &mut visited);
+    visit_js_package(
+        &root,
+        &root,
+        &mut context,
+        &workspace_packages,
+        &mut visited,
+    );
 
     // sorted(workspace_packages.values()) — Python compares Paths by their
     // full string form.
@@ -2199,7 +2209,10 @@ mod tests {
     fn test_node_provider_detects_hydrogen_config_file() {
         let tmp = tempfile::tempdir().unwrap();
         write(&tmp.path().join("package.json"), "{}\n");
-        write(&tmp.path().join("hydrogen.config.ts"), "export default {}\n");
+        write(
+            &tmp.path().join("hydrogen.config.ts"),
+            "export default {}\n",
+        );
 
         let config = load_config(tmp.path(), BaseConfig::default());
 
@@ -2280,7 +2293,11 @@ mod tests {
 
             let config = load_config(tmp.path(), BaseConfig::default());
 
-            assert_eq!(config.build_command.as_deref(), Some(build_command), "{lockfile}");
+            assert_eq!(
+                config.build_command.as_deref(),
+                Some(build_command),
+                "{lockfile}"
+            );
         }
     }
 
@@ -2349,7 +2366,10 @@ mod tests {
 
         let config = load_config(tmp.path(), base);
 
-        assert_eq!(config.base.commands.start.as_deref(), Some("node custom.js"));
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node custom.js")
+        );
     }
 
     #[test]
@@ -2371,7 +2391,10 @@ mod tests {
     #[test]
     fn test_node_start_command_uses_package_main() {
         let tmp = tempfile::tempdir().unwrap();
-        write(&tmp.path().join("package.json"), "{\"main\": \"src/server.js\"}\n");
+        write(
+            &tmp.path().join("package.json"),
+            "{\"main\": \"src/server.js\"}\n",
+        );
 
         let config = load_config(tmp.path(), BaseConfig::default());
 
@@ -2519,10 +2542,7 @@ mod tests {
 
         assert_eq!(config.package_manager, Some(PackageManager::Pnpm));
         assert!(!config.install_requires_all_files);
-        assert_eq!(
-            config.install_inputs,
-            Some(vec!["package.json".to_owned()])
-        );
+        assert_eq!(config.install_inputs, Some(vec!["package.json".to_owned()]));
     }
 
     #[test]

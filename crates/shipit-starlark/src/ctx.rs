@@ -3,6 +3,8 @@
 //! Port of `evaluator.py`'s `Ctx`: builtins construct plan objects
 //! directly; `serve()` receives them back and registers the final plan.
 
+#![allow(clippy::too_many_arguments)]
+
 use std::cell::RefCell;
 use std::path::{Component, Path, PathBuf};
 
@@ -19,8 +21,8 @@ use starlark::values::{Value, ValueLike};
 
 use shipit_plan::layout::MountLayout;
 use shipit_plan::{
-    CopyStep, EnvStep, Mount, Package, PathStep, RunStep, Serve, Service, Step, UseStep,
-    Volume, WorkdirStep, WriteFileStep,
+    CopyStep, EnvStep, Mount, Package, PathStep, RunStep, Serve, Service, Step, UseStep, Volume,
+    WorkdirStep, WriteFileStep,
 };
 
 use crate::values::{MountValue, PackageValue, ServiceValue, StepValue, VolumeValue};
@@ -155,19 +157,16 @@ fn build_serve(
     services: Option<&UnpackListOrTuple<Value>>,
 ) -> Result<()> {
     // Conditional steps evaluate to None; prepare only runs commands.
-    let prepare_steps: Option<Vec<RunStep>> = match prepare {
-        Some(items) => Some(
-            items
-                .items
-                .iter()
-                .filter_map(|v| match step_from(*v).ok().flatten() {
-                    Some(Step::Run(run)) => Some(run),
-                    _ => None,
-                })
-                .collect(),
-        ),
-        None => None,
-    };
+    let prepare_steps: Option<Vec<RunStep>> = prepare.map(|items| {
+        items
+            .items
+            .iter()
+            .filter_map(|v| match step_from(*v).ok().flatten() {
+                Some(Step::Run(run)) => Some(run),
+                _ => None,
+            })
+            .collect()
+    });
     let build_steps: Vec<Step> = build
         .items
         .iter()
@@ -184,8 +183,7 @@ fn build_serve(
         .into_iter()
         .flatten()
         .collect();
-    let command_map: IndexMap<String, String> =
-        commands.entries.iter().cloned().collect();
+    let command_map: IndexMap<String, String> = commands.entries.iter().cloned().collect();
 
     // Python: `x if x else None` — empty collections collapse to None.
     let mounts = match mounts {
@@ -227,10 +225,8 @@ fn build_serve(
         ),
         _ => None,
     };
-    let env: Option<IndexMap<String, String>> = match env {
-        Some(entries) => Some(entries.entries.iter().cloned().collect()),
-        None => None,
-    };
+    let env: Option<IndexMap<String, String>> =
+        env.map(|entries| entries.entries.iter().cloned().collect());
 
     let serve = Serve {
         name: name.to_owned(),
@@ -245,7 +241,10 @@ fn build_serve(
         env,
         services,
     };
-    ctx(eval)?.serves.borrow_mut().insert(name.to_owned(), serve);
+    ctx(eval)?
+        .serves
+        .borrow_mut()
+        .insert(name.to_owned(), serve);
     Ok(())
 }
 
@@ -325,16 +324,11 @@ pub fn shipit_builtins(builder: &mut GlobalsBuilder) {
         })))
     }
 
-    fn r#use(
-        #[starlark(args)] args: UnpackTuple<Value>,
-    ) -> anyhow::Result<StepValue> {
+    fn r#use(#[starlark(args)] args: UnpackTuple<Value>) -> anyhow::Result<StepValue> {
         let dependencies = args
             .items
             .iter()
-            .map(|v| {
-                package_from(*v)?
-                    .ok_or_else(|| anyhow!("use() does not accept None"))
-            })
+            .map(|v| package_from(*v)?.ok_or_else(|| anyhow!("use() does not accept None")))
             .collect::<Result<Vec<Package>>>()?;
         Ok(StepValue(Step::Use(UseStep { dependencies })))
     }

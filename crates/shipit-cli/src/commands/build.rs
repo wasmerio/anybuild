@@ -195,7 +195,9 @@ pub fn run(args: BuildArgs) -> Result<()> {
 
         // Prepare the build steps (sometimes the runners need to adapt the
         // dependencies).
-        let build_steps = context.runner.prepare_build_steps(context.serve.build.clone());
+        let build_steps = context
+            .runner
+            .prepare_build_steps(context.serve.build.clone());
 
         // Build and serve
         context.build_backend.borrow_mut().build(

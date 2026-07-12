@@ -150,7 +150,10 @@ pub fn load_config(path: &Path, base: BaseConfig) -> LaravelConfig {
 /// Port of `LaravelProvider.detect`.
 pub fn detect(path: &Path, _base: &BaseConfig) -> Option<DetectResult> {
     if path.join("artisan").exists() && path.join("composer.json").exists() {
-        return Some(DetectResult { name: NAME, score: 95 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 95,
+        });
     }
     None
 }

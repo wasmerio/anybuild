@@ -11,8 +11,7 @@ use crate::base::{env_str, BaseConfig, DetectResult, HasBase};
 
 pub const NAME: &str = "go";
 
-const BUILD_FILE_CANDIDATES: [&str; 5] =
-    ["main.go", "server.go", "serve.go", "api.go", "web.go"];
+const BUILD_FILE_CANDIDATES: [&str; 5] = ["main.go", "server.go", "serve.go", "api.go", "web.go"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoConfig {
@@ -71,7 +70,10 @@ pub fn load_config(path: &Path, _base: BaseConfig) -> GoConfig {
         config.serve_binary = Some(serve_binary);
     }
     assert!(
-        config.serve_binary.as_deref().is_some_and(|b| !b.is_empty()),
+        config
+            .serve_binary
+            .as_deref()
+            .is_some_and(|b| !b.is_empty()),
         "No serve binary for go found"
     );
     config
@@ -89,7 +91,8 @@ pub fn get_build_file(root_path: &Path) -> Option<String> {
     }
     for name in BUILD_FILE_CANDIDATES {
         // Python: next(root_path.glob(f"*/{name}")) then f"*/*/{name}".
-        if let Some(found) = glob_child(root_path, name, 1).or_else(|| glob_child(root_path, name, 2))
+        if let Some(found) =
+            glob_child(root_path, name, 1).or_else(|| glob_child(root_path, name, 2))
         {
             return Some(found);
         }
@@ -135,7 +138,10 @@ fn sorted_entries(path: &Path) -> Vec<String> {
 /// Port of `GoProvider.detect`.
 pub fn detect(path: &Path, _base: &BaseConfig) -> Option<DetectResult> {
     if path.join("go.mod").exists() || path.join("go.sum").exists() {
-        return Some(DetectResult { name: NAME, score: 80 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 80,
+        });
     }
     None
 }

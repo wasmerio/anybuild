@@ -105,12 +105,7 @@ pub fn evaluate_shipit(options: EvaluateOptions) -> Result<Serve> {
     let entry_globals = globals(&port, Some(&config_map));
 
     let had_loads = {
-        let mut graph = ModuleGraph::new(
-            workspace_root.clone(),
-            stdlib,
-            lib_globals,
-            &ctx,
-        );
+        let mut graph = ModuleGraph::new(workspace_root.clone(), stdlib, lib_globals, &ctx);
         graph.eval_entry(source, &shipit_file, "Shipit", &entry_globals)?
     };
 
@@ -142,9 +137,7 @@ fn apply_command_overrides(serve: &mut Serve, config: &serde_json::Value, port: 
     let install_cmd = config_str(config, &["commands", "install"]);
 
     if let Some(start) = &start {
-        serve
-            .commands
-            .insert("start".to_owned(), start.clone());
+        serve.commands.insert("start".to_owned(), start.clone());
     }
     if let Some(after_deploy) = &after_deploy {
         serve
@@ -168,9 +161,7 @@ fn apply_command_overrides(serve: &mut Serve, config: &serde_json::Value, port: 
                             group: Some("build".to_owned()),
                         }));
                         has_done_build = true;
-                    } else if group == Some("install")
-                        && !has_done_install
-                        && install_cmd.is_some()
+                    } else if group == Some("install") && !has_done_install && install_cmd.is_some()
                     {
                         new_build.push(Step::Run(RunStep {
                             command: install_cmd.clone().unwrap(),

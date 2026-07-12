@@ -32,10 +32,7 @@ pub fn build_volumes(
     let volumes: &[Volume] = serve.volumes.as_deref().unwrap_or(&[]);
     let mut mappings: IndexMap<String, String> = IndexMap::new();
     for volume in volumes {
-        mappings.insert(
-            volume.name.clone(),
-            volume.serve_path.display().to_string(),
-        );
+        mappings.insert(volume.name.clone(), volume.serve_path.display().to_string());
     }
     for volume in volumes {
         std::fs::create_dir_all(&volume.path)?;

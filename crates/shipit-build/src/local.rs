@@ -54,11 +54,7 @@ fn build_ignore_set(patterns: &[String]) -> Result<globset::GlobSet> {
 /// Port of `shutil.copytree(source, target, dirs_exist_ok=True,
 /// ignore=shutil.ignore_patterns(*patterns))`: recursive copy that skips
 /// entries whose basename matches any pattern.
-pub fn copy_tree_with_ignore(
-    source: &Path,
-    target: &Path,
-    patterns: &[String],
-) -> Result<()> {
+pub fn copy_tree_with_ignore(source: &Path, target: &Path, patterns: &[String]) -> Result<()> {
     let ignore = build_ignore_set(patterns)?;
     copy_tree_inner(source, target, &ignore)
 }
@@ -76,8 +72,8 @@ fn copy_tree_inner(source: &Path, target: &Path, ignore: &globset::GlobSet) -> R
         let src = entry.path();
         let dst = target.join(&name);
         // Follows symlinks, like shutil.copytree(symlinks=False).
-        let metadata = std::fs::metadata(&src)
-            .with_context(|| format!("Failed to stat {}", src.display()))?;
+        let metadata =
+            std::fs::metadata(&src).with_context(|| format!("Failed to stat {}", src.display()))?;
         if metadata.is_dir() {
             copy_tree_inner(&src, &dst, ignore)?;
         } else {
@@ -251,9 +247,8 @@ impl LocalBuildBackend {
                         if source.is_dir() {
                             copy_tree(&source, &target)?;
                         } else {
-                            std::fs::copy(&source, &target).with_context(|| {
-                                format!("Failed to copy {}", source.display())
-                            })?;
+                            std::fs::copy(&source, &target)
+                                .with_context(|| format!("Failed to copy {}", source.display()))?;
                         }
                     }
                     let all_inputs = inputs.join(", ");
@@ -306,10 +301,7 @@ impl LocalBuildBackend {
                 ignore_matches.push("Shipit".to_owned());
 
                 if step.is_download() {
-                    console_print(&format!(
-                        "Download from {} to {}",
-                        step.source, step.target
-                    ));
+                    console_print(&format!("Download from {} to {}", step.source, step.target));
                     download_file(&step.source, &pythonic_join(&build_path, &step.target))?;
                 } else {
                     let base = match step.base.as_str() {
@@ -332,9 +324,8 @@ impl LocalBuildBackend {
                     if source.is_dir() {
                         copy_tree_with_ignore(&source, &target, &ignore_matches)?;
                     } else if source.is_file() {
-                        std::fs::copy(&source, &target).with_context(|| {
-                            format!("Failed to copy {}", source.display())
-                        })?;
+                        std::fs::copy(&source, &target)
+                            .with_context(|| format!("Failed to copy {}", source.display()))?;
                     } else {
                         bail!("Source {} is not a file or directory", step.source);
                     }

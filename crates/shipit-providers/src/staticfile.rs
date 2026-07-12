@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::OnceLock;
 
+use anyhow::{anyhow, bail, Context, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -122,11 +123,11 @@ pub(crate) fn parse_simple_yaml(contents: &str) -> HashMap<String, String> {
 }
 
 /// Port of `StaticFileProvider.load_config`.
-pub fn load_config(path: &Path, base: BaseConfig) -> StaticFileConfig {
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<StaticFileConfig> {
     let mut config = load_static_config(path, base);
     config.redirects_config =
-        compute_redirects_config(path, config.static_dir.as_deref(), config.convert_redirects);
-    config
+        compute_redirects_config(path, config.static_dir.as_deref(), config.convert_redirects)?;
+    Ok(config)
 }
 
 /// Port of `StaticFileProvider._load_static_config`.
@@ -157,11 +158,17 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
     let is_python_php_js_project =
         exists(path, &["package.json", "pyproject.toml", "composer.json"]);
     if exists(path, &["Staticfile"]) {
-        return Some(DetectResult { name: NAME, score: 50 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 50,
+        });
     }
     if !is_python_php_js_project {
         // Python returns 10 whether or not an index file exists.
-        return Some(DetectResult { name: NAME, score: 10 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 10,
+        });
     }
     if base
         .commands
@@ -169,21 +176,23 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         .as_deref()
         .is_some_and(|start| start.starts_with("static-web-server "))
     {
-        return Some(DetectResult { name: NAME, score: 70 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 70,
+        });
     }
     None
 }
 
 /// Port of `compute_redirects_config`: render a `_redirects` file into
-/// sws.toml redirect rules (or None). Invalid rules panic with the same
-/// messages Python raises as `ValueError`.
+/// sws.toml redirect rules (or None).
 pub fn compute_redirects_config(
     path: &Path,
     static_dir: Option<&str>,
     convert_redirects: bool,
-) -> Option<String> {
+) -> Result<Option<String>> {
     if !convert_redirects {
-        return None;
+        return Ok(None);
     }
 
     let mut redirects_path = path.join(REDIRECTS_SOURCE);
@@ -194,12 +203,12 @@ pub fn compute_redirects_config(
         }
     }
     if !redirects_path.is_file() {
-        return None;
+        return Ok(None);
     }
 
-    let rules = load_redirect_rules(&redirects_path);
+    let rules = load_redirect_rules(&redirects_path)?;
     if rules.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     // tomlkit renders the [advanced] super-table implicitly: only the
@@ -217,7 +226,7 @@ pub fn compute_redirects_config(
         ));
         rendered.push_str(&format!("kind = {}\n", rule.kind));
     }
-    Some(rendered)
+    Ok(Some(rendered))
 }
 
 /// tomlkit-style basic string rendering.
@@ -242,9 +251,9 @@ fn toml_basic_string(value: &str) -> String {
 }
 
 /// Port of `StaticFileProvider._load_redirect_rules`.
-pub(crate) fn load_redirect_rules(redirects_path: &Path) -> Vec<RedirectRule> {
+pub(crate) fn load_redirect_rules(redirects_path: &Path) -> Result<Vec<RedirectRule>> {
     let contents = std::fs::read_to_string(redirects_path)
-        .unwrap_or_else(|e| panic!("{}: unreadable _redirects file: {e}", redirects_path.display()));
+        .with_context(|| format!("{}: unreadable _redirects file", redirects_path.display()))?;
     let mut rules = Vec::new();
     for (index, raw_line) in contents.lines().enumerate() {
         let line_number = index + 1;
@@ -253,11 +262,14 @@ pub(crate) fn load_redirect_rules(redirects_path: &Path) -> Vec<RedirectRule> {
             continue;
         }
 
-        let parts = shlex_split(line).unwrap_or_else(|| {
-            panic!("{}:{line_number}: invalid _redirects rule", redirects_path.display())
-        });
+        let parts = shlex_split(line).ok_or_else(|| {
+            anyhow!(
+                "{}:{line_number}: invalid _redirects rule",
+                redirects_path.display()
+            )
+        })?;
         if parts.len() < 2 {
-            panic!(
+            bail!(
                 "{}:{line_number}: expected source and destination",
                 redirects_path.display()
             );
@@ -269,41 +281,41 @@ pub(crate) fn load_redirect_rules(redirects_path: &Path) -> Vec<RedirectRule> {
         let mut kind: i64 = 301;
         if let Some(first) = rest.first() {
             if !first.is_empty() && first.chars().all(|c| c.is_ascii_digit()) {
-                kind = first.parse().unwrap_or_else(|_| {
-                    panic!(
+                kind = first.parse().map_err(|_| {
+                    anyhow!(
                         "{}:{line_number}: redirect status {first} is not supported by \
                          static-web-server",
                         redirects_path.display()
                     )
-                });
+                })?;
                 rest = &rest[1..];
             }
         }
 
         if !REDIRECT_STATUS_CODES.contains(&kind) {
-            panic!(
+            bail!(
                 "{}:{line_number}: redirect status {kind} is not supported by \
                  static-web-server",
                 redirects_path.display()
             );
         }
         if !rest.is_empty() {
-            panic!(
+            bail!(
                 "{}:{line_number}: conditions and forced redirects are not supported",
                 redirects_path.display()
             );
         }
 
-        let (sws_source, replacements) = translate_source(redirects_path, line_number, source);
+        let (sws_source, replacements) = translate_source(redirects_path, line_number, source)?;
         let sws_destination =
-            translate_destination(redirects_path, line_number, destination, &replacements);
+            translate_destination(redirects_path, line_number, destination, &replacements)?;
         rules.push(RedirectRule {
             source: sws_source,
             destination: sws_destination,
             kind,
         });
     }
-    rules
+    Ok(rules)
 }
 
 /// Port of `StaticFileProvider._translate_source`.
@@ -311,21 +323,21 @@ fn translate_source(
     redirects_path: &Path,
     line_number: usize,
     source: &str,
-) -> (String, HashMap<String, usize>) {
+) -> Result<(String, HashMap<String, usize>)> {
     if source.contains("://") {
-        panic!(
+        bail!(
             "{}:{line_number}: redirect sources must be local paths",
             redirects_path.display()
         );
     }
     if source.contains('?') {
-        panic!(
+        bail!(
             "{}:{line_number}: query matching is not supported",
             redirects_path.display()
         );
     }
     if !source.starts_with('/') {
-        panic!(
+        bail!(
             "{}:{line_number}: redirect sources must start with '/'",
             redirects_path.display()
         );
@@ -334,15 +346,13 @@ fn translate_source(
     let mut translated = String::new();
     let mut replacements: HashMap<String, usize> = HashMap::new();
     let mut last_index = 0;
-    let mut next_index = 1;
-
-    for captures in source_token_pattern().captures_iter(source) {
+    for (next_index, captures) in (1..).zip(source_token_pattern().captures_iter(source)) {
         let whole = captures.get(0).expect("match 0 exists");
         translated.push_str(&source[last_index..whole.start()]);
         if let Some(param) = captures.get(1) {
             let param_name = param.as_str();
             if replacements.contains_key(param_name) {
-                panic!(
+                bail!(
                     "{}:{line_number}: duplicate source parameter :{param_name}",
                     redirects_path.display()
                 );
@@ -351,7 +361,7 @@ fn translate_source(
             translated.push_str("{*}");
         } else {
             if replacements.contains_key("splat") {
-                panic!(
+                bail!(
                     "{}:{line_number}: only one splat segment is supported",
                     redirects_path.display()
                 );
@@ -359,12 +369,11 @@ fn translate_source(
             replacements.insert("splat".to_owned(), next_index);
             translated.push_str("{**}");
         }
-        next_index += 1;
         last_index = whole.end();
     }
 
     translated.push_str(&source[last_index..]);
-    (translated, replacements)
+    Ok((translated, replacements))
 }
 
 /// Port of `StaticFileProvider._translate_destination`.
@@ -373,9 +382,9 @@ fn translate_destination(
     line_number: usize,
     destination: &str,
     replacements: &HashMap<String, usize>,
-) -> String {
+) -> Result<String> {
     if destination.contains('*') {
-        panic!(
+        bail!(
             "{}:{line_number}: destination splats must use :splat",
             redirects_path.display()
         );
@@ -387,7 +396,7 @@ fn translate_destination(
         let whole = captures.get(0).expect("match 0 exists");
         let param_name = captures.get(1).expect("group 1 exists").as_str();
         let Some(replacement) = replacements.get(param_name) else {
-            panic!(
+            bail!(
                 "{}:{line_number}: destination references unknown parameter :{param_name}",
                 redirects_path.display()
             );
@@ -397,7 +406,7 @@ fn translate_destination(
         last_index = whole.end();
     }
     translated.push_str(&destination[last_index..]);
-    translated
+    Ok(translated)
 }
 
 /// Minimal `shlex.split` (POSIX mode, comments off): whitespace-separated
@@ -483,7 +492,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            compute_redirects_config(tmp.path(), Some("site"), true).as_deref(),
+            compute_redirects_config(tmp.path(), Some("site"), true)
+                .unwrap()
+                .as_deref(),
             Some(
                 "[[advanced.redirects]]\n\
                  source = \"/docs/{**}\"\n\
@@ -502,11 +513,16 @@ mod tests {
     fn test_staticfile_redirects_fall_back_to_project_root() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join("site")).unwrap();
-        std::fs::write(tmp.path().join("_redirects"), "/docs/* /guides/:splat/ 301\n")
-            .unwrap();
+        std::fs::write(
+            tmp.path().join("_redirects"),
+            "/docs/* /guides/:splat/ 301\n",
+        )
+        .unwrap();
 
         assert_eq!(
-            compute_redirects_config(tmp.path(), Some("site"), true).as_deref(),
+            compute_redirects_config(tmp.path(), Some("site"), true)
+                .unwrap()
+                .as_deref(),
             Some(
                 "[[advanced.redirects]]\n\
                  source = \"/docs/{**}\"\n\
@@ -517,7 +533,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "conditions and forced redirects are not supported")]
     fn test_staticfile_redirects_reject_unsupported_conditions() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(
@@ -526,6 +541,12 @@ mod tests {
         )
         .unwrap();
 
-        compute_redirects_config(tmp.path(), None, true);
+        let error = compute_redirects_config(tmp.path(), None, true).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("conditions and forced redirects are not supported"),
+            "{error:#}"
+        );
     }
 }

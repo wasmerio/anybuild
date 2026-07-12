@@ -25,10 +25,7 @@ struct Case {
 fn example_env(case_name: &str) -> Vec<(&'static str, &'static str)> {
     // Mirrors EXAMPLE_ENV in the dump script / test suites.
     if case_name.starts_with("php-wordpress-empty") {
-        vec![
-            ("SHIPIT_WP_VERSION", "latest"),
-            ("SHIPIT_PHPIX", "true"),
-        ]
+        vec![("SHIPIT_WP_VERSION", "latest"), ("SHIPIT_PHPIX", "true")]
     } else {
         vec![]
     }
@@ -39,8 +36,8 @@ fn configs_match_python() {
     let manifest_path = match std::env::var("SHIPIT_FIXTURES") {
         Ok(path) => PathBuf::from(path),
         Err(_) => {
-            let default = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/manifest.json");
+            let default =
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/manifest.json");
             if !default.is_file() {
                 eprintln!("skipping: no fixtures (run scripts/dump_rust_fixtures.py)");
                 return;
@@ -48,10 +45,9 @@ fn configs_match_python() {
             default
         }
     };
-    let mut manifest: Manifest = serde_json::from_str(
-        &std::fs::read_to_string(&manifest_path).expect("manifest readable"),
-    )
-    .expect("manifest parses");
+    let mut manifest: Manifest =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).expect("manifest readable"))
+            .expect("manifest parses");
     // Committed fixtures carry repo-relative workspace paths.
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     for case in &mut manifest.cases {
@@ -90,7 +86,11 @@ fn configs_match_python() {
             "{} of {} config cases failed:\n{shown}{}",
             failures.len(),
             manifest.cases.len(),
-            if failures.len() > 8 { "\n… (more)" } else { "" }
+            if failures.len() > 8 {
+                "\n… (more)"
+            } else {
+                ""
+            }
         );
     }
     assert!(passed > 0, "no cases ran");
@@ -107,8 +107,8 @@ fn run_case(case: &Case) -> Result<(), String> {
     let mut base = BaseConfig::default();
     base.commands.enrich_from_path(&app_path);
 
-    let provider = load_provider(&app_path, &base, None)
-        .map_err(|e| format!("detection failed: {e:#}"))?;
+    let provider =
+        load_provider(&app_path, &base, None).map_err(|e| format!("detection failed: {e:#}"))?;
     let mut config = load_provider_config(provider, &app_path, base)
         .map_err(|e| format!("load_config failed: {e:#}"))?;
 
@@ -134,8 +134,7 @@ fn run_case(case: &Case) -> Result<(), String> {
 }
 
 fn diff_json(expected: &serde_json::Value, actual: &serde_json::Value) -> String {
-    let (Some(expected_map), Some(actual_map)) = (expected.as_object(), actual.as_object())
-    else {
+    let (Some(expected_map), Some(actual_map)) = (expected.as_object(), actual.as_object()) else {
         return "config is not an object".to_owned();
     };
     let mut lines = Vec::new();

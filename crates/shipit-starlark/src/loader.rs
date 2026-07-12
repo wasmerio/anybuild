@@ -69,9 +69,7 @@ pub fn resolve_label(
             .ok_or_else(|| {
                 anyhow!("Invalid load label {label:?}: expected //package:file.shipit")
             })?;
-        if pkg == STARLIB_NAMESPACE
-            || pkg.starts_with(&format!("{STARLIB_NAMESPACE}/"))
-        {
+        if pkg == STARLIB_NAMESPACE || pkg.starts_with(&format!("{STARLIB_NAMESPACE}/")) {
             let rel = pkg[STARLIB_NAMESPACE.len()..].trim_matches('/');
             return Ok(stdlib.resolve(rel, fname));
         }
@@ -153,10 +151,9 @@ impl<'c> ModuleGraph<'c> {
         if !path.is_file() {
             bail!("load({label:?}): no module at {}", path.display());
         }
-        let source = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
-        let ast = AstModule::parse(label, source, &dialect())
-            .map_err(|e| anyhow!("{e}"))?;
+        let source =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let ast = AstModule::parse(label, source, &dialect()).map_err(|e| anyhow!("{e}"))?;
         stack.push((key.clone(), label.to_owned()));
         let deps = self.deps_for(&ast, path, stack)?;
         stack.pop();
@@ -174,8 +171,7 @@ impl<'c> ModuleGraph<'c> {
         entry_name: &str,
         entry_globals: &Globals,
     ) -> Result<bool> {
-        let ast = AstModule::parse(entry_name, source, &dialect())
-            .map_err(|e| anyhow!("{e}"))?;
+        let ast = AstModule::parse(entry_name, source, &dialect()).map_err(|e| anyhow!("{e}"))?;
         let mut stack = Vec::new();
         let deps = self.deps_for(&ast, entry_path, &mut stack)?;
         let had_loads = !deps.is_empty();

@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::base::{env_str, BaseConfig, DetectResult, HasBase};
@@ -48,8 +49,8 @@ fn exists(path: &Path, candidates: &[&str]) -> bool {
 }
 
 /// Port of `JekyllProvider.load_config`.
-pub fn load_config(path: &Path, base: BaseConfig) -> JekyllConfig {
-    let staticfile_config = staticfile::load_config(path, base);
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<JekyllConfig> {
+    let staticfile_config = staticfile::load_config(path, base)?;
     // Python re-instantiates JekyllConfig(**config.model_dump()): every
     // staticfile field is an init kwarg, so the env only reaches the
     // ruby/jekyll versions.
@@ -62,7 +63,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> JekyllConfig {
         .staticfile
         .static_dir
         .as_deref()
-        .map_or(true, |dir| dir.is_empty())
+        .is_none_or(|dir| dir.is_empty())
     {
         let mut destination = None;
         for name in ["_config.yml", "_config.yaml"] {
@@ -73,25 +74,30 @@ pub fn load_config(path: &Path, base: BaseConfig) -> JekyllConfig {
                 break;
             }
         }
-        config.staticfile.static_dir =
-            Some(destination.unwrap_or_else(|| "_site".to_owned()));
+        config.staticfile.static_dir = Some(destination.unwrap_or_else(|| "_site".to_owned()));
     }
     // static_dir may have changed since the base load; recompute redirects.
     config.staticfile.redirects_config = compute_redirects_config(
         path,
         config.staticfile.static_dir.as_deref(),
         config.staticfile.convert_redirects,
-    );
-    config
+    )?;
+    Ok(config)
 }
 
 /// Port of `JekyllProvider.detect`.
 pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
     if exists(path, &["_config.yml", "_config.yaml"]) {
         if exists(path, &["Gemfile"]) {
-            return Some(DetectResult { name: NAME, score: 85 });
+            return Some(DetectResult {
+                name: NAME,
+                score: 85,
+            });
         }
-        return Some(DetectResult { name: NAME, score: 40 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 40,
+        });
     }
     if base
         .commands
@@ -99,7 +105,10 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         .as_deref()
         .is_some_and(|build| build.starts_with("jekyll "))
     {
-        return Some(DetectResult { name: NAME, score: 85 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 85,
+        });
     }
     None
 }

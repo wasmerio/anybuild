@@ -245,7 +245,7 @@ fn exists(path: &Path, candidates: &[&str]) -> bool {
 }
 
 fn is_blank(value: &Option<String>) -> bool {
-    value.as_deref().map_or(true, str::is_empty)
+    value.as_deref().is_none_or(str::is_empty)
 }
 
 /// Port of `PythonProvider.detect`.
@@ -368,7 +368,7 @@ pub fn load_config_with_deps(
         .commands
         .start
         .as_deref()
-        .map_or(false, |start| start.starts_with("uvicorn "));
+        .is_some_and(|start| start.starts_with("uvicorn "));
     let framework_should_use_uvicorn = matches!(
         config.framework,
         Some(PythonFramework::Django | PythonFramework::FastApi | PythonFramework::Flask)

@@ -140,10 +140,7 @@ pub fn normalize(serve: &Serve) -> Value {
                 .collect(),
         ),
     );
-    map.insert(
-        "env".into(),
-        json!(serve.env.clone().unwrap_or_default()),
-    );
+    map.insert("env".into(), json!(serve.env.clone().unwrap_or_default()));
     map.insert(
         "mounts".into(),
         Value::Array(
@@ -196,10 +193,8 @@ pub fn normalize(serve: &Serve) -> Value {
 fn sort_keys(value: Value) -> Value {
     match value {
         Value::Object(map) => {
-            let mut entries: Vec<(String, Value)> = map
-                .into_iter()
-                .map(|(k, v)| (k, sort_keys(v)))
-                .collect();
+            let mut entries: Vec<(String, Value)> =
+                map.into_iter().map(|(k, v)| (k, sort_keys(v))).collect();
             entries.sort_by(|a, b| a.0.cmp(&b.0));
             Value::Object(entries.into_iter().collect())
         }

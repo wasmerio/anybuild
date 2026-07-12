@@ -22,8 +22,7 @@ use shipit_starlark::loader::StdlibSource;
 
 use crate::generator::starlib_dir;
 use crate::paths::{
-    default_shipit_dir, get_shipit_path, read_shipit_subdir, resolve_project_paths,
-    ProjectPaths,
+    default_shipit_dir, get_shipit_path, read_shipit_subdir, resolve_project_paths, ProjectPaths,
 };
 
 /// The bundled assets dir (shared with the legacy Python tree).
@@ -148,10 +147,7 @@ pub struct ProjectContext {
     pub runner: Box<dyn Runner>,
 }
 
-pub fn base_config_for(
-    app_path: &Path,
-    overrides: &CommandOverrides,
-) -> BaseConfig {
+pub fn base_config_for(app_path: &Path, overrides: &CommandOverrides) -> BaseConfig {
     let mut base = BaseConfig::default();
     base.commands.enrich_from_path(app_path);
     if let Some(start) = &overrides.start_command {
@@ -184,15 +180,11 @@ pub fn load_project_config(
     overrides: &CommandOverrides,
 ) -> Result<(&'static str, ProviderConfig)> {
     let base = base_config_for(&paths.app_path, overrides);
-    let provider = load_provider(
-        &paths.app_path,
-        &base,
-        overrides.use_provider.as_deref(),
-    )?;
+    let provider = load_provider(&paths.app_path, &base, overrides.use_provider.as_deref())?;
     let mut config = load_provider_config(provider, &paths.app_path, base)?;
     if let Some(patch) = &overrides.config {
-        let patch: serde_json::Value = serde_json::from_str(patch)
-            .map_err(|e| anyhow!("--config must be valid JSON: {e}"))?;
+        let patch: serde_json::Value =
+            serde_json::from_str(patch).map_err(|e| anyhow!("--config must be valid JSON: {e}"))?;
         config = shipit_providers::merge_config_json(provider, &config, &patch)?;
     }
     workspace::apply_subdir_provider_config(&mut config, paths.subdir.as_deref());
@@ -257,9 +249,7 @@ mod tests {
 
     use shipit_plan::layout::LocalLayout;
     use shipit_plan::{RunStep, Serve, Step};
-    use shipit_providers::{
-        load_provider, load_provider_config, merge_config_json, BaseConfig,
-    };
+    use shipit_providers::{load_provider, load_provider_config, merge_config_json, BaseConfig};
     use shipit_starlark::eval::{evaluate_shipit, EvaluateOptions};
     use shipit_starlark::loader::StdlibSource;
 
@@ -293,9 +283,7 @@ mod tests {
             .build
             .iter()
             .filter_map(|step| match step {
-                Step::Run(run) if run.group.as_deref() == Some(group) => {
-                    Some(run.command.as_str())
-                }
+                Step::Run(run) if run.group.as_deref() == Some(group) => Some(run.command.as_str()),
                 _ => None,
             })
             .collect()
@@ -404,7 +392,10 @@ mod tests {
         );
         assert_eq!(group_commands(&serve, "build"), ["make assets"]);
         // start override wins and $PORT is substituted.
-        assert_eq!(serve.commands.get("start").unwrap(), "make serve --port 8080");
+        assert_eq!(
+            serve.commands.get("start").unwrap(),
+            "make serve --port 8080"
+        );
     }
 
     /// Port of tests/test_command_overrides.py::

@@ -1,7 +1,6 @@
 //! `shipit run` (port of cli.py's run command).
 //!
 
-
 use anyhow::Result;
 use indexmap::IndexMap;
 use shipit_build::local::ui::console_print;
@@ -83,9 +82,7 @@ pub fn run_serve_commands(
         parse_cli_volume_mappings(volume_specs)?,
     ]);
     for command in commands {
-        if OPTIONAL_RUN_COMMANDS.contains(&command.as_str())
-            && !runner.has_serve_command(command)
-        {
+        if OPTIONAL_RUN_COMMANDS.contains(&command.as_str()) && !runner.has_serve_command(command) {
             continue;
         }
         console_print(&format!("\nRunning command {command}"));
@@ -109,8 +106,7 @@ pub fn run(args: RunArgs) -> Result<()> {
         },
     )?;
 
-    let commands_to_run =
-        resolve_run_commands(
+    let commands_to_run = resolve_run_commands(
         &args.selection.command_names,
         args.selection.effective_start(),
         args.selection.effective_after_deploy(),

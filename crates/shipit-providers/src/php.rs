@@ -156,8 +156,8 @@ pub(crate) fn detect_framework(
         "drupal/drupal",
         "drupal/recommended-project",
     ];
-    let has_drupal_layout = path.join("core/lib/Drupal.php").exists()
-        || path.join("web/core/lib/Drupal.php").exists();
+    let has_drupal_layout =
+        path.join("core/lib/Drupal.php").exists() || path.join("web/core/lib/Drupal.php").exists();
     if has_drupal_layout
         || drupal_packages
             .iter()
@@ -217,17 +217,16 @@ pub fn load_config(path: &Path, base: BaseConfig) -> PhpConfig {
         // php server handles more predictably than phpix by default.
         config.phpix = false;
     }
-    config.public_dir = if config.framework == Some(PhpFramework::Drupal)
-        && exists(path, &["web/index.php"])
-    {
-        Some("web".to_owned())
-    } else if exists(path, &["public/index.php"]) {
-        Some("public".to_owned())
-    } else if exists(path, &["app/index.php"]) {
-        Some("app".to_owned())
-    } else {
-        None
-    };
+    config.public_dir =
+        if config.framework == Some(PhpFramework::Drupal) && exists(path, &["web/index.php"]) {
+            Some("web".to_owned())
+        } else if exists(path, &["public/index.php"]) {
+            Some("public".to_owned())
+        } else if exists(path, &["app/index.php"]) {
+            Some("app".to_owned())
+        } else {
+            None
+        };
     config
 }
 
@@ -235,19 +234,26 @@ pub fn load_config(path: &Path, base: BaseConfig) -> PhpConfig {
 pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
     let framework = detect_framework(path, None);
     if framework == Some(PhpFramework::Drupal) && path.join("web/index.php").exists() {
-        return Some(DetectResult { name: NAME, score: 70 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 70,
+        });
     }
     if matches!(
         framework,
         Some(PhpFramework::Drupal | PhpFramework::Moodle | PhpFramework::Symfony)
     ) && exists(path, &["index.php", "public/index.php", "web/index.php"])
     {
-        return Some(DetectResult { name: NAME, score: 65 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 65,
+        });
     }
-    if path.join("composer.json").exists()
-        && exists(path, &["public/index.php", "web/index.php"])
-    {
-        return Some(DetectResult { name: NAME, score: 60 });
+    if path.join("composer.json").exists() && exists(path, &["public/index.php", "web/index.php"]) {
+        return Some(DetectResult {
+            name: NAME,
+            score: 60,
+        });
     }
     if exists(
         path,
@@ -258,7 +264,10 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
             "app/index.php",
         ],
     ) {
-        return Some(DetectResult { name: NAME, score: 10 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 10,
+        });
     }
     if base
         .commands
@@ -266,7 +275,10 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         .as_deref()
         .is_some_and(|start| start.starts_with("php "))
     {
-        return Some(DetectResult { name: NAME, score: 70 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 70,
+        });
     }
     if base
         .commands
@@ -274,7 +286,10 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         .as_deref()
         .is_some_and(|install| install.starts_with("composer "))
     {
-        return Some(DetectResult { name: NAME, score: 30 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 30,
+        });
     }
     None
 }

@@ -35,8 +35,8 @@ fn plan_snapshots_match() {
     let manifest_path = match std::env::var("SHIPIT_FIXTURES") {
         Ok(path) => PathBuf::from(path),
         Err(_) => {
-            let default = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/manifest.json");
+            let default =
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/manifest.json");
             if !default.is_file() {
                 eprintln!(
                     "skipping: no fixtures (run scripts/dump_rust_fixtures.py \
@@ -47,10 +47,9 @@ fn plan_snapshots_match() {
             default
         }
     };
-    let mut manifest: Manifest = serde_json::from_str(
-        &std::fs::read_to_string(&manifest_path).expect("manifest readable"),
-    )
-    .expect("manifest parses");
+    let mut manifest: Manifest =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).expect("manifest readable"))
+            .expect("manifest parses");
     // Committed fixtures carry repo-relative paths.
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     if manifest.starlib.is_relative() {
@@ -92,8 +91,7 @@ fn plan_snapshots_match() {
                 continue;
             }
         };
-        let rendered =
-            snapshot::render(&serve, &build_path, &shipit_dir, &case.workspace);
+        let rendered = snapshot::render(&serve, &build_path, &shipit_dir, &case.workspace);
         let golden_path = manifest.snapshots.join(format!("{}.json", case.name));
         let golden = match std::fs::read_to_string(&golden_path) {
             Ok(text) => text,
@@ -159,7 +157,11 @@ fn plan_snapshots_match() {
             "{} of {} snapshot cases failed:\n{shown}{}",
             failures.len(),
             manifest.cases.len(),
-            if failures.len() > 5 { "\n… (more)" } else { "" }
+            if failures.len() > 5 {
+                "\n… (more)"
+            } else {
+                ""
+            }
         );
     }
     assert!(passed > 0, "no cases ran");

@@ -22,7 +22,9 @@ pub struct LocalLayout {
 
 impl LocalLayout {
     pub fn new(shipit_dir: impl Into<PathBuf>) -> Self {
-        Self { shipit_dir: shipit_dir.into() }
+        Self {
+            shipit_dir: shipit_dir.into(),
+        }
     }
 
     pub fn build_path(&self) -> PathBuf {

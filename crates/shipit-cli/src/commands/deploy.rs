@@ -1,7 +1,6 @@
 //! `shipit deploy` (port of cli.py's deploy command): deploy a Wasmer
 //! package produced by `shipit build --wasmer`.
 
-
 use anyhow::{bail, Result};
 
 use crate::args::{DeployTargetArgs, ProjectArgs, WasmerConnArgs};

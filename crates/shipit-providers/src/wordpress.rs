@@ -103,15 +103,24 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         && path.join("index.php").exists()
         && path.join("wp-load.php").exists()
     {
-        return Some(DetectResult { name: NAME, score: 80 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 80,
+        });
     }
 
     let wp_config = load_config(path, base.clone());
     if wp_config.wp_version.is_some() {
-        return Some(DetectResult { name: NAME, score: 80 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 80,
+        });
     }
     if detect_extension(path).is_some() {
-        return Some(DetectResult { name: NAME, score: 75 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 75,
+        });
     }
     None
 }
@@ -133,8 +142,8 @@ fn detect_plugin(path: &Path) -> Option<WordPressExtension> {
         if !file_has_header(&plugin_file, plugin_header_re()) {
             continue;
         }
-        let slug = detect_text_domain_slug(&plugin_file)
-            .unwrap_or_else(|| slugify(&dir_name(path)));
+        let slug =
+            detect_text_domain_slug(&plugin_file).unwrap_or_else(|| slugify(&dir_name(path)));
         let file_name = plugin_file
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -160,8 +169,7 @@ fn detect_theme(path: &Path) -> Option<WordPressExtension> {
     {
         return None;
     }
-    let slug =
-        detect_text_domain_slug(&style_css).unwrap_or_else(|| slugify(&dir_name(path)));
+    let slug = detect_text_domain_slug(&style_css).unwrap_or_else(|| slugify(&dir_name(path)));
     Some(WordPressExtension {
         kind: "theme",
         activate_target: slug.clone(),
@@ -230,8 +238,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use crate::{
-        load_provider, load_provider_config, merge_config_json, BaseConfig,
-        ProviderConfig,
+        load_provider, load_provider_config, merge_config_json, BaseConfig, ProviderConfig,
     };
 
     fn write_plugin(project_dir: &Path, filename: &str) {
@@ -245,8 +252,11 @@ mod tests {
 
     fn write_theme(project_dir: &Path) {
         std::fs::create_dir_all(project_dir).unwrap();
-        std::fs::write(project_dir.join("style.css"), "/*\nTheme Name: My Theme\n*/\n")
-            .unwrap();
+        std::fs::write(
+            project_dir.join("style.css"),
+            "/*\nTheme Name: My Theme\n*/\n",
+        )
+        .unwrap();
         std::fs::write(project_dir.join("index.php"), "<?php\n").unwrap();
     }
 
@@ -312,8 +322,7 @@ mod tests {
         // `load_provider_config(..., {"wp_version": "6.8.3"})` in Python:
         // load, then merge the user config over the model dump.
         let config =
-            load_provider_config("wordpress", &project_dir, BaseConfig::default())
-                .unwrap();
+            load_provider_config("wordpress", &project_dir, BaseConfig::default()).unwrap();
         let config = merge_config_json(
             "wordpress",
             &config,
@@ -341,8 +350,7 @@ mod tests {
         assert!(!wordpress(&config).php.phpix);
 
         let config =
-            merge_config_json("wordpress", &config, &serde_json::json!({"phpix": true}))
-                .unwrap();
+            merge_config_json("wordpress", &config, &serde_json::json!({"phpix": true})).unwrap();
         let config = wordpress(&config);
         assert!(config.php.phpix);
         // A full site (not an extension) keeps wp_version unset unless the

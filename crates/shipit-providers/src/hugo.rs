@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::base::{env_str, BaseConfig, DetectResult, HasBase};
@@ -48,11 +49,13 @@ fn exists(path: &Path, candidates: &[&str]) -> bool {
 /// Port of `_contains_text`.
 fn contains_text(src_dir: &Path, text: &str) -> bool {
     let skipped_dirs = [".git", ".shipit", "node_modules"];
-    let walker = walkdir::WalkDir::new(src_dir).into_iter().filter_entry(|entry| {
-        !skipped_dirs
-            .iter()
-            .any(|skipped| entry.file_name() == *skipped)
-    });
+    let walker = walkdir::WalkDir::new(src_dir)
+        .into_iter()
+        .filter_entry(|entry| {
+            !skipped_dirs
+                .iter()
+                .any(|skipped| entry.file_name() == *skipped)
+        });
     for entry in walker.filter_map(|entry| entry.ok()) {
         if !entry.file_type().is_file() {
             continue;
@@ -112,8 +115,8 @@ fn hugo_publish_dir(path: &Path) -> Option<String> {
 }
 
 /// Port of `HugoProvider.load_config`.
-pub fn load_config(path: &Path, base: BaseConfig) -> HugoConfig {
-    let staticfile_config = staticfile::load_config(path, base);
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<HugoConfig> {
+    let staticfile_config = staticfile::load_config(path, base)?;
     // Python re-instantiates HugoConfig(**config.model_dump()): every
     // staticfile field is an init kwarg, so the env only reaches
     // hugo_version.
@@ -125,7 +128,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> HugoConfig {
         .staticfile
         .static_dir
         .as_deref()
-        .map_or(true, |dir| dir.is_empty())
+        .is_none_or(|dir| dir.is_empty())
     {
         config.staticfile.static_dir =
             Some(hugo_publish_dir(path).unwrap_or_else(|| "public".to_owned()));
@@ -142,20 +145,28 @@ pub fn load_config(path: &Path, base: BaseConfig) -> HugoConfig {
         path,
         config.staticfile.static_dir.as_deref(),
         config.staticfile.convert_redirects,
-    );
-    config
+    )?;
+    Ok(config)
 }
 
 /// Port of `HugoProvider.detect`.
 pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
     if exists(path, &["hugo.toml", "hugo.json", "hugo.yaml", "hugo.yml"]) {
-        return Some(DetectResult { name: NAME, score: 80 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 80,
+        });
     }
-    if exists(path, &["config.toml", "config.json", "config.yaml", "config.yml"])
-        && exists(path, &["content"])
+    if exists(
+        path,
+        &["config.toml", "config.json", "config.yaml", "config.yml"],
+    ) && exists(path, &["content"])
         && (exists(path, &["static"]) || exists(path, &["themes"]))
     {
-        return Some(DetectResult { name: NAME, score: 40 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 40,
+        });
     }
     if base
         .commands
@@ -163,7 +174,10 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         .as_deref()
         .is_some_and(|build| build.starts_with("hugo "))
     {
-        return Some(DetectResult { name: NAME, score: 80 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 80,
+        });
     }
     None
 }

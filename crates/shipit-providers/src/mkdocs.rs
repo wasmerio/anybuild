@@ -9,6 +9,7 @@
 
 use std::path::Path;
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -167,9 +168,9 @@ fn collect_requirements_files(file: std::path::PathBuf, out: &mut Vec<std::path:
 }
 
 /// Port of `MkdocsProvider.load_config`.
-pub fn load_config(path: &Path, base: BaseConfig) -> MkdocsConfig {
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<MkdocsConfig> {
     let python_config = crate::python::load_config(path, base.clone());
-    let staticfile_config = staticfile::load_config(path, base.clone());
+    let staticfile_config = staticfile::load_config(path, base.clone())?;
 
     let mut merged =
         to_object(serde_json::to_value(&python_config).expect("python config serializes"));
@@ -202,13 +203,16 @@ pub fn load_config(path: &Path, base: BaseConfig) -> MkdocsConfig {
         env_str("mkdocs_version").map_or(Value::Null, Value::String),
     );
 
-    serde_json::from_value(Value::Object(merged)).expect("mkdocs config deserializes")
+    Ok(serde_json::from_value(Value::Object(merged))?)
 }
 
 /// Port of `MkdocsProvider.detect`.
 pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
     if exists(path, &["mkdocs.yml", "mkdocs.yaml"]) {
-        return Some(DetectResult { name: NAME, score: 85 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 85,
+        });
     }
     if base
         .commands
@@ -216,7 +220,10 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         .as_deref()
         .is_some_and(|build| build.starts_with("mkdocs "))
     {
-        return Some(DetectResult { name: NAME, score: 85 });
+        return Some(DetectResult {
+            name: NAME,
+            score: 85,
+        });
     }
     None
 }

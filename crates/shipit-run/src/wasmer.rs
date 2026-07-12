@@ -397,7 +397,7 @@ fn apply_runner_flips(provider: &str, config_json: &mut JsonValue) {
     }
     if is_node_config(provider) {
         map.insert("use_edgejs".to_owned(), JsonValue::Bool(true));
-        if map.get("precompile_edgejs").map_or(true, JsonValue::is_null) {
+        if map.get("precompile_edgejs").is_none_or(JsonValue::is_null) {
             map.insert("precompile_edgejs".to_owned(), JsonValue::Bool(true));
         }
         map.insert("remove_native_binaries".to_owned(), JsonValue::Bool(true));
@@ -536,7 +536,10 @@ impl WasmerRunner {
         let mut binaries: IndexMap<String, (String, BinaryEnv)> = IndexMap::new();
 
         let mut deps: Vec<Package> = serve.deps.clone();
-        if serve.prepare.as_ref().is_some_and(|steps| !steps.is_empty())
+        if serve
+            .prepare
+            .as_ref()
+            .is_some_and(|steps| !steps.is_empty())
             && !deps.iter().any(|dep| dep.name == "bash")
         {
             deps.push(Package {
@@ -602,7 +605,10 @@ impl WasmerRunner {
                 fs.insert(
                     &path_str(&absolute_path(&mount.serve_path)),
                     value(path_str(&absolute_path(
-                        &self.build_backend.borrow().get_artifact_mount_path(&mount.name),
+                        &self
+                            .build_backend
+                            .borrow()
+                            .get_artifact_mount_path(&mount.name),
                     ))),
                 );
             }
@@ -653,10 +659,7 @@ impl WasmerRunner {
                             .trim_start_matches('_')
                             .to_owned();
                         module.insert("name", value(&module_name));
-                        module.insert(
-                            "source",
-                            value(path_str(&absolute_path(&full_module_path))),
-                        );
+                        module.insert("source", value(path_str(&absolute_path(&full_module_path))));
                         modules.push(module);
 
                         command_module = Some(module_name);
@@ -767,7 +770,7 @@ impl WasmerRunner {
         }
 
         if let Some(volumes) = serve.volumes.as_ref().filter(|v| !v.is_empty()) {
-            let mut volumes_yaml: Vec<YamlValue> = match yaml_config.remove(&yaml_str("volumes")) {
+            let mut volumes_yaml: Vec<YamlValue> = match yaml_config.remove(yaml_str("volumes")) {
                 Some(YamlValue::Sequence(seq)) => seq,
                 Some(_) => bail!("volumes must be a list"),
                 None => Vec::new(),
@@ -776,7 +779,7 @@ impl WasmerRunner {
                 let mount_path = path_str(&vol.serve_path);
                 let existing_volume = volumes_yaml.iter_mut().find(|volume_yaml| {
                     volume_yaml.as_mapping().is_some_and(|map| {
-                        map.get(&yaml_str("mount")) == Some(&yaml_str(&mount_path))
+                        map.get(yaml_str("mount")) == Some(&yaml_str(&mount_path))
                     })
                 });
                 if let Some(existing_volume) = existing_volume {
@@ -823,7 +826,7 @@ impl WasmerRunner {
                 "capabilities",
                 "capabilities must be a dictionary",
             )?;
-            let mut memory = match capabilities.remove(&yaml_str("memory")) {
+            let mut memory = match capabilities.remove(yaml_str("memory")) {
                 Some(YamlValue::Mapping(map)) => map,
                 Some(_) => bail!("memory must be a dictionary"),
                 None => serde_yaml::Mapping::new(),
@@ -841,20 +844,21 @@ impl WasmerRunner {
                 .and_then(|env| env.get("PHPIX_PHP_THREADS"))
                 .filter(|threads| !threads.is_empty())
             {
-                let mut app_env = take_mapping(&mut yaml_config, "env", "env must be a dictionary")?;
+                let mut app_env =
+                    take_mapping(&mut yaml_config, "env", "env must be a dictionary")?;
                 app_env.insert(yaml_str("PHPIX_PHP_THREADS"), yaml_str(threads));
                 yaml_config.insert(yaml_str("env"), YamlValue::Mapping(app_env));
             }
         }
 
         if serve.commands.contains_key("after_deploy") {
-            let mut jobs: Vec<YamlValue> = match yaml_config.remove(&yaml_str("jobs")) {
+            let mut jobs: Vec<YamlValue> = match yaml_config.remove(yaml_str("jobs")) {
                 Some(YamlValue::Sequence(seq)) => seq,
                 _ => Vec::new(),
             };
             // Filter out any existing after_deploy job
             jobs.retain(|job| {
-                job.as_mapping().and_then(|map| map.get(&yaml_str("name")))
+                job.as_mapping().and_then(|map| map.get(yaml_str("name")))
                     != Some(&yaml_str("after_deploy"))
             });
             let mut execute = serde_yaml::Mapping::new();
@@ -879,8 +883,14 @@ impl WasmerRunner {
             yaml_str(SHIPIT_CONFIG_ANNOTATION),
             serde_yaml::to_value(&config_annotation)?,
         );
-        annotations.insert(yaml_str(SHIPIT_VERSION_ANNOTATION), yaml_str(shipit_version()));
-        annotations.insert(yaml_str(SHIPIT_PROVIDER_ANNOTATION), yaml_str(&serve.provider));
+        annotations.insert(
+            yaml_str(SHIPIT_VERSION_ANNOTATION),
+            yaml_str(shipit_version()),
+        );
+        annotations.insert(
+            yaml_str(SHIPIT_PROVIDER_ANNOTATION),
+            yaml_str(&serve.provider),
+        );
         let framework = self
             .provider_config
             .as_ref()
@@ -984,13 +994,13 @@ impl WasmerRunner {
         };
         let mut changed = false;
         if let Some(owner) = app_owner {
-            if yaml_config.get(&yaml_str("owner")) != Some(&yaml_str(owner)) {
+            if yaml_config.get(yaml_str("owner")) != Some(&yaml_str(owner)) {
                 yaml_config.insert(yaml_str("owner"), yaml_str(owner));
                 changed = true;
             }
         }
         if let Some(name) = app_name {
-            if yaml_config.get(&yaml_str("name")) != Some(&yaml_str(name)) {
+            if yaml_config.get(yaml_str("name")) != Some(&yaml_str(name)) {
                 yaml_config.insert(yaml_str("name"), yaml_str(name));
                 changed = true;
             }
@@ -1247,7 +1257,7 @@ fn take_mapping(
     key: &str,
     message: &'static str,
 ) -> Result<serde_yaml::Mapping> {
-    match yaml_config.remove(&yaml_str(key)) {
+    match yaml_config.remove(yaml_str(key)) {
         Some(YamlValue::Mapping(map)) => Ok(map),
         Some(_) => bail!("{message}"),
         None => Ok(serde_yaml::Mapping::new()),
@@ -1261,7 +1271,7 @@ fn dump_yaml_sorted(value: &YamlValue) -> Result<String> {
             YamlValue::Mapping(map) => {
                 let mut entries: Vec<(YamlValue, YamlValue)> =
                     map.iter().map(|(k, v)| (k.clone(), sort(v))).collect();
-                entries.sort_by(|a, b| yaml_key(&a.0).cmp(&yaml_key(&b.0)));
+                entries.sort_by_key(|a| yaml_key(&a.0));
                 YamlValue::Mapping(entries.into_iter().collect())
             }
             YamlValue::Sequence(items) => YamlValue::Sequence(items.iter().map(sort).collect()),
@@ -1433,40 +1443,37 @@ mod tests {
 
         let app_yaml = read_yaml(&runner.wasmer_dir_path.join("app.yaml"));
         let annotations = app_yaml
-            .get(&yaml_str("annotations"))
+            .get(yaml_str("annotations"))
             .and_then(YamlValue::as_mapping)
             .unwrap();
 
         assert_eq!(
-            annotations.get(&yaml_str("example.com/existing")),
+            annotations.get(yaml_str("example.com/existing")),
             Some(&yaml_str("keep"))
         );
         assert_eq!(
-            annotations.get(&yaml_str(SHIPIT_PROVIDER_ANNOTATION)),
+            annotations.get(yaml_str(SHIPIT_PROVIDER_ANNOTATION)),
             Some(&yaml_str("python"))
         );
         assert_eq!(
-            annotations.get(&yaml_str(SHIPIT_VERSION_ANNOTATION)),
+            annotations.get(yaml_str(SHIPIT_VERSION_ANNOTATION)),
             Some(&yaml_str(shipit_version()))
         );
         assert_eq!(
-            annotations.get(&yaml_str(WASMER_APP_KIND_ANNOTATION)),
+            annotations.get(yaml_str(WASMER_APP_KIND_ANNOTATION)),
             Some(&yaml_str("django"))
         );
         let config = annotations
-            .get(&yaml_str(SHIPIT_CONFIG_ANNOTATION))
+            .get(yaml_str(SHIPIT_CONFIG_ANNOTATION))
             .and_then(YamlValue::as_mapping)
             .unwrap();
+        assert_eq!(config.get(yaml_str("framework")), Some(&yaml_str("django")));
         assert_eq!(
-            config.get(&yaml_str("framework")),
-            Some(&yaml_str("django"))
-        );
-        assert_eq!(
-            config.get(&yaml_str("cross_platform")),
+            config.get(yaml_str("cross_platform")),
             Some(&yaml_str("wasix_wasm32"))
         );
         assert_eq!(
-            config.get(&yaml_str("python_extra_index_url")),
+            config.get(yaml_str("python_extra_index_url")),
             Some(&yaml_str("https://pythonindex.wasix.org/simple"))
         );
         // exclude_none: no null values may survive in the annotation.
@@ -1535,7 +1542,11 @@ mod tests {
         serve.volumes = Some(vec![
             Volume {
                 name: "wp-content".to_owned(),
-                path: tmp.path().join(".shipit").join("volumes").join("wp-content"),
+                path: tmp
+                    .path()
+                    .join(".shipit")
+                    .join("volumes")
+                    .join("wp-content"),
                 serve_path: PathBuf::from("/app/wp-content"),
             },
             Volume {
@@ -1549,28 +1560,28 @@ mod tests {
 
         let app_yaml = read_yaml(&runner.wasmer_dir_path.join("app.yaml"));
         let volumes = app_yaml
-            .get(&yaml_str("volumes"))
+            .get(yaml_str("volumes"))
             .and_then(YamlValue::as_sequence)
             .unwrap();
 
         let wp_content: Vec<&YamlValue> = volumes
             .iter()
             .filter(|volume| {
-                volume.as_mapping().unwrap().get(&yaml_str("mount"))
+                volume.as_mapping().unwrap().get(yaml_str("mount"))
                     == Some(&yaml_str("/app/wp-content"))
             })
             .collect();
         assert_eq!(wp_content.len(), 1);
         let wp_map = wp_content[0].as_mapping().unwrap();
         assert_eq!(wp_map.len(), 3);
-        assert_eq!(wp_map.get(&yaml_str("name")), Some(&yaml_str("wp-content")));
-        assert_eq!(wp_map.get(&yaml_str("retention")), Some(&yaml_str("keep")));
+        assert_eq!(wp_map.get(yaml_str("name")), Some(&yaml_str("wp-content")));
+        assert_eq!(wp_map.get(yaml_str("retention")), Some(&yaml_str("keep")));
 
         let find = |name: &str, mount: &str| {
             volumes.iter().any(|volume| {
                 let map = volume.as_mapping().unwrap();
-                map.get(&yaml_str("name")) == Some(&yaml_str(name))
-                    && map.get(&yaml_str("mount")) == Some(&yaml_str(mount))
+                map.get(yaml_str("name")) == Some(&yaml_str(name))
+                    && map.get(yaml_str("mount")) == Some(&yaml_str(mount))
                     && map.len() == 2
             })
         };
@@ -1845,8 +1856,7 @@ mod tests {
             &[("start", "node server.js")],
         );
         runner.build_serve(&serve).unwrap();
-        let manifest =
-            std::fs::read_to_string(runner.wasmer_dir_path.join("wasmer.toml")).unwrap();
+        let manifest = std::fs::read_to_string(runner.wasmer_dir_path.join("wasmer.toml")).unwrap();
         let expected = format!(
             "# Wasmer manifest generated with Shipit v{}\n\n\
              [package]\n\
@@ -1926,43 +1936,40 @@ mod tests {
 
         let app_yaml = read_yaml(&runner.wasmer_dir_path.join("app.yaml"));
         let capabilities = app_yaml
-            .get(&yaml_str("capabilities"))
+            .get(yaml_str("capabilities"))
             .and_then(YamlValue::as_mapping)
             .unwrap();
         assert_eq!(
             capabilities
-                .get(&yaml_str("database"))
+                .get(yaml_str("database"))
                 .and_then(YamlValue::as_mapping)
-                .and_then(|db| db.get(&yaml_str("engine")))
+                .and_then(|db| db.get(yaml_str("engine")))
                 .cloned(),
             Some(yaml_str("mysql"))
         );
         assert_eq!(
             capabilities
-                .get(&yaml_str("memory"))
+                .get(yaml_str("memory"))
                 .and_then(YamlValue::as_mapping)
-                .and_then(|memory| memory.get(&yaml_str("limit")))
+                .and_then(|memory| memory.get(yaml_str("limit")))
                 .cloned(),
             Some(yaml_str("2Gb"))
         );
         assert_eq!(
-            app_yaml.get(&yaml_str("enable_email")),
+            app_yaml.get(yaml_str("enable_email")),
             Some(&YamlValue::Bool(true))
         );
         let env = app_yaml
-            .get(&yaml_str("env"))
+            .get(yaml_str("env"))
             .and_then(YamlValue::as_mapping)
             .unwrap();
-        assert_eq!(
-            env.get(&yaml_str("PHPIX_PHP_THREADS")),
-            Some(&yaml_str("4"))
-        );
+        assert_eq!(env.get(yaml_str("PHPIX_PHP_THREADS")), Some(&yaml_str("4")));
         let annotations = app_yaml
-            .get(&yaml_str("annotations"))
+            .get(yaml_str("annotations"))
             .and_then(YamlValue::as_mapping)
             .unwrap();
         assert_eq!(
-            annotations.get(&yaml_str("wasmer.io/app-kind")),
+            annotations.get(yaml_str("wasmer.io/app-kind")),
             Some(&yaml_str("wordpress"))
         );
     }

@@ -205,8 +205,7 @@ pub fn merge_config_json(
     patch: &serde_json::Value,
 ) -> Result<ProviderConfig> {
     let mut merged = config.to_json();
-    let (Some(target), Some(patch_map)) = (merged.as_object_mut(), patch.as_object())
-    else {
+    let (Some(target), Some(patch_map)) = (merged.as_object_mut(), patch.as_object()) else {
         return Err(anyhow!("Config must be a dictionary"));
     };
     for (key, value) in patch_map {
@@ -217,23 +216,19 @@ pub fn merge_config_json(
 
 /// Port of `generator.load_provider_config` (without the --config JSON
 /// merge, which lives with the CLI).
-pub fn load_provider_config(
-    name: &str,
-    path: &Path,
-    base: BaseConfig,
-) -> Result<ProviderConfig> {
+pub fn load_provider_config(name: &str, path: &Path, base: BaseConfig) -> Result<ProviderConfig> {
     let mut config = match name {
         "python" => ProviderConfig::Python(python::load_config(path, base)),
         "node" => ProviderConfig::Node(node::load_config(path, base)),
-        "node-static" => ProviderConfig::NodeStatic(node_static::load_config(path, base)),
+        "node-static" => ProviderConfig::NodeStatic(node_static::load_config(path, base)?),
         "php" => ProviderConfig::Php(php::load_config(path, base)),
         "wordpress" => ProviderConfig::Wordpress(wordpress::load_config(path, base)),
         "laravel" => ProviderConfig::Laravel(laravel::load_config(path, base)),
         "go" => ProviderConfig::Go(go::load_config(path, base)),
-        "staticfile" => ProviderConfig::StaticFile(staticfile::load_config(path, base)),
-        "hugo" => ProviderConfig::Hugo(hugo::load_config(path, base)),
-        "jekyll" => ProviderConfig::Jekyll(jekyll::load_config(path, base)),
-        "mkdocs" => ProviderConfig::Mkdocs(mkdocs::load_config(path, base)),
+        "staticfile" => ProviderConfig::StaticFile(staticfile::load_config(path, base)?),
+        "hugo" => ProviderConfig::Hugo(hugo::load_config(path, base)?),
+        "jekyll" => ProviderConfig::Jekyll(jekyll::load_config(path, base)?),
+        "mkdocs" => ProviderConfig::Mkdocs(mkdocs::load_config(path, base)?),
         other => return Err(anyhow!("unknown provider {other:?}")),
     };
     if config.base().name.is_none() {

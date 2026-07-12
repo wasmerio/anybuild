@@ -73,9 +73,6 @@ impl LocalRunner {
 
     fn build_serve(&mut self, serve: &Serve) -> Result<()> {
         console_print("\nBuilding serve");
-        // NB: faithful to Python, this clears the whole runner dir —
-        // including the prepare script written just before.
-        let _ = std::fs::remove_dir_all(&self.runner_path);
         std::fs::create_dir_all(&self.serve_bin_path)?;
         let runtime_path = self
             .build_backend
@@ -136,24 +133,23 @@ impl Runner for LocalRunner {
     }
 
     fn build(&mut self, serve: &Serve) -> Result<()> {
+        match std::fs::remove_dir_all(&self.runner_path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(err)
+                    .with_context(|| format!("Failed to clear {}", self.runner_path.display()));
+            }
+        }
         self.build_prepare(serve)?;
         self.build_serve(serve)?;
         Ok(())
     }
 
-    fn prepare(
-        &mut self,
-        _env: &IndexMap<String, String>,
-        _prepare: &[RunStep],
-    ) -> Result<()> {
+    fn prepare(&mut self, _env: &IndexMap<String, String>, _prepare: &[RunStep]) -> Result<()> {
         let status = Command::new(&self.prepare_bash_script)
             .status()
-            .with_context(|| {
-                format!(
-                    "Failed to run {}",
-                    self.prepare_bash_script.display()
-                )
-            })?;
+            .with_context(|| format!("Failed to run {}", self.prepare_bash_script.display()))?;
         if !status.success() {
             bail!(
                 "Prepare script failed with exit code {}",
@@ -192,5 +188,57 @@ impl Runner for LocalRunner {
 
     fn get_serve_mount_path(&self, name: &str) -> PathBuf {
         self.build_backend.borrow().get_artifact_mount_path(name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use shipit_build::local::LocalBuildBackend;
+
+    use super::*;
+
+    fn serve(prepare: Option<Vec<RunStep>>) -> Serve {
+        Serve {
+            name: "test".to_owned(),
+            provider: "test".to_owned(),
+            build: Vec::new(),
+            deps: Vec::new(),
+            commands: IndexMap::from([("start".to_owned(), "true".to_owned())]),
+            cwd: None,
+            prepare,
+            mounts: None,
+            volumes: None,
+            env: None,
+            services: None,
+        }
+    }
+
+    #[test]
+    fn prepare_script_survives_build_and_is_removed_when_stale() {
+        let tmp = tempfile::tempdir().unwrap();
+        let shipit_dir = tmp.path().join(".shipit");
+        let backend: Rc<RefCell<dyn BuildBackend>> = Rc::new(RefCell::new(LocalBuildBackend::new(
+            tmp.path().to_path_buf(),
+            tmp.path().join("assets"),
+            Some(shipit_dir.clone()),
+        )));
+        let mut runner = LocalRunner::new(backend, tmp.path().to_path_buf(), Some(shipit_dir));
+        let marker = tmp.path().join("prepared");
+        let with_prepare = serve(Some(vec![RunStep {
+            command: format!("touch {}", marker.display()),
+            inputs: None,
+            outputs: None,
+            group: None,
+        }]));
+
+        runner.build(&with_prepare).unwrap();
+        assert!(runner.prepare_bash_script.is_file());
+        runner
+            .prepare(&IndexMap::new(), with_prepare.prepare.as_deref().unwrap())
+            .unwrap();
+        assert!(marker.is_file());
+
+        runner.build(&serve(None)).unwrap();
+        assert!(!runner.prepare_bash_script.exists());
     }
 }

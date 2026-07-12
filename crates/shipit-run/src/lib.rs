@@ -20,11 +20,7 @@ pub trait Runner {
     fn prepare_config(&mut self, config: ProviderConfig) -> ProviderConfig;
     fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step>;
     fn build(&mut self, serve: &Serve) -> Result<()>;
-    fn prepare(
-        &mut self,
-        env: &IndexMap<String, String>,
-        prepare: &[RunStep],
-    ) -> Result<()>;
+    fn prepare(&mut self, env: &IndexMap<String, String>, prepare: &[RunStep]) -> Result<()>;
     fn has_serve_command(&self, command: &str) -> bool;
     fn run_serve_command(
         &mut self,
