@@ -457,10 +457,8 @@ fn shlex_split(line: &str) -> Option<Vec<String>> {
             }
             '\\' => {
                 in_word = true;
-                match chars.next() {
-                    Some(escaped) => current.push(escaped),
-                    None => return None,
-                }
+                let escaped = chars.next()?;
+                current.push(escaped);
             }
             other => {
                 in_word = true;
