@@ -1,5 +1,11 @@
 name: Reusable Test + E2E
 
+# The CLI under test is the Rust binary: the `test` job builds it (debug)
+# and runs the migration gate stack, then every e2e job downloads that
+# binary and drives it through the pytest harness via SHIPIT_BIN. The
+# Python implementation is no longer tested on CI; it only serves as the
+# oracle for the cross-implementation fixtures and the CLI differential.
+
 on:
   workflow_call:
     inputs:
@@ -14,13 +20,9 @@ permissions:
 
 jobs:
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Rust build + gates
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.13"]
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -34,25 +36,48 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.13"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
 
       - name: Verify lockfile is up to date
         run: uv lock --check
 
-      - name: Install dependencies
+      - name: Install dependencies (fixture oracle + e2e harness)
         run: uv sync --locked --dev
 
-      - name: Bytecode compile check
-        run: uv run python -m compileall -q src tests
+      - name: Build shipit (debug)
+        run: cargo build --workspace
+        env:
+          RUSTFLAGS: -D warnings
 
-      - name: Run mypy
-        run: uv run mypy
+      - name: Dump cross-implementation fixtures
+        # The Rust snapshot/config tests *skip* when the manifest is
+        # absent — fail here instead so a broken dump can't green-wash CI.
+        run: |
+          uv run python scripts/dump_rust_fixtures.py
+          test -f target/rust-fixtures/manifest.json
 
-      - name: Run tests (excluding e2e)
-        run: uv run pytest -m "not e2e" -q
+      - name: Rust tests (snapshots, legacy files, config differential, units)
+        run: cargo test --workspace
+
+      - name: CLI differential (generate + plan, Rust vs Python oracle)
+        run: uv run python scripts/cli_differential.py
+
+      - name: Upload shipit binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: shipit-debug
+          path: target/debug/shipit
+          retention-days: 1
+          if-no-files-found: error
 
   e2e:
-    name: E2E ${{ matrix.suite }} (Python 3.13)
+    name: E2E ${{ matrix.suite }} (Rust binary)
     if: ${{ inputs.run_e2e }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -106,17 +131,27 @@ jobs:
         with:
           version: v7.2.0
 
+      - name: Download shipit binary
+        uses: actions/download-artifact@v4
+        with:
+          name: shipit-debug
+          path: shipit-bin
+
       - name: Verify toolchain
         run: |
+          chmod +x shipit-bin/shipit
           uv --version
           python --version
           wasmer --version
           docker --version
+          ./shipit-bin/shipit generate --help > /dev/null
 
-      - name: Install dependencies
+      - name: Install dependencies (pytest harness)
         run: uv sync --locked --dev
 
-      - name: Run e2e tests
+      - name: Run e2e tests (Rust binary via SHIPIT_BIN)
+        env:
+          SHIPIT_BIN: ${{ github.workspace }}/shipit-bin/shipit
         run: |
           uv run pytest -m "e2e and e2e_${{ matrix.suite }}" \
             -v tests/test_e2e.py -n 4 \
