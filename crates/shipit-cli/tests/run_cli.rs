@@ -46,3 +46,79 @@ fn invalid_redirects_are_reported_without_panicking() {
     );
     assert!(!stderr.contains("panicked at"), "{stderr}");
 }
+
+#[test]
+fn missing_go_entrypoint_is_reported_without_panicking() {
+    let tmp = tempfile::tempdir().unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_shipit"))
+        .arg("generate")
+        .arg(tmp.path())
+        .args(["--provider", "go"])
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("No Go build file was found"), "{stderr}");
+    assert!(!stderr.contains("panicked at"), "{stderr}");
+}
+
+#[test]
+fn runtime_node_framework_is_rejected_by_node_static_without_panicking() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("package.json"),
+        r#"{"scripts":{"build":"vite build"}}"#,
+    )
+    .unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_shipit"))
+        .arg("generate")
+        .arg(tmp.path())
+        .args(["--provider", "node-static"])
+        .env("SHIPIT_FRAMEWORK", "express")
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("does not have a static output directory"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("panicked at"), "{stderr}");
+}
+
+#[test]
+fn copied_binary_uses_embedded_runtime_resources() {
+    let tmp = tempfile::tempdir().unwrap();
+    let copied_binary = tmp.path().join("shipit-copy");
+    std::fs::copy(env!("CARGO_BIN_EXE_shipit"), &copied_binary).unwrap();
+
+    let project = tmp.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    std::fs::write(project.join("index.html"), "<h1>relocatable</h1>\n").unwrap();
+    std::fs::write(
+        project.join("Shipit"),
+        r#"load("//shipit/tools:staticfile.shipit", "staticfile_build", "staticfile_serve")
+
+build = staticfile_build(config)
+staticfile_serve(config, build, name = "relocatable")
+"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&copied_binary)
+        .arg("plan")
+        .arg(&project)
+        .args(["--provider", "staticfile"])
+        .env_remove("SHIPIT_STARLIB")
+        .env_remove("SHIPIT_ASSETS")
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(String::from_utf8_lossy(&output.stdout).contains(r#""provider": "staticfile""#));
+    assert!(!project.join(".shipit/runtime").exists());
+}

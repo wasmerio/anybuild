@@ -20,22 +20,10 @@ use shipit_run::Runner;
 use shipit_starlark::eval::{evaluate_shipit, EvaluateOptions};
 use shipit_starlark::loader::StdlibSource;
 
-use crate::generator::starlib_dir;
 use crate::paths::{
     default_shipit_dir, get_shipit_path, read_shipit_subdir, resolve_project_paths, ProjectPaths,
 };
-
-/// The bundled assets dir (shared with the legacy Python tree).
-/// Overridable with SHIPIT_ASSETS.
-pub fn assets_dir() -> PathBuf {
-    if let Ok(path) = std::env::var("SHIPIT_ASSETS") {
-        return PathBuf::from(path);
-    }
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../src/shipit/assets")
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from("src/shipit/assets"))
-}
+use crate::resources;
 
 /// Which backend/runner pair to resolve (the wasmer/docker flag surface
 /// shared by auto/build/run/plan/deploy).
@@ -54,6 +42,7 @@ pub struct EnvironmentOptions {
 /// `resolve_environment`).
 pub struct Environment {
     pub shipit_dir: PathBuf,
+    pub runtime_resources: resources::RuntimeResources,
     pub build_backend: Rc<RefCell<dyn BuildBackend>>,
     pub runner: Box<dyn Runner>,
 }
@@ -63,11 +52,12 @@ pub fn resolve_environment(
     options: &EnvironmentOptions,
 ) -> Result<Environment> {
     let shipit_dir = default_shipit_dir(paths);
+    let runtime_resources = resources::resolve()?;
     let build_backend: Rc<RefCell<dyn BuildBackend>> =
         if options.docker || options.docker_client.is_some() {
             Rc::new(RefCell::new(DockerBuildBackend::new(
                 paths.workspace_root.clone(),
-                assets_dir(),
+                runtime_resources.assets_dir.clone(),
                 options.docker_client.clone(),
                 options.docker_opts.clone(),
                 Some(shipit_dir.clone()),
@@ -75,7 +65,7 @@ pub fn resolve_environment(
         } else {
             Rc::new(RefCell::new(LocalBuildBackend::new(
                 paths.workspace_root.clone(),
-                assets_dir(),
+                runtime_resources.assets_dir.clone(),
                 Some(shipit_dir.clone()),
             )))
         };
@@ -97,6 +87,7 @@ pub fn resolve_environment(
     };
     Ok(Environment {
         shipit_dir,
+        runtime_resources,
         build_backend,
         runner,
     })
@@ -143,6 +134,7 @@ pub struct ProjectContext {
     pub provider: &'static str,
     pub provider_config: ProviderConfig,
     pub serve: Serve,
+    _runtime_resources: resources::RuntimeResources,
     pub build_backend: Rc<RefCell<dyn BuildBackend>>,
     pub runner: Box<dyn Runner>,
 }
@@ -211,6 +203,7 @@ pub fn resolve_project_context(
     let environment = resolve_environment(&paths, env_options)?;
     let Environment {
         shipit_dir,
+        runtime_resources,
         build_backend,
         mut runner,
     } = environment;
@@ -229,7 +222,7 @@ pub fn resolve_project_context(
             backend: build_backend.clone(),
             wasmer: env_options.wasmer,
         }),
-        stdlib: StdlibSource::Dir(starlib_dir()),
+        stdlib: StdlibSource::Dir(runtime_resources.starlib_dir.clone()),
     })?;
 
     Ok(ProjectContext {
@@ -238,6 +231,7 @@ pub fn resolve_project_context(
         provider,
         provider_config,
         serve,
+        _runtime_resources: runtime_resources,
         build_backend,
         runner,
     })
@@ -254,7 +248,7 @@ mod tests {
     use shipit_starlark::loader::StdlibSource;
 
     use super::*;
-    use crate::generator::{entrypoint, generate_shipit_loader, starlib_dir};
+    use crate::generator::{entrypoint, generate_shipit_loader};
 
     fn no_overrides() -> CommandOverrides {
         CommandOverrides {
@@ -351,12 +345,13 @@ mod tests {
             generate_shipit_loader(&entrypoint(provider).unwrap(), None, None),
         )
         .unwrap();
+        let runtime_resources = crate::resources::resolve().unwrap();
         evaluate_shipit(EvaluateOptions {
             shipit_file,
             project_root: Some(workspace.to_path_buf()),
             config: config.to_json(),
             layout: Box::new(LocalLayout::new(tmp.join(".shipit"))),
-            stdlib: StdlibSource::Dir(starlib_dir()),
+            stdlib: StdlibSource::Dir(runtime_resources.starlib_dir.clone()),
         })
         .unwrap()
     }

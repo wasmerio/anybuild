@@ -224,7 +224,7 @@ pub fn load_provider_config(name: &str, path: &Path, base: BaseConfig) -> Result
         "php" => ProviderConfig::Php(php::load_config(path, base)),
         "wordpress" => ProviderConfig::Wordpress(wordpress::load_config(path, base)),
         "laravel" => ProviderConfig::Laravel(laravel::load_config(path, base)),
-        "go" => ProviderConfig::Go(go::load_config(path, base)),
+        "go" => ProviderConfig::Go(go::load_config(path, base)?),
         "staticfile" => ProviderConfig::StaticFile(staticfile::load_config(path, base)?),
         "hugo" => ProviderConfig::Hugo(hugo::load_config(path, base)?),
         "jekyll" => ProviderConfig::Jekyll(jekyll::load_config(path, base)?),

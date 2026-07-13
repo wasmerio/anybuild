@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::LazyLock;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -247,7 +247,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> Result<NodeStaticConfig> {
 
     if node::non_empty(&config.static_dir).is_none() {
         config.static_dir = Some(match config.framework {
-            Some(framework) => get_static_dir(path, package_json.as_ref(), framework),
+            Some(framework) => get_static_dir(path, package_json.as_ref(), framework)?,
             None => "dist".to_owned(),
         });
     }
@@ -472,17 +472,23 @@ fn has_vite_remix(path: &Path, found_deps: &BTreeSet<&'static str>) -> bool {
 // ---------------------------------------------------------------------------
 // Static dir resolution
 
-fn get_static_dir(path: &Path, package_json: Option<&JsonMap>, framework: NodeFramework) -> String {
+fn get_static_dir(
+    path: &Path,
+    package_json: Option<&JsonMap>,
+    framework: NodeFramework,
+) -> Result<String> {
     let default_dir = || {
         framework
             .get_static_output_dir()
-            .expect("static-capable framework has an output dir")
-            .to_owned()
+            .ok_or_else(|| {
+                anyhow!("framework {framework:?} does not have a static output directory")
+            })
+            .map(str::to_owned)
     };
 
-    match framework {
+    Ok(match framework {
         NodeFramework::Angular | NodeFramework::IonicAngular => {
-            angular_output_dir(path).unwrap_or_else(default_dir)
+            angular_output_dir(path).map_or_else(default_dir, Ok)?
         }
         NodeFramework::Vitepress => {
             let root = script_build_root(package_json, "vitepress")
@@ -494,11 +500,11 @@ fn get_static_dir(path: &Path, package_json: Option<&JsonMap>, framework: NodeFr
                 .unwrap_or_else(|| default_docs_root(path, ".vuepress"));
             rooted_output_dir(&root, ".vuepress/dist")
         }
-        NodeFramework::Metalsmith => metalsmith_output_dir(path).unwrap_or_else(default_dir),
-        NodeFramework::Assemble => assemble_output_dir(path).unwrap_or_else(default_dir),
-        NodeFramework::Harp => harp_output_dir(package_json).unwrap_or_else(default_dir),
-        _ => default_dir(),
-    }
+        NodeFramework::Metalsmith => metalsmith_output_dir(path).map_or_else(default_dir, Ok)?,
+        NodeFramework::Assemble => assemble_output_dir(path).map_or_else(default_dir, Ok)?,
+        NodeFramework::Harp => harp_output_dir(package_json).map_or_else(default_dir, Ok)?,
+        _ => default_dir()?,
+    })
 }
 
 /// node_static's `_script_commands` override: build scripts first, then

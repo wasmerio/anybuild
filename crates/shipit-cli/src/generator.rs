@@ -1,7 +1,5 @@
 //! Shipit file generation (port of `generator.py`).
 
-use std::path::Path;
-
 use anyhow::{anyhow, Result};
 
 /// The workspace version (root Cargo.toml) is the single version source;
@@ -146,19 +144,6 @@ pub fn generate_shipit(
 ) -> Result<String> {
     let ep = entrypoint(provider)?;
     Ok(generate_shipit_loader(&ep, subdir, config_name))
-}
-
-/// Locate the bundled starlib. While the Rust and Python implementations
-/// coexist, the Starlark stdlib lives in the Python tree; the embedded
-/// variant lands at cutover.
-pub fn starlib_dir() -> std::path::PathBuf {
-    if let Ok(path) = std::env::var("SHIPIT_STARLIB") {
-        return Path::new(&path).to_path_buf();
-    }
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../src/shipit/starlib")
-        .canonicalize()
-        .unwrap_or_else(|_| Path::new("src/shipit/starlib").to_path_buf())
 }
 
 #[cfg(test)]

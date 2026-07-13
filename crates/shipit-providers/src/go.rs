@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::base::{env_str, BaseConfig, DetectResult, HasBase};
@@ -47,7 +48,7 @@ impl HasBase for GoConfig {
 /// Python constructs `GoConfig()` from scratch (the passed base config is
 /// ignored), so every field — including the base — comes from the env or
 /// its declared default.
-pub fn load_config(path: &Path, _base: BaseConfig) -> GoConfig {
+pub fn load_config(path: &Path, _base: BaseConfig) -> Result<GoConfig> {
     let mut config = GoConfig {
         base: BaseConfig::default(),
         go_version: env_str("go_version").or_else(|| Some("1.25.5".to_owned())),
@@ -57,10 +58,12 @@ pub fn load_config(path: &Path, _base: BaseConfig) -> GoConfig {
     if config.go_build_file.is_none() {
         config.go_build_file = get_build_file(path);
     }
-    let build_file = config
-        .go_build_file
-        .clone()
-        .expect("No build file for go found");
+    let build_file = config.go_build_file.clone().with_context(|| {
+        format!(
+            "No Go build file was found in {}. Set SHIPIT_GO_BUILD_FILE or add a supported Go entrypoint",
+            path.display()
+        )
+    })?;
     if config.serve_binary.is_none() {
         let serve_binary = build_file
             .replace('/', "_")
@@ -69,14 +72,10 @@ pub fn load_config(path: &Path, _base: BaseConfig) -> GoConfig {
             .replace(".go", "");
         config.serve_binary = Some(serve_binary);
     }
-    assert!(
-        config
-            .serve_binary
-            .as_deref()
-            .is_some_and(|b| !b.is_empty()),
-        "No serve binary for go found"
-    );
-    config
+    if config.serve_binary.as_deref().is_none_or(str::is_empty) {
+        bail!("No serve binary for Go was configured");
+    }
+    Ok(config)
 }
 
 /// Port of `GoProvider.get_build_file`.

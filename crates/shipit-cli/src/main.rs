@@ -8,6 +8,7 @@ mod commands;
 mod context;
 mod generator;
 mod paths;
+mod resources;
 mod volumes;
 
 use std::path::PathBuf;
