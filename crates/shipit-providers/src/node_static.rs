@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::base::{env_bool, env_str, BaseConfig, DetectResult, HasBase};
-use crate::node::{self, JsonMap, NodeConfig, NodeFramework, PackageManager};
+use crate::node::{self, JsonMap, NodeConfig, NodeConfigFields, NodeFramework, PackageManager};
 use crate::staticfile::compute_redirects_config;
 
 // ---------------------------------------------------------------------------
@@ -33,23 +33,8 @@ pub struct NodeStaticConfig {
     /// Rendered sws.toml redirects (from a _redirects file), computed at
     /// load time so the Starlark provider stays filesystem-free.
     pub redirects_config: Option<String>,
-    // NodeConfig fields.
-    pub use_edgejs: Option<bool>,
-    pub precompile_edgejs: Option<bool>,
-    pub package_manager: Option<PackageManager>,
-    pub framework: Option<NodeFramework>,
-    pub extra_dependencies: BTreeSet<String>,
-    pub build_command: Option<String>,
-    pub node_version: Option<String>,
-    pub npm_version: Option<String>,
-    pub pnpm_version: Option<String>,
-    pub yarn_version: Option<String>,
-    pub bun_version: Option<String>,
-    pub optimize_node_dependencies: Option<bool>,
-    pub remove_native_binaries: Option<bool>,
-    pub install_requires_all_files: bool,
-    pub install_inputs: Option<Vec<String>>,
-    pub package_name: Option<String>,
+    #[serde(flatten)]
+    pub node: NodeConfigFields,
 }
 
 impl Default for NodeStaticConfig {
@@ -61,22 +46,7 @@ impl Default for NodeStaticConfig {
             sws_version: Some("2.38.0".to_owned()),
             static_dir: None,
             redirects_config: None,
-            use_edgejs: node.use_edgejs,
-            precompile_edgejs: node.precompile_edgejs,
-            package_manager: node.package_manager,
-            framework: node.framework,
-            extra_dependencies: node.extra_dependencies,
-            build_command: node.build_command,
-            node_version: node.node_version,
-            npm_version: node.npm_version,
-            pnpm_version: node.pnpm_version,
-            yarn_version: node.yarn_version,
-            bun_version: node.bun_version,
-            optimize_node_dependencies: node.optimize_node_dependencies,
-            remove_native_binaries: node.remove_native_binaries,
-            install_requires_all_files: node.install_requires_all_files,
-            install_inputs: node.install_inputs,
-            package_name: node.package_name,
+            node: node.node,
         }
     }
 }
@@ -92,23 +62,22 @@ impl NodeStaticConfig {
             sws_version: env_str("sws_version").or_else(|| Some("2.38.0".to_owned())),
             static_dir: env_str("static_dir"),
             redirects_config: env_str("redirects_config"),
-            use_edgejs: node.use_edgejs,
-            precompile_edgejs: node.precompile_edgejs,
-            package_manager: node.package_manager,
-            framework: node.framework,
-            extra_dependencies: node.extra_dependencies,
-            build_command: node.build_command,
-            node_version: node.node_version,
-            npm_version: node.npm_version,
-            pnpm_version: node.pnpm_version,
-            yarn_version: node.yarn_version,
-            bun_version: node.bun_version,
-            optimize_node_dependencies: node.optimize_node_dependencies,
-            remove_native_binaries: node.remove_native_binaries,
-            install_requires_all_files: node.install_requires_all_files,
-            install_inputs: node.install_inputs,
-            package_name: node.package_name,
+            node: node.node,
         }
+    }
+}
+
+impl std::ops::Deref for NodeStaticConfig {
+    type Target = NodeConfigFields;
+
+    fn deref(&self) -> &Self::Target {
+        &self.node
+    }
+}
+
+impl std::ops::DerefMut for NodeStaticConfig {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.node
     }
 }
 

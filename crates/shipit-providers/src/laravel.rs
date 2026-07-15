@@ -4,72 +4,26 @@
 //! (with `use_composer` forced on) merged with the node config (minus its
 //! `framework`) and the base config, exactly as Python's
 //! `config.model_dump() | node_config_data | base_config.model_dump()`.
-//! The merge happens on the JSON views so this port stays decoupled from
-//! the node provider's struct layout.
+//! The shared Node fields are flattened from `NodeConfigFields`; loading
+//! still uses the Python-compatible JSON merge to preserve precedence.
 
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::base::{BaseConfig, DetectResult, HasBase};
+use crate::node::NodeConfigFields;
 use crate::php;
 
 pub const NAME: &str = "laravel";
-
-fn default_false() -> Option<bool> {
-    Some(false)
-}
-
-fn default_true() -> Option<bool> {
-    Some(true)
-}
-
-fn default_node_version() -> Option<String> {
-    Some("24".to_owned())
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LaravelConfig {
     #[serde(flatten)]
     pub base: BaseConfig,
-    // Node-side fields (mirroring NodeConfig; kept loosely typed so this
-    // module compiles independently of crate::node's port). The serde
-    // defaults are the declared pydantic defaults.
-    #[serde(default = "default_false")]
-    pub use_edgejs: Option<bool>,
-    #[serde(default)]
-    pub precompile_edgejs: Option<bool>,
-    #[serde(default)]
-    pub package_manager: Option<String>,
-    /// `Optional[Any]` in Python; holds the php framework value.
-    #[serde(default)]
-    pub framework: Option<Value>,
-    #[serde(default)]
-    pub extra_dependencies: BTreeSet<String>,
-    #[serde(default)]
-    pub build_command: Option<String>,
-    #[serde(default = "default_node_version")]
-    pub node_version: Option<String>,
-    #[serde(default)]
-    pub npm_version: Option<String>,
-    #[serde(default)]
-    pub pnpm_version: Option<String>,
-    #[serde(default)]
-    pub yarn_version: Option<String>,
-    #[serde(default)]
-    pub bun_version: Option<String>,
-    #[serde(default = "default_true")]
-    pub optimize_node_dependencies: Option<bool>,
-    #[serde(default = "default_false")]
-    pub remove_native_binaries: Option<bool>,
-    #[serde(default)]
-    pub install_requires_all_files: bool,
-    #[serde(default)]
-    pub install_inputs: Option<Vec<String>>,
-    #[serde(default)]
-    pub package_name: Option<String>,
+    #[serde(flatten)]
+    pub node: NodeConfigFields<Value>,
     // Php-side fields (minus framework, which node's position holds).
     pub phpix: bool,
     pub use_composer: bool,
@@ -84,22 +38,7 @@ impl Default for LaravelConfig {
     fn default() -> Self {
         Self {
             base: BaseConfig::default(),
-            use_edgejs: Some(false),
-            precompile_edgejs: None,
-            package_manager: None,
-            framework: None,
-            extra_dependencies: BTreeSet::new(),
-            build_command: None,
-            node_version: Some("24".to_owned()),
-            npm_version: None,
-            pnpm_version: None,
-            yarn_version: None,
-            bun_version: None,
-            optimize_node_dependencies: Some(true),
-            remove_native_binaries: Some(false),
-            install_requires_all_files: false,
-            install_inputs: None,
-            package_name: None,
+            node: NodeConfigFields::default(),
             phpix: false,
             use_composer: false,
             composer_build_script: None,
@@ -108,6 +47,20 @@ impl Default for LaravelConfig {
             phpix_worker_threads: Some(4),
             public_dir: None,
         }
+    }
+}
+
+impl std::ops::Deref for LaravelConfig {
+    type Target = NodeConfigFields<Value>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.node
+    }
+}
+
+impl std::ops::DerefMut for LaravelConfig {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.node
     }
 }
 

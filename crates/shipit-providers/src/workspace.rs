@@ -34,15 +34,15 @@ pub fn apply_subdir_workspace_config(workspace_root: &Path, config: &mut Provide
         ProviderConfig::Node(node) => apply_node_workspace_config(
             workspace_root,
             &subdir,
-            &mut node.package_manager,
-            &mut node.build_command,
+            &mut node.node.package_manager,
+            &mut node.node.build_command,
             &mut node.base.commands,
         ),
         ProviderConfig::NodeStatic(node_static) => apply_node_workspace_config(
             workspace_root,
             &subdir,
-            &mut node_static.package_manager,
-            &mut node_static.build_command,
+            &mut node_static.node.package_manager,
+            &mut node_static.node.build_command,
             &mut node_static.base.commands,
         ),
         _ => {}

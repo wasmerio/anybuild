@@ -240,3 +240,90 @@ pub fn load_provider_config(name: &str, path: &Path, base: BaseConfig) -> Result
     }
     Ok(config)
 }
+
+#[cfg(test)]
+mod config_inheritance_tests {
+    use super::*;
+
+    const BASE_FIELDS: &[&str] = &["name", "port", "commands", "app_subdir"];
+    const NODE_FIELDS: &[&str] = &[
+        "use_edgejs",
+        "precompile_edgejs",
+        "package_manager",
+        "framework",
+        "extra_dependencies",
+        "build_command",
+        "node_version",
+        "npm_version",
+        "pnpm_version",
+        "yarn_version",
+        "bun_version",
+        "optimize_node_dependencies",
+        "remove_native_binaries",
+        "install_requires_all_files",
+        "install_inputs",
+        "package_name",
+    ];
+
+    fn keys(value: &serde_json::Value) -> Vec<&str> {
+        value
+            .as_object()
+            .expect("config object")
+            .keys()
+            .map(String::as_str)
+            .collect()
+    }
+
+    #[test]
+    fn node_config_fields_are_flattened_in_declaration_order() {
+        let node = defaults_json("node").unwrap();
+        let node_static = defaults_json("node-static").unwrap();
+        let laravel = defaults_json("laravel").unwrap();
+
+        let expected_node: Vec<&str> = BASE_FIELDS
+            .iter()
+            .copied()
+            .chain(NODE_FIELDS.iter().copied())
+            .collect();
+        let expected_node_static: Vec<&str> = BASE_FIELDS
+            .iter()
+            .copied()
+            .chain([
+                "convert_redirects",
+                "sws_version",
+                "static_dir",
+                "redirects_config",
+            ])
+            .chain(NODE_FIELDS.iter().copied())
+            .collect();
+        let expected_laravel: Vec<&str> = BASE_FIELDS
+            .iter()
+            .copied()
+            .chain(NODE_FIELDS.iter().copied())
+            .chain([
+                "phpix",
+                "use_composer",
+                "composer_build_script",
+                "php_version",
+                "php_architecture",
+                "phpix_worker_threads",
+                "public_dir",
+            ])
+            .collect();
+
+        assert_eq!(keys(&node), expected_node);
+        assert_eq!(keys(&node_static), expected_node_static);
+        assert_eq!(keys(&laravel), expected_laravel);
+    }
+
+    #[test]
+    fn flattened_node_configs_round_trip_without_nested_fields() {
+        for name in ["node", "node-static", "laravel"] {
+            let json = defaults_json(name).unwrap();
+            assert!(!json.as_object().unwrap().contains_key("node"));
+            let round_trip = config_from_json(name, json.clone()).unwrap().to_json();
+            assert_eq!(keys(&round_trip), keys(&json));
+            assert_eq!(round_trip, json);
+        }
+    }
+}

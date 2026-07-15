@@ -493,15 +493,17 @@ impl NodeFramework {
 // ---------------------------------------------------------------------------
 // NodeConfig
 
+/// Node-specific config fields shared by Node, Node Static, and Laravel.
+///
+/// `F` preserves Laravel's Python-compatible `Any` framework field while
+/// ordinary Node configs retain the typed `NodeFramework` enum.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct NodeConfig {
-    #[serde(flatten)]
-    pub base: BaseConfig,
+pub struct NodeConfigFields<F = NodeFramework> {
     pub use_edgejs: Option<bool>,
     pub precompile_edgejs: Option<bool>,
     pub package_manager: Option<PackageManager>,
-    pub framework: Option<NodeFramework>,
+    pub framework: Option<F>,
     pub extra_dependencies: BTreeSet<String>,
     pub build_command: Option<String>,
     pub node_version: Option<String>,
@@ -519,10 +521,9 @@ pub struct NodeConfig {
     pub package_name: Option<String>,
 }
 
-impl Default for NodeConfig {
+impl<F> Default for NodeConfigFields<F> {
     fn default() -> Self {
         Self {
-            base: BaseConfig::default(),
             use_edgejs: Some(false),
             precompile_edgejs: None,
             package_manager: None,
@@ -543,12 +544,9 @@ impl Default for NodeConfig {
     }
 }
 
-impl NodeConfig {
-    /// pydantic-settings construction: `NodeConfig(**base.model_dump())`
-    /// reads `SHIPIT_<FIELD>` for every non-base field.
-    pub(crate) fn from_env(base: BaseConfig) -> Self {
+impl NodeConfigFields<NodeFramework> {
+    fn from_env() -> Self {
         Self {
-            base,
             use_edgejs: env_bool("use_edgejs").or(Some(false)),
             precompile_edgejs: env_bool("precompile_edgejs"),
             package_manager: env_str("package_manager").and_then(|v| PackageManager::from_name(&v)),
@@ -566,6 +564,40 @@ impl NodeConfig {
             install_inputs: env_string_list("install_inputs"),
             package_name: env_str("package_name"),
         }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NodeConfig {
+    #[serde(flatten)]
+    pub base: BaseConfig,
+    #[serde(flatten)]
+    pub node: NodeConfigFields,
+}
+
+impl NodeConfig {
+    /// pydantic-settings construction: `NodeConfig(**base.model_dump())`
+    /// reads `SHIPIT_<FIELD>` for every non-base field.
+    pub(crate) fn from_env(base: BaseConfig) -> Self {
+        Self {
+            base,
+            node: NodeConfigFields::from_env(),
+        }
+    }
+}
+
+impl std::ops::Deref for NodeConfig {
+    type Target = NodeConfigFields;
+
+    fn deref(&self) -> &Self::Target {
+        &self.node
+    }
+}
+
+impl std::ops::DerefMut for NodeConfig {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.node
     }
 }
 
