@@ -169,7 +169,7 @@ fn collect_requirements_files(file: std::path::PathBuf, out: &mut Vec<std::path:
 
 /// Port of `MkdocsProvider.load_config`.
 pub fn load_config(path: &Path, base: BaseConfig) -> Result<MkdocsConfig> {
-    let python_config = crate::python::load_config(path, base.clone());
+    let python_config = crate::python::load_config(path, base.clone())?;
     let staticfile_config = staticfile::load_config(path, base.clone())?;
 
     let mut merged =

@@ -7,10 +7,11 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::base::{env_bool, env_int, env_str, BaseConfig, DetectResult, HasBase};
+use crate::base::{env_bool, env_enum, env_int, env_str, BaseConfig, DetectResult, HasBase};
 
 pub const NAME: &str = "php";
 
@@ -79,19 +80,24 @@ impl HasBase for PhpConfig {
 impl PhpConfig {
     /// pydantic-settings construction: env applies to every field not
     /// passed as an init kwarg (the base fields always are).
-    pub(crate) fn from_env(base: BaseConfig) -> Self {
-        Self {
+    pub(crate) fn from_env(base: BaseConfig) -> Result<Self> {
+        Ok(Self {
             base,
-            framework: env_str("framework").and_then(|v| PhpFramework::from_value(&v)),
-            phpix: env_bool("phpix").unwrap_or(false),
-            use_composer: env_bool("use_composer").unwrap_or(false),
+            framework: env_enum(
+                "framework",
+                "a supported PHP framework",
+                PhpFramework::from_value,
+            )?,
+            phpix: env_bool("phpix")?.unwrap_or(false),
+            use_composer: env_bool("use_composer")?.unwrap_or(false),
             composer_build_script: env_str("composer_build_script"),
             php_version: env_str("php_version").or_else(|| Some("8.3.29".to_owned())),
-            php_architecture: env_str("php_architecture")
-                .filter(|v| v == "64-bit" || v == "32-bit"),
-            phpix_worker_threads: env_int("phpix_worker_threads").or(Some(4)),
+            php_architecture: env_enum("php_architecture", "64-bit or 32-bit", |value| {
+                matches!(value, "64-bit" | "32-bit").then(|| value.to_owned())
+            })?,
+            phpix_worker_threads: env_int("phpix_worker_threads")?.or(Some(4)),
             public_dir: env_str("public_dir"),
-        }
+        })
     }
 }
 
@@ -182,7 +188,7 @@ pub(crate) fn detect_framework(
 }
 
 /// Port of `PhpProvider.load_config`.
-pub fn load_config(path: &Path, base: BaseConfig) -> PhpConfig {
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<PhpConfig> {
     let composer_config = load_composer_config(path);
     let use_composer = exists(path, &["composer.json", "composer.lock"])
         || base
@@ -203,7 +209,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> PhpConfig {
         }
     }
 
-    let mut config = PhpConfig::from_env(base);
+    let mut config = PhpConfig::from_env(base)?;
     // use_composer / composer_build_script are init kwargs in Python, so
     // they never come from the env.
     config.use_composer = use_composer;
@@ -227,7 +233,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> PhpConfig {
         } else {
             None
         };
-    config
+    Ok(config)
 }
 
 /// Port of `PhpProvider.detect`.

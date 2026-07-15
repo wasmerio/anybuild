@@ -6,6 +6,7 @@
 
 use std::path::Path;
 
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::procfile::Procfile;
@@ -17,44 +18,73 @@ pub struct DetectResult {
     pub score: i32,
 }
 
-thread_local! {
-    static ENV_DISABLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// Run `f` with the SHIPIT_* env overlay disabled. Used to construct the
-/// *declared* field defaults (pydantic's `exclude_defaults` compares
-/// against declared defaults, not env-provided values).
-pub fn without_env<R>(f: impl FnOnce() -> R) -> R {
-    ENV_DISABLED.with(|flag| flag.set(true));
-    let result = f();
-    ENV_DISABLED.with(|flag| flag.set(false));
-    result
-}
-
 /// `SHIPIT_<FIELD>` environment lookup.
 pub fn env_var(field: &str) -> Option<String> {
-    if ENV_DISABLED.with(|flag| flag.get()) {
-        return None;
-    }
     std::env::var(format!("SHIPIT_{}", field.to_uppercase())).ok()
 }
 
+/// String settings preserve an explicitly empty value, matching
+/// pydantic-settings rather than treating it as absent.
 pub fn env_str(field: &str) -> Option<String> {
-    env_var(field).filter(|s| !s.is_empty())
+    env_var(field)
 }
 
 /// pydantic v2 bool coercion from strings.
-pub fn env_bool(field: &str) -> Option<bool> {
-    let raw = env_var(field)?;
+pub fn env_bool(field: &str) -> Result<Option<bool>> {
+    let Some(raw) = env_var(field) else {
+        return Ok(None);
+    };
     match raw.trim().to_ascii_lowercase().as_str() {
-        "true" | "t" | "yes" | "y" | "on" | "1" => Some(true),
-        "false" | "f" | "no" | "n" | "off" | "0" => Some(false),
-        _ => None,
+        "true" | "t" | "yes" | "y" | "on" | "1" => Ok(Some(true)),
+        "false" | "f" | "no" | "n" | "off" | "0" => Ok(Some(false)),
+        _ => Err(invalid_env_value(
+            field,
+            &raw,
+            "a boolean (true/false, yes/no, on/off, or 1/0)",
+        )),
     }
 }
 
-pub fn env_int(field: &str) -> Option<i64> {
-    env_var(field)?.trim().parse().ok()
+pub fn env_int(field: &str) -> Result<Option<i64>> {
+    let Some(raw) = env_var(field) else {
+        return Ok(None);
+    };
+    raw.trim()
+        .parse()
+        .map(Some)
+        .map_err(|_| invalid_env_value(field, &raw, "an integer"))
+}
+
+pub fn env_enum<T>(
+    field: &str,
+    expected: &str,
+    parse: impl FnOnce(&str) -> Option<T>,
+) -> Result<Option<T>> {
+    let Some(raw) = env_str(field) else {
+        return Ok(None);
+    };
+    parse(&raw)
+        .map(Some)
+        .ok_or_else(|| invalid_env_value(field, &raw, expected))
+}
+
+pub fn env_json<T: serde::de::DeserializeOwned>(field: &str) -> Result<Option<T>> {
+    let Some(raw) = env_var(field) else {
+        return Ok(None);
+    };
+    serde_json::from_str(&raw).map(Some).map_err(|err| {
+        anyhow!(
+            "Invalid value for SHIPIT_{}: {raw:?}; expected valid JSON: {err}",
+            field.to_uppercase()
+        )
+    })
+}
+
+fn invalid_env_value(field: &str, raw: &str, expected: &str) -> anyhow::Error {
+    anyhow!(
+        "Invalid value for SHIPIT_{}: {raw:?}; expected {expected}",
+        field.to_uppercase()
+    )
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -94,11 +124,23 @@ pub struct BaseConfig {
 impl Default for BaseConfig {
     fn default() -> Self {
         Self {
+            name: None,
+            port: Some(8080),
+            commands: CustomCommands::default(),
+            app_subdir: None,
+        }
+    }
+}
+
+impl BaseConfig {
+    /// Apply the fallible `SHIPIT_*` overlay to the declared defaults.
+    pub fn from_env() -> Result<Self> {
+        Ok(Self {
             name: env_str("name"),
-            port: env_int("port").or(Some(8080)),
+            port: env_int("port")?.or(Some(8080)),
             commands: CustomCommands::default(),
             app_subdir: env_str("app_subdir"),
-        }
+        })
     }
 }
 

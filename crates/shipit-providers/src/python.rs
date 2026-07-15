@@ -8,10 +8,11 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::base::{env_bool, env_str, env_var, BaseConfig, DetectResult, HasBase};
+use crate::base::{env_bool, env_enum, env_json, env_str, BaseConfig, DetectResult, HasBase};
 use crate::install_context::{discover_python_dependency_files, discover_python_install_context};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -162,37 +163,39 @@ impl PythonConfig {
     /// pydantic-settings construction: `PythonConfig(**base.model_dump())`.
     /// The base fields arrive already resolved; every python field reads
     /// its `SHIPIT_<FIELD>` env var, falling back to the class default.
-    fn from_base(base: BaseConfig) -> Self {
-        Self {
+    fn from_base(base: BaseConfig) -> Result<Self> {
+        Ok(Self {
             base,
-            framework: env_str("framework").and_then(|v| PythonFramework::parse(&v)),
-            server: env_str("server").and_then(|v| PythonServer::parse(&v)),
-            migration_strategy: env_str("migration_strategy")
-                .and_then(|v| MigrationStrategy::parse(&v)),
-            database: env_str("database").and_then(|v| DatabaseType::parse(&v)),
-            extra_dependencies: env_json("extra_dependencies").unwrap_or_default(),
+            framework: env_enum(
+                "framework",
+                "a supported Python framework",
+                PythonFramework::parse,
+            )?,
+            server: env_enum("server", "a supported Python server", PythonServer::parse)?,
+            migration_strategy: env_enum(
+                "migration_strategy",
+                "a supported migration strategy",
+                MigrationStrategy::parse,
+            )?,
+            database: env_enum("database", "a supported database type", DatabaseType::parse)?,
+            extra_dependencies: env_json("extra_dependencies")?.unwrap_or_default(),
             asgi_application: env_str("asgi_application"),
             wsgi_application: env_str("wsgi_application"),
-            uses_ffmpeg: env_bool("uses_ffmpeg").unwrap_or(false),
-            uses_pandoc: env_bool("uses_pandoc").unwrap_or(false),
-            install_requires_all_files: env_bool("install_requires_all_files").unwrap_or(false),
+            uses_ffmpeg: env_bool("uses_ffmpeg")?.unwrap_or(false),
+            uses_pandoc: env_bool("uses_pandoc")?.unwrap_or(false),
+            install_requires_all_files: env_bool("install_requires_all_files")?.unwrap_or(false),
             main_file: env_str("main_file"),
             python_version: env_str("python_version").or_else(|| Some("3.13".to_owned())),
             uv_version: env_str("uv_version").or_else(|| Some("0.8.15".to_owned())),
-            precompile_python: env_bool("precompile_python").unwrap_or(true),
+            precompile_python: env_bool("precompile_python")?.unwrap_or(true),
             cross_platform: env_str("cross_platform"),
             python_extra_index_url: env_str("python_extra_index_url"),
             pandoc_version: env_str("pandoc_version"),
             ffmpeg_version: env_str("ffmpeg_version"),
-            install_inputs: env_json("install_inputs"),
-            mcp_self_running: env_bool("mcp_self_running").unwrap_or(false),
-        }
+            install_inputs: env_json("install_inputs")?,
+            mcp_self_running: env_bool("mcp_self_running")?.unwrap_or(false),
+        })
     }
-}
-
-/// pydantic-settings parses complex fields (lists/sets) from env as JSON.
-fn env_json<T: serde::de::DeserializeOwned>(field: &str) -> Option<T> {
-    env_var(field).and_then(|raw| serde_json::from_str(&raw).ok())
 }
 
 impl HasBase for PythonConfig {
@@ -284,7 +287,7 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
 }
 
 /// Port of `PythonProvider.load_config`.
-pub fn load_config(path: &Path, base: BaseConfig) -> PythonConfig {
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<PythonConfig> {
     load_config_with_deps(path, base, BTreeSet::new())
 }
 
@@ -294,8 +297,8 @@ pub fn load_config_with_deps(
     path: &Path,
     base: BaseConfig,
     mut must_have_deps: BTreeSet<String>,
-) -> PythonConfig {
-    let mut config = PythonConfig::from_base(base);
+) -> Result<PythonConfig> {
+    let mut config = PythonConfig::from_base(base)?;
 
     if is_blank(&config.main_file) {
         config.main_file = detect_main_file(path);
@@ -395,7 +398,7 @@ pub fn load_config_with_deps(
     config.mcp_self_running =
         detect_mcp_self_running(path, config.framework, config.main_file.as_deref());
 
-    config
+    Ok(config)
 }
 
 /// Port of `PythonProvider.check_deps`: substring scan over the

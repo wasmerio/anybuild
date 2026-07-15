@@ -9,6 +9,7 @@
 
 use std::path::Path;
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -81,12 +82,12 @@ fn to_object(value: Value) -> Map<String, Value> {
 }
 
 /// Port of `LaravelProvider.load_config`.
-pub fn load_config(path: &Path, base: BaseConfig) -> LaravelConfig {
-    let mut php_config = php::load_config(path, base.clone());
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<LaravelConfig> {
+    let mut php_config = php::load_config(path, base.clone())?;
     php_config.use_composer = true;
     // Python passes infer_start=False, but the inferred commands are
     // overwritten by the base config in the final merge anyway.
-    let node_config = crate::node::load_config(path, base.clone());
+    let node_config = crate::node::load_config(path, base.clone())?;
 
     let mut merged = to_object(serde_json::to_value(&php_config).expect("php config serializes"));
     let mut node_data =
@@ -97,7 +98,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> LaravelConfig {
         serde_json::to_value(&base).expect("base config serializes"),
     ));
 
-    serde_json::from_value(Value::Object(merged)).expect("laravel config deserializes")
+    Ok(serde_json::from_value(Value::Object(merged)).expect("laravel config deserializes"))
 }
 
 /// Port of `LaravelProvider.detect`.

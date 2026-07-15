@@ -54,16 +54,16 @@ impl Default for NodeStaticConfig {
 impl NodeStaticConfig {
     /// pydantic-settings construction: node fields plus the staticfile
     /// fields, each overlaid from `SHIPIT_<FIELD>`.
-    fn from_env(base: BaseConfig) -> Self {
-        let node = NodeConfig::from_env(base);
-        Self {
+    fn from_env(base: BaseConfig) -> Result<Self> {
+        let node = NodeConfig::from_env(base)?;
+        Ok(Self {
             base: node.base,
-            convert_redirects: env_bool("convert_redirects").unwrap_or(true),
+            convert_redirects: env_bool("convert_redirects")?.unwrap_or(true),
             sws_version: env_str("sws_version").or_else(|| Some("2.38.0".to_owned())),
             static_dir: env_str("static_dir"),
             redirects_config: env_str("redirects_config"),
             node: node.node,
-        }
+        })
     }
 }
 
@@ -186,7 +186,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> Result<NodeStaticConfig> {
     // StaticFileProvider.load_config(path, base_config), whose dump is
     // merged into the NodeStaticConfig construction.
     let static_parts = load_static_parts(path)?;
-    let mut config = NodeStaticConfig::from_env(base);
+    let mut config = NodeStaticConfig::from_env(base)?;
     config.convert_redirects = static_parts.convert_redirects;
     config.sws_version = static_parts.sws_version;
     config.static_dir = static_parts.static_dir;
@@ -249,7 +249,7 @@ struct StaticParts {
 
 fn load_static_parts(path: &Path) -> Result<StaticParts> {
     let mut parts = StaticParts {
-        convert_redirects: env_bool("convert_redirects").unwrap_or(true),
+        convert_redirects: env_bool("convert_redirects")?.unwrap_or(true),
         sws_version: env_str("sws_version").or_else(|| Some("2.38.0".to_owned())),
         static_dir: env_str("static_dir"),
         redirects_config: env_str("redirects_config"),

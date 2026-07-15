@@ -139,8 +139,8 @@ pub struct ProjectContext {
     pub runner: Box<dyn Runner>,
 }
 
-pub fn base_config_for(app_path: &Path, overrides: &CommandOverrides) -> BaseConfig {
-    let mut base = BaseConfig::default();
+pub fn base_config_for(app_path: &Path, overrides: &CommandOverrides) -> Result<BaseConfig> {
+    let mut base = BaseConfig::from_env()?;
     base.commands.enrich_from_path(app_path);
     if let Some(start) = &overrides.start_command {
         base.commands.start = Some(start.clone());
@@ -162,7 +162,7 @@ pub fn base_config_for(app_path: &Path, overrides: &CommandOverrides) -> BaseCon
     if let Some(port) = serve_port {
         base.port = Some(port);
     }
-    base
+    Ok(base)
 }
 
 /// Load provider + config for a resolved app path (detection half of
@@ -171,7 +171,7 @@ pub fn load_project_config(
     paths: &ProjectPaths,
     overrides: &CommandOverrides,
 ) -> Result<(&'static str, ProviderConfig)> {
-    let base = base_config_for(&paths.app_path, overrides);
+    let base = base_config_for(&paths.app_path, overrides)?;
     let provider = load_provider(&paths.app_path, &base, overrides.use_provider.as_deref())?;
     let mut config = load_provider_config(provider, &paths.app_path, base)?;
     if let Some(patch) = &overrides.config {

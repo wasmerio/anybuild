@@ -8,12 +8,13 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
+use anyhow::Result;
 use indexmap::IndexMap;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::base::{env_bool, env_str, env_var, BaseConfig, DetectResult, HasBase};
+use crate::base::{env_bool, env_enum, env_json, env_str, BaseConfig, DetectResult, HasBase};
 
 pub(crate) type JsonMap = serde_json::Map<String, Value>;
 
@@ -545,25 +546,33 @@ impl<F> Default for NodeConfigFields<F> {
 }
 
 impl NodeConfigFields<NodeFramework> {
-    fn from_env() -> Self {
-        Self {
-            use_edgejs: env_bool("use_edgejs").or(Some(false)),
-            precompile_edgejs: env_bool("precompile_edgejs"),
-            package_manager: env_str("package_manager").and_then(|v| PackageManager::from_name(&v)),
-            framework: env_str("framework").and_then(|v| NodeFramework::from_value(&v)),
-            extra_dependencies: env_string_set("extra_dependencies"),
+    fn from_env() -> Result<Self> {
+        Ok(Self {
+            use_edgejs: env_bool("use_edgejs")?.or(Some(false)),
+            precompile_edgejs: env_bool("precompile_edgejs")?,
+            package_manager: env_enum(
+                "package_manager",
+                "a supported package manager",
+                PackageManager::from_name,
+            )?,
+            framework: env_enum(
+                "framework",
+                "a supported Node framework",
+                NodeFramework::from_value,
+            )?,
+            extra_dependencies: env_json("extra_dependencies")?.unwrap_or_default(),
             build_command: env_str("build_command"),
             node_version: env_str("node_version").or_else(|| Some("24".to_owned())),
             npm_version: env_str("npm_version"),
             pnpm_version: env_str("pnpm_version"),
             yarn_version: env_str("yarn_version"),
             bun_version: env_str("bun_version"),
-            optimize_node_dependencies: env_bool("optimize_node_dependencies").or(Some(true)),
-            remove_native_binaries: env_bool("remove_native_binaries").or(Some(false)),
-            install_requires_all_files: env_bool("install_requires_all_files").unwrap_or(false),
-            install_inputs: env_string_list("install_inputs"),
+            optimize_node_dependencies: env_bool("optimize_node_dependencies")?.or(Some(true)),
+            remove_native_binaries: env_bool("remove_native_binaries")?.or(Some(false)),
+            install_requires_all_files: env_bool("install_requires_all_files")?.unwrap_or(false),
+            install_inputs: env_json("install_inputs")?,
             package_name: env_str("package_name"),
-        }
+        })
     }
 }
 
@@ -579,11 +588,11 @@ pub struct NodeConfig {
 impl NodeConfig {
     /// pydantic-settings construction: `NodeConfig(**base.model_dump())`
     /// reads `SHIPIT_<FIELD>` for every non-base field.
-    pub(crate) fn from_env(base: BaseConfig) -> Self {
-        Self {
+    pub(crate) fn from_env(base: BaseConfig) -> Result<Self> {
+        Ok(Self {
             base,
-            node: NodeConfigFields::from_env(),
-        }
+            node: NodeConfigFields::from_env()?,
+        })
     }
 }
 
@@ -608,18 +617,6 @@ impl HasBase for NodeConfig {
     fn base_mut(&mut self) -> &mut BaseConfig {
         &mut self.base
     }
-}
-
-fn env_string_set(field: &str) -> BTreeSet<String> {
-    env_var(field)
-        .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
-        .map(|values| values.into_iter().collect())
-        .unwrap_or_default()
-}
-
-fn env_string_list(field: &str) -> Option<Vec<String>> {
-    let raw = env_var(field)?;
-    serde_json::from_str::<Vec<String>>(&raw).ok()
 }
 
 /// Python truthiness for optional command strings ("" is falsy).
@@ -1368,8 +1365,8 @@ fn node_entry_command(entry_file: &str) -> String {
 // ---------------------------------------------------------------------------
 // load_config
 
-pub fn load_config(path: &Path, base: BaseConfig) -> NodeConfig {
-    let mut config = NodeConfig::from_env(base);
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<NodeConfig> {
+    let mut config = NodeConfig::from_env(base)?;
 
     let package_manager = config
         .package_manager
@@ -1421,7 +1418,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> NodeConfig {
         config.package_name = Some(name);
     }
 
-    config
+    Ok(config)
 }
 
 // ---------------------------------------------------------------------------
@@ -2054,6 +2051,10 @@ mod tests {
 
     use super::*;
     use crate::base::BaseConfig;
+
+    fn load_config(path: &Path, base: BaseConfig) -> NodeConfig {
+        super::load_config(path, base).unwrap()
+    }
 
     fn example(name: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))

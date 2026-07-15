@@ -6,10 +6,11 @@
 use std::path::Path;
 use std::sync::OnceLock;
 
+use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::base::{env_str, BaseConfig, DetectResult, HasBase};
+use crate::base::{env_enum, env_str, BaseConfig, DetectResult, HasBase};
 use crate::php::{self, PhpConfig};
 
 pub const NAME: &str = "wordpress";
@@ -71,8 +72,8 @@ pub struct WordPressExtension {
 }
 
 /// Port of `WordPressProvider.load_config`.
-pub fn load_config(path: &Path, base: BaseConfig) -> WordPressConfig {
-    let php_config = php::load_config(path, base);
+pub fn load_config(path: &Path, base: BaseConfig) -> Result<WordPressConfig> {
+    let php_config = php::load_config(path, base)?;
     // Python re-instantiates as WordPressConfig(**php_config.model_dump()):
     // every php field is an init kwarg, so the env only reaches the new
     // wp_* fields.
@@ -81,7 +82,9 @@ pub fn load_config(path: &Path, base: BaseConfig) -> WordPressConfig {
         wp_version: env_str("wp_version"),
         wp_locale: env_str("wp_locale"),
         wp_cli_version: env_str("wp_cli_version"),
-        wp_extension_kind: env_str("wp_extension_kind"),
+        wp_extension_kind: env_enum("wp_extension_kind", "plugin or theme", |value| {
+            matches!(value, "plugin" | "theme").then(|| value.to_owned())
+        })?,
         wp_extension_slug: env_str("wp_extension_slug"),
         wp_extension_activate_target: env_str("wp_extension_activate_target"),
     };
@@ -94,11 +97,11 @@ pub fn load_config(path: &Path, base: BaseConfig) -> WordPressConfig {
         config.wp_extension_slug = Some(extension.slug);
         config.wp_extension_activate_target = Some(extension.activate_target);
     }
-    config
+    Ok(config)
 }
 
 /// Port of `WordPressProvider.detect`.
-pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
+pub fn detect(path: &Path, _base: &BaseConfig) -> Option<DetectResult> {
     if path.join("wp-content").exists()
         && path.join("index.php").exists()
         && path.join("wp-load.php").exists()
@@ -109,8 +112,7 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         });
     }
 
-    let wp_config = load_config(path, base.clone());
-    if wp_config.wp_version.is_some() {
+    if env_str("wp_version").is_some() {
         return Some(DetectResult {
             name: NAME,
             score: 80,

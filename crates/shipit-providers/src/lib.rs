@@ -159,8 +159,7 @@ pub fn load_provider(
 }
 
 /// The declared field defaults for a provider config (pydantic's notion
-/// for `exclude_defaults`). Call inside `base::without_env` for the pure
-/// declared defaults.
+/// for `exclude_defaults`). Defaults never apply the environment overlay.
 pub fn defaults_json(name: &str) -> Result<serde_json::Value> {
     let value = match name {
         "python" => serde_json::to_value(python::PythonConfig::default())?,
@@ -218,12 +217,12 @@ pub fn merge_config_json(
 /// merge, which lives with the CLI).
 pub fn load_provider_config(name: &str, path: &Path, base: BaseConfig) -> Result<ProviderConfig> {
     let mut config = match name {
-        "python" => ProviderConfig::Python(python::load_config(path, base)),
-        "node" => ProviderConfig::Node(node::load_config(path, base)),
+        "python" => ProviderConfig::Python(python::load_config(path, base)?),
+        "node" => ProviderConfig::Node(node::load_config(path, base)?),
         "node-static" => ProviderConfig::NodeStatic(node_static::load_config(path, base)?),
-        "php" => ProviderConfig::Php(php::load_config(path, base)),
-        "wordpress" => ProviderConfig::Wordpress(wordpress::load_config(path, base)),
-        "laravel" => ProviderConfig::Laravel(laravel::load_config(path, base)),
+        "php" => ProviderConfig::Php(php::load_config(path, base)?),
+        "wordpress" => ProviderConfig::Wordpress(wordpress::load_config(path, base)?),
+        "laravel" => ProviderConfig::Laravel(laravel::load_config(path, base)?),
         "go" => ProviderConfig::Go(go::load_config(path, base)?),
         "staticfile" => ProviderConfig::StaticFile(staticfile::load_config(path, base)?),
         "hugo" => ProviderConfig::Hugo(hugo::load_config(path, base)?),

@@ -65,14 +65,14 @@ impl HasBase for StaticFileConfig {
 impl StaticFileConfig {
     /// pydantic-settings construction with only the base fields passed as
     /// init kwargs: the env reaches every staticfile-specific field.
-    pub(crate) fn from_env(base: BaseConfig) -> Self {
-        Self {
+    pub(crate) fn from_env(base: BaseConfig) -> Result<Self> {
+        Ok(Self {
             base,
-            convert_redirects: env_bool("convert_redirects").unwrap_or(true),
+            convert_redirects: env_bool("convert_redirects")?.unwrap_or(true),
             sws_version: env_str("sws_version").or_else(|| Some("2.38.0".to_owned())),
             static_dir: env_str("static_dir"),
             redirects_config: env_str("redirects_config"),
-        }
+        })
     }
 }
 
@@ -124,14 +124,14 @@ pub(crate) fn parse_simple_yaml(contents: &str) -> HashMap<String, String> {
 
 /// Port of `StaticFileProvider.load_config`.
 pub fn load_config(path: &Path, base: BaseConfig) -> Result<StaticFileConfig> {
-    let mut config = load_static_config(path, base);
+    let mut config = load_static_config(path, base)?;
     config.redirects_config =
         compute_redirects_config(path, config.static_dir.as_deref(), config.convert_redirects)?;
     Ok(config)
 }
 
 /// Port of `StaticFileProvider._load_static_config`.
-fn load_static_config(path: &Path, base: BaseConfig) -> StaticFileConfig {
+fn load_static_config(path: &Path, base: BaseConfig) -> Result<StaticFileConfig> {
     let staticfile_path = path.join("Staticfile");
     if staticfile_path.exists() {
         if let Ok(contents) = std::fs::read_to_string(&staticfile_path) {
@@ -139,16 +139,16 @@ fn load_static_config(path: &Path, base: BaseConfig) -> StaticFileConfig {
             if !parsed.is_empty() {
                 // static_dir is an explicit init kwarg here (even when the
                 // Staticfile has no root), so the env never overrides it.
-                let mut config = StaticFileConfig::from_env(base);
+                let mut config = StaticFileConfig::from_env(base)?;
                 config.static_dir = parsed.get("root").cloned();
-                return config;
+                return Ok(config);
             }
         }
     }
     if exists(path, &["public/index.html"]) || exists(path, &["public/index.htm"]) {
-        let mut config = StaticFileConfig::from_env(base);
+        let mut config = StaticFileConfig::from_env(base)?;
         config.static_dir = Some("public".to_owned());
-        return config;
+        return Ok(config);
     }
     StaticFileConfig::from_env(base)
 }

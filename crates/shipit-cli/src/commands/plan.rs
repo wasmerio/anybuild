@@ -135,7 +135,7 @@ pub(crate) fn exclude_defaults_json(
     config: &shipit_providers::ProviderConfig,
 ) -> serde_json::Value {
     let dumped = config.to_json();
-    let defaults = shipit_providers::base::without_env(|| defaults_for(config));
+    let defaults = defaults_for(config);
     match (dumped, defaults) {
         (serde_json::Value::Object(dumped), Some(serde_json::Value::Object(defaults))) => {
             exclude_object(dumped, &defaults)

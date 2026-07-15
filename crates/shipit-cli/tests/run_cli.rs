@@ -89,6 +89,67 @@ fn runtime_node_framework_is_rejected_by_node_static_without_panicking() {
 }
 
 #[test]
+fn malformed_typed_env_overrides_are_reported_as_errors() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("package.json"), r#"{"main":"index.js"}"#).unwrap();
+
+    for (field, value) in [
+        ("PORT", "many"),
+        ("USE_EDGEJS", "enabled"),
+        ("FRAMEWORK", "not-a-framework"),
+        ("EXTRA_DEPENDENCIES", "not-json"),
+    ] {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_shipit"))
+            .arg("generate")
+            .arg(tmp.path())
+            .args(["--provider", "node", "--out"])
+            .arg(tmp.path().join(format!("Shipit.{field}")))
+            .env(format!("SHIPIT_{field}"), value)
+            .output()
+            .unwrap();
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{field}: {stderr}");
+        assert!(
+            stderr.contains(&format!("Invalid value for SHIPIT_{field}")),
+            "{field}: {stderr}"
+        );
+        assert!(!stderr.contains("panicked at"), "{field}: {stderr}");
+    }
+}
+
+#[test]
+fn empty_string_env_override_is_preserved() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();
+    std::fs::write(
+        tmp.path().join("Shipit"),
+        r#"load("//shipit/tools:staticfile.shipit", "staticfile_build", "staticfile_serve")
+
+build = staticfile_build(config)
+staticfile_serve(config, build, name = "empty-env")
+"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_shipit"))
+        .arg("plan")
+        .arg(tmp.path())
+        .args(["--provider", "staticfile"])
+        .env("SHIPIT_SWS_VERSION", "")
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains(r#""sws_version": """#),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn copied_binary_uses_embedded_runtime_resources() {
     let tmp = tempfile::tempdir().unwrap();
     let copied_binary = tmp.path().join("shipit-copy");
