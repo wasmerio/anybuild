@@ -29,6 +29,13 @@ pub fn env_str(field: &str) -> Option<String> {
     env_var(field)
 }
 
+/// Python truthiness for optional strings: `None` and `""` are both falsy.
+/// Use wherever the Python original tests `if not config.field:`, so an
+/// explicitly empty `SHIPIT_*` value still triggers the fallback.
+pub fn is_blank(value: &Option<String>) -> bool {
+    value.as_deref().is_none_or(str::is_empty)
+}
+
 /// pydantic v2 bool coercion from strings.
 pub fn env_bool(field: &str) -> Result<Option<bool>> {
     let Some(raw) = env_var(field) else {

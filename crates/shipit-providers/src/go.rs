@@ -8,7 +8,7 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::base::{env_str, BaseConfig, DetectResult, HasBase};
+use crate::base::{env_str, is_blank, BaseConfig, DetectResult, HasBase};
 
 pub const NAME: &str = "go";
 
@@ -55,16 +55,22 @@ pub fn load_config(path: &Path, _base: BaseConfig) -> Result<GoConfig> {
         go_build_file: env_str("go_build_file"),
         serve_binary: env_str("serve_binary"),
     };
-    if config.go_build_file.is_none() {
+    // Python: `if not config.go_build_file:` twice — "" gates discovery and
+    // the missing-file error just like None.
+    if is_blank(&config.go_build_file) {
         config.go_build_file = get_build_file(path);
     }
-    let build_file = config.go_build_file.clone().with_context(|| {
+    let build_file = config
+        .go_build_file
+        .clone()
+        .filter(|f| !f.is_empty())
+        .with_context(|| {
         format!(
             "No Go build file was found in {}. Set SHIPIT_GO_BUILD_FILE or add a supported Go entrypoint",
             path.display()
         )
     })?;
-    if config.serve_binary.is_none() {
+    if is_blank(&config.serve_binary) {
         let serve_binary = build_file
             .replace('/', "_")
             .to_lowercase()

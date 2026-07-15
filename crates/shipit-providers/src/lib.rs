@@ -230,7 +230,8 @@ pub fn load_provider_config(name: &str, path: &Path, base: BaseConfig) -> Result
         "mkdocs" => ProviderConfig::Mkdocs(mkdocs::load_config(path, base)?),
         other => return Err(anyhow!("unknown provider {other:?}")),
     };
-    if config.base().name.is_none() {
+    // Python: `if not provider_config.name:` — "" falls back like None.
+    if base::is_blank(&config.base().name) {
         let dir_name = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())

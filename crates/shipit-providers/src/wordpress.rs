@@ -10,7 +10,7 @@ use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::base::{env_enum, env_str, BaseConfig, DetectResult, HasBase};
+use crate::base::{env_enum, env_str, is_blank, BaseConfig, DetectResult, HasBase};
 use crate::php::{self, PhpConfig};
 
 pub const NAME: &str = "wordpress";
@@ -89,7 +89,8 @@ pub fn load_config(path: &Path, base: BaseConfig) -> Result<WordPressConfig> {
         wp_extension_activate_target: env_str("wp_extension_activate_target"),
     };
     let extension = detect_extension(path);
-    if extension.is_some() && config.wp_version.is_none() {
+    // Python: `if extension and not wp_config.wp_version:` — "" is falsy.
+    if extension.is_some() && is_blank(&config.wp_version) {
         config.wp_version = Some("latest".to_owned());
     }
     if let Some(extension) = extension {
@@ -112,7 +113,8 @@ pub fn detect(path: &Path, _base: &BaseConfig) -> Option<DetectResult> {
         });
     }
 
-    if env_str("wp_version").is_some() {
+    // Python truthiness: an empty SHIPIT_WP_VERSION does not force detection.
+    if env_str("wp_version").is_some_and(|v| !v.is_empty()) {
         return Some(DetectResult {
             name: NAME,
             score: 80,

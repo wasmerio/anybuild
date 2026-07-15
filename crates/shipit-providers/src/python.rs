@@ -12,7 +12,9 @@ use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::base::{env_bool, env_enum, env_json, env_str, BaseConfig, DetectResult, HasBase};
+use crate::base::{
+    env_bool, env_enum, env_json, env_str, is_blank, BaseConfig, DetectResult, HasBase,
+};
 use crate::install_context::{discover_python_dependency_files, discover_python_install_context};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -245,10 +247,6 @@ pub const DEPENDENCY_SCAN: [&str; 14] = [
 
 fn exists(path: &Path, candidates: &[&str]) -> bool {
     candidates.iter().any(|c| path.join(c).exists())
-}
-
-fn is_blank(value: &Option<String>) -> bool {
-    value.as_deref().is_none_or(str::is_empty)
 }
 
 /// Port of `PythonProvider.detect`.

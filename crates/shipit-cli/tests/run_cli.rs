@@ -149,6 +149,34 @@ staticfile_serve(config, build, name = "empty-env")
     );
 }
 
+/// Python applies truthiness (not presence) at fallback sites, so an
+/// explicitly empty env value still triggers the fallback even though the
+/// field itself preserves "".
+#[test]
+fn empty_string_env_still_triggers_python_truthiness_fallbacks() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project = tmp.path().join("truthy-proj");
+    std::fs::create_dir(&project).unwrap();
+    std::fs::write(project.join("index.html"), "<h1>test</h1>\n").unwrap();
+
+    // SHIPIT_NAME="" must fall back to the directory name (generator.py:57),
+    // and SHIPIT_WP_VERSION="" must not force wordpress detection
+    // (wordpress.py only detects on a truthy version).
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_shipit"))
+        .arg("plan")
+        .arg(&project)
+        .env("SHIPIT_NAME", "")
+        .env("SHIPIT_WP_VERSION", "")
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(r#""name": "truthy-proj""#), "{stdout}");
+    assert!(!stdout.contains(r#""wp_version""#), "{stdout}");
+}
+
 #[test]
 fn copied_binary_uses_embedded_runtime_resources() {
     let tmp = tempfile::tempdir().unwrap();

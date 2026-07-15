@@ -8,7 +8,7 @@ use std::path::Path;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::base::{env_str, BaseConfig, DetectResult, HasBase};
+use crate::base::{env_str, is_blank, BaseConfig, DetectResult, HasBase};
 use crate::staticfile::{self, compute_redirects_config, parse_simple_yaml, StaticFileConfig};
 
 pub const NAME: &str = "hugo";
@@ -133,7 +133,8 @@ pub fn load_config(path: &Path, base: BaseConfig) -> Result<HugoConfig> {
         config.staticfile.static_dir =
             Some(hugo_publish_dir(path).unwrap_or_else(|| "public".to_owned()));
     }
-    if config.hugo_version.is_none() {
+    // Python: `if not config.hugo_version:` — "" falls back like None.
+    if is_blank(&config.hugo_version) {
         config.hugo_version = Some(if is_old_hugo(path) {
             "0.139.0".to_owned()
         } else {
