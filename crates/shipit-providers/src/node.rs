@@ -1,22 +1,19 @@
 //! Port of `src/shipit/providers/node.py`.
-//!
-//! Also hosts (as private items) the JS half of
-//! `src/shipit/providers/install_context.py`:
-//! `discover_js_install_context` and its helpers.
 
-use std::collections::{BTreeSet, HashMap};
-use std::path::{Component, Path, PathBuf};
+use std::collections::BTreeSet;
+use std::path::Path;
 use std::sync::LazyLock;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::base::{env_bool, env_enum, env_json, env_str, BaseConfig, DetectResult, HasBase};
+use crate::install_context::{discover_js_install_context, read_json_object};
 
-pub(crate) type JsonMap = serde_json::Map<String, Value>;
+pub(crate) use crate::install_context::JsonMap;
 
 const NEXT_BUNDLE_VERSION: &str = "1.0.0";
 
@@ -469,14 +466,15 @@ impl NodeFramework {
         self,
         package_manager: PackageManager,
         build_command: &str,
-    ) -> String {
+    ) -> Result<String> {
         if self == NodeFramework::Next {
-            let quoted_command = shlex_quote(build_command);
-            return package_manager.dlx_command(&format!(
+            let quoted_command =
+                shlex::try_quote(build_command).context("Cannot shell-quote Node build command")?;
+            return Ok(package_manager.dlx_command(&format!(
                 "next-bundle@{NEXT_BUNDLE_VERSION} --build-command {quoted_command}"
-            ));
+            )));
         }
-        build_command.to_owned()
+        Ok(build_command.to_owned())
     }
 
     pub fn start_command(self) -> Option<&'static str> {
@@ -869,18 +867,6 @@ pub fn detect_package_manager(path: &Path) -> PackageManager {
 
 // ---------------------------------------------------------------------------
 // package.json helpers
-
-/// `_read_json`: JSON object or None.
-pub(crate) fn read_json_object(path: &Path) -> Option<JsonMap> {
-    if !path.exists() {
-        return None;
-    }
-    let text = std::fs::read_to_string(path).ok()?;
-    match serde_json::from_str::<Value>(&text) {
-        Ok(Value::Object(map)) => Some(map),
-        _ => None,
-    }
-}
 
 pub(crate) fn parse_package_json(path: &Path) -> Option<JsonMap> {
     read_json_object(&path.join("package.json"))
@@ -1312,7 +1298,7 @@ fn get_build_command(
     package_manager: PackageManager,
     framework: Option<NodeFramework>,
     explicit_build_command: Option<&str>,
-) -> Option<String> {
+) -> Result<Option<String>> {
     let mut build_command: Option<String> = explicit_build_command.map(str::to_owned);
 
     let scripts = package_scripts(package_json);
@@ -1324,22 +1310,22 @@ fn get_build_command(
     }
 
     match (build_command, framework) {
-        (Some(command), Some(framework)) => {
-            Some(framework.bundle_build_command(package_manager, &command))
-        }
-        (command, _) => command,
+        (Some(command), Some(framework)) => framework
+            .bundle_build_command(package_manager, &command)
+            .map(Some),
+        (command, _) => Ok(command),
     }
 }
 
-fn infer_start_command(path: &Path, package_json: Option<&JsonMap>) -> Option<String> {
+fn infer_start_command(path: &Path, package_json: Option<&JsonMap>) -> Result<Option<String>> {
     let scripts = package_scripts(package_json);
     if let Some(start_script) = scripts.get("start").copied() {
         if !start_script.is_empty() {
             let trimmed = start_script.trim();
             return if trimmed.is_empty() {
-                None
+                Ok(None)
             } else {
-                Some(trimmed.to_owned())
+                Ok(Some(trimmed.to_owned()))
             };
         }
     }
@@ -1350,16 +1336,24 @@ fn infer_start_command(path: &Path, package_json: Option<&JsonMap>) -> Option<St
     {
         let trimmed = main.trim();
         if !trimmed.is_empty() {
-            return Some(node_entry_command(trimmed));
+            return node_entry_command(trimmed).map(Some);
         }
     }
 
     let require_node_evidence = !path.join("package.json").is_file();
-    common_entry_file(path, require_node_evidence).map(node_entry_command)
+    common_entry_file(path, require_node_evidence)
+        .map(node_entry_command)
+        .transpose()
 }
 
-fn node_entry_command(entry_file: &str) -> String {
-    format!("node {}", shlex_quote(entry_file))
+fn node_entry_command(entry_file: &str) -> Result<String> {
+    let quoted_entry =
+        shlex::try_quote(entry_file).context("Cannot shell-quote Node entry file")?;
+    Ok(format!("node {quoted_entry}"))
+}
+
+pub(crate) fn split_command(command: &str) -> Vec<String> {
+    shlex::split(command).unwrap_or_else(|| command.split_whitespace().map(str::to_owned).collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -1392,7 +1386,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> Result<NodeConfig> {
             non_empty(&config.base.commands.build)
                 .map(str::to_owned)
                 .as_deref(),
-        );
+        )?;
     }
 
     // infer_start=True in the Python default path.
@@ -1401,7 +1395,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> Result<NodeConfig> {
             config.base.commands.start = framework.start_command().map(str::to_owned);
         }
         if non_empty(&config.base.commands.start).is_none() {
-            config.base.commands.start = infer_start_command(path, package_json.as_ref());
+            config.base.commands.start = infer_start_command(path, package_json.as_ref())?;
         }
     }
 
@@ -1421,622 +1415,9 @@ pub fn load_config(path: &Path, base: BaseConfig) -> Result<NodeConfig> {
     Ok(config)
 }
 
-// ---------------------------------------------------------------------------
-// shlex (Python `shlex.split` POSIX mode / `shlex.quote`)
-
-/// `shlex.split(s)`; `Err` mirrors Python's ValueError on unbalanced
-/// quotes or a trailing escape.
-pub(crate) fn shlex_split(s: &str) -> Result<Vec<String>, ()> {
-    let mut tokens = Vec::new();
-    let mut current: Option<String> = None;
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            ' ' | '\t' | '\r' | '\n' => {
-                if let Some(token) = current.take() {
-                    tokens.push(token);
-                }
-            }
-            '\'' => {
-                let buf = current.get_or_insert_with(String::new);
-                loop {
-                    match chars.next() {
-                        Some('\'') => break,
-                        Some(ch) => buf.push(ch),
-                        None => return Err(()), // No closing quotation
-                    }
-                }
-            }
-            '"' => {
-                let buf = current.get_or_insert_with(String::new);
-                loop {
-                    match chars.next() {
-                        Some('"') => break,
-                        Some('\\') => match chars.next() {
-                            Some(ch @ ('"' | '\\')) => buf.push(ch),
-                            Some(ch) => {
-                                buf.push('\\');
-                                buf.push(ch);
-                            }
-                            None => return Err(()), // No escaped character
-                        },
-                        Some(ch) => buf.push(ch),
-                        None => return Err(()), // No closing quotation
-                    }
-                }
-            }
-            '\\' => match chars.next() {
-                Some(ch) => current.get_or_insert_with(String::new).push(ch),
-                None => return Err(()), // No escaped character
-            },
-            ch => current.get_or_insert_with(String::new).push(ch),
-        }
-    }
-    if let Some(token) = current.take() {
-        tokens.push(token);
-    }
-    Ok(tokens)
-}
-
-/// shlex.split with the `except ValueError: command.split()` fallback used
-/// throughout node.py.
-pub(crate) fn split_command(command: &str) -> Vec<String> {
-    shlex_split(command).unwrap_or_else(|_| command.split_whitespace().map(str::to_owned).collect())
-}
-
-/// `shlex.quote`.
-pub(crate) fn shlex_quote(s: &str) -> String {
-    if s.is_empty() {
-        return "''".to_owned();
-    }
-    let safe = s.chars().all(|c| {
-        c.is_ascii_alphanumeric()
-            || matches!(c, '_' | '@' | '%' | '+' | '=' | ':' | ',' | '.' | '/' | '-')
-    });
-    if safe {
-        return s.to_owned();
-    }
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
-}
-
-// ---------------------------------------------------------------------------
-// JS install context (private port of install_context.py's JS half)
-
-#[derive(Debug, Default)]
-pub(crate) struct InstallContext {
-    pub(crate) inputs: Vec<String>,
-    pub(crate) requires_all_files: bool,
-}
-
-impl InstallContext {
-    fn add_input(&mut self, value: &str) {
-        let value = clean_relative(value);
-        if !self.inputs.contains(&value) {
-            self.inputs.push(value);
-        }
-    }
-
-    /// `add_local_path` with `require_all_files=True` (every JS call site).
-    fn add_local_path(&mut self, path: &Path, root: &Path) {
-        let resolved = resolve_non_strict(path);
-        if let Some(relative) = relative_to_root(&resolved, root) {
-            if looks_like_file_dependency(&resolved) {
-                self.add_input(&relative);
-            } else {
-                self.requires_all_files = true;
-            }
-            return;
-        }
-        self.requires_all_files = true;
-    }
-}
-
-const JS_DEPENDENCY_SECTIONS: &[&str] = &[
-    "dependencies",
-    "devDependencies",
-    "optionalDependencies",
-    "peerDependencies",
-];
-
-pub(crate) fn discover_js_install_context(root: &Path) -> InstallContext {
-    let root = resolve_non_strict(root);
-    let mut context = InstallContext::default();
-    if !root.join("package.json").exists() {
-        return context;
-    }
-
-    let workspace_packages = find_js_workspace_packages(&root);
-    let mut visited: BTreeSet<PathBuf> = BTreeSet::new();
-    visit_js_package(
-        &root,
-        &root,
-        &mut context,
-        &workspace_packages,
-        &mut visited,
-    );
-
-    // sorted(workspace_packages.values()) — Python compares Paths by their
-    // full string form.
-    let mut package_dirs: Vec<&PathBuf> = workspace_packages.values().collect();
-    package_dirs.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
-    for package_dir in package_dirs {
-        if resolve_non_strict(package_dir) == root {
-            continue;
-        }
-        context.add_local_path(package_dir, &root);
-        visit_js_package(
-            package_dir,
-            &root,
-            &mut context,
-            &workspace_packages,
-            &mut visited,
-        );
-    }
-
-    context
-}
-
-fn visit_js_package(
-    package_dir: &Path,
-    root: &Path,
-    context: &mut InstallContext,
-    workspace_packages: &HashMap<String, PathBuf>,
-    visited: &mut BTreeSet<PathBuf>,
-) {
-    let package_dir = resolve_non_strict(package_dir);
-    if !visited.insert(package_dir.clone()) {
-        return;
-    }
-
-    let package_json_path = package_dir.join("package.json");
-    let Some(package_json) = read_json_object(&package_json_path) else {
-        return;
-    };
-
-    if let Some(relative) = relative_to_root(&package_json_path, root) {
-        context.add_input(&relative);
-    }
-
-    for section in JS_DEPENDENCY_SECTIONS {
-        let Some(Value::Object(deps)) = package_json.get(*section) else {
-            continue;
-        };
-        for (name, spec) in deps {
-            let Some(spec) = spec.as_str() else { continue };
-            let Some(local_path) = js_local_ref(name, spec, &package_dir, workspace_packages)
-            else {
-                continue;
-            };
-            context.add_local_path(&local_path, root);
-            if local_path.is_dir() {
-                visit_js_package(&local_path, root, context, workspace_packages, visited);
-            }
-        }
-    }
-}
-
-fn js_local_ref(
-    name: &str,
-    spec: &str,
-    base_dir: &Path,
-    workspace_packages: &HashMap<String, PathBuf>,
-) -> Option<PathBuf> {
-    if let Some(target) = spec.strip_prefix("workspace:") {
-        if is_path_like(target) {
-            return resolve_local_ref(base_dir, target, true);
-        }
-        return workspace_packages.get(name).cloned();
-    }
-
-    if spec.starts_with("file:") || spec.starts_with("link:") {
-        return resolve_local_ref(base_dir, spec, true);
-    }
-
-    if is_path_like(spec) {
-        return resolve_local_ref(base_dir, spec, false);
-    }
-    None
-}
-
-fn find_js_workspace_packages(root: &Path) -> HashMap<String, PathBuf> {
-    let package_json = read_json_object(&root.join("package.json")).unwrap_or_default();
-    let mut patterns = package_json_workspace_patterns(&package_json);
-
-    let pnpm_workspace = root.join("pnpm-workspace.yaml");
-    if pnpm_workspace.exists() {
-        patterns.extend(pnpm_workspace_patterns(&pnpm_workspace));
-    }
-
-    let mut package_paths = HashMap::new();
-    for pattern in &patterns {
-        if pattern.starts_with('!') {
-            continue;
-        }
-        for path in glob_paths(root, pattern) {
-            if path
-                .components()
-                .any(|component| component.as_os_str() == "node_modules")
-            {
-                continue;
-            }
-            let Some(package_data) = read_json_object(&path.join("package.json")) else {
-                continue;
-            };
-            if package_data.is_empty() {
-                continue; // Python: `if not package_data`
-            }
-            if let Some(name) = package_data.get("name").and_then(Value::as_str) {
-                if !name.is_empty() {
-                    package_paths.insert(name.to_owned(), resolve_non_strict(&path));
-                }
-            }
-        }
-    }
-    package_paths
-}
-
-fn package_json_workspace_patterns(package_json: &JsonMap) -> Vec<String> {
-    match package_json.get("workspaces") {
-        Some(Value::Array(items)) => items
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect(),
-        Some(Value::Object(map)) => match map.get("packages") {
-            Some(Value::Array(items)) => items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect(),
-            _ => Vec::new(),
-        },
-        _ => Vec::new(),
-    }
-}
-
-/// Minimal `pnpm-workspace.yaml` read: the top-level `packages:` list
-/// (yaml.safe_load equivalent for the shapes pnpm documents).
-fn pnpm_workspace_patterns(path: &Path) -> Vec<String> {
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    let mut patterns = Vec::new();
-    let mut in_packages = false;
-    for raw_line in text.lines() {
-        let line = raw_line.trim_end();
-        let trimmed = line.trim_start();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        if let Some(item) = trimmed.strip_prefix('-') {
-            if in_packages {
-                if let Some(value) = yaml_scalar(item.trim()) {
-                    if !value.is_empty() {
-                        patterns.push(value);
-                    }
-                }
-            }
-            continue;
-        }
-        let is_indented = line.len() != trimmed.len();
-        if is_indented {
-            continue; // nested mapping under some key; not a list item
-        }
-        if let Some(rest) = trimmed.strip_prefix("packages:") {
-            let rest = rest.trim();
-            if rest.is_empty() {
-                in_packages = true;
-            } else {
-                in_packages = false;
-                if let Some(inner) = rest.strip_prefix('[') {
-                    let inner = inner.trim_end_matches(']');
-                    for part in inner.split(',') {
-                        if let Some(value) = yaml_scalar(part.trim()) {
-                            if !value.is_empty() {
-                                patterns.push(value);
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            in_packages = false;
-        }
-    }
-    patterns
-}
-
-/// Unquote a simple YAML scalar and drop trailing comments.
-pub(crate) fn yaml_scalar(item: &str) -> Option<String> {
-    let item = item.trim();
-    if let Some(rest) = item.strip_prefix('"') {
-        return rest.find('"').map(|i| rest[..i].to_owned());
-    }
-    if let Some(rest) = item.strip_prefix('\'') {
-        return rest.find('\'').map(|i| rest[..i].to_owned());
-    }
-    let end = item.find(" #").unwrap_or(item.len());
-    Some(item[..end].trim().to_owned())
-}
-
-fn is_path_like(value: &str) -> bool {
-    value.starts_with("./")
-        || value.starts_with("../")
-        || value.starts_with('/')
-        || value.starts_with('~')
-        || value == "."
-        || value == ".."
-}
-
-fn resolve_local_ref(base_dir: &Path, value: &str, allow_bare_relative: bool) -> Option<PathBuf> {
-    let value = value.trim();
-    if value.is_empty() {
-        return None;
-    }
-
-    if value.starts_with("file:") || value.starts_with("link:") {
-        let (prefix, raw_value) = value.split_once(':').expect("checked prefix");
-        if prefix == "file" {
-            // urlparse: netloc after //, path up to ? or #, percent-decoded.
-            let (netloc, path_part) = if let Some(after) = raw_value.strip_prefix("//") {
-                match after.find('/') {
-                    Some(index) => (&after[..index], &after[index..]),
-                    None => (after, ""),
-                }
-            } else {
-                ("", raw_value)
-            };
-            let path_part = path_part.split(['?', '#']).next().unwrap_or("");
-            let mut path_value = percent_decode(path_part);
-            if !netloc.is_empty() && netloc != "localhost" {
-                path_value = format!("//{netloc}{path_value}");
-            }
-            if path_value.starts_with('/') {
-                return Some(PathBuf::from(path_value));
-            }
-            return Some(resolve_non_strict(&base_dir.join(path_value)));
-        }
-        return resolve_local_ref(base_dir, raw_value, allow_bare_relative);
-    }
-
-    if let Some(rest) = value.strip_prefix("git+") {
-        if rest.starts_with("file:") {
-            return resolve_local_ref(base_dir, rest, allow_bare_relative);
-        }
-    }
-
-    if has_url_scheme(value) {
-        return None;
-    }
-
-    if !is_path_like(value) && !allow_bare_relative {
-        return None;
-    }
-
-    let path = Path::new(value);
-    if path.is_absolute() {
-        return Some(path.to_path_buf());
-    }
-    Some(resolve_non_strict(&base_dir.join(path)))
-}
-
-fn has_url_scheme(value: &str) -> bool {
-    static SCHEME: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"^[A-Za-z][A-Za-z0-9+.-]*:").expect("valid regex"));
-    SCHEME.is_match(value)
-}
-
-/// `urllib.parse.unquote` (UTF-8, invalid sequences left as-is /
-/// replaced).
-fn percent_decode(value: &str) -> String {
-    let bytes = value.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' {
-            if let Some(hex) = bytes.get(i + 1..i + 3) {
-                if let Ok(hex) = std::str::from_utf8(hex) {
-                    if let Ok(byte) = u8::from_str_radix(hex, 16) {
-                        out.push(byte);
-                        i += 3;
-                        continue;
-                    }
-                }
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-/// `Path.resolve(strict=False)`: canonicalize what exists, resolve the
-/// rest lexically ('..' applied to the symlink-resolved prefix).
-pub(crate) fn resolve_non_strict(path: &Path) -> PathBuf {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("/"))
-            .join(path)
-    };
-    if let Ok(canonical) = absolute.canonicalize() {
-        return canonical;
-    }
-    let mut result = PathBuf::from("/");
-    for component in absolute.components() {
-        match component {
-            Component::RootDir => result = PathBuf::from("/"),
-            Component::Prefix(prefix) => result = PathBuf::from(prefix.as_os_str()),
-            Component::CurDir => {}
-            Component::ParentDir => {
-                result.pop();
-            }
-            Component::Normal(name) => {
-                result.push(name);
-                if let Ok(canonical) = result.canonicalize() {
-                    result = canonical;
-                }
-            }
-        }
-    }
-    result
-}
-
-fn relative_to_root(path: &Path, root: &Path) -> Option<String> {
-    let path = resolve_non_strict(path);
-    let root = resolve_non_strict(root);
-    let relative = path.strip_prefix(&root).ok()?;
-    Some(clean_relative(&relative.to_string_lossy()))
-}
-
-fn clean_relative(value: &str) -> String {
-    let value = value.replace('\\', "/");
-    let mut value = value.trim();
-    if let Some(rest) = value.strip_prefix("./") {
-        value = rest;
-    }
-    if value.is_empty() {
-        ".".to_owned()
-    } else {
-        value.to_owned()
-    }
-}
-
-fn looks_like_file_dependency(path: &Path) -> bool {
-    if path.exists() {
-        return path.is_file();
-    }
-    let suffixes = joined_suffixes(path);
-    matches!(
-        suffixes.as_str(),
-        ".whl" | ".zip" | ".tar" | ".tar.gz" | ".tgz" | ".tar.bz2" | ".tar.xz"
-    )
-}
-
-/// `"".join(Path.suffixes)`.
-fn joined_suffixes(path: &Path) -> String {
-    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-        return String::new();
-    };
-    let trimmed = name.trim_start_matches('.');
-    match trimmed.find('.') {
-        Some(index) => trimmed[index..].to_owned(),
-        None => String::new(),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Python-compatible glob (glob.glob, non-recursive)
-
-fn glob_paths(root: &Path, pattern: &str) -> Vec<PathBuf> {
-    let mut resolved: Vec<PathBuf> = python_glob(root, pattern)
-        .into_iter()
-        .map(|path| resolve_non_strict(&path))
-        .collect();
-    resolved.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
-    resolved
-}
-
-fn python_glob(root: &Path, pattern: &str) -> Vec<PathBuf> {
-    let mut candidates: Vec<PathBuf> = vec![if Path::new(pattern).is_absolute() {
-        PathBuf::from("/")
-    } else {
-        root.to_path_buf()
-    }];
-    for part in pattern.split('/') {
-        if part.is_empty() || part == "." {
-            continue;
-        }
-        if part == ".." {
-            candidates = candidates
-                .iter()
-                .map(|candidate| candidate.join(".."))
-                .collect();
-            continue;
-        }
-        if part.contains(['*', '?', '[']) {
-            let Some(re) = fnmatch_regex(part) else {
-                return Vec::new();
-            };
-            let include_hidden = part.starts_with('.');
-            let mut next = Vec::new();
-            for candidate in &candidates {
-                let Ok(entries) = std::fs::read_dir(candidate) else {
-                    continue;
-                };
-                for entry in entries.flatten() {
-                    let name = entry.file_name().to_string_lossy().into_owned();
-                    if !include_hidden && name.starts_with('.') {
-                        continue;
-                    }
-                    if re.is_match(&name) {
-                        next.push(candidate.join(&name));
-                    }
-                }
-            }
-            candidates = next;
-        } else {
-            candidates = candidates
-                .iter()
-                .map(|candidate| candidate.join(part))
-                .filter(|path| path.symlink_metadata().is_ok())
-                .collect();
-        }
-    }
-    candidates
-}
-
-/// `fnmatch.translate` (posix, case-sensitive) for one path component.
-fn fnmatch_regex(pattern: &str) -> Option<Regex> {
-    let chars: Vec<char> = pattern.chars().collect();
-    let mut re = String::from("(?s)^");
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        i += 1;
-        match c {
-            '*' => re.push_str(".*"),
-            '?' => re.push('.'),
-            '[' => {
-                let mut j = i;
-                if j < chars.len() && chars[j] == '!' {
-                    j += 1;
-                }
-                if j < chars.len() && chars[j] == ']' {
-                    j += 1;
-                }
-                while j < chars.len() && chars[j] != ']' {
-                    j += 1;
-                }
-                if j >= chars.len() {
-                    re.push_str("\\[");
-                } else {
-                    let inner: String = chars[i..j].iter().collect();
-                    let inner = inner.replace('\\', "\\\\");
-                    re.push('[');
-                    if let Some(rest) = inner.strip_prefix('!') {
-                        re.push('^');
-                        re.push_str(rest);
-                    } else {
-                        re.push_str(&inner);
-                    }
-                    re.push(']');
-                    i = j + 1;
-                }
-            }
-            c => re.push_str(&regex::escape(&c.to_string())),
-        }
-    }
-    re.push('$');
-    Regex::new(&re).ok()
-}
-
 #[cfg(test)]
 mod tests {
-    //! Port of `tests/test_node_provider.py` plus the JS-side half of
-    //! `tests/test_install_context.py` (`discover_js_install_context`
-    //! lives here).
+    //! Port of `tests/test_node_provider.py`.
     //!
     //! Not ported (plan-level / out of scope for this crate):
     //! - `test_node_build_steps_optimize_deps_prunes_then_node_modules`,
@@ -2050,6 +1431,8 @@ mod tests {
     //!   elsewhere; plan behavior is snapshot-gated).
 
     use super::*;
+    use std::path::PathBuf;
+
     use crate::base::BaseConfig;
 
     fn load_config(path: &Path, base: BaseConfig) -> NodeConfig {
@@ -2354,6 +1737,34 @@ mod tests {
     }
 
     #[test]
+    fn test_nextjs_build_command_rejects_nul_byte() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\"dependencies\": {\"next\": \"^14.2.14\"}}\n",
+        );
+        let mut base = BaseConfig::default();
+        base.commands.build = Some("next build\0--debug".to_owned());
+
+        let error = super::load_config(tmp.path(), base).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("Cannot shell-quote Node build command"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn test_node_command_splitting_honors_shell_quotes() {
+        assert_eq!(
+            split_command("vite build --out-dir 'dist site'"),
+            ["vite", "build", "--out-dir", "dist site"]
+        );
+    }
+
+    #[test]
     fn test_nextjs_start_command_prefers_explicit_command() {
         let tmp = tempfile::tempdir().unwrap();
         write(
@@ -2485,59 +1896,6 @@ mod tests {
         assert_eq!(config.precompile_edgejs, None);
     }
 
-    // -----------------------------------------------------------------
-    // tests/test_install_context.py (JS side)
-
-    #[test]
-    fn test_js_context_detects_recursive_external_file_dependency() {
-        let tmp = tempfile::tempdir().unwrap();
-        let app_dir = tmp.path().join("app");
-        let shared_dir = tmp.path().join("shared");
-        let core_dir = tmp.path().join("core");
-        std::fs::create_dir(&app_dir).unwrap();
-        std::fs::create_dir(&shared_dir).unwrap();
-        std::fs::create_dir(&core_dir).unwrap();
-        write(
-            &app_dir.join("package.json"),
-            "{\"dependencies\": {\"shared\": \"file:../shared\"}}",
-        );
-        write(
-            &shared_dir.join("package.json"),
-            "{\"name\": \"shared\", \"dependencies\": {\"core\": \"file:../core\"}}",
-        );
-        write(&core_dir.join("package.json"), "{\"name\": \"core\"}");
-
-        let context = discover_js_install_context(&app_dir);
-
-        // Python also asserts local_paths == [shared, core]; the Rust
-        // context only carries the consumed facts (inputs +
-        // requires_all_files).
-        assert!(context.requires_all_files);
-    }
-
-    #[test]
-    fn test_js_context_detects_in_root_file_dependency() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        let package_dir = root.join("packages").join("shared");
-        std::fs::create_dir_all(&package_dir).unwrap();
-        write(
-            &root.join("package.json"),
-            "{\"dependencies\": {\"shared\": \"file:packages/shared\"}}",
-        );
-        write(&package_dir.join("package.json"), "{\"name\": \"shared\"}");
-
-        let context = discover_js_install_context(root);
-
-        assert!(context.requires_all_files);
-        // The in-root local package's manifest is walked into the inputs
-        // (Python asserts local_paths == [package_dir]).
-        assert_eq!(
-            context.inputs,
-            ["package.json", "packages/shared/package.json"]
-        );
-    }
-
     /// Python also asserts the evaluated plan's copy/env/install steps
     /// (`npm install` with `inputs=None`); those are snapshot-gated. The
     /// decisive provider fact is the escape hatch flag.
@@ -2576,23 +1934,5 @@ mod tests {
         assert_eq!(config.package_manager, Some(PackageManager::Pnpm));
         assert!(!config.install_requires_all_files);
         assert_eq!(config.install_inputs, Some(vec!["package.json".to_owned()]));
-    }
-
-    #[test]
-    fn test_js_context_detects_package_json_workspaces() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        let package_dir = root.join("packages").join("ui");
-        std::fs::create_dir_all(&package_dir).unwrap();
-        write(
-            &root.join("package.json"),
-            "{\"workspaces\": [\"packages/*\"]}",
-        );
-        write(&package_dir.join("package.json"), "{\"name\": \"@app/ui\"}");
-
-        let context = discover_js_install_context(root);
-
-        // Python also asserts package_dir in local_paths; see above.
-        assert!(context.requires_all_files);
     }
 }

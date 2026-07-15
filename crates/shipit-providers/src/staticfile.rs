@@ -262,12 +262,7 @@ pub(crate) fn load_redirect_rules(redirects_path: &Path) -> Result<Vec<RedirectR
             continue;
         }
 
-        let parts = shlex_split(line).ok_or_else(|| {
-            anyhow!(
-                "{}:{line_number}: invalid _redirects rule",
-                redirects_path.display()
-            )
-        })?;
+        let parts: Vec<&str> = line.split_ascii_whitespace().collect();
         if parts.len() < 2 {
             bail!(
                 "{}:{line_number}: expected source and destination",
@@ -409,69 +404,6 @@ fn translate_destination(
     Ok(translated)
 }
 
-/// Minimal `shlex.split` (POSIX mode, comments off): whitespace-separated
-/// tokens with single/double quotes and backslash escapes. Returns None on
-/// unbalanced quotes or a trailing escape (Python raises ValueError).
-fn shlex_split(line: &str) -> Option<Vec<String>> {
-    let mut parts = Vec::new();
-    let mut current = String::new();
-    let mut in_word = false;
-    let mut chars = line.chars();
-    while let Some(ch) = chars.next() {
-        match ch {
-            c if c.is_whitespace() => {
-                if in_word {
-                    parts.push(std::mem::take(&mut current));
-                    in_word = false;
-                }
-            }
-            '\'' => {
-                in_word = true;
-                loop {
-                    match chars.next() {
-                        Some('\'') => break,
-                        Some(inner) => current.push(inner),
-                        None => return None,
-                    }
-                }
-            }
-            '"' => {
-                in_word = true;
-                loop {
-                    match chars.next() {
-                        Some('"') => break,
-                        Some('\\') => match chars.next() {
-                            // In double quotes, backslash only escapes the
-                            // quote and itself (shlex posix behavior).
-                            Some(escaped @ ('"' | '\\')) => current.push(escaped),
-                            Some(other) => {
-                                current.push('\\');
-                                current.push(other);
-                            }
-                            None => return None,
-                        },
-                        Some(inner) => current.push(inner),
-                        None => return None,
-                    }
-                }
-            }
-            '\\' => {
-                in_word = true;
-                let escaped = chars.next()?;
-                current.push(escaped);
-            }
-            other => {
-                in_word = true;
-                current.push(other);
-            }
-        }
-    }
-    if in_word {
-        parts.push(current);
-    }
-    Some(parts)
-}
-
 #[cfg(test)]
 mod tests {
     //! Port of `tests/test_staticfile_provider.py`.
@@ -538,6 +470,42 @@ mod tests {
             "/docs/* /guides/:splat/ 301 Country=us\n",
         )
         .unwrap();
+
+        let error = compute_redirects_config(tmp.path(), None, true).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("conditions and forced redirects are not supported"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn test_staticfile_redirects_preserve_url_fragments() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("_redirects"),
+            "/docs /guides#getting-started 302\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            compute_redirects_config(tmp.path(), None, true)
+                .unwrap()
+                .as_deref(),
+            Some(
+                "[[advanced.redirects]]\n\
+                 source = \"/docs\"\n\
+                 destination = \"/guides#getting-started\"\n\
+                 kind = 302\n"
+            )
+        );
+    }
+
+    #[test]
+    fn test_staticfile_redirects_do_not_treat_quotes_as_grouping() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("_redirects"), "\"/old path\" /new 301\n").unwrap();
 
         let error = compute_redirects_config(tmp.path(), None, true).unwrap_err();
         assert!(

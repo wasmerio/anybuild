@@ -1,19 +1,27 @@
-//! Port of the Python-side discovery in `providers/install_context.py`:
-//! `discover_python_install_context`, `discover_python_dependency_files`
-//! and their helpers (pyproject parsing, uv workspace member globbing,
-//! requirements includes walking, requires-all-files logic).
-//!
-//! The JS-side discovery (`discover_js_install_context`) lives in
-//! `node.rs`.
+//! Port of dependency install-input discovery in
+//! `providers/install_context.py` for Python and JavaScript projects.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
 use regex::Regex;
+use serde_json::Value;
+
+pub(crate) type JsonMap = serde_json::Map<String, Value>;
 
 const REQ_INCLUDE_FLAGS: [&str; 4] = ["-r", "--requirement", "-c", "--constraint"];
 const REQ_INLINE_INCLUDE_PREFIXES: [&str; 4] = ["-r", "-c", "--requirement=", "--constraint="];
+
+const JS_DEPENDENCY_SECTIONS: [&str; 4] = [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies",
+];
+
+const JS_LOCAL_DEPENDENCY_REASON: &str = "JavaScript local dependencies need source files";
+const JS_WORKSPACE_REASON: &str = "JavaScript workspace packages need source files at install time";
 
 /// `@ <ref>` in a PEP 508 dependency string (direct references).
 static PYTHON_DEPENDENCY_RE: LazyLock<Regex> =
@@ -110,6 +118,233 @@ pub fn discover_python_dependency_files(root: &Path) -> Vec<PathBuf> {
         .into_iter()
         .filter(|path| path.is_file())
         .collect()
+}
+
+/// Port of `discover_js_install_context`.
+pub fn discover_js_install_context(root: &Path) -> InstallContext {
+    let root = resolve_non_strict(root);
+    let mut context = InstallContext::default();
+    if !root.join("package.json").exists() {
+        return context;
+    }
+
+    let workspace_packages = find_js_workspace_packages(&root);
+    let mut visited = BTreeSet::new();
+    visit_js_package(
+        &root,
+        &root,
+        &mut context,
+        &workspace_packages,
+        &mut visited,
+    );
+
+    let mut package_dirs: Vec<&PathBuf> = workspace_packages.values().collect();
+    package_dirs.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+    for package_dir in package_dirs {
+        if resolve_non_strict(package_dir) == root {
+            continue;
+        }
+        context.add_local_path(package_dir, &root, JS_WORKSPACE_REASON, true);
+        visit_js_package(
+            package_dir,
+            &root,
+            &mut context,
+            &workspace_packages,
+            &mut visited,
+        );
+    }
+
+    context
+}
+
+fn visit_js_package(
+    package_dir: &Path,
+    root: &Path,
+    context: &mut InstallContext,
+    workspace_packages: &HashMap<String, PathBuf>,
+    visited: &mut BTreeSet<PathBuf>,
+) {
+    let package_dir = resolve_non_strict(package_dir);
+    if !visited.insert(package_dir.clone()) {
+        return;
+    }
+
+    let package_json_path = package_dir.join("package.json");
+    let Some(package_json) = read_json_object(&package_json_path) else {
+        return;
+    };
+
+    context.add_manifest(&package_json_path);
+    if let Some(relative) = relative_to_root(&package_json_path, root) {
+        context.add_input(&relative);
+    }
+
+    for section in JS_DEPENDENCY_SECTIONS {
+        let Some(Value::Object(dependencies)) = package_json.get(section) else {
+            continue;
+        };
+        for (name, spec) in dependencies {
+            let Some(spec) = spec.as_str() else {
+                continue;
+            };
+            let Some(local_path) = js_local_ref(name, spec, &package_dir, workspace_packages)
+            else {
+                continue;
+            };
+            context.add_local_path(&local_path, root, JS_LOCAL_DEPENDENCY_REASON, true);
+            if local_path.is_dir() {
+                visit_js_package(&local_path, root, context, workspace_packages, visited);
+            }
+        }
+    }
+}
+
+fn js_local_ref(
+    name: &str,
+    spec: &str,
+    base_dir: &Path,
+    workspace_packages: &HashMap<String, PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(target) = spec.strip_prefix("workspace:") {
+        if is_path_like(target) {
+            return resolve_local_ref(base_dir, target, true);
+        }
+        return workspace_packages.get(name).cloned();
+    }
+
+    if spec.starts_with("file:") || spec.starts_with("link:") {
+        return resolve_local_ref(base_dir, spec, true);
+    }
+    if is_path_like(spec) {
+        return resolve_local_ref(base_dir, spec, false);
+    }
+    None
+}
+
+fn find_js_workspace_packages(root: &Path) -> HashMap<String, PathBuf> {
+    let package_json = read_json_object(&root.join("package.json")).unwrap_or_default();
+    let mut patterns = package_json_workspace_patterns(&package_json);
+
+    let pnpm_workspace = root.join("pnpm-workspace.yaml");
+    if pnpm_workspace.exists() {
+        patterns.extend(pnpm_workspace_patterns(&pnpm_workspace));
+    }
+
+    let mut package_paths = HashMap::new();
+    for pattern in patterns {
+        if pattern.starts_with('!') {
+            continue;
+        }
+        for path in glob_paths(root, &pattern) {
+            if path
+                .components()
+                .any(|component| component.as_os_str() == "node_modules")
+            {
+                continue;
+            }
+            let Some(package_data) = read_json_object(&path.join("package.json")) else {
+                continue;
+            };
+            if package_data.is_empty() {
+                continue;
+            }
+            if let Some(name) = package_data.get("name").and_then(Value::as_str) {
+                if !name.is_empty() {
+                    package_paths.insert(name.to_owned(), resolve_non_strict(&path));
+                }
+            }
+        }
+    }
+    package_paths
+}
+
+fn package_json_workspace_patterns(package_json: &JsonMap) -> Vec<String> {
+    match package_json.get("workspaces") {
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect(),
+        Some(Value::Object(map)) => map
+            .get("packages")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+fn pnpm_workspace_patterns(path: &Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut patterns = Vec::new();
+    let mut in_packages = false;
+    for raw_line in text.lines() {
+        let line = raw_line.trim_end();
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(item) = trimmed.strip_prefix('-') {
+            if in_packages {
+                if let Some(value) = yaml_scalar(item.trim()) {
+                    if !value.is_empty() {
+                        patterns.push(value);
+                    }
+                }
+            }
+            continue;
+        }
+        if line.len() != trimmed.len() {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("packages:") {
+            let rest = rest.trim();
+            in_packages = rest.is_empty();
+            if let Some(inner) = rest.strip_prefix('[') {
+                let inner = inner.trim_end_matches(']');
+                for part in inner.split(',') {
+                    if let Some(value) = yaml_scalar(part.trim()) {
+                        if !value.is_empty() {
+                            patterns.push(value);
+                        }
+                    }
+                }
+            }
+        } else {
+            in_packages = false;
+        }
+    }
+    patterns
+}
+
+/// Unquote a simple YAML scalar and drop trailing comments.
+pub(crate) fn yaml_scalar(item: &str) -> Option<String> {
+    let item = item.trim();
+    if let Some(rest) = item.strip_prefix('"') {
+        return rest.find('"').map(|index| rest[..index].to_owned());
+    }
+    if let Some(rest) = item.strip_prefix('\'') {
+        return rest.find('\'').map(|index| rest[..index].to_owned());
+    }
+    let end = item.find(" #").unwrap_or(item.len());
+    Some(item[..end].trim().to_owned())
+}
+
+pub(crate) fn read_json_object(path: &Path) -> Option<JsonMap> {
+    let bytes = std::fs::read(path).ok()?;
+    let value: Value = serde_json::from_slice(&bytes).ok()?;
+    match value {
+        Value::Object(map) => Some(map),
+        _ => None,
+    }
 }
 
 /// Port of `_discover_python_pyproject`.
@@ -291,88 +526,20 @@ fn python_local_ref(value: &str, base_dir: &Path) -> Option<PathBuf> {
     resolve_local_ref(base_dir, value, false)
 }
 
-/// Port of `_split_requirement_line` (shlex.split with comments, falling
-/// back to whitespace splitting on unbalanced quotes).
+/// Split the portions of a pip requirements line that affect install-input
+/// discovery. Pip comments begin at `#` only at the start of a line or after
+/// whitespace, so URL fragments remain part of the requirement.
 fn split_requirement_line(line: &str) -> Vec<String> {
-    let stripped = line.trim();
-    if stripped.is_empty() || stripped.starts_with('#') {
-        return Vec::new();
-    }
-    match shlex_split(stripped) {
-        Ok(tokens) => tokens,
-        Err(()) => stripped.split_whitespace().map(str::to_owned).collect(),
-    }
-}
-
-/// Minimal POSIX shlex with `#` comments (mirror of
-/// `shlex.split(line, comments=True)` for single-line input).
-fn shlex_split(input: &str) -> Result<Vec<String>, ()> {
-    let mut tokens = Vec::new();
-    let mut current = String::new();
-    let mut has_token = false;
-    let mut chars = input.chars();
-
-    while let Some(c) = chars.next() {
-        match c {
-            c if c.is_whitespace() => {
-                if has_token {
-                    tokens.push(std::mem::take(&mut current));
-                    has_token = false;
-                }
-            }
-            '#' => {
-                // Comment: the rest of the line is discarded.
-                if has_token {
-                    tokens.push(std::mem::take(&mut current));
-                }
-                return Ok(tokens);
-            }
-            '\'' => {
-                has_token = true;
-                loop {
-                    match chars.next() {
-                        Some('\'') => break,
-                        Some(ch) => current.push(ch),
-                        None => return Err(()),
-                    }
-                }
-            }
-            '"' => {
-                has_token = true;
-                loop {
-                    match chars.next() {
-                        Some('"') => break,
-                        Some('\\') => match chars.next() {
-                            Some(ch @ ('"' | '\\' | '$' | '`')) => current.push(ch),
-                            Some(ch) => {
-                                current.push('\\');
-                                current.push(ch);
-                            }
-                            None => return Err(()),
-                        },
-                        Some(ch) => current.push(ch),
-                        None => return Err(()),
-                    }
-                }
-            }
-            '\\' => {
-                has_token = true;
-                match chars.next() {
-                    Some(ch) => current.push(ch),
-                    None => return Err(()),
-                }
-            }
-            ch => {
-                has_token = true;
-                current.push(ch);
-            }
+    let mut previous_was_whitespace = true;
+    let mut end = line.len();
+    for (index, ch) in line.char_indices() {
+        if ch == '#' && previous_was_whitespace {
+            end = index;
+            break;
         }
+        previous_was_whitespace = ch.is_whitespace();
     }
-
-    if has_token {
-        tokens.push(current);
-    }
-    Ok(tokens)
+    line[..end].split_whitespace().map(str::to_owned).collect()
 }
 
 /// Port of `_requirement_include_refs`.
@@ -551,9 +718,17 @@ fn has_url_scheme(value: &str) -> bool {
 fn glob_paths(root: &Path, pattern: &str) -> Vec<PathBuf> {
     let mut current = vec![root.to_path_buf()];
     for segment in pattern.split('/') {
-        if segment.is_empty() {
+        if segment.is_empty() || segment == "." {
             continue;
         }
+        if segment == ".." {
+            current = current
+                .iter()
+                .map(|candidate| candidate.join(".."))
+                .collect();
+            continue;
+        }
+
         let mut next = Vec::new();
         if segment.contains(['*', '?', '[']) {
             let Ok(glob) = globset::GlobBuilder::new(segment)
@@ -563,36 +738,36 @@ fn glob_paths(root: &Path, pattern: &str) -> Vec<PathBuf> {
                 return Vec::new();
             };
             let matcher = glob.compile_matcher();
-            for dir in &current {
-                let Ok(entries) = std::fs::read_dir(dir) else {
+            for directory in &current {
+                let Ok(entries) = std::fs::read_dir(directory) else {
                     continue;
                 };
-                let mut names: Vec<String> = entries
-                    .filter_map(|entry| entry.ok())
-                    .map(|entry| entry.file_name().to_string_lossy().into_owned())
-                    .collect();
-                names.sort();
-                for name in names {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
                     if name.starts_with('.') && !segment.starts_with('.') {
                         continue;
                     }
                     if matcher.is_match(&name) {
-                        next.push(dir.join(&name));
+                        next.push(directory.join(name));
                     }
                 }
             }
         } else {
-            for dir in &current {
-                let candidate = dir.join(segment);
-                if candidate.symlink_metadata().is_ok() {
-                    next.push(candidate);
-                }
-            }
+            next.extend(
+                current
+                    .iter()
+                    .map(|directory| directory.join(segment))
+                    .filter(|path| path.symlink_metadata().is_ok()),
+            );
         }
         current = next;
     }
-    let mut resolved: Vec<PathBuf> = current.iter().map(|p| resolve_non_strict(p)).collect();
-    resolved.sort();
+
+    let mut resolved: Vec<PathBuf> = current
+        .iter()
+        .map(|path| resolve_non_strict(path))
+        .collect();
+    resolved.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
     resolved
 }
 
@@ -730,9 +905,7 @@ fn looks_like_file_dependency(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    //! Port of the Python-side half of `tests/test_install_context.py`.
-    //! (The JS-side tests live with `discover_js_install_context` in
-    //! `node.rs`.)
+    //! Port of `tests/test_install_context.py`.
 
     use super::*;
 
@@ -763,6 +936,27 @@ mod tests {
             ["requirements.txt", "deps/base.txt", "constraints.txt"]
         );
         assert!(!context.requires_all_files);
+    }
+
+    #[test]
+    fn test_requirement_line_strips_pip_comments() {
+        assert_eq!(
+            split_requirement_line("-r deps/base.txt # install dependencies"),
+            ["-r", "deps/base.txt"]
+        );
+        assert!(split_requirement_line("  # comment").is_empty());
+    }
+
+    #[test]
+    fn test_requirement_line_preserves_url_fragments() {
+        assert_eq!(
+            split_requirement_line("package @ https://example.com/repo.git#subdirectory=package"),
+            [
+                "package",
+                "@",
+                "https://example.com/repo.git#subdirectory=package"
+            ]
+        );
     }
 
     #[test]
@@ -843,5 +1037,97 @@ mod tests {
 
         assert!(!context.requires_all_files);
         assert!(context.local_paths.is_empty());
+    }
+
+    #[test]
+    fn test_js_context_detects_recursive_external_file_dependency() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app_dir = tmp.path().join("app");
+        let shared_dir = tmp.path().join("shared");
+        let core_dir = tmp.path().join("core");
+        std::fs::create_dir(&app_dir).unwrap();
+        std::fs::create_dir(&shared_dir).unwrap();
+        std::fs::create_dir(&core_dir).unwrap();
+        write(
+            &app_dir.join("package.json"),
+            "{\"dependencies\": {\"shared\": \"file:../shared\"}}",
+        );
+        write(
+            &shared_dir.join("package.json"),
+            "{\"name\": \"shared\", \"dependencies\": {\"core\": \"file:../core\"}}",
+        );
+        write(&core_dir.join("package.json"), "{\"name\": \"core\"}");
+
+        let context = discover_js_install_context(&app_dir);
+
+        assert!(context.requires_all_files);
+        assert_eq!(
+            context.local_paths,
+            [
+                resolve_non_strict(&shared_dir),
+                resolve_non_strict(&core_dir)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_js_context_detects_in_root_file_dependency() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let package_dir = root.join("packages/shared");
+        std::fs::create_dir_all(&package_dir).unwrap();
+        write(
+            &root.join("package.json"),
+            "{\"dependencies\": {\"shared\": \"file:packages/shared\"}}",
+        );
+        write(&package_dir.join("package.json"), "{\"name\": \"shared\"}");
+
+        let context = discover_js_install_context(root);
+
+        assert!(context.requires_all_files);
+        assert_eq!(
+            context.inputs,
+            ["package.json", "packages/shared/package.json"]
+        );
+        assert_eq!(context.local_paths, [resolve_non_strict(&package_dir)]);
+    }
+
+    #[test]
+    fn test_js_context_detects_package_json_workspaces() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let package_dir = root.join("packages/ui");
+        std::fs::create_dir_all(&package_dir).unwrap();
+        write(
+            &root.join("package.json"),
+            "{\"workspaces\": [\"packages/*\"]}",
+        );
+        write(&package_dir.join("package.json"), "{\"name\": \"@app/ui\"}");
+
+        let context = discover_js_install_context(root);
+
+        assert!(context.requires_all_files);
+        assert_eq!(context.local_paths, [resolve_non_strict(&package_dir)]);
+        assert_eq!(
+            context.reasons,
+            ["JavaScript workspace packages need source files at install time"]
+        );
+    }
+
+    #[test]
+    fn test_workspace_globs_skip_implicit_dotfiles() {
+        let tmp = tempfile::tempdir().unwrap();
+        let packages = tmp.path().join("packages");
+        std::fs::create_dir_all(packages.join("visible")).unwrap();
+        std::fs::create_dir_all(packages.join(".hidden")).unwrap();
+
+        assert_eq!(
+            glob_paths(tmp.path(), "packages/*"),
+            [resolve_non_strict(&packages.join("visible"))]
+        );
+        assert_eq!(
+            glob_paths(tmp.path(), "packages/.*"),
+            [resolve_non_strict(&packages.join(".hidden"))]
+        );
     }
 }

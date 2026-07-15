@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::base::{env_bool, env_str, BaseConfig, DetectResult, HasBase};
+use crate::install_context::{discover_js_install_context, read_json_object, yaml_scalar};
 use crate::node::{self, JsonMap, NodeConfig, NodeConfigFields, NodeFramework, PackageManager};
 use crate::staticfile::compute_redirects_config;
 
@@ -221,7 +222,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> Result<NodeStaticConfig> {
         });
     }
 
-    let install_context = node::discover_js_install_context(path);
+    let install_context = discover_js_install_context(path);
     if install_context.requires_all_files {
         config.install_requires_all_files = true;
     }
@@ -291,7 +292,7 @@ fn staticfile_config_root(path: &Path) -> Option<Option<String>> {
         if let Some((key, value)) = trimmed.split_once(':') {
             any_key = true;
             if key.trim() == "root" {
-                let value = node::yaml_scalar(value).unwrap_or_default();
+                let value = yaml_scalar(value).unwrap_or_default();
                 root = if value.is_empty() { None } else { Some(value) };
             }
         }
@@ -562,7 +563,7 @@ fn metalsmith_output_dir(path: &Path) -> Option<String> {
         if !config_path.is_file() {
             continue;
         }
-        let Some(config) = node::read_json_object(&config_path) else {
+        let Some(config) = read_json_object(&config_path) else {
             continue;
         };
         for key in ["destination", "dest"] {
@@ -622,7 +623,7 @@ fn angular_output_dir(path: &Path) -> Option<String> {
     if !config_path.is_file() {
         return None;
     }
-    let config = node::read_json_object(&config_path)?;
+    let config = read_json_object(&config_path)?;
 
     let Some(Value::Object(projects)) = config.get("projects") else {
         return None;
