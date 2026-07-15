@@ -104,12 +104,19 @@ fn pythonic_join(base: &Path, part: &str) -> PathBuf {
 }
 
 /// `shutil.which(program, path=PATH)`.
-fn which(program: &str, path: &str) -> Option<PathBuf> {
+fn which(program: &str, search_paths: &[PathBuf]) -> Option<PathBuf> {
     fn is_executable_file(path: &Path) -> bool {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::metadata(path)
-            .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-            .unwrap_or(false)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::metadata(path)
+                .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+                .unwrap_or(false)
+        }
+        #[cfg(not(unix))]
+        {
+            path.is_file()
+        }
     }
     if program.contains('/') {
         let candidate = PathBuf::from(program);
@@ -120,11 +127,11 @@ fn which(program: &str, path: &str) -> Option<PathBuf> {
         };
         return is_executable_file(&candidate).then_some(candidate);
     }
-    for dir in path.split(':') {
-        if dir.is_empty() {
+    for dir in search_paths {
+        if dir.as_os_str().is_empty() {
             continue;
         }
-        let candidate = Path::new(dir).join(program);
+        let candidate = dir.join(program);
         if is_executable_file(&candidate) {
             return Some(candidate);
         }
@@ -242,15 +249,25 @@ impl LocalBuildBackend {
                     .ok_or_else(|| anyhow!("Program is not installed: "))?;
                 let empty = String::new();
                 let env_path = env.get("PATH").unwrap_or(&empty);
-                let mut extended_paths: Vec<String> = env_path
+                // Plan env values are POSIX (':'-separated); the host PATH
+                // appended after them uses the platform separator.
+                let mut search_paths: Vec<PathBuf> = env_path
                     .split(':')
-                    .map(|path| pythonic_join(&build_path, path).display().to_string())
+                    .map(|path| pythonic_join(&build_path, path))
                     .collect();
-                extended_paths.push(std::env::var("PATH").unwrap_or_default());
-                let full_path = extended_paths.join(":");
-                if which(program, &full_path).is_none() {
+                search_paths.extend(std::env::split_paths(
+                    &std::env::var_os("PATH").unwrap_or_default(),
+                ));
+                if which(program, &search_paths).is_none() {
                     bail!("Program is not installed: {program}");
                 }
+                // The command runs under bash, so its PATH is ':'-joined
+                // regardless of host platform.
+                let full_path = search_paths
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(":");
                 let mut command = Command::new("bash");
                 command
                     .arg("-c")

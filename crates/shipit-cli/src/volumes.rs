@@ -172,7 +172,11 @@ fn link_local_volume(volume: &Volume) -> Result<()> {
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    #[cfg(unix)]
     std::os::unix::fs::symlink(&source, target)?;
+    // The volume source is always a directory.
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(&source, target)?;
     Ok(())
 }
 

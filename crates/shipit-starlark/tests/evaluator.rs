@@ -44,6 +44,7 @@ fn eval_source(ctx: &Ctx, root: &Path, source: &str) -> anyhow::Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
 fn file_exists_follows_symlinks_out_of_the_tree() {
     let tmp = tempfile::tempdir().unwrap();
     let shared = tmp.path().join("shared");
