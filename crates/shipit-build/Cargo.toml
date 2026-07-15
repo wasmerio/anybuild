@@ -15,6 +15,7 @@ syntax-highlighting = ["dep:syntect", "dep:two-face"]
 anyhow.workspace = true
 base64 = "0.22"
 indexmap.workspace = true
+shipit-common = { path = "../shipit-common" }
 shipit-plan = { path = "../shipit-plan" }
 globset = "0.4"
 shell-words = "1"

@@ -17,6 +17,7 @@ indexmap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 shipit-build = { path = "../shipit-build", default-features = false }
+shipit-common = { path = "../shipit-common" }
 shipit-plan = { path = "../shipit-plan" }
 shipit-providers = { path = "../shipit-providers" }
 shipit-run = { path = "../shipit-run", default-features = false }

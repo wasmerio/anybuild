@@ -1310,6 +1310,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
+name = "path-clean"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17359afc20d7ab31fdb42bb844c8b3bb1dabd7dcf7e68428492da7f16966fcef"
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1772,6 +1778,7 @@ dependencies = [
  "globset",
  "indexmap",
  "shell-words",
+ "shipit-common",
  "shipit-plan",
  "syntect",
  "tempfile",
@@ -1791,10 +1798,22 @@ dependencies = [
  "serde",
  "serde_json",
  "shipit-build",
+ "shipit-common",
  "shipit-plan",
  "shipit-providers",
  "shipit-run",
  "shipit-starlark",
+ "tempfile",
+]
+
+[[package]]
+name = "shipit-common"
+version = "0.21.7"
+dependencies = [
+ "anyhow",
+ "indexmap",
+ "path-clean",
+ "serde_json",
  "tempfile",
 ]
 
@@ -1844,6 +1863,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "shipit-build",
+ "shipit-common",
  "shipit-plan",
  "shipit-providers",
  "shlex 1.3.0",

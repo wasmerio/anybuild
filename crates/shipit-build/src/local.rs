@@ -10,6 +10,7 @@ use std::process::Command;
 use anyhow::{anyhow, bail, Context, Result};
 use indexmap::IndexMap;
 
+use shipit_common::paths::normalize_absolute;
 use shipit_plan::{Mount, Step};
 
 use crate::BuildBackend;
@@ -100,28 +101,6 @@ fn pythonic_join(base: &Path, part: &str) -> PathBuf {
         return part_path.to_path_buf();
     }
     base.join(part_path)
-}
-
-/// Lexical stand-in for `Path.resolve(strict=False)`: absolute + normalized.
-fn lexical_resolve(path: &Path) -> PathBuf {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(path))
-            .unwrap_or_else(|_| path.to_path_buf())
-    };
-    let mut out = PathBuf::new();
-    for component in absolute.components() {
-        match component {
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => out.push(other),
-        }
-    }
-    out
 }
 
 /// `shutil.which(program, path=PATH)`.
@@ -315,7 +294,7 @@ impl LocalBuildBackend {
                     ));
                     let source = pythonic_join(base, &step.source);
                     let target = pythonic_join(&build_path, &step.target);
-                    if lexical_resolve(&source) == lexical_resolve(&target) {
+                    if normalize_absolute(&source)? == normalize_absolute(&target)? {
                         return Ok(());
                     }
                     if let Some(parent) = target.parent() {

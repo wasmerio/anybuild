@@ -6,17 +6,24 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Result};
 use indexmap::IndexMap;
 
+use shipit_common::paths::normalize_absolute;
+use shipit_common::volumes::{
+    load_volume_mappings as load_persisted_volume_mappings, volume_mappings_path, volumes_dir,
+};
 use shipit_plan::{Serve, Volume};
 
+fn effective_shipit_dir(src_dir: &Path, shipit_dir: Option<&Path>) -> PathBuf {
+    shipit_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| src_dir.join(".shipit"))
+}
+
 pub fn get_volumes_dir(src_dir: &Path, shipit_dir: Option<&Path>) -> PathBuf {
-    match shipit_dir {
-        Some(dir) => dir.join("volumes"),
-        None => src_dir.join(".shipit").join("volumes"),
-    }
+    volumes_dir(&effective_shipit_dir(src_dir, shipit_dir))
 }
 
 pub fn get_volume_mappings_path(src_dir: &Path, shipit_dir: Option<&Path>) -> PathBuf {
-    get_volumes_dir(src_dir, shipit_dir).join("mappings.json")
+    volume_mappings_path(&effective_shipit_dir(src_dir, shipit_dir))
 }
 
 /// Port of `build_volumes`: create the volume dirs, link local volumes,
@@ -55,26 +62,7 @@ pub fn load_volume_mappings(
     src_dir: &Path,
     shipit_dir: Option<&Path>,
 ) -> Result<IndexMap<String, String>> {
-    let mappings_path = get_volume_mappings_path(src_dir, shipit_dir);
-    if !mappings_path.is_file() {
-        return Ok(IndexMap::new());
-    }
-
-    let text = std::fs::read_to_string(&mappings_path)?;
-    let value: serde_json::Value = serde_json::from_str(&text)?;
-    let object = value
-        .as_object()
-        .ok_or_else(|| anyhow!("Volume mappings must be a dictionary"))?;
-
-    let mut mappings = IndexMap::new();
-    for (name, guest_path) in object {
-        let guest_path = match guest_path {
-            serde_json::Value::String(s) => s.clone(),
-            other => other.to_string(),
-        };
-        mappings.insert(name.clone(), guest_path);
-    }
-    Ok(mappings)
+    load_persisted_volume_mappings(&effective_shipit_dir(src_dir, shipit_dir))
 }
 
 pub fn parse_cli_volume_mappings(volume_specs: &[String]) -> Result<IndexMap<String, String>> {
@@ -118,22 +106,8 @@ fn absolute(path: &Path) -> Result<PathBuf> {
     Ok(std::path::absolute(path)?)
 }
 
-fn resolve_or_lexical(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| {
-        // Path.resolve(strict=False) on a missing path: absolute + normalized.
-        let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
-        let mut out = PathBuf::new();
-        for component in abs.components() {
-            match component {
-                std::path::Component::ParentDir => {
-                    out.pop();
-                }
-                std::path::Component::CurDir => {}
-                other => out.push(other),
-            }
-        }
-        out
-    })
+fn resolve_or_normalize(path: &Path) -> Result<PathBuf> {
+    Ok(std::fs::canonicalize(path).or_else(|_| normalize_absolute(path))?)
 }
 
 fn should_link_local_volume(
@@ -174,7 +148,7 @@ fn link_local_volume(volume: &Volume) -> Result<()> {
     let target = &volume.serve_path;
 
     if target.is_symlink() {
-        if resolve_or_lexical(target) == resolve_or_lexical(&source) {
+        if resolve_or_normalize(target)? == resolve_or_normalize(&source)? {
             return Ok(());
         }
         std::fs::remove_file(target)?;

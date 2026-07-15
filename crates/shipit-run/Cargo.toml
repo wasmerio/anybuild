@@ -15,6 +15,7 @@ sha2 = "0.10"
 shlex = "1"
 toml_edit = "0.22"
 shipit-build = { path = "../shipit-build", default-features = false }
+shipit-common = { path = "../shipit-common" }
 shipit-plan = { path = "../shipit-plan" }
 shipit-providers = { path = "../shipit-providers" }
 

@@ -1,0 +1,15 @@
+[package]
+name = "shipit-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared filesystem and persistence utilities for Shipit"
+
+[dependencies]
+anyhow.workspace = true
+indexmap.workspace = true
+path-clean = "1"
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

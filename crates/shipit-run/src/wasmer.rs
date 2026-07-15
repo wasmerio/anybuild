@@ -23,6 +23,7 @@ use sha2::Digest;
 use toml_edit::{value, Array, ArrayOfTables, DocumentMut, Item, Table};
 
 use shipit_build::BuildBackend;
+use shipit_common::volumes::load_volume_mappings;
 use shipit_plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
 use shipit_providers::{merge_config_json, ProviderConfig};
 
@@ -299,29 +300,6 @@ fn absolute_path(path: &Path) -> PathBuf {
 
 fn path_str(path: &Path) -> String {
     path.to_string_lossy().into_owned()
-}
-
-/// Port of `volumes.load_volume_mappings` (the runner-facing subset).
-fn load_volume_mappings(shipit_dir: &Path) -> Result<IndexMap<String, String>> {
-    let mappings_path = shipit_dir.join("volumes").join("mappings.json");
-    if !mappings_path.is_file() {
-        return Ok(IndexMap::new());
-    }
-    let text = std::fs::read_to_string(&mappings_path)?;
-    let parsed: JsonValue = serde_json::from_str(&text)?;
-    let Some(map) = parsed.as_object() else {
-        bail!("Volume mappings must be a dictionary");
-    };
-    Ok(map
-        .iter()
-        .map(|(name, guest)| {
-            let guest = match guest {
-                JsonValue::String(s) => s.clone(),
-                other => other.to_string(),
-            };
-            (name.clone(), guest)
-        })
-        .collect())
 }
 
 /// Port of `volumes.volume_mapdir_args`.

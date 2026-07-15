@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/shipit-common",
     "crates/shipit-plan",
     "crates/shipit-starlark",
     "crates/shipit-providers",
@@ -12,6 +13,7 @@ members = [
 # are additionally #[ignore]d so `--workspace` runs skip them too. Run
 # them explicitly with: cargo nextest run -p shipit-e2e --run-ignored all
 default-members = [
+    "crates/shipit-common",
     "crates/shipit-plan",
     "crates/shipit-starlark",
     "crates/shipit-providers",
