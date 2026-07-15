@@ -3,6 +3,8 @@
 
 use std::path::{Path, PathBuf};
 
+const EXPECTED_GOLDENS: usize = 80;
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -52,6 +54,11 @@ fn generated_files_match_examples() {
         .filter(|p| p.join("Shipit").is_file())
         .collect();
     dirs.sort();
+    assert_eq!(
+        dirs.len(),
+        EXPECTED_GOLDENS,
+        "golden coverage changed; review the examples and update the pinned count intentionally"
+    );
 
     for example_dir in dirs {
         let name = example_dir
@@ -97,7 +104,7 @@ fn generated_files_match_examples() {
             failures.join("\n")
         );
     }
-    assert!(checked > 0);
+    assert_eq!(checked, EXPECTED_GOLDENS);
 }
 
 fn generate_for(workspace: &Path, subdir: Option<&str>) -> anyhow::Result<String> {

@@ -153,14 +153,15 @@ scripts/verify_rust.sh          # gates
 scripts/verify_rust.sh --e2e    # + wasmer-mode e2e
 ```
 
-Plan snapshots (`tests/plan_snapshots/`) and the cross-implementation
-fixtures (`fixtures/`) are committed; refresh them only for intentional
-plan changes and review the diff like any golden.
+Plan snapshots (`tests/plan_snapshots/`) and the Python compatibility
+fixtures (`fixtures/`) are committed. The test gates fail if the fixture
+manifest is missing or its expected coverage shrinks. For a local checkout
+that intentionally omits fixtures, set
+`SHIPIT_ALLOW_MISSING_FIXTURES=1`.
 
-The legacy Python implementation is kept at `src/shipit/` during the
-transition. It is not exercised by CI and the Rust workspace does not
-depend on it; check it against the Rust binary with
-`uv run python scripts/cli_differential.py`.
+The legacy Python implementation is kept at `src/shipit/` as a historical
+reference. It is not exercised by CI and the Rust workspace does not depend
+on it.
 
 ### Release Automation
 

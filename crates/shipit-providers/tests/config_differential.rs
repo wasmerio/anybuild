@@ -1,12 +1,13 @@
-//! The phase-2 gate: detection + config loading must produce the exact
-//! JSON config the Python implementation dumped for every snapshot case.
-//!
-//! Run `uv run python scripts/dump_rust_fixtures.py` first.
+//! Detection and config loading must produce the exact JSON committed from
+//! the Python implementation for every compatibility case.
 
 use std::path::PathBuf;
 
 use serde::Deserialize;
 use shipit_providers::{base::BaseConfig, load_provider, load_provider_config, workspace};
+
+const EXPECTED_CONFIG_CASES: usize = 98;
+const ALLOW_MISSING_FIXTURES_ENV: &str = "SHIPIT_ALLOW_MISSING_FIXTURES";
 
 #[derive(Deserialize)]
 struct Manifest {
@@ -33,21 +34,33 @@ fn example_env(case_name: &str) -> Vec<(&'static str, &'static str)> {
 
 #[test]
 fn configs_match_python() {
-    let manifest_path = match std::env::var("SHIPIT_FIXTURES") {
-        Ok(path) => PathBuf::from(path),
-        Err(_) => {
-            let default =
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/manifest.json");
-            if !default.is_file() {
-                eprintln!("skipping: no fixtures (run scripts/dump_rust_fixtures.py)");
-                return;
-            }
-            default
-        }
-    };
+    let manifest_path = std::env::var("SHIPIT_FIXTURES")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/manifest.json")
+        });
+    if !manifest_path.is_file() && std::env::var(ALLOW_MISSING_FIXTURES_ENV).as_deref() == Ok("1") {
+        eprintln!(
+            "skipping: fixture manifest {} is missing and \
+             {ALLOW_MISSING_FIXTURES_ENV}=1",
+            manifest_path.display()
+        );
+        return;
+    }
+    assert!(
+        manifest_path.is_file(),
+        "fixture manifest {} is missing; restore the committed fixtures or set \
+         {ALLOW_MISSING_FIXTURES_ENV}=1 to skip this gate locally",
+        manifest_path.display()
+    );
     let mut manifest: Manifest =
         serde_json::from_str(&std::fs::read_to_string(&manifest_path).expect("manifest readable"))
             .expect("manifest parses");
+    assert_eq!(
+        manifest.cases.len(),
+        EXPECTED_CONFIG_CASES,
+        "fixture coverage changed; review the manifest and update the pinned count intentionally"
+    );
     // Committed fixtures carry repo-relative workspace paths.
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     for case in &mut manifest.cases {
@@ -93,7 +106,7 @@ fn configs_match_python() {
             }
         );
     }
-    assert!(passed > 0, "no cases ran");
+    assert_eq!(passed, EXPECTED_CONFIG_CASES);
 }
 
 fn run_case(case: &Case) -> Result<(), String> {

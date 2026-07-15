@@ -1,9 +1,5 @@
-//! The phase-1 gate: evaluate every plan-snapshot case with configs
-//! injected from the Python side and compare byte-for-byte against
-//! `tests/plan_snapshots/*.json`.
-//!
-//! Run `uv run python scripts/dump_rust_fixtures.py` first (the
-//! `scripts/rust_gate.sh` wrapper does both).
+//! Evaluate every committed Python compatibility case and compare its
+//! Rust plan byte-for-byte against `tests/plan_snapshots/*.json`.
 
 use std::path::PathBuf;
 
@@ -12,6 +8,10 @@ use shipit_plan::layout::LocalLayout;
 use shipit_plan::snapshot;
 use shipit_starlark::eval::{evaluate_shipit, EvaluateOptions};
 use shipit_starlark::loader::StdlibSource;
+
+const EXPECTED_SNAPSHOT_CASES: usize = 98;
+const EXPECTED_LEGACY_CASES: usize = 80;
+const ALLOW_MISSING_FIXTURES_ENV: &str = "SHIPIT_ALLOW_MISSING_FIXTURES";
 
 #[derive(Deserialize)]
 struct Manifest {
@@ -32,24 +32,33 @@ struct Case {
 
 #[test]
 fn plan_snapshots_match() {
-    let manifest_path = match std::env::var("SHIPIT_FIXTURES") {
-        Ok(path) => PathBuf::from(path),
-        Err(_) => {
-            let default =
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/manifest.json");
-            if !default.is_file() {
-                eprintln!(
-                    "skipping: no fixtures (run scripts/dump_rust_fixtures.py \
-                     or set SHIPIT_FIXTURES)"
-                );
-                return;
-            }
-            default
-        }
-    };
+    let manifest_path = std::env::var("SHIPIT_FIXTURES")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/manifest.json")
+        });
+    if !manifest_path.is_file() && std::env::var(ALLOW_MISSING_FIXTURES_ENV).as_deref() == Ok("1") {
+        eprintln!(
+            "skipping: fixture manifest {} is missing and \
+             {ALLOW_MISSING_FIXTURES_ENV}=1",
+            manifest_path.display()
+        );
+        return;
+    }
+    assert!(
+        manifest_path.is_file(),
+        "fixture manifest {} is missing; restore the committed fixtures or set \
+         {ALLOW_MISSING_FIXTURES_ENV}=1 to skip this gate locally",
+        manifest_path.display()
+    );
     let mut manifest: Manifest =
         serde_json::from_str(&std::fs::read_to_string(&manifest_path).expect("manifest readable"))
             .expect("manifest parses");
+    assert_eq!(
+        manifest.cases.len(),
+        EXPECTED_SNAPSHOT_CASES,
+        "fixture coverage changed; review the manifest and update the pinned count intentionally"
+    );
     // Committed fixtures carry repo-relative paths.
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     if manifest.starlib.is_relative() {
@@ -164,7 +173,9 @@ fn plan_snapshots_match() {
             }
         );
     }
-    assert!(passed > 0, "no cases ran");
+    assert_eq!(passed, EXPECTED_SNAPSHOT_CASES);
+    assert_eq!(legacy_total, EXPECTED_LEGACY_CASES);
+    assert_eq!(legacy_ok, EXPECTED_LEGACY_CASES);
 }
 
 fn first_diff(expected: &str, actual: &str) -> String {
