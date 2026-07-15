@@ -17,4 +17,5 @@ shlex = "2"
 walkdir = "2"
 
 [dev-dependencies]
+shipit-common = { path = "../shipit-common" }
 tempfile = "3"

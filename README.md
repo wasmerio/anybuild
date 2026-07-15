@@ -159,6 +159,22 @@ manifest is missing or its expected coverage shrinks. For a local checkout
 that intentionally omits fixtures, set
 `SHIPIT_ALLOW_MISSING_FIXTURES=1`.
 
+For an intentional plan or config change, regenerate the fixtures from
+the current implementation and review the diff like any golden:
+
+```bash
+scripts/update_fixtures.sh
+```
+
+This rewrites the manifest configs, the generated `Shipit` texts
+(`examples/*/Shipit` and the manifest's example-derived cases), and the
+plan snapshots, then re-runs the gates. Synthetic-case workspaces and
+texts, and the `legacy_shipit` entries (frozen main-era history), are
+never regenerated. When adding or removing a case or example, add the
+manifest entry / example directory by hand, bump the pinned `EXPECTED_*`
+counts in the gate tests, and run the script to fill in the derived
+fields.
+
 The legacy Python implementation is kept at `src/shipit/` as a historical
 reference. It is not exercised by CI and the Rust workspace does not depend
 on it.

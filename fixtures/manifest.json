@@ -82,10 +82,6 @@
      "after_deploy": null
     },
     "app_subdir": null,
-    "convert_redirects": true,
-    "sws_version": "2.38.0",
-    "static_dir": null,
-    "redirects_config": null,
     "framework": null,
     "server": null,
     "migration_strategy": null,
@@ -108,6 +104,10 @@
     "ffmpeg_version": null,
     "install_inputs": [],
     "mcp_self_running": false,
+    "convert_redirects": true,
+    "sws_version": "2.38.0",
+    "static_dir": null,
+    "redirects_config": null,
     "mkdocs_version": null
    },
    "legacy_shipit": "python = dep(\"python\", config.python_version)\nuv = dep(\"uv\", config.uv_version)\nstaticwebserver = dep(\"static-web-server\", config.sws_version)\n\ntemp = mount(\"temp\")\nlocal_venv = mount(\"local_venv\")\nstatic_app = mount(\"static_app\")\n\npython_version = config.python_version\ncross_platform = config.cross_platform\nvenv = local_venv\n\n\nserve(\n  name=\"mkdocs\",\n  provider=\"mkdocs\",\n  build=[\n    use(python, uv),\n    workdir(temp.path),\n    env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path),\n    run(f\"uv init\", inputs=[], outputs=[\"uv.lock\"], group=\"install\"),\n    run(\"uv add mkdocs\", group=\"install\"),\n    path((local_venv.path if cross_platform else venv.path) + \"/bin\"),\n    copy(\".\", \".\", ignore=[\".venv\", \".git\", \"__pycache__\"]),\n    run(\"uv run mkdocs build --site-dir={}\".format(static_app.path), outputs=[\".\"], group=\"build\")\n  ],\n  deps=[python, staticwebserver],\n  env = {},\n  commands = {\n    \"start\": \"static-web-server --root={} --log-level=info --port={}\".format(static_app.serve_path, PORT)\n  },\n  mounts=[\n    static_app\n  ],\n)\n"
@@ -127,10 +127,6 @@
      "after_deploy": null
     },
     "app_subdir": null,
-    "convert_redirects": true,
-    "sws_version": "2.38.0",
-    "static_dir": null,
-    "redirects_config": null,
     "framework": null,
     "server": null,
     "migration_strategy": null,
@@ -153,6 +149,10 @@
     "ffmpeg_version": null,
     "install_inputs": [],
     "mcp_self_running": false,
+    "convert_redirects": true,
+    "sws_version": "2.38.0",
+    "static_dir": null,
+    "redirects_config": null,
     "mkdocs_version": null
    }
   },
@@ -171,10 +171,6 @@
      "after_deploy": null
     },
     "app_subdir": null,
-    "convert_redirects": true,
-    "sws_version": "2.38.0",
-    "static_dir": null,
-    "redirects_config": null,
     "framework": null,
     "server": null,
     "migration_strategy": null,
@@ -197,6 +193,10 @@
      "requirements.txt"
     ],
     "mcp_self_running": false,
+    "convert_redirects": true,
+    "sws_version": "2.38.0",
+    "static_dir": null,
+    "redirects_config": null,
     "mkdocs_version": null
    },
    "legacy_shipit": "python = dep(\"python\", config.python_version)\nuv = dep(\"uv\", config.uv_version)\nstaticwebserver = dep(\"static-web-server\", config.sws_version)\n\ntemp = mount(\"temp\")\nlocal_venv = mount(\"local_venv\")\nstatic_app = mount(\"static_app\")\n\npython_version = config.python_version\ncross_platform = config.cross_platform\nvenv = local_venv\n\n\nserve(\n  name=\"mkdocs-with-plugins\",\n  provider=\"mkdocs\",\n  build=[\n    use(python, uv),\n    workdir(temp.path),\n    env(UV_PROJECT_ENVIRONMENT=local_venv.path if cross_platform else venv.path),\n    run(f\"uv init\", inputs=[], outputs=[\"uv.lock\"], group=\"install\"),\n    run(\"uv add -r requirements.txt \", inputs=[\"requirements.txt\"], group=\"install\"),\n    path((local_venv.path if cross_platform else venv.path) + \"/bin\"),\n    copy(\".\", \".\", ignore=[\".venv\", \".git\", \"__pycache__\"]),\n    run(\"uv run mkdocs build --site-dir={}\".format(static_app.path), outputs=[\".\"], group=\"build\")\n  ],\n  deps=[python, staticwebserver],\n  env = {},\n  commands = {\n    \"start\": \"static-web-server --root={} --log-level=info --port={}\".format(static_app.serve_path, PORT)\n  },\n  mounts=[\n    static_app\n  ],\n)\n"
@@ -216,10 +216,6 @@
      "after_deploy": null
     },
     "app_subdir": null,
-    "convert_redirects": true,
-    "sws_version": "2.38.0",
-    "static_dir": null,
-    "redirects_config": null,
     "framework": null,
     "server": null,
     "migration_strategy": null,
@@ -242,6 +238,10 @@
      "requirements.txt"
     ],
     "mcp_self_running": false,
+    "convert_redirects": true,
+    "sws_version": "2.38.0",
+    "static_dir": null,
+    "redirects_config": null,
     "mkdocs_version": null
    }
   },

@@ -12,6 +12,7 @@ use shipit_starlark::loader::StdlibSource;
 const EXPECTED_SNAPSHOT_CASES: usize = 98;
 const EXPECTED_LEGACY_CASES: usize = 80;
 const ALLOW_MISSING_FIXTURES_ENV: &str = "SHIPIT_ALLOW_MISSING_FIXTURES";
+const UPDATE_FIXTURES_ENV: &str = "SHIPIT_UPDATE_FIXTURES";
 
 #[derive(Deserialize)]
 struct Manifest {
@@ -73,6 +74,10 @@ fn plan_snapshots_match() {
         }
     }
 
+    // Regeneration mode: rewrite the plan-snapshot goldens with the
+    // evaluated output instead of comparing (see scripts/update_fixtures.sh).
+    let update = std::env::var(UPDATE_FIXTURES_ENV).as_deref() == Ok("1");
+    let mut updated = 0usize;
     let mut failures: Vec<String> = Vec::new();
     let mut passed = 0usize;
 
@@ -102,6 +107,15 @@ fn plan_snapshots_match() {
         };
         let rendered = snapshot::render(&serve, &build_path, &shipit_dir, &case.workspace);
         let golden_path = manifest.snapshots.join(format!("{}.json", case.name));
+        if update {
+            let previous = std::fs::read_to_string(&golden_path).ok();
+            if previous.as_deref() != Some(rendered.as_str()) {
+                updated += 1;
+            }
+            std::fs::write(&golden_path, &rendered).unwrap();
+            passed += 1;
+            continue;
+        }
         let golden = match std::fs::read_to_string(&golden_path) {
             Ok(text) => text,
             Err(_) => {
@@ -151,10 +165,17 @@ fn plan_snapshots_match() {
         }
     }
 
-    eprintln!(
-        "snapshots: {passed}/{} matched; legacy: {legacy_ok}/{legacy_total} evaluate",
-        manifest.cases.len()
-    );
+    if update {
+        eprintln!(
+            "snapshots: rewrote {passed}/{} ({updated} changed); legacy: {legacy_ok}/{legacy_total} evaluate",
+            manifest.cases.len()
+        );
+    } else {
+        eprintln!(
+            "snapshots: {passed}/{} matched; legacy: {legacy_ok}/{legacy_total} evaluate",
+            manifest.cases.len()
+        );
+    }
     if !failures.is_empty() {
         let shown = failures
             .iter()

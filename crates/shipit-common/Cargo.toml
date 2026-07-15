@@ -9,6 +9,7 @@ description = "Shared filesystem and persistence utilities for Shipit"
 anyhow.workspace = true
 indexmap.workspace = true
 path-clean = "1"
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

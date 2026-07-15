@@ -1813,6 +1813,7 @@ dependencies = [
  "anyhow",
  "indexmap",
  "path-clean",
+ "serde",
  "serde_json",
  "tempfile",
 ]
@@ -1846,6 +1847,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "shipit-common",
  "shlex 2.0.1",
  "tempfile",
  "toml",

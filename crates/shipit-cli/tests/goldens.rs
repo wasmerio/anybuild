@@ -1,9 +1,15 @@
 //! Phase-3 gate: `shipit generate` output must match every committed
 //! example golden (version-masked), driven by Rust detection end-to-end.
+//!
+//! Regeneration: `SHIPIT_UPDATE_FIXTURES=1` rewrites `examples/*/Shipit`
+//! and the example-derived `shipit` texts in `fixtures/manifest.json`
+//! (see `scripts/update_fixtures.sh`). Synthetic-case texts are
+//! hand-authored fixtures and are left untouched.
 
 use std::path::{Path, PathBuf};
 
 const EXPECTED_GOLDENS: usize = 80;
+const UPDATE_FIXTURES_ENV: &str = "SHIPIT_UPDATE_FIXTURES";
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -45,6 +51,8 @@ fn example_env(name: &str) -> Vec<(&'static str, &'static str)> {
 fn generated_files_match_examples() {
     let root = repo_root();
     let examples = root.join("examples");
+    let update = std::env::var(UPDATE_FIXTURES_ENV).as_deref() == Ok("1");
+    let mut updated = 0usize;
     let mut checked = 0usize;
     let mut failures: Vec<String> = Vec::new();
 
@@ -89,11 +97,33 @@ fn generated_files_match_examples() {
             }
         };
         let expected = std::fs::read_to_string(example_dir.join("Shipit")).unwrap();
-        if mask_version(&generated) != mask_version(&expected) {
+        if update {
+            if mask_version(&generated) != mask_version(&expected) {
+                updated += 1;
+                std::fs::write(example_dir.join("Shipit"), &generated).unwrap();
+            }
+            checked += 1;
+        } else if mask_version(&generated) != mask_version(&expected) {
             failures.push(format!("{name}: generated Shipit differs"));
         } else {
             checked += 1;
         }
+    }
+
+    if update {
+        assert!(
+            failures.is_empty(),
+            "cannot update goldens, {} example(s) failed to generate:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
+        let manifest_updated = update_manifest_shipit_texts(&root);
+        eprintln!(
+            "goldens: rewrote {checked} example(s) ({updated} changed); \
+             manifest shipit texts: {manifest_updated} changed"
+        );
+        assert_eq!(checked, EXPECTED_GOLDENS);
+        return;
     }
 
     eprintln!("goldens: {checked} matched");
@@ -105,6 +135,59 @@ fn generated_files_match_examples() {
         );
     }
     assert_eq!(checked, EXPECTED_GOLDENS);
+}
+
+/// Rewrite the `shipit` text of every example-derived manifest case with
+/// fresh `generate` output. The manifest convention (from the original
+/// Python dump) omits the baked `name = "..."` argument — the case config
+/// carries the name — so it is stripped here. Synthetic-case texts are
+/// hand-authored and left untouched.
+fn update_manifest_shipit_texts(root: &Path) -> usize {
+    let manifest_path = root.join("fixtures/manifest.json");
+    let mut raw: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    let cases = raw["cases"].as_array_mut().expect("cases array");
+    let mut changed = 0usize;
+    for case in cases.iter_mut() {
+        let workspace = case["workspace"].as_str().expect("workspace string");
+        if !workspace.starts_with("examples/") {
+            continue;
+        }
+        let name = case["name"].as_str().expect("name string");
+        let base_name = name.strip_suffix("__cross").unwrap_or(name);
+        let subdir = case["subdir"].as_str().map(str::to_owned);
+        let env = example_env(base_name);
+        for (key, value) in &env {
+            std::env::set_var(key, value);
+        }
+        let generated = generate_for(&root.join(workspace), subdir.as_deref());
+        for (key, _) in &env {
+            std::env::remove_var(key);
+        }
+        let generated = generated
+            .unwrap_or_else(|err| panic!("{name}: generate failed during update: {err:#}"));
+        let text = strip_baked_name(&generated);
+        if case["shipit"].as_str() != Some(text.as_str()) {
+            changed += 1;
+        }
+        case["shipit"] = serde_json::Value::String(text);
+    }
+    std::fs::write(&manifest_path, shipit_common::pyjson::to_python_json(&raw)).unwrap();
+    changed
+}
+
+/// Remove the single `, name = "..."` argument generate bakes into the
+/// serve call.
+fn strip_baked_name(text: &str) -> String {
+    let Some(start) = text.find(", name = \"") else {
+        return text.to_owned();
+    };
+    let value_start = start + ", name = \"".len();
+    let Some(quote_offset) = text[value_start..].find('"') else {
+        return text.to_owned();
+    };
+    let end = value_start + quote_offset + 1;
+    format!("{}{}", &text[..start], &text[end..])
 }
 
 fn generate_for(workspace: &Path, subdir: Option<&str>) -> anyhow::Result<String> {

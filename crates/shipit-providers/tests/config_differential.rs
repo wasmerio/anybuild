@@ -1,5 +1,10 @@
 //! Detection and config loading must produce the exact JSON committed from
 //! the Python implementation for every compatibility case.
+//!
+//! Regeneration: `SHIPIT_UPDATE_FIXTURES=1` rewrites each case's `config`
+//! in `fixtures/manifest.json` with the computed value instead of
+//! comparing (see `scripts/update_fixtures.sh`). Intentional config
+//! changes are reviewed as fixture diffs, like any golden.
 
 use std::path::PathBuf;
 
@@ -8,6 +13,7 @@ use shipit_providers::{base::BaseConfig, load_provider, load_provider_config, wo
 
 const EXPECTED_CONFIG_CASES: usize = 98;
 const ALLOW_MISSING_FIXTURES_ENV: &str = "SHIPIT_ALLOW_MISSING_FIXTURES";
+const UPDATE_FIXTURES_ENV: &str = "SHIPIT_UPDATE_FIXTURES";
 
 #[derive(Deserialize)]
 struct Manifest {
@@ -69,22 +75,63 @@ fn configs_match_python() {
         }
     }
 
+    let update = std::env::var(UPDATE_FIXTURES_ENV).as_deref() == Ok("1");
     let mut failures: Vec<String> = Vec::new();
     let mut passed = 0usize;
+    let mut computed: Vec<serde_json::Value> = Vec::new();
 
     for case in &manifest.cases {
         let env = example_env(&case.name);
         for (key, value) in &env {
             std::env::set_var(key, value);
         }
-        let result = run_case(case);
+        let result = compute_config(case);
         for (key, _) in &env {
             std::env::remove_var(key);
         }
         match result {
-            Ok(()) => passed += 1,
+            Ok(config) => {
+                if update {
+                    computed.push(config);
+                } else if config == case.config {
+                    passed += 1;
+                } else {
+                    failures.push(format!(
+                        "{}: {}",
+                        case.name,
+                        diff_json(&case.config, &config)
+                    ));
+                }
+            }
             Err(message) => failures.push(format!("{}: {message}", case.name)),
         }
+    }
+
+    if update {
+        assert!(
+            failures.is_empty(),
+            "cannot update fixtures, {} case(s) failed to compute:\n{}",
+            failures.len(),
+            failures.join("\n---\n")
+        );
+        let mut raw: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+        let cases = raw["cases"].as_array_mut().expect("cases array");
+        assert_eq!(cases.len(), computed.len());
+        let total = cases.len();
+        let mut changed = 0usize;
+        for (case, config) in cases.iter_mut().zip(computed) {
+            if case["config"] != config {
+                changed += 1;
+            }
+            case["config"] = config;
+        }
+        std::fs::write(&manifest_path, shipit_common::pyjson::to_python_json(&raw)).unwrap();
+        eprintln!(
+            "configs: rewrote {total} case(s) in {} ({changed} changed)",
+            manifest_path.display()
+        );
+        return;
     }
 
     eprintln!("configs: {passed}/{} matched", manifest.cases.len());
@@ -109,7 +156,7 @@ fn configs_match_python() {
     assert_eq!(passed, EXPECTED_CONFIG_CASES);
 }
 
-fn run_case(case: &Case) -> Result<(), String> {
+fn compute_config(case: &Case) -> Result<serde_json::Value, String> {
     let is_synthetic = case.name.starts_with("synthetic__");
     let is_cross = case.name.ends_with("__cross");
     let app_path = match &case.subdir {
@@ -139,11 +186,7 @@ fn run_case(case: &Case) -> Result<(), String> {
         workspace::apply_subdir_workspace_config(&case.workspace, &mut config);
     }
 
-    let rust_json = config.to_json();
-    if rust_json != case.config {
-        return Err(diff_json(&case.config, &rust_json));
-    }
-    Ok(())
+    Ok(config.to_json())
 }
 
 fn diff_json(expected: &serde_json::Value, actual: &serde_json::Value) -> String {
