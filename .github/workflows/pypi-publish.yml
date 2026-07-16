@@ -21,6 +21,11 @@ concurrency:
 jobs:
   validate_version:
     name: Validate tag and package versions
+    # Disabled during the Rust transition: this publishes the legacy Python
+    # package, which CI no longer tests. unit_tests and publish hang off
+    # this job, so the whole workflow is skipped. Remove the `if` once the
+    # Rust binary has its own distribution path (or delete the workflow).
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
