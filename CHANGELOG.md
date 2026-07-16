@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.0](https://github.com/wasmerio/shipit/compare/v0.21.7...v0.22.0) (2026-07-16)
+
+
+### Features
+
+* update phpix to 0.3.0-rc.2 ([6303bd5](https://github.com/wasmerio/shipit/commit/6303bd5ef2ccfc9b7b733db5067a041e462750b3))
+
 ## [0.21.7](https://github.com/wasmerio/shipit/compare/v0.21.6...v0.21.7) (2026-07-08)
 
 
