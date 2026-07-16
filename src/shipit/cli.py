@@ -357,6 +357,13 @@ def print_help() -> None:
     console.print(panel)
 
 
+def version_callback(value: bool) -> bool:
+    if value:
+        typer.echo(shipit_version)
+        raise typer.Exit()
+    return value
+
+
 @app.command(name="auto")
 def auto(
     path: Path = typer.Argument(
@@ -670,7 +677,17 @@ def generate(
     invoke_without_command=True,
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
-def _default(ctx: typer.Context) -> None:
+def _default(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-v",
+        callback=version_callback,
+        is_eager=True,
+        help="Show the version and exit.",
+    ),
+) -> None:
     if ctx.invoked_subcommand in ["auto", "generate", "build", "run", "deploy", None]:
         print_help()
 
@@ -1228,7 +1245,10 @@ def main() -> None:
     args = sys.argv[1:]
     # If no subcommand or first token looks like option/path → default to "build"
     available_commands = [cmd.name for cmd in app.registered_commands]
-    if not args or args[0].startswith("-") or args[0] not in available_commands:
+    if not args or (
+        args[0] not in {"--version", "-v"}
+        and (args[0].startswith("-") or args[0] not in available_commands)
+    ):
         sys.argv = [sys.argv[0], "auto", *args]
 
     try:
