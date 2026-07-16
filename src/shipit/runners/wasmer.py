@@ -30,7 +30,7 @@ SHIPIT_PROVIDER_ANNOTATION = "shipitcli.com/provider"
 SHIPIT_VERSION_ANNOTATION = "shipitcli.com/version"
 WASMER_APP_KIND_ANNOTATION = "wasmer.io/app-kind"
 EDGEJS_QUICKJS_DEPENDENCY = "wasmer/edgejs-quickjs@=0.0.7"
-PHPIX_VERSION = "0.3.0-rc.1"
+PHPIX_VERSION = "0.3.0-rc.2"
 
 
 def _phpix_dependency(php_version: str, bits: int) -> str:
