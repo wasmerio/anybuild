@@ -242,7 +242,7 @@ def test_wasmer_phpix_manifest_maps_php_versions(
     runner.build_serve(serve)
 
     manifest = tomllib.loads((runner.wasmer_dir_path / "wasmer.toml").read_text())
-    assert manifest["dependencies"][expected_package] == "=0.3.0-rc.1"
+    assert manifest["dependencies"][expected_package] == "=0.3.0-rc.2"
     assert manifest["command"][0]["module"] == f"{expected_package}:phpix"
 
 
