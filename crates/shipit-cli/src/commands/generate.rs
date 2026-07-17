@@ -30,7 +30,7 @@ pub fn run(shared: SharedProjectArgs, out: Option<PathBuf>) -> Result<()> {
     )?;
     // Python: provider_config.model_dump_json(indent=2, exclude_defaults=True)
     // rendered in a line-numbered panel when non-empty.
-    let config_json = crate::commands::plan::exclude_defaults_json(&provider_config);
+    let config_json = shipit_providers::exclude_defaults_json(&provider_config);
     let config_json = serde_json::to_string_pretty(&config_json)?;
     if !config_json.is_empty() && config_json != "{}" {
         shipit_build::ui::print_syntax_panel(&config_json, "json");

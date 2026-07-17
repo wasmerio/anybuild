@@ -102,7 +102,7 @@ pub fn run(
 
     let plan_output = serde_json::json!({
         "provider": context.provider,
-        "config": exclude_defaults_json(&provider_config),
+        "config": shipit_providers::exclude_defaults_json(&provider_config),
         "services": serve
             .services
             .iter()
@@ -127,51 +127,6 @@ pub fn run(
         }
     }
     Ok(())
-}
-
-/// pydantic `model_dump_json(exclude_defaults=True)`: drop fields equal to
-/// their declared defaults, recursively for nested models.
-pub(crate) fn exclude_defaults_json(
-    config: &shipit_providers::ProviderConfig,
-) -> serde_json::Value {
-    let dumped = config.to_json();
-    let defaults = defaults_for(config);
-    match (dumped, defaults) {
-        (serde_json::Value::Object(dumped), Some(serde_json::Value::Object(defaults))) => {
-            exclude_object(dumped, &defaults)
-        }
-        (dumped, _) => dumped,
-    }
-}
-
-fn defaults_for(config: &shipit_providers::ProviderConfig) -> Option<serde_json::Value> {
-    shipit_providers::defaults_json(config.provider_name()).ok()
-}
-
-fn exclude_object(
-    dumped: serde_json::Map<String, serde_json::Value>,
-    defaults: &serde_json::Map<String, serde_json::Value>,
-) -> serde_json::Value {
-    let mut out = serde_json::Map::new();
-    for (key, value) in dumped {
-        match defaults.get(&key) {
-            Some(default) if *default == value => {}
-            Some(serde_json::Value::Object(default_child)) => {
-                if let serde_json::Value::Object(child) = value {
-                    let reduced = exclude_object(child, default_child);
-                    if reduced.as_object().map(|m| !m.is_empty()).unwrap_or(true) {
-                        out.insert(key, reduced);
-                    }
-                } else {
-                    out.insert(key, value);
-                }
-            }
-            _ => {
-                out.insert(key, value);
-            }
-        }
-    }
-    serde_json::Value::Object(out)
 }
 
 /// `json.dumps(..., indent=4)` formatting.

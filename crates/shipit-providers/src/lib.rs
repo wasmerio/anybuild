@@ -178,6 +178,50 @@ pub fn defaults_json(name: &str) -> Result<serde_json::Value> {
     Ok(value)
 }
 
+/// Pydantic's `model_dump(mode="json", exclude_defaults=True)` for a typed
+/// provider config.
+pub fn exclude_defaults_json(config: &ProviderConfig) -> serde_json::Value {
+    exclude_defaults_from_json(config.provider_name(), config.to_json())
+}
+
+/// Apply a provider's declared defaults to an already serialized config.
+/// This is used by the Wasmer runner after applying runner-only overrides.
+pub fn exclude_defaults_from_json(name: &str, dumped: serde_json::Value) -> serde_json::Value {
+    let Ok(serde_json::Value::Object(defaults)) = defaults_json(name) else {
+        return dumped;
+    };
+    match dumped {
+        serde_json::Value::Object(dumped) => exclude_default_object(dumped, &defaults),
+        dumped => dumped,
+    }
+}
+
+fn exclude_default_object(
+    dumped: serde_json::Map<String, serde_json::Value>,
+    defaults: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
+    for (key, value) in dumped {
+        match defaults.get(&key) {
+            Some(default) if *default == value => {}
+            Some(serde_json::Value::Object(default_child)) => {
+                if let serde_json::Value::Object(child) = value {
+                    let reduced = exclude_default_object(child, default_child);
+                    if reduced.as_object().is_none_or(|map| !map.is_empty()) {
+                        out.insert(key, reduced);
+                    }
+                } else {
+                    out.insert(key, value);
+                }
+            }
+            _ => {
+                out.insert(key, value);
+            }
+        }
+    }
+    serde_json::Value::Object(out)
+}
+
 /// Deserialize a config JSON back into the provider's typed config.
 pub fn config_from_json(name: &str, json: serde_json::Value) -> Result<ProviderConfig> {
     Ok(match name {

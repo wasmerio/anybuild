@@ -33,6 +33,8 @@ pub const SHIPIT_CONFIG_ANNOTATION: &str = "shipitcli.com/config";
 pub const SHIPIT_PROVIDER_ANNOTATION: &str = "shipitcli.com/provider";
 pub const SHIPIT_VERSION_ANNOTATION: &str = "shipitcli.com/version";
 pub const WASMER_APP_KIND_ANNOTATION: &str = "wasmer.io/app-kind";
+pub const WASMER_VERSION_ANNOTATION: &str = "wasmer.io/version";
+pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
 pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.0.7";
 pub const PHPIX_VERSION: &str = "0.3.0-rc.2";
 
@@ -48,34 +50,13 @@ fn phpix_dependency(php_version: &str, bits: u32) -> String {
 }
 
 /// Port of `serialize_provider_config`: pydantic's
-/// `model_dump(mode="json", exclude_none=True)` over the runner-side
-/// config JSON — i.e. drop null-valued keys recursively.
-pub fn serialize_provider_config(provider_config: Option<&JsonValue>) -> JsonValue {
-    match provider_config {
-        Some(JsonValue::Object(map)) => {
-            let mut value = JsonValue::Object(map.clone());
-            drop_nulls(&mut value);
-            value
-        }
-        _ => JsonValue::Object(serde_json::Map::new()),
-    }
-}
-
-fn drop_nulls(value: &mut JsonValue) {
-    match value {
-        JsonValue::Object(map) => {
-            map.retain(|_, v| !v.is_null());
-            for v in map.values_mut() {
-                drop_nulls(v);
-            }
-        }
-        JsonValue::Array(items) => {
-            for v in items.iter_mut() {
-                drop_nulls(v);
-            }
-        }
-        _ => {}
-    }
+/// `model_dump(mode="json", exclude_defaults=True)` over the runner-side
+/// config JSON.
+pub fn serialize_provider_config(provider: &str, provider_config: Option<&JsonValue>) -> JsonValue {
+    let dumped = provider_config
+        .cloned()
+        .unwrap_or_else(|| JsonValue::Object(serde_json::Map::new()));
+    shipit_providers::exclude_defaults_from_json(provider, dumped)
 }
 
 /// Port of `resolve_app_kind`. Keys off the *serve-side* provider
@@ -430,6 +411,49 @@ impl WasmerRunner {
             provider_config: None,
             #[cfg(test)]
             captured_commands: Vec::new(),
+        }
+    }
+
+    /// Query the Wasmer CLI version recorded alongside build artifacts.
+    fn get_wasmer_version(&self) -> Result<String> {
+        let output = std::process::Command::new(&self.bin)
+            .arg("--version")
+            .output()
+            .with_context(|| format!("failed to run {} --version", self.bin))?;
+        ensure!(
+            output.status.success(),
+            "{} --version failed with exit code {:?}",
+            self.bin,
+            output.status.code()
+        );
+        let stdout = String::from_utf8(output.stdout).context("Wasmer version is not UTF-8")?;
+        parse_wasmer_version(&stdout)
+    }
+
+    fn write_build_annotations(&self) -> Result<()> {
+        let version = self.get_wasmer_version()?;
+        self.write_build_annotations_for_version(&version)
+    }
+
+    fn write_build_annotations_for_version(&self, version: &str) -> Result<()> {
+        std::fs::create_dir_all(&self.wasmer_dir_path)?;
+        let mut annotations = serde_yaml::Mapping::new();
+        annotations.insert(yaml_str(WASMER_VERSION_ANNOTATION), yaml_str(version));
+        let yaml = dump_yaml_sorted(&YamlValue::Mapping(annotations))?;
+        std::fs::write(self.wasmer_dir_path.join(BUILD_ANNOTATIONS_FILENAME), yaml)?;
+        Ok(())
+    }
+
+    fn load_build_annotations(&self) -> Result<serde_yaml::Mapping> {
+        let path = self.wasmer_dir_path.join(BUILD_ANNOTATIONS_FILENAME);
+        if !path.exists() {
+            return Ok(serde_yaml::Mapping::new());
+        }
+        let text = std::fs::read_to_string(&path)?;
+        match serde_yaml::from_str::<YamlValue>(&text)? {
+            YamlValue::Mapping(annotations) => Ok(annotations),
+            YamlValue::Null => Ok(serde_yaml::Mapping::new()),
+            _ => bail!("{BUILD_ANNOTATIONS_FILENAME} must contain a dictionary"),
         }
     }
 
@@ -856,7 +880,11 @@ impl WasmerRunner {
             "annotations",
             "annotations must be a dictionary",
         )?;
-        let config_annotation = serialize_provider_config(self.provider_config.as_ref());
+        for (key, value) in self.load_build_annotations()? {
+            annotations.insert(key, value);
+        }
+        let config_annotation =
+            serialize_provider_config(&serve.provider, self.provider_config.as_ref());
         annotations.insert(
             yaml_str(SHIPIT_CONFIG_ANNOTATION),
             serde_yaml::to_value(&config_annotation)?,
@@ -1136,6 +1164,7 @@ impl Runner for WasmerRunner {
     }
 
     fn build(&mut self, serve: &Serve) -> Result<()> {
+        self.write_build_annotations()?;
         self.build_prepare(serve)?;
         self.build_serve(serve)
     }
@@ -1226,6 +1255,18 @@ impl Runner for WasmerRunner {
 
 fn yaml_str(value: &str) -> YamlValue {
     YamlValue::String(value.to_owned())
+}
+
+fn parse_wasmer_version(output: &str) -> Result<String> {
+    let output = output.trim();
+    let Some((name, version)) = output.split_once(' ') else {
+        bail!("Unexpected Wasmer version output: {output:?}");
+    };
+    ensure!(
+        name.eq_ignore_ascii_case("wasmer") && !version.is_empty(),
+        "Unexpected Wasmer version output: {output:?}"
+    );
+    Ok(version.to_owned())
 }
 
 /// `yaml_config.get(key, {})` + isinstance assert, removing the key so the
@@ -1417,9 +1458,11 @@ mod tests {
             )],
         );
 
+        runner.write_build_annotations_for_version("7.2.0").unwrap();
         runner.build_serve(&serve).unwrap();
 
         let app_yaml = read_yaml(&runner.wasmer_dir_path.join("app.yaml"));
+        let build_annotations = read_yaml(&runner.wasmer_dir_path.join(BUILD_ANNOTATIONS_FILENAME));
         let annotations = app_yaml
             .get(yaml_str("annotations"))
             .and_then(YamlValue::as_mapping)
@@ -1441,6 +1484,14 @@ mod tests {
             annotations.get(yaml_str(WASMER_APP_KIND_ANNOTATION)),
             Some(&yaml_str("django"))
         );
+        assert_eq!(
+            build_annotations.get(yaml_str(WASMER_VERSION_ANNOTATION)),
+            Some(&yaml_str("7.2.0"))
+        );
+        assert_eq!(
+            annotations.get(yaml_str(WASMER_VERSION_ANNOTATION)),
+            Some(&yaml_str("7.2.0"))
+        );
         let config = annotations
             .get(yaml_str(SHIPIT_CONFIG_ANNOTATION))
             .and_then(YamlValue::as_mapping)
@@ -1454,20 +1505,16 @@ mod tests {
             config.get(yaml_str("python_extra_index_url")),
             Some(&yaml_str("https://pythonindex.wasix.org/simple"))
         );
-        // exclude_none: no null values may survive in the annotation.
-        fn assert_no_nulls(value: &YamlValue) {
-            match value {
-                YamlValue::Mapping(map) => {
-                    for (_, v) in map {
-                        assert!(!v.is_null(), "null value in config annotation");
-                        assert_no_nulls(v);
-                    }
-                }
-                YamlValue::Sequence(items) => items.iter().for_each(assert_no_nulls),
-                _ => {}
-            }
-        }
-        assert_no_nulls(&YamlValue::Mapping(config.clone()));
+        assert!(!config.contains_key(yaml_str("python_version")));
+        assert!(!config.contains_key(yaml_str("precompile_python")));
+    }
+
+    #[test]
+    fn test_parse_wasmer_version() {
+        assert_eq!(parse_wasmer_version("wasmer 7.2.0\n").unwrap(), "7.2.0");
+        assert_eq!(parse_wasmer_version("Wasmer 8.0.0").unwrap(), "8.0.0");
+        assert!(parse_wasmer_version("7.2.0").is_err());
+        assert!(parse_wasmer_version("other 7.2.0").is_err());
     }
 
     #[test]
@@ -1481,7 +1528,7 @@ mod tests {
             framework: Some(PythonFramework::Django),
             ..PythonConfig::default()
         }));
-        let annotation = serialize_provider_config(runner.provider_config.as_ref());
+        let annotation = serialize_provider_config("python", runner.provider_config.as_ref());
         let mut sorted = std::collections::BTreeMap::new();
         for (key, value) in annotation.as_object().unwrap() {
             sorted.insert(key.clone(), value.clone());
@@ -1489,7 +1536,7 @@ mod tests {
         let json = serde_json::to_string(&sorted).unwrap();
         assert_eq!(
             json,
-            "{\"commands\":{},\"cross_platform\":\"wasix_wasm32\",\"extra_dependencies\":[],\"framework\":\"django\",\"install_requires_all_files\":false,\"mcp_self_running\":false,\"port\":8080,\"precompile_python\":true,\"python_extra_index_url\":\"https://pythonindex.wasix.org/simple\",\"python_version\":\"3.13\",\"uses_ffmpeg\":false,\"uses_pandoc\":false,\"uv_version\":\"0.8.15\"}"
+            "{\"cross_platform\":\"wasix_wasm32\",\"framework\":\"django\",\"python_extra_index_url\":\"https://pythonindex.wasix.org/simple\"}"
         );
     }
 
