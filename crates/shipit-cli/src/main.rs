@@ -16,8 +16,16 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "shipit", version, about = "Ship any project")]
+#[command(
+    name = "shipit",
+    version,
+    disable_version_flag = true,
+    about = "Ship any project"
+)]
 struct Cli {
+    /// Show the version and exit.
+    #[arg(short = 'v', long = "version")]
+    _version: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -120,6 +128,13 @@ fn main() {
     // like an option or a path, default to "auto".
     const KNOWN_COMMANDS: &[&str] = &["auto", "generate", "plan", "build", "run", "deploy"];
     let mut args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    if matches!(
+        args.get(1).and_then(|arg| arg.to_str()),
+        Some("--version" | "-v")
+    ) {
+        println!("{}", generator::shipit_version());
+        return;
+    }
     let needs_auto = match args.get(1) {
         None => true,
         Some(first) => {

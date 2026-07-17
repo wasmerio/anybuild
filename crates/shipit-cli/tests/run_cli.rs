@@ -2,6 +2,23 @@
 //! (the counterpart of test_cli_after_deploy.py's typer-runner tests
 //! that assert on process output).
 
+#[test]
+fn version_is_plain_text() {
+    for option in ["--version", "-v"] {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_shipit"))
+            .arg(option)
+            .output()
+            .unwrap();
+
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            format!("{}\n", env!("CARGO_PKG_VERSION"))
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stderr), "");
+    }
+}
+
 /// Port of tests/test_cli_after_deploy.py::
 /// test_run_without_commands_prints_to_stderr.
 #[test]

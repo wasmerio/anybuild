@@ -34,10 +34,10 @@ pub const SHIPIT_PROVIDER_ANNOTATION: &str = "shipitcli.com/provider";
 pub const SHIPIT_VERSION_ANNOTATION: &str = "shipitcli.com/version";
 pub const WASMER_APP_KIND_ANNOTATION: &str = "wasmer.io/app-kind";
 pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.0.7";
-pub const PHPIX_VERSION: &str = "0.3.0-rc.1";
+pub const PHPIX_VERSION: &str = "0.3.0-rc.2";
 
-/// The bundled Python version file is the single version source while the
-/// two implementations coexist (same trick as shipit-cli/src/generator.rs).
+/// The workspace package version is embedded in every Rust crate and kept in
+/// sync with the Python package by release-please.
 pub fn shipit_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
@@ -1638,7 +1638,7 @@ mod tests {
             let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
             assert_eq!(
                 manifest["dependencies"][*expected_package].as_str(),
-                Some("=0.3.0-rc.1"),
+                Some("=0.3.0-rc.2"),
                 "version={version:?} architecture={architecture:?}"
             );
             let command = manifest["command"]
