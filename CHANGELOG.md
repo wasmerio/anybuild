@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.1](https://github.com/wasmerio/shipit/compare/v0.22.0...v0.22.1) (2026-07-17)
+
+
+### Bug Fixes
+
+* Wasmer build annotations ([#64](https://github.com/wasmerio/shipit/issues/64)) ([c433db7](https://github.com/wasmerio/shipit/commit/c433db7f4edc9d24585e0b9ef2760613dc7359a1))
+
 ## [0.22.0](https://github.com/wasmerio/shipit/compare/v0.21.7...v0.22.0) (2026-07-16)
 
 
