@@ -12,6 +12,7 @@ from shipit.runners.wasmer import (
     BUILD_ANNOTATIONS_FILENAME,
     WasmerRunner,
     resolve_app_kind,
+    serialize_provider_config,
 )
 from shipit.shipit_types import Package, Serve, Volume
 from shipit.version import version as shipit_version
@@ -59,6 +60,13 @@ def test_resolve_app_kind(
     assert resolve_app_kind(provider, framework) == expected
 
 
+def test_serialize_provider_config_excludes_defaults() -> None:
+    assert serialize_provider_config(PythonConfig()) == {}
+    assert serialize_provider_config(
+        PythonConfig(framework=PythonFramework.Django)
+    ) == {"framework": "django"}
+
+
 def test_wasmer_app_yaml_adds_python_annotations(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -100,6 +108,8 @@ def test_wasmer_app_yaml_adds_python_annotations(
     assert annotations["wasmer.io/app-kind"] == "django"
     assert annotations["wasmer.io/version"] == "7.2.0"
     assert annotations["shipitcli.com/config"]["framework"] == "django"
+    assert "python_version" not in annotations["shipitcli.com/config"]
+    assert "precompile_python" not in annotations["shipitcli.com/config"]
     assert (
         annotations["shipitcli.com/config"]["cross_platform"]
         == "wasix_wasm32"
