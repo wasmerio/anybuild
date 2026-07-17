@@ -29,6 +29,8 @@ SHIPIT_CONFIG_ANNOTATION = "shipitcli.com/config"
 SHIPIT_PROVIDER_ANNOTATION = "shipitcli.com/provider"
 SHIPIT_VERSION_ANNOTATION = "shipitcli.com/version"
 WASMER_APP_KIND_ANNOTATION = "wasmer.io/app-kind"
+WASMER_VERSION_ANNOTATION = "wasmer.io/version"
+BUILD_ANNOTATIONS_FILENAME = "build-annotations.yaml"
 EDGEJS_QUICKJS_DEPENDENCY = "wasmer/edgejs-quickjs@=0.0.7"
 PHPIX_VERSION = "0.3.0-rc.2"
 
@@ -313,6 +315,7 @@ class WasmerRunner:
         return new_build_steps
 
     def build(self, serve: Serve) -> None:
+        self._write_build_annotations()
         self.build_prepare(serve)
         self.build_serve(serve)
 
@@ -635,6 +638,7 @@ class WasmerRunner:
 
         annotations = yaml_config.get("annotations", {})
         assert isinstance(annotations, dict), "annotations must be a dictionary"
+        annotations.update(self._load_build_annotations())
         annotations[SHIPIT_CONFIG_ANNOTATION] = serialize_provider_config(
             self.provider_config
         )
@@ -758,6 +762,36 @@ class WasmerRunner:
             check=True,
             env=env or os.environ,
         )
+
+    def _get_wasmer_version(self) -> str:
+        result = subprocess.run(
+            [self.bin, "--version"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout.strip()
+        name, separator, version = output.partition(" ")
+        if name.lower() != "wasmer" or not separator or not version:
+            raise ValueError(f"Unexpected Wasmer version output: {output!r}")
+        return version
+
+    def _write_build_annotations(self) -> None:
+        self.wasmer_dir_path.mkdir(parents=True, exist_ok=True)
+        annotations_path = self.wasmer_dir_path / BUILD_ANNOTATIONS_FILENAME
+        annotations_path.write_text(
+            yaml.dump({WASMER_VERSION_ANNOTATION: self._get_wasmer_version()})
+        )
+
+    def _load_build_annotations(self) -> Dict[str, Any]:
+        annotations_path = self.wasmer_dir_path / BUILD_ANNOTATIONS_FILENAME
+        if not annotations_path.exists():
+            return {}
+        annotations = yaml.safe_load(annotations_path.read_text()) or {}
+        assert isinstance(annotations, dict), (
+            f"{BUILD_ANNOTATIONS_FILENAME} must contain a dictionary"
+        )
+        return annotations
 
     def _update_app_yaml(
         self, app_owner: Optional[str] = None, app_name: Optional[str] = None

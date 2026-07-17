@@ -1,3 +1,4 @@
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -7,7 +8,11 @@ import yaml
 from shipit.providers.node import NodeConfig
 from shipit.providers.php import PhpFramework
 from shipit.providers.python import PythonConfig, PythonFramework
-from shipit.runners.wasmer import WasmerRunner, resolve_app_kind
+from shipit.runners.wasmer import (
+    BUILD_ANNOTATIONS_FILENAME,
+    WasmerRunner,
+    resolve_app_kind,
+)
 from shipit.shipit_types import Package, Serve, Volume
 from shipit.version import version as shipit_version
 
@@ -54,7 +59,10 @@ def test_resolve_app_kind(
     assert resolve_app_kind(provider, framework) == expected
 
 
-def test_wasmer_app_yaml_adds_python_annotations(tmp_path: Path) -> None:
+def test_wasmer_app_yaml_adds_python_annotations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     src_dir = tmp_path / "src"
     src_dir.mkdir()
     (src_dir / "app.yaml").write_text(
@@ -63,6 +71,7 @@ def test_wasmer_app_yaml_adds_python_annotations(tmp_path: Path) -> None:
 
     runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
     runner.prepare_config(PythonConfig(framework=PythonFramework.Django))
+    monkeypatch.setattr(runner, "_get_wasmer_version", lambda: "7.2.0")
 
     serve = Serve(
         name="django",
@@ -76,15 +85,20 @@ def test_wasmer_app_yaml_adds_python_annotations(tmp_path: Path) -> None:
         },
     )
 
-    runner.build_serve(serve)
+    runner.build(serve)
 
     app_yaml = yaml.safe_load((runner.wasmer_dir_path / "app.yaml").read_text())
     annotations = app_yaml["annotations"]
+    build_annotations = yaml.safe_load(
+        (runner.wasmer_dir_path / BUILD_ANNOTATIONS_FILENAME).read_text()
+    )
 
+    assert build_annotations == {"wasmer.io/version": "7.2.0"}
     assert annotations["example.com/existing"] == "keep"
     assert annotations["shipitcli.com/provider"] == "python"
     assert annotations["shipitcli.com/version"] == shipit_version
     assert annotations["wasmer.io/app-kind"] == "django"
+    assert annotations["wasmer.io/version"] == "7.2.0"
     assert annotations["shipitcli.com/config"]["framework"] == "django"
     assert (
         annotations["shipitcli.com/config"]["cross_platform"]
@@ -182,6 +196,28 @@ def test_wasmer_run_command_inherits_stdio(
         "check": True,
         "env": {"SHIPIT": "1"},
     }
+
+
+def test_get_wasmer_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir, bin="wasmer")
+
+    def fake_run(*args, **kwargs):
+        assert args == (["wasmer", "--version"],)
+        assert kwargs == {
+            "check": True,
+            "capture_output": True,
+            "text": True,
+        }
+        return subprocess.CompletedProcess(args[0], 0, stdout="wasmer 7.2.0\n")
+
+    monkeypatch.setattr("shipit.runners.wasmer.subprocess.run", fake_run)
+
+    assert runner._get_wasmer_version() == "7.2.0"
 
 
 def test_wasmer_node_manifest_maps_to_edgejs(tmp_path: Path) -> None:
