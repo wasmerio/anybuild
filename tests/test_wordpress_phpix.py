@@ -190,6 +190,24 @@ def test_generate_shipit_wordpress_phpix_mode(tmp_path: Path) -> None:
     )
 
 
+def test_wasmer_enables_phpix_before_evaluating_plan(tmp_path: Path) -> None:
+    project_dir = tmp_path / "my-plugin"
+    _write_plugin(project_dir)
+
+    _provider_cls, provider_config, generated = _generate_for_path(project_dir)
+    assert provider_config.phpix is False
+
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), project_dir)
+    provider_config = runner.prepare_config(provider_config)
+    _backend, _ctx, serve = _evaluate_generated(
+        project_dir, provider_config, generated, tmp_path
+    )
+
+    assert any(pkg.name == "phpix" for pkg in serve.deps)
+    assert not any(pkg.name == "php" for pkg in serve.deps)
+    assert serve.commands["start"].startswith("phpix ")
+
+
 def test_wasmer_app_yaml_sets_memory_limit_for_wordpress_phpix(
     tmp_path: Path,
 ) -> None:

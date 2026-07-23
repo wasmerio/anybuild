@@ -260,9 +260,9 @@ class WasmerRunner:
             return Path("/opt") / name
 
     def prepare_config(self, provider_config: Any) -> Any:
-        from shipit.providers.python import PythonConfig
-        from shipit.providers.php import PhpConfig
         from shipit.providers.node import NodeConfig
+        from shipit.providers.php import PhpConfig
+        from shipit.providers.python import PythonConfig
 
         # Plan-visible overrides: the Shipit plan intentionally reacts to
         # these at evaluation time (cross-platform wheel builds etc.).
@@ -272,21 +272,15 @@ class WasmerRunner:
             )
             provider_config.cross_platform = "wasix_wasm32"
             provider_config.precompile_python = True
+        if isinstance(provider_config, PhpConfig):
+            provider_config.phpix = True
+        if isinstance(provider_config, NodeConfig):
+            provider_config.use_edgejs = True
+            if provider_config.precompile_edgejs is None:
+                provider_config.precompile_edgejs = True
+            provider_config.remove_native_binaries = True
 
-        # Runner-only overrides: these feed app.yaml/wasmer.toml metadata
-        # (app kind, memory caps, runtime selection) but must NOT change the
-        # evaluated plan — with providers evaluated from config, a shared
-        # mutation here would silently flip e.g. php serving to phpix.
-        # phpix stays opt-in via project config/SHIPIT_PHPIX.
-        runner_config = provider_config.model_copy(deep=True)
-        if isinstance(runner_config, PhpConfig):
-            runner_config.phpix = True
-        if isinstance(runner_config, NodeConfig):
-            runner_config.use_edgejs = True
-            if runner_config.precompile_edgejs is None:
-                runner_config.precompile_edgejs = True
-            runner_config.remove_native_binaries = True
-        self.provider_config = runner_config
+        self.provider_config = provider_config.model_copy(deep=True)
         return provider_config
 
     def prepare_build_steps(self, build_steps: List["Step"]) -> List["Step"]:

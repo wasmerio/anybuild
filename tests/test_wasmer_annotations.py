@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from shipit.providers.node import NodeConfig
-from shipit.providers.php import PhpFramework
+from shipit.providers.php import PhpConfig, PhpFramework
 from shipit.providers.python import PythonConfig, PythonFramework
 from shipit.runners.wasmer import (
     BUILD_ANNOTATIONS_FILENAME,
@@ -65,6 +65,21 @@ def test_serialize_provider_config_excludes_defaults() -> None:
     assert serialize_provider_config(
         PythonConfig(framework=PythonFramework.Django)
     ) == {"framework": "django"}
+
+
+@pytest.mark.parametrize("phpix", [False, True])
+def test_wasmer_prepare_config_enables_phpix(
+    tmp_path: Path,
+    phpix: bool,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    runner = WasmerRunner(DummyBuildBackend(tmp_path), src_dir)
+
+    config = runner.prepare_config(PhpConfig(phpix=phpix))
+
+    assert config.phpix is True
+    assert runner.provider_config.phpix is True
 
 
 def test_wasmer_app_yaml_adds_python_annotations(
@@ -323,15 +338,12 @@ def test_wasmer_prepare_config_enables_node_edge_optimizations(
 
     config = runner.prepare_config(NodeConfig())
 
-    # Runner metadata (app.yaml/wasmer.toml) sees the edge optimizations...
     assert runner.provider_config.use_edgejs is True
     assert runner.provider_config.precompile_edgejs is True
     assert runner.provider_config.remove_native_binaries is True
-    # ...but the plan config the Shipit file is evaluated with is untouched,
-    # so per-run runner flags cannot silently change the build plan.
-    assert config.use_edgejs is False
-    assert config.precompile_edgejs is None
-    assert config.remove_native_binaries is False
+    assert config.use_edgejs is True
+    assert config.precompile_edgejs is True
+    assert config.remove_native_binaries is True
 
 
 def test_wasmer_prepare_config_preserves_node_precompile_override(
