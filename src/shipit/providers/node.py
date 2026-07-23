@@ -9,6 +9,8 @@ from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 from semantic_version import NpmSpec, Version
 
+from shipit.ui import console
+
 from .base import Config, DetectResult
 from .install_context import discover_js_install_context
 
@@ -506,6 +508,11 @@ class NodeProvider:
             if not config.commands.start:
                 config.commands.start = cls.infer_start_command(
                     path, package_json
+                )
+            if not config.commands.start and (path / "package.json").is_file():
+                console.print(
+                    "[bold yellow]Warning:[/bold yellow] "
+                    "no start command found in package.json"
                 )
 
         if config.framework and config.commands.build and config.build_command:
