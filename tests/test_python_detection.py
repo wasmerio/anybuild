@@ -111,7 +111,7 @@ def test_python_provider_warns_when_start_command_is_missing(
 
     assert provider_config.commands.start is None
     assert (
-        "Warning: no start command found for Python project"
+        "Warning: no start command could be inferred for Python project"
         in capsys.readouterr().err
     )
 
@@ -126,7 +126,7 @@ def test_python_provider_does_not_warn_when_start_command_is_inferred(
     provider_config = PythonProvider.load_config(tmp_path, Config())
 
     assert provider_config.commands.start == "python main.py"
-    assert "no start command found" not in capsys.readouterr().err
+    assert "no start command could be inferred" not in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
