@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/wasmerio/shipit/compare/v0.22.2...v0.23.0) (2026-07-23)
+
+
+### Features
+
+* Node python improvements ([#67](https://github.com/wasmerio/shipit/issues/67)) ([e76e8e1](https://github.com/wasmerio/shipit/commit/e76e8e148029891ceefa3ea1ec033345c03c9751))
+
 ## [0.22.2](https://github.com/wasmerio/shipit/compare/v0.22.1...v0.22.2) (2026-07-23)
 
 
