@@ -534,7 +534,7 @@ def _e2e_case_params(cases: list[E2ECase]) -> list[object]:
             path="examples/node-astro",
             serve_pattern=r"Node|Astro|Listening|ready",
             http=[HTTPRequest(path="/", body_match=r"Astro Node Example")],
-            build_modes=(BuildMode.Local,),
+            build_modes=(BuildMode.Local, BuildMode.Wasmer),
         ),
         # Hugo static site (built via Hugo, served with static-web-server)
         E2ECase(
