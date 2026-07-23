@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.22.2](https://github.com/wasmerio/shipit/compare/v0.22.1...v0.22.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* Fixed config updating for Wasmer ([5a582bc](https://github.com/wasmerio/shipit/commit/5a582bc0a709a59d324530dbfbae3837e35d6cef))
+* Updated edgejs dependency to 0.1.0 ([48e4c3a](https://github.com/wasmerio/shipit/commit/48e4c3ae33f153a206f77ee0168d4d8826218f97))
+* WP setup failing on rewrite structure ([f487537](https://github.com/wasmerio/shipit/commit/f487537cff26e57d6cef7951c45c53a0b82202b4))
+
 ## [0.22.1](https://github.com/wasmerio/shipit/compare/v0.22.0...v0.22.1) (2026-07-17)
 
 
