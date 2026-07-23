@@ -2,10 +2,15 @@
 
 from pathlib import Path
 
+import pytest
+
+from shipit.providers.base import Config
 from shipit.providers.python import (
     DatabaseType,
     MigrationStrategy,
+    PythonConfig,
     PythonFramework,
+    PythonProvider,
     PythonServer,
     _default_server_for_framework,
     _detect_database,
@@ -94,3 +99,147 @@ def test_detect_mcp_self_running(tmp_path: Path) -> None:
     # Only applies to MCP projects with a resolvable main file.
     assert _detect_mcp_self_running(tmp_path, PythonFramework.FastAPI, "main.py") is False
     assert _detect_mcp_self_running(tmp_path, PythonFramework.MCP, None) is False
+
+
+def test_python_provider_warns_when_start_command_is_missing(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'app'\n")
+
+    provider_config = PythonProvider.load_config(tmp_path, Config())
+
+    assert provider_config.commands.start is None
+    assert (
+        "Warning: no main file was detected for Python project"
+        in capsys.readouterr().err
+    )
+
+
+def test_python_provider_does_not_warn_when_start_command_is_inferred(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'app'\n")
+    (tmp_path / "main.py").write_text("print('hello')\n")
+
+    provider_config = PythonProvider.load_config(tmp_path, Config())
+
+    assert provider_config.commands.start == "python main.py"
+    assert "no main file was detected" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_warning"),
+    [
+        (
+            PythonConfig(framework=PythonFramework.Streamlit),
+            "no main file was detected for the Streamlit framework",
+        ),
+        (
+            PythonConfig(framework=PythonFramework.MCP),
+            "no main file was detected for the MCP framework",
+        ),
+        (
+            PythonConfig(server=PythonServer.Daphne),
+            "no ASGI application was detected for the Daphne server",
+        ),
+        (
+            PythonConfig(server=PythonServer.Hypercorn),
+            "no ASGI application was detected for the Hypercorn server",
+        ),
+        (
+            PythonConfig(server=PythonServer.Uvicorn),
+            (
+                "no main file, ASGI application, or WSGI application "
+                "was detected for the Uvicorn server"
+            ),
+        ),
+        (
+            PythonConfig(
+                framework=PythonFramework.FastAPI,
+                server=PythonServer.Uvicorn,
+            ),
+            "no main file was detected for the FastAPI framework",
+        ),
+    ],
+)
+def test_infer_start_command_explains_missing_evidence(
+    config: PythonConfig,
+    expected_warning: str,
+    capsys,
+) -> None:
+    assert PythonProvider.infer_start_command(config) is None
+    warning = " ".join(capsys.readouterr().err.split())
+    assert expected_warning in warning
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        (
+            PythonConfig(
+                server=PythonServer.Daphne,
+                asgi_application="app:api",
+            ),
+            "daphne app:api --bind 0.0.0.0 --port $PORT",
+        ),
+        (
+            PythonConfig(
+                server=PythonServer.Uvicorn,
+                asgi_application="app:api",
+            ),
+            "uvicorn app:api --host 0.0.0.0 --port $PORT",
+        ),
+        (
+            PythonConfig(
+                server=PythonServer.Uvicorn,
+                wsgi_application="app:web",
+            ),
+            (
+                "uvicorn app:web --interface=wsgi "
+                "--host 0.0.0.0 --port $PORT"
+            ),
+        ),
+        (
+            PythonConfig(
+                server=PythonServer.Hypercorn,
+                asgi_application="app:api",
+            ),
+            "hypercorn app:api --bind 0.0.0.0:$PORT",
+        ),
+        (
+            PythonConfig(
+                framework=PythonFramework.Streamlit,
+                main_file="streamlit_app.py",
+            ),
+            (
+                "streamlit run streamlit_app.py --server.port $PORT "
+                "--server.address 0.0.0.0 --server.headless true"
+            ),
+        ),
+        (
+            PythonConfig(
+                framework=PythonFramework.MCP,
+                main_file="main.py",
+            ),
+            (
+                "python $VIRTUAL_ENV/bin/mcp run main.py "
+                "--transport=streamable-http"
+            ),
+        ),
+        (
+            PythonConfig(framework=PythonFramework.Django),
+            "python manage.py runserver 0.0.0.0:$PORT",
+        ),
+        (
+            PythonConfig(main_file="main.py"),
+            "python main.py",
+        ),
+    ],
+)
+def test_infer_start_command(
+    config: PythonConfig,
+    expected: str,
+) -> None:
+    assert PythonProvider.infer_start_command(config) == expected

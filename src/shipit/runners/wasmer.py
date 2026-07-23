@@ -32,7 +32,7 @@ WASMER_APP_KIND_ANNOTATION = "wasmer.io/app-kind"
 WASMER_VERSION_ANNOTATION = "wasmer.io/version"
 BUILD_ANNOTATIONS_FILENAME = "build-annotations.yaml"
 EDGEJS_QUICKJS_DEPENDENCY = "wasmer/edgejs-quickjs@=0.1.0"
-PHPIX_VERSION = "0.3.0-rc.2"
+PHPIX_VERSION = "0.3.0-rc.3"
 
 
 def _phpix_dependency(php_version: str, bits: int) -> str:

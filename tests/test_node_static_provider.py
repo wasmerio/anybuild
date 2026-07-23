@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from shipit.generator import load_provider, load_provider_config
 from shipit.providers.base import Config
-from shipit.providers.node import NodeFramework, PackageManager
+from shipit.providers.node import NodeFramework, NodeProvider, PackageManager
 from shipit.providers.node_static import (
     NodeStaticConfig,
     NodeStaticProvider,
@@ -245,7 +245,9 @@ def test_pure_static_dependency_keeps_priority_with_package_script_command() -> 
     assert detect_result.score == 60
 
 
-def test_explicit_next_build_command_uses_node_provider(tmp_path: Path) -> None:
+def test_next_build_without_start_command_uses_node_static(
+    tmp_path: Path,
+) -> None:
     (tmp_path / "package.json").write_text(
         """{
   "scripts": {
@@ -261,10 +263,13 @@ def test_explicit_next_build_command_uses_node_provider(tmp_path: Path) -> None:
     base_config.commands.build = "next build"
 
     detect_result = NodeStaticProvider.detect(tmp_path, base_config)
+    node_result = NodeProvider.detect(tmp_path, base_config)
 
     assert detect_result is not None
     assert detect_result.score == 20
-    assert load_provider(tmp_path, base_config) is not NodeStaticProvider
+    assert node_result is not None
+    assert node_result.score < detect_result.score
+    assert load_provider(tmp_path, base_config) is NodeStaticProvider
 
 
 def test_explicit_next_export_command_stays_node_static(tmp_path: Path) -> None:
