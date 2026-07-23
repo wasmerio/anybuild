@@ -163,7 +163,7 @@ class PythonProvider:
         if not config.commands.start:
             console.print(
                 "[bold yellow]Warning:[/bold yellow] "
-                "no start command found for Python project"
+                "no start command could be inferred for Python project"
             )
 
         return config
