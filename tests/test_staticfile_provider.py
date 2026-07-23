@@ -56,6 +56,7 @@ def test_staticfile_redirects_reject_unsupported_conditions(tmp_path) -> None:
 
 def test_staticfile_detects_unbuilt_node_project_with_root_index(
     tmp_path: Path,
+    capsys,
 ) -> None:
     (tmp_path / "index.html").write_text("<h1>Static app</h1>\n")
     (tmp_path / "package.json").write_text(
@@ -76,6 +77,7 @@ def test_staticfile_detects_unbuilt_node_project_with_root_index(
     assert result is not None
     assert result.score == 15
     assert load_provider(tmp_path, Config()) is StaticFileProvider
+    assert "Warning:" not in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

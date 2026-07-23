@@ -509,11 +509,6 @@ class NodeProvider:
                 config.commands.start = cls.infer_start_command(
                     path, package_json
                 )
-            if not config.commands.start and (path / "package.json").is_file():
-                console.print(
-                    "[bold yellow]Warning:[/bold yellow] "
-                    "no start command found in package.json"
-                )
 
         if config.framework and config.commands.build and config.build_command:
             config.commands.build = config.build_command
@@ -930,17 +925,27 @@ class NodeProvider:
 
     @classmethod
     def infer_start_command(
-        cls, path: Path, package_json: Optional[Dict[str, Any]]
+        cls,
+        path: Path,
+        package_json: Optional[Dict[str, Any]],
+        *,
+        warn: bool = True,
     ) -> Optional[str]:
         scripts = cls.package_scripts(package_json)
         start_script = scripts.get("start")
-        if start_script:
-            return start_script.strip() or None
+        if start_script and start_script.strip():
+            return start_script.strip()
 
         if package_json:
             main = package_json.get("main")
             if isinstance(main, str) and main.strip():
                 return cls._node_entry_command(main.strip())
+
+        if warn and (path / "package.json").is_file():
+            console.print(
+                "[bold yellow]Warning:[/bold yellow] "
+                "no start or main script found in package.json"
+            )
 
         entry_file = cls._common_entry_file(
             path,
@@ -948,7 +953,12 @@ class NodeProvider:
         )
         if entry_file:
             return cls._node_entry_command(entry_file)
-
+        if warn:
+            tried = ", ".join(cls.COMMON_ENTRY_FILES)
+            console.print(
+                "[bold yellow]Warning:[/bold yellow] "
+                f"no entry file found for Node project (tried: {tried})"
+            )
         return None
 
     @classmethod

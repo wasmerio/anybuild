@@ -160,16 +160,32 @@ class PythonProvider:
 
         if not config.commands.start:
             config.commands.start = cls.infer_start_command(config)
-        if not config.commands.start:
-            console.print(
-                "[bold yellow]Warning:[/bold yellow] "
-                "no start command could be inferred for Python project"
-            )
 
         return config
 
     @staticmethod
-    def infer_start_command(config: PythonConfig) -> Optional[str]:
+    def infer_start_command(
+        config: PythonConfig,
+        *,
+        warn: bool = True,
+    ) -> Optional[str]:
+        def cannot_infer(reason: str) -> Optional[str]:
+            if warn:
+                console.print(
+                    f"[bold yellow]Warning:[/bold yellow] {reason}"
+                )
+            return None
+
+        def missing_main_file() -> Optional[str]:
+            if config.framework:
+                return cannot_infer(
+                    "no main file was detected for the "
+                    f"{config.framework.name} framework"
+                )
+            return cannot_infer(
+                "no main file was detected for Python project"
+            )
+
         main_file = config.main_file
         asgi = config.asgi_application
         wsgi = config.wsgi_application
@@ -177,7 +193,9 @@ class PythonProvider:
         if config.server == PythonServer.Daphne:
             if asgi:
                 return f"daphne {asgi} --bind 0.0.0.0 --port $PORT"
-            return None
+            return cannot_infer(
+                "no ASGI application was detected for the Daphne server"
+            )
         if config.server == PythonServer.Uvicorn:
             if asgi:
                 return f"uvicorn {asgi} --host 0.0.0.0 --port $PORT"
@@ -187,21 +205,28 @@ class PythonProvider:
                     "--host 0.0.0.0 --port $PORT"
                 )
             if not main_file:
-                return None
+                if config.framework:
+                    return missing_main_file()
+                return cannot_infer(
+                    "no main file, ASGI application, or WSGI application "
+                    "was detected for the Uvicorn server"
+                )
         elif config.server == PythonServer.Hypercorn:
             if asgi:
                 return f"hypercorn {asgi} --bind 0.0.0.0:$PORT"
-            return None
+            return cannot_infer(
+                "no ASGI application was detected for the Hypercorn server"
+            )
         elif config.framework == PythonFramework.Streamlit:
             if main_file:
                 return (
                     f"streamlit run {main_file} --server.port $PORT "
                     "--server.address 0.0.0.0 --server.headless true"
                 )
-            return None
+            return missing_main_file()
         elif config.framework == PythonFramework.MCP:
             if not main_file:
-                return None
+                return missing_main_file()
             if config.mcp_self_running:
                 return f"python {main_file}"
             return (
@@ -213,7 +238,7 @@ class PythonProvider:
 
         if main_file:
             return f"python {main_file}"
-        return None
+        return missing_main_file()
 
     @classmethod
     def check_deps(cls, path: Path, *deps: str) -> Set[str]:

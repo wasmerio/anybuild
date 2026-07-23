@@ -111,7 +111,7 @@ def test_python_provider_warns_when_start_command_is_missing(
 
     assert provider_config.commands.start is None
     assert (
-        "Warning: no start command could be inferred for Python project"
+        "Warning: no main file was detected for Python project"
         in capsys.readouterr().err
     )
 
@@ -126,7 +126,52 @@ def test_python_provider_does_not_warn_when_start_command_is_inferred(
     provider_config = PythonProvider.load_config(tmp_path, Config())
 
     assert provider_config.commands.start == "python main.py"
-    assert "no start command could be inferred" not in capsys.readouterr().err
+    assert "no main file was detected" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_warning"),
+    [
+        (
+            PythonConfig(framework=PythonFramework.Streamlit),
+            "no main file was detected for the Streamlit framework",
+        ),
+        (
+            PythonConfig(framework=PythonFramework.MCP),
+            "no main file was detected for the MCP framework",
+        ),
+        (
+            PythonConfig(server=PythonServer.Daphne),
+            "no ASGI application was detected for the Daphne server",
+        ),
+        (
+            PythonConfig(server=PythonServer.Hypercorn),
+            "no ASGI application was detected for the Hypercorn server",
+        ),
+        (
+            PythonConfig(server=PythonServer.Uvicorn),
+            (
+                "no main file, ASGI application, or WSGI application "
+                "was detected for the Uvicorn server"
+            ),
+        ),
+        (
+            PythonConfig(
+                framework=PythonFramework.FastAPI,
+                server=PythonServer.Uvicorn,
+            ),
+            "no main file was detected for the FastAPI framework",
+        ),
+    ],
+)
+def test_infer_start_command_explains_missing_evidence(
+    config: PythonConfig,
+    expected_warning: str,
+    capsys,
+) -> None:
+    assert PythonProvider.infer_start_command(config) is None
+    warning = " ".join(capsys.readouterr().err.split())
+    assert expected_warning in warning
 
 
 @pytest.mark.parametrize(

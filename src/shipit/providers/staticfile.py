@@ -138,7 +138,14 @@ class StaticFileProvider:
         ):
             return False
 
-        return NodeProvider.infer_start_command(path, package_json) is None
+        return (
+            NodeProvider.infer_start_command(
+                path,
+                package_json,
+                warn=False,
+            )
+            is None
+        )
 
     @classmethod
     def _load_redirect_rules(cls, redirects_path: Path) -> list[RedirectRule]:
