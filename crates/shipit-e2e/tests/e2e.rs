@@ -125,8 +125,9 @@ e2e_tests! {
     // examples/node-next
     node__local__node_next => ("node_next", Local);
     node__wasmer__node_next => ("node_next", Wasmer);
-    // examples/node-astro (Local only)
+    // examples/node-astro
     node__local__node_astro => ("node_astro", Local);
+    node__wasmer__node_astro => ("node_astro", Wasmer);
     // examples/hugo
     static__local__hugo => ("hugo", Local);
     static__wasmer__hugo => ("hugo", Wasmer);

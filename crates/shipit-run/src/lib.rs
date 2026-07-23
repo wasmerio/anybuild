@@ -13,10 +13,8 @@ pub mod wasmer;
 
 /// Port of `runners/base.py::Runner`.
 pub trait Runner {
-    /// Apply the runner's config hook before evaluation. The wasmer runner
-    /// splits plan-visible mutations from runner-only metadata (see
-    /// `prepare_config` in runners/wasmer.py — an invariant, not an
-    /// accident).
+    /// Apply the runner's config hook before evaluation. The Wasmer runner
+    /// uses this to select Wasmer-specific dependencies and preparation.
     fn prepare_config(&mut self, config: ProviderConfig) -> ProviderConfig;
     fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step>;
     fn build(&mut self, serve: &Serve) -> Result<()>;

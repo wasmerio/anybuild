@@ -206,13 +206,11 @@ const BASE: Case = Case {
     build_modes: None,
 };
 
-const PHP_DEV_SERVER: &str =
-    r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started";
+const PHPIX_LISTENING: &str = r"listening addr";
 const SWS_LISTENING: &str = r"server is listening on";
 const UVICORN: &str = r"Uvicorn running on .*";
 
 const WASMER_ONLY: &[BuildMode] = &[BuildMode::Wasmer];
-const LOCAL_ONLY: &[BuildMode] = &[BuildMode::Local];
 const LOCAL_AND_WASMER: &[BuildMode] = &[BuildMode::Local, BuildMode::Wasmer];
 
 const WORDPRESS_DB_ENV: &[(&str, &str)] = &[
@@ -242,7 +240,7 @@ pub static CASES: &[Case] = &[
         test_id: "php_nobuild0",
         suite: Suite::Php,
         path: Some("examples/php-nobuild"),
-        serve_pattern: PHP_DEV_SERVER,
+        serve_pattern: PHPIX_LISTENING,
         http: &[body("/", r"PHP Version 8\.3\.[0-9]+")],
         ..BASE
     },
@@ -251,7 +249,7 @@ pub static CASES: &[Case] = &[
         test_id: "php_nobuild1",
         suite: Suite::Php,
         path: Some("examples/php-nobuild"),
-        serve_pattern: PHP_DEV_SERVER,
+        serve_pattern: PHPIX_LISTENING,
         http: &[body("/", r"PHP Version 8\.3\.[0-9]+")],
         ..BASE
     },
@@ -260,7 +258,7 @@ pub static CASES: &[Case] = &[
         test_id: "php_api",
         suite: Suite::Php,
         path: Some("examples/php-api"),
-        serve_pattern: PHP_DEV_SERVER,
+        serve_pattern: PHPIX_LISTENING,
         http: &[
             body("/", r#""version"\s*:\s*"8\.3\.[0-9]+""#),
             body("/api/greet/Alice", r"Hello, Alice!"),
@@ -272,7 +270,7 @@ pub static CASES: &[Case] = &[
         test_id: "php_wordpress0",
         suite: Suite::Php,
         path: Some("examples/php-wordpress"),
-        serve_pattern: PHP_DEV_SERVER,
+        serve_pattern: PHPIX_LISTENING,
         http: &[body("/", r"WordPress")],
         ..BASE
     },
@@ -356,7 +354,7 @@ pub static CASES: &[Case] = &[
         test_id: "php_wordpress1",
         suite: Suite::Php,
         path: Some("examples/php-wordpress"),
-        serve_pattern: PHP_DEV_SERVER,
+        serve_pattern: PHPIX_LISTENING,
         http: &[body("/", r"WordPress")],
         extra_env: &[("SHIPIT_PHPIX", "true")],
         expected_memory_limit: Some("2Gb"),
@@ -367,7 +365,7 @@ pub static CASES: &[Case] = &[
         test_id: "php_nobuild2",
         suite: Suite::Php,
         path: Some("examples/php-nobuild"),
-        serve_pattern: PHP_DEV_SERVER,
+        serve_pattern: PHPIX_LISTENING,
         http: &[body("/", r"PHP Version 8\.3\.[0-9]+")],
         extra_env: &[("SHIPIT_PHPIX", "true")],
         expect_no_memory_limit: true,
@@ -593,7 +591,7 @@ pub static CASES: &[Case] = &[
         path: Some("examples/node-astro"),
         serve_pattern: r"Node|Astro|Listening|ready",
         http: &[body("/", r"Astro Node Example")],
-        build_modes: Some(LOCAL_ONLY),
+        build_modes: Some(LOCAL_AND_WASMER),
         ..BASE
     },
     // Hugo static site (built via Hugo, served with static-web-server)

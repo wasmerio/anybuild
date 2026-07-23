@@ -210,8 +210,8 @@ pub fn resolve_project_context(
 
     let (provider, provider_config) = load_project_config(&paths, overrides)?;
     // Apply the runner's config hook before evaluation (identity for the
-    // local runner; the wasmer runner's plan-visible/runner-only split is
-    // an invariant — see runners/wasmer semantics in plans/rust-migration.md).
+    // local runner; the Wasmer runner selects its runtime dependencies and
+    // preparation behavior through config overrides).
     let provider_config = runner.prepare_config(provider_config);
 
     let serve = evaluate_shipit(EvaluateOptions {

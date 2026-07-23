@@ -185,7 +185,7 @@ pub fn exclude_defaults_json(config: &ProviderConfig) -> serde_json::Value {
 }
 
 /// Apply a provider's declared defaults to an already serialized config.
-/// This is used by the Wasmer runner after applying runner-only overrides.
+/// This is used by the Wasmer runner after applying runtime overrides.
 pub fn exclude_defaults_from_json(name: &str, dumped: serde_json::Value) -> serde_json::Value {
     let Ok(serde_json::Value::Object(defaults)) = defaults_json(name) else {
         return dumped;

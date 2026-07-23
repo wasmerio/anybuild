@@ -2,12 +2,9 @@
 //!
 //! Two invariants carried over verbatim (see plans/rust-migration.md):
 //!
-//! - `prepare_config` split: the python trio (cross_platform, extra
-//!   index, precompile) mutates the plan-visible config *before* eval;
-//!   the php/node flips (phpix, edgejs, remove_native_binaries) apply
-//!   only to a runner-side copy used for metadata. Sharing the mutation
-//!   silently flips php serving to phpix — pinned by the ported
-//!   `tests/test_wasmer_annotations.py` cases below.
+//! - `prepare_config` applies the Wasmer-specific Python, PHP, and Node
+//!   overrides before plan evaluation so the generated dependencies and
+//!   commands agree with the selected runner.
 //! - `resolve_app_kind` keys off `serve.provider` (serve-side identity).
 
 use std::cell::RefCell;
@@ -25,7 +22,7 @@ use toml_edit::{value, Array, ArrayOfTables, DocumentMut, Item, Table};
 use shipit_build::BuildBackend;
 use shipit_common::volumes::load_volume_mappings;
 use shipit_plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
-use shipit_providers::{merge_config_json, ProviderConfig};
+use shipit_providers::{config_from_json, merge_config_json, ProviderConfig};
 
 use crate::Runner;
 
@@ -35,7 +32,7 @@ pub const SHIPIT_VERSION_ANNOTATION: &str = "shipitcli.com/version";
 pub const WASMER_APP_KIND_ANNOTATION: &str = "wasmer.io/app-kind";
 pub const WASMER_VERSION_ANNOTATION: &str = "wasmer.io/version";
 pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
-pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.0.7";
+pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.1.0";
 pub const PHPIX_VERSION: &str = "0.3.0-rc.2";
 
 /// The workspace package version is embedded in every Rust crate and kept in
@@ -344,9 +341,8 @@ fn is_node_config(provider: &str) -> bool {
     matches!(provider, "node" | "node-static" | "laravel")
 }
 
-/// The runner-only overrides from `prepare_config`, applied to the JSON
-/// view of the deep copy (annotations only ever need the JSON, and this
-/// keeps us decoupled from sibling config-struct layouts).
+/// Wasmer-specific overrides from `prepare_config`, applied through JSON to
+/// keep the runner decoupled from sibling config-struct layouts.
 fn apply_runner_flips(provider: &str, config_json: &mut JsonValue) {
     let Some(map) = config_json.as_object_mut() else {
         return;
@@ -382,8 +378,8 @@ pub struct WasmerRunner {
     pub wasmer_registry: Option<String>,
     pub wasmer_token: Option<String>,
     pub bin: String,
-    /// Runner-side config JSON (deep copy with the php/node flips
-    /// applied). Feeds `shipitcli.com/config`; never the evaluated plan.
+    /// Snapshot of the plan-visible config after Wasmer overrides. Feeds
+    /// `shipitcli.com/config` annotations.
     pub provider_config: Option<JsonValue>,
     #[cfg(test)]
     pub(crate) captured_commands: Vec<CapturedCommand>,
@@ -1116,14 +1112,13 @@ impl Runner for WasmerRunner {
             config
         };
 
-        // Runner-only overrides: these feed app.yaml/wasmer.toml metadata
-        // (app kind, memory caps, runtime selection) but must NOT change
-        // the evaluated plan — with providers evaluated from config, a
-        // shared mutation here would silently flip e.g. php serving to
-        // phpix. phpix stays opt-in via project config/SHIPIT_PHPIX.
-        let mut runner_config = config.to_json();
-        apply_runner_flips(provider, &mut runner_config);
-        self.provider_config = Some(runner_config);
+        // Runtime selection must be visible while evaluating the plan: PHP
+        // plans need phpix dependencies/commands and Node plans need EdgeJS
+        // preparation whenever the Wasmer runner is selected.
+        let mut config_json = config.to_json();
+        apply_runner_flips(provider, &mut config_json);
+        let config = config_from_json(provider, config_json).unwrap_or(config);
+        self.provider_config = Some(config.to_json());
         config
     }
 
@@ -1632,7 +1627,7 @@ mod tests {
         let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
         assert_eq!(
             manifest["dependencies"]["wasmer/edgejs-quickjs"].as_str(),
-            Some("=0.0.7")
+            Some("=0.1.0")
         );
         let command = manifest["command"]
             .as_array_of_tables()
@@ -1741,25 +1736,14 @@ mod tests {
 
         let config = runner.prepare_config(ProviderConfig::Node(NodeConfig::default()));
 
-        // Runner metadata (app.yaml/wasmer.toml) sees the edge
-        // optimizations...
         let runner_json = runner.provider_config.as_ref().unwrap();
         assert_eq!(runner_json["use_edgejs"], JsonValue::Bool(true));
         assert_eq!(runner_json["precompile_edgejs"], JsonValue::Bool(true));
         assert_eq!(runner_json["remove_native_binaries"], JsonValue::Bool(true));
-        // ...but the plan config the Shipit file is evaluated with is
-        // untouched, so per-run runner flags cannot silently change the
-        // build plan.
         let plan_json = config.to_json();
-        assert_ne!(plan_json.get("use_edgejs"), Some(&JsonValue::Bool(true)));
-        assert_ne!(
-            plan_json.get("precompile_edgejs"),
-            Some(&JsonValue::Bool(true))
-        );
-        assert_ne!(
-            plan_json.get("remove_native_binaries"),
-            Some(&JsonValue::Bool(true))
-        );
+        assert_eq!(plan_json["use_edgejs"], JsonValue::Bool(true));
+        assert_eq!(plan_json["precompile_edgejs"], JsonValue::Bool(true));
+        assert_eq!(plan_json["remove_native_binaries"], JsonValue::Bool(true));
     }
 
     #[test]
@@ -1778,20 +1762,40 @@ mod tests {
     }
 
     #[test]
-    fn test_wasmer_prepare_config_php_flip_is_runner_only() {
+    fn test_wasmer_prepare_config_enables_phpix() {
+        for initial_phpix in [false, true] {
+            let tmp = tempfile::tempdir().unwrap();
+            let mut runner = make_runner(tmp.path());
+            let mut php_json = shipit_providers::defaults_json("php").unwrap();
+            php_json["phpix"] = JsonValue::Bool(initial_phpix);
+            let php = shipit_providers::config_from_json("php", php_json).unwrap();
+            let config = runner.prepare_config(php);
+
+            assert_eq!(config.to_json()["phpix"], JsonValue::Bool(true));
+            assert_eq!(
+                runner.provider_config.as_ref().unwrap()["phpix"],
+                JsonValue::Bool(true)
+            );
+        }
+    }
+
+    #[test]
+    fn test_wasmer_prepare_config_enables_wordpress_phpix() {
         let tmp = tempfile::tempdir().unwrap();
         let mut runner = make_runner(tmp.path());
-        let php = shipit_providers::config_from_json(
-            "php",
-            shipit_providers::defaults_json("php").unwrap(),
-        )
-        .unwrap();
-        let config = runner.prepare_config(php);
 
-        let runner_json = runner.provider_config.as_ref().unwrap();
-        assert_eq!(runner_json["phpix"], JsonValue::Bool(true));
-        // The plan-visible config keeps phpix opt-in.
-        assert_ne!(config.to_json().get("phpix"), Some(&JsonValue::Bool(true)));
+        let config = runner.prepare_config(ProviderConfig::Wordpress(
+            shipit_providers::wordpress::WordPressConfig::default(),
+        ));
+
+        let ProviderConfig::Wordpress(config) = config else {
+            panic!("expected wordpress config");
+        };
+        assert!(config.php.phpix);
+        assert_eq!(
+            runner.provider_config.as_ref().unwrap()["phpix"],
+            JsonValue::Bool(true)
+        );
     }
 
     #[test]
@@ -1887,7 +1891,7 @@ mod tests {
              [package]\n\
              entrypoint = \"start\"\n\n\
              [dependencies]\n\
-             \"wasmer/edgejs-quickjs\" = \"=0.0.7\"\n\n\
+             \"wasmer/edgejs-quickjs\" = \"=0.1.0\"\n\n\
              [fs]\n\
              [[command]]\n\
              name = \"start\"\n\
