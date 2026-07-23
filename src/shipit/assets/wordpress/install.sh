@@ -54,7 +54,11 @@ else
     --locale="$WP_LOCALE"
 
   echo "🔄 Setting permalinks"
-  wp rewrite structure '/%year%/%monthnum%/%day%/%postname%/'
+  # Avoid `wp rewrite structure`: it relaunches wp-cli in a subprocess to flush
+  # rewrites, which fails under WASIX (PHP_BINARY is empty) and aborts this
+  # script via `set -e`. Setting the option directly is equivalent, since we
+  # flush rewrites with `wp rewrite flush --hard` at the end of this script.
+  wp option update permalink_structure '/%year%/%monthnum%/%day%/%postname%/'
 fi
 
 # Install plugins from WP_PLUGINS environment variable
