@@ -155,55 +155,18 @@ def python_build(config, source = None, app = None, venv = None, serving = True)
         local_venv = local_venv,
     )
 
-def python_commands(config, venv):
-    """start/after_deploy commands for the detected server and framework."""
-    asgi = config.asgi_application
-    wsgi = config.wsgi_application
-    main_file = config.main_file
-
-    start = None
-    if config.server == "daphne":
-        if not asgi:
-            fail("No ASGI application found for Daphne")
-        start = f"daphne {asgi} --bind 0.0.0.0 --port {PORT}"
-    elif config.server == "uvicorn":
-        if not main_file and not asgi and not wsgi:
-            fail("No ASGI or WSGI application found for Uvicorn and no main file found")
-        if asgi:
-            start = f"uvicorn {asgi} --host 0.0.0.0 --port {PORT}"
-        elif wsgi:
-            start = f"uvicorn {wsgi} --interface=wsgi --host 0.0.0.0 --port {PORT}"
-    elif config.server == "hypercorn":
-        if not asgi:
-            fail("No ASGI application found for Hypercorn")
-        start = f"hypercorn {asgi} --bind 0.0.0.0:{PORT}"
-    elif config.framework == "streamlit":
-        if not main_file:
-            fail("No main file found for Streamlit")
-        start = f"streamlit run {main_file} --server.port {PORT} --server.address 0.0.0.0 --server.headless true"
-    elif config.framework == "mcp":
-        if not main_file:
-            fail("No main file found for MCP")
-        if config.mcp_self_running:
-            start = "python " + main_file
-        else:
-            start = "python {}/bin/mcp run {} --transport=streamable-http".format(venv.serve_path, main_file)
-    elif config.framework == "django":
-        start = f"python manage.py runserver 0.0.0.0:{PORT}"
-
-    if not start and main_file:
-        start = "python " + main_file
-
+def python_commands(config):
+    """Commands resolved from the Python provider configuration."""
     commands = {}
-    if start:
-        commands["start"] = start
+    if config.commands.start:
+        commands["start"] = config.commands.start
     if config.migration_strategy == "django":
         commands["after_deploy"] = "python manage.py migrate"
     elif config.migration_strategy == "alembic":
         commands["after_deploy"] = "alembic upgrade head"
     return commands
 
-def python_env(config, app, site_packages):
+def python_env(config, app, venv, site_packages):
     app_path = app.serve_path
     if config.main_file and config.main_file.startswith("src/"):
         pythonpath = "{}:{}/src:{}".format(app_path, app_path, site_packages)
@@ -215,6 +178,8 @@ def python_env(config, app, site_packages):
     elif config.framework == "mcp":
         env_vars["FASTMCP_HOST"] = "0.0.0.0"
         env_vars["FASTMCP_PORT"] = PORT
+        if not config.mcp_self_running:
+            env_vars["VIRTUAL_ENV"] = venv.serve_path
     return env_vars
 
 def python_prepare(config, site_packages, app_serve_path):
@@ -256,8 +221,8 @@ def python_serve(
         name = name,
         cwd = app.serve_path,
         prepare = prepare if prepare != None else python_prepare(config, site_packages, app.serve_path),
-        env = python_env(config, app, site_packages),
-        commands = python_commands(config, venv),
+        env = python_env(config, app, venv, site_packages),
+        commands = python_commands(config),
         services = services if services != None else python_services(config),
         mounts = [app, venv],
         **overrides

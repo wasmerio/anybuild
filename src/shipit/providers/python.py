@@ -6,6 +6,8 @@ from typing import List, Optional, Set
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
+from shipit.ui import console
+
 from .install_context import discover_python_dependency_files, discover_python_install_context
 from .base import DetectResult, _exists, Config
 
@@ -156,7 +158,62 @@ class PythonProvider:
             path, config.framework, config.main_file
         )
 
+        if not config.commands.start:
+            config.commands.start = cls.infer_start_command(config)
+        if not config.commands.start:
+            console.print(
+                "[bold yellow]Warning:[/bold yellow] "
+                "no start command found for Python project"
+            )
+
         return config
+
+    @staticmethod
+    def infer_start_command(config: PythonConfig) -> Optional[str]:
+        main_file = config.main_file
+        asgi = config.asgi_application
+        wsgi = config.wsgi_application
+
+        if config.server == PythonServer.Daphne:
+            if asgi:
+                return f"daphne {asgi} --bind 0.0.0.0 --port $PORT"
+            return None
+        if config.server == PythonServer.Uvicorn:
+            if asgi:
+                return f"uvicorn {asgi} --host 0.0.0.0 --port $PORT"
+            if wsgi:
+                return (
+                    f"uvicorn {wsgi} --interface=wsgi "
+                    "--host 0.0.0.0 --port $PORT"
+                )
+            if not main_file:
+                return None
+        elif config.server == PythonServer.Hypercorn:
+            if asgi:
+                return f"hypercorn {asgi} --bind 0.0.0.0:$PORT"
+            return None
+        elif config.framework == PythonFramework.Streamlit:
+            if main_file:
+                return (
+                    f"streamlit run {main_file} --server.port $PORT "
+                    "--server.address 0.0.0.0 --server.headless true"
+                )
+            return None
+        elif config.framework == PythonFramework.MCP:
+            if not main_file:
+                return None
+            if config.mcp_self_running:
+                return f"python {main_file}"
+            return (
+                f"python $VIRTUAL_ENV/bin/mcp run {main_file} "
+                "--transport=streamable-http"
+            )
+        elif config.framework == PythonFramework.Django:
+            return "python manage.py runserver 0.0.0.0:$PORT"
+
+        if main_file:
+            return f"python {main_file}"
+        return None
 
     @classmethod
     def check_deps(cls, path: Path, *deps: str) -> Set[str]:
