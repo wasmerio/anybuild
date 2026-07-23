@@ -341,6 +341,18 @@ def test_node_start_command_uses_package_main(tmp_path: Path) -> None:
     assert provider_config.commands.start == "node src/server.js"
 
 
+def test_node_start_command_ignores_empty_script_and_uses_package_main(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"scripts": {"start": "  "}, "main": "src/server.js"}\n'
+    )
+
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+
+    assert provider_config.commands.start == "node src/server.js"
+
+
 def test_node_start_command_uses_common_entry_file(tmp_path: Path) -> None:
     (tmp_path / "server.js").write_text(
         """const http = require("http");
@@ -354,6 +366,20 @@ http.createServer((_req, res) => {
     provider_config = NodeProvider.load_config(tmp_path, Config())
 
     assert provider_config.commands.start == "node server.js"
+
+
+def test_node_provider_warns_when_start_command_is_missing(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    (tmp_path / "package.json").write_text('{"name": "missing-start"}\n')
+
+    provider_config = NodeProvider.load_config(tmp_path, Config())
+
+    assert provider_config.commands.start is None
+    warning = capsys.readouterr().err
+    assert "Warning: no start or main script found in package.json" in warning
+    assert "Warning: no entry file found for Node project" in warning
 
 
 def test_node_build_steps_optimize_deps_prunes_then_node_modules(

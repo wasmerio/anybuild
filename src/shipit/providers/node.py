@@ -9,6 +9,8 @@ from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 from semantic_version import NpmSpec, Version
 
+from shipit.ui import console
+
 from .base import Config, DetectResult
 from .install_context import discover_js_install_context
 
@@ -536,6 +538,12 @@ class NodeProvider:
         if config.commands.start and cls._is_node_command(config.commands.start):
             return DetectResult(cls.name(), 35)
 
+        package_json = cls.parse_package_json(path)
+        package_start = (
+            cls.package_scripts(package_json).get("start", "").strip()
+        )
+        package_score = 30 if package_start else 10
+
         if config.commands.install:
             install_commands = {
                 "npm install",
@@ -552,17 +560,17 @@ class NodeProvider:
                 "bun i",
             }
             if config.commands.install in install_commands:
-                return DetectResult(cls.name(), 30)
+                return DetectResult(cls.name(), package_score)
 
-        package_json = cls.parse_package_json(path)
         found_deps = cls._check_package_json_deps(
             package_json, *cls.FRAMEWORK_DEPENDENCIES
         )
         if cls.detect_framework(package_json, found_deps, path):
-            return DetectResult(cls.name(), 45)
+            framework_score = 45 if package_start else 10
+            return DetectResult(cls.name(), framework_score)
 
         if (path / "package.json").is_file():
-            return DetectResult(cls.name(), 30)
+            return DetectResult(cls.name(), package_score)
 
         if cls._common_entry_file(path, require_node_evidence=True):
             return DetectResult(cls.name(), 30)
@@ -917,17 +925,27 @@ class NodeProvider:
 
     @classmethod
     def infer_start_command(
-        cls, path: Path, package_json: Optional[Dict[str, Any]]
+        cls,
+        path: Path,
+        package_json: Optional[Dict[str, Any]],
+        *,
+        warn: bool = True,
     ) -> Optional[str]:
         scripts = cls.package_scripts(package_json)
         start_script = scripts.get("start")
-        if start_script:
-            return start_script.strip() or None
+        if start_script and start_script.strip():
+            return start_script.strip()
 
         if package_json:
             main = package_json.get("main")
             if isinstance(main, str) and main.strip():
                 return cls._node_entry_command(main.strip())
+
+        if warn and (path / "package.json").is_file():
+            console.print(
+                "[bold yellow]Warning:[/bold yellow] "
+                "no start or main script found in package.json"
+            )
 
         entry_file = cls._common_entry_file(
             path,
@@ -935,10 +953,14 @@ class NodeProvider:
         )
         if entry_file:
             return cls._node_entry_command(entry_file)
-
+        if warn:
+            tried = ", ".join(cls.COMMON_ENTRY_FILES)
+            console.print(
+                "[bold yellow]Warning:[/bold yellow] "
+                f"no entry file found for Node project (tried: {tried})"
+            )
         return None
 
     @classmethod
     def _node_entry_command(cls, entry_file: str) -> str:
         return f"node {shlex.quote(entry_file)}"
-

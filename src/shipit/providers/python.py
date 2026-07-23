@@ -6,6 +6,8 @@ from typing import List, Optional, Set
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
+from shipit.ui import console
+
 from .install_context import discover_python_dependency_files, discover_python_install_context
 from .base import DetectResult, _exists, Config
 
@@ -156,7 +158,87 @@ class PythonProvider:
             path, config.framework, config.main_file
         )
 
+        if not config.commands.start:
+            config.commands.start = cls.infer_start_command(config)
+
         return config
+
+    @staticmethod
+    def infer_start_command(
+        config: PythonConfig,
+        *,
+        warn: bool = True,
+    ) -> Optional[str]:
+        def cannot_infer(reason: str) -> Optional[str]:
+            if warn:
+                console.print(
+                    f"[bold yellow]Warning:[/bold yellow] {reason}"
+                )
+            return None
+
+        def missing_main_file() -> Optional[str]:
+            if config.framework:
+                return cannot_infer(
+                    "no main file was detected for the "
+                    f"{config.framework.name} framework"
+                )
+            return cannot_infer(
+                "no main file was detected for Python project"
+            )
+
+        main_file = config.main_file
+        asgi = config.asgi_application
+        wsgi = config.wsgi_application
+
+        if config.server == PythonServer.Daphne:
+            if asgi:
+                return f"daphne {asgi} --bind 0.0.0.0 --port $PORT"
+            return cannot_infer(
+                "no ASGI application was detected for the Daphne server"
+            )
+        if config.server == PythonServer.Uvicorn:
+            if asgi:
+                return f"uvicorn {asgi} --host 0.0.0.0 --port $PORT"
+            if wsgi:
+                return (
+                    f"uvicorn {wsgi} --interface=wsgi "
+                    "--host 0.0.0.0 --port $PORT"
+                )
+            if not main_file:
+                if config.framework:
+                    return missing_main_file()
+                return cannot_infer(
+                    "no main file, ASGI application, or WSGI application "
+                    "was detected for the Uvicorn server"
+                )
+        elif config.server == PythonServer.Hypercorn:
+            if asgi:
+                return f"hypercorn {asgi} --bind 0.0.0.0:$PORT"
+            return cannot_infer(
+                "no ASGI application was detected for the Hypercorn server"
+            )
+        elif config.framework == PythonFramework.Streamlit:
+            if main_file:
+                return (
+                    f"streamlit run {main_file} --server.port $PORT "
+                    "--server.address 0.0.0.0 --server.headless true"
+                )
+            return missing_main_file()
+        elif config.framework == PythonFramework.MCP:
+            if not main_file:
+                return missing_main_file()
+            if config.mcp_self_running:
+                return f"python {main_file}"
+            return (
+                f"python $VIRTUAL_ENV/bin/mcp run {main_file} "
+                "--transport=streamable-http"
+            )
+        elif config.framework == PythonFramework.Django:
+            return "python manage.py runserver 0.0.0.0:$PORT"
+
+        if main_file:
+            return f"python {main_file}"
+        return missing_main_file()
 
     @classmethod
     def check_deps(cls, path: Path, *deps: str) -> Set[str]:
