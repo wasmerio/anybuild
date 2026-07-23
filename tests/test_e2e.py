@@ -201,7 +201,7 @@ def _e2e_case_params(cases: list[E2ECase]) -> list[object]:
         E2ECase(
             path="examples/php-nobuild",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                r"listening addr"
             ),
             http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
         ),
@@ -209,7 +209,7 @@ def _e2e_case_params(cases: list[E2ECase]) -> list[object]:
         E2ECase(
             path="examples/php-nobuild",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                r"listening addr"
             ),
             http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
         ),
@@ -217,7 +217,7 @@ def _e2e_case_params(cases: list[E2ECase]) -> list[object]:
         E2ECase(
             path="examples/php-api",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                r"listening addr"
             ),
             http=[
                 HTTPRequest(
@@ -231,7 +231,7 @@ def _e2e_case_params(cases: list[E2ECase]) -> list[object]:
         E2ECase(
             path="examples/php-wordpress",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                r"listening addr"
             ),
             http=[HTTPRequest(path="/", body_match=r"WordPress")],
         ),
@@ -342,7 +342,7 @@ def _e2e_case_params(cases: list[E2ECase]) -> list[object]:
         E2ECase(
             path="examples/php-wordpress",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                r"listening addr"
             ),
             http=[HTTPRequest(path="/", body_match=r"WordPress")],
             extra_env={"SHIPIT_PHPIX": "true"},
@@ -352,7 +352,7 @@ def _e2e_case_params(cases: list[E2ECase]) -> list[object]:
         E2ECase(
             path="examples/php-nobuild",
             serve_pattern=(
-                r"PHP 8\.3\.[0-9]+ Development Server \(http://localhost:[\d]+\) started"
+                r"listening addr"
             ),
             http=[HTTPRequest(path="/", body_match=r"PHP Version 8\.3\.[0-9]+")],
             extra_env={"SHIPIT_PHPIX": "true"},
