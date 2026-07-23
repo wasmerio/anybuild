@@ -149,7 +149,7 @@ jobs:
       - name: Set up Wasmer
         uses: wasmerio/setup-wasmer@v3.1
         with:
-          version: v7.2.0
+          version: v7.2.1
 
       - name: Download shipit binary
         uses: actions/download-artifact@v4
