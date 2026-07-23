@@ -88,13 +88,57 @@ class StaticFileProvider:
             if _exists(
                 path, "index.html", "index.htm", "public/index.htm", "public/index.html"
             ):
-                return DetectResult(cls.name(), 10)
+                return DetectResult(cls.name(), 15)
             return DetectResult(cls.name(), 10)
         if config.commands.start and config.commands.start.startswith(
             "static-web-server "
         ):
             return DetectResult(cls.name(), 70)
+        if cls._is_unbuilt_node_static_site(path, config):
+            return DetectResult(cls.name(), 15)
         return None
+
+    @classmethod
+    def _is_unbuilt_node_static_site(
+        cls,
+        path: Path,
+        config: Config,
+    ) -> bool:
+        if not _exists(path, "index.html", "index.htm"):
+            return False
+
+        # Local imports avoid a module cycle: node-static composes this
+        # provider for its serving behavior.
+        from .node import NodeProvider
+        from .node_static import NodeStaticProvider
+
+        package_json = NodeProvider.parse_package_json(path)
+        if package_json is None:
+            return False
+
+        scripts = NodeProvider.package_scripts(package_json)
+        if scripts.get("start", "").strip():
+            return False
+        build_scripts = ("build", "generate", "export", "docs:build")
+        if config.commands.build or any(
+            scripts.get(name, "").strip() for name in build_scripts
+        ):
+            return False
+        if NodeStaticProvider.detect(path, config):
+            return False
+
+        found_runtime_deps = NodeProvider._check_package_json_deps(
+            package_json,
+            *NodeProvider.FRAMEWORK_DEPENDENCIES,
+        )
+        if NodeProvider.detect_framework(
+            package_json,
+            found_runtime_deps,
+            path,
+        ):
+            return False
+
+        return NodeProvider.infer_start_command(path, package_json) is None
 
     @classmethod
     def _load_redirect_rules(cls, redirects_path: Path) -> list[RedirectRule]:

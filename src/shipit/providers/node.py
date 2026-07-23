@@ -543,6 +543,12 @@ class NodeProvider:
         if config.commands.start and cls._is_node_command(config.commands.start):
             return DetectResult(cls.name(), 35)
 
+        package_json = cls.parse_package_json(path)
+        package_start = (
+            cls.package_scripts(package_json).get("start", "").strip()
+        )
+        package_score = 30 if package_start else 10
+
         if config.commands.install:
             install_commands = {
                 "npm install",
@@ -559,17 +565,17 @@ class NodeProvider:
                 "bun i",
             }
             if config.commands.install in install_commands:
-                return DetectResult(cls.name(), 30)
+                return DetectResult(cls.name(), package_score)
 
-        package_json = cls.parse_package_json(path)
         found_deps = cls._check_package_json_deps(
             package_json, *cls.FRAMEWORK_DEPENDENCIES
         )
         if cls.detect_framework(package_json, found_deps, path):
-            return DetectResult(cls.name(), 45)
+            framework_score = 45 if package_start else 10
+            return DetectResult(cls.name(), framework_score)
 
         if (path / "package.json").is_file():
-            return DetectResult(cls.name(), 30)
+            return DetectResult(cls.name(), package_score)
 
         if cls._common_entry_file(path, require_node_evidence=True):
             return DetectResult(cls.name(), 30)
@@ -948,4 +954,3 @@ class NodeProvider:
     @classmethod
     def _node_entry_command(cls, entry_file: str) -> str:
         return f"node {shlex.quote(entry_file)}"
-
