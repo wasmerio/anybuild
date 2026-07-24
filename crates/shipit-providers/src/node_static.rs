@@ -1131,7 +1131,7 @@ mod tests {
     }
 
     #[test]
-    fn test_explicit_next_build_command_uses_node_provider() {
+    fn test_next_build_without_start_command_uses_node_static() {
         let tmp = tempfile::tempdir().unwrap();
         write(
             &tmp.path().join("package.json"),
@@ -1141,9 +1141,11 @@ mod tests {
         base.commands.build = Some("next build".to_owned());
 
         let detect_result = detect(tmp.path(), &base).expect("detects");
+        let node_result = crate::node::detect(tmp.path(), &base).expect("node detects");
 
         assert_eq!(detect_result.score, 20);
-        assert_ne!(
+        assert!(node_result.score < detect_result.score);
+        assert_eq!(
             crate::load_provider(tmp.path(), &base, None).unwrap(),
             "node-static"
         );

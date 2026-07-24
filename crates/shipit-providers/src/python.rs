@@ -45,6 +45,17 @@ impl PythonFramework {
             _ => None,
         }
     }
+
+    fn display_name(self) -> &'static str {
+        match self {
+            Self::Django => "Django",
+            Self::Streamlit => "Streamlit",
+            Self::FastApi => "FastAPI",
+            Self::Flask => "Flask",
+            Self::FastHtml => "FastHTML",
+            Self::Mcp => "MCP",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -396,7 +407,113 @@ pub fn load_config_with_deps(
     config.mcp_self_running =
         detect_mcp_self_running(path, config.framework, config.main_file.as_deref());
 
+    if is_blank(&config.base.commands.start) {
+        config.base.commands.start = infer_start_command(&config, true);
+    }
+
     Ok(config)
+}
+
+fn cannot_infer_start(reason: &str, warn: bool) -> Option<String> {
+    if warn {
+        eprintln!("Warning: {reason}");
+    }
+    None
+}
+
+fn missing_main_file(config: &PythonConfig, warn: bool) -> Option<String> {
+    match config.framework {
+        Some(framework) => cannot_infer_start(
+            &format!(
+                "no main file was detected for the {} framework",
+                framework.display_name()
+            ),
+            warn,
+        ),
+        None => cannot_infer_start("no main file was detected for Python project", warn),
+    }
+}
+
+/// Resolve the provider-level start command before Starlark evaluation.
+pub(crate) fn infer_start_command(config: &PythonConfig, warn: bool) -> Option<String> {
+    let main_file = config
+        .main_file
+        .as_deref()
+        .filter(|value| !value.is_empty());
+    let asgi = config
+        .asgi_application
+        .as_deref()
+        .filter(|value| !value.is_empty());
+    let wsgi = config
+        .wsgi_application
+        .as_deref()
+        .filter(|value| !value.is_empty());
+
+    if config.server == Some(PythonServer::Daphne) {
+        return match asgi {
+            Some(asgi) => Some(format!("daphne {asgi} --bind 0.0.0.0 --port $PORT")),
+            None => cannot_infer_start(
+                "no ASGI application was detected for the Daphne server",
+                warn,
+            ),
+        };
+    }
+
+    if config.server == Some(PythonServer::Uvicorn) {
+        if let Some(asgi) = asgi {
+            return Some(format!("uvicorn {asgi} --host 0.0.0.0 --port $PORT"));
+        }
+        if let Some(wsgi) = wsgi {
+            return Some(format!(
+                "uvicorn {wsgi} --interface=wsgi --host 0.0.0.0 --port $PORT"
+            ));
+        }
+        if main_file.is_none() {
+            if config.framework.is_some() {
+                return missing_main_file(config, warn);
+            }
+            return cannot_infer_start(
+                "no main file, ASGI application, or WSGI application was detected \
+                 for the Uvicorn server",
+                warn,
+            );
+        }
+    } else if config.server == Some(PythonServer::Hypercorn) {
+        return match asgi {
+            Some(asgi) => Some(format!("hypercorn {asgi} --bind 0.0.0.0:$PORT")),
+            None => cannot_infer_start(
+                "no ASGI application was detected for the Hypercorn server",
+                warn,
+            ),
+        };
+    } else if config.framework == Some(PythonFramework::Streamlit) {
+        return match main_file {
+            Some(main_file) => Some(format!(
+                "streamlit run {main_file} --server.port $PORT \
+                 --server.address 0.0.0.0 --server.headless true"
+            )),
+            None => missing_main_file(config, warn),
+        };
+    } else if config.framework == Some(PythonFramework::Mcp) {
+        let Some(main_file) = main_file else {
+            return missing_main_file(config, warn);
+        };
+        return if config.mcp_self_running {
+            Some(format!("python {main_file}"))
+        } else {
+            Some(format!(
+                "python $VIRTUAL_ENV/bin/mcp run {main_file} \
+                 --transport=streamable-http"
+            ))
+        };
+    } else if config.framework == Some(PythonFramework::Django) {
+        return Some("python manage.py runserver 0.0.0.0:$PORT".to_owned());
+    }
+
+    match main_file {
+        Some(main_file) => Some(format!("python {main_file}")),
+        None => missing_main_file(config, warn),
+    }
 }
 
 /// Port of `PythonProvider.check_deps`: substring scan over the
@@ -863,5 +980,114 @@ mod tests {
             Some(PythonFramework::Mcp),
             None
         ));
+    }
+
+    #[test]
+    fn test_python_provider_infers_start_command() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("pyproject.toml"),
+            "[project]\nname = 'app'\n",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join("main.py"), "print('hello')\n").unwrap();
+
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
+
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("python main.py")
+        );
+    }
+
+    #[test]
+    fn test_infer_start_command_for_servers_and_frameworks() {
+        let mut config = PythonConfig {
+            server: Some(PythonServer::Daphne),
+            asgi_application: Some("app:api".to_owned()),
+            ..PythonConfig::default()
+        };
+        assert_eq!(
+            infer_start_command(&config, false).as_deref(),
+            Some("daphne app:api --bind 0.0.0.0 --port $PORT")
+        );
+
+        config.server = Some(PythonServer::Uvicorn);
+        assert_eq!(
+            infer_start_command(&config, false).as_deref(),
+            Some("uvicorn app:api --host 0.0.0.0 --port $PORT")
+        );
+
+        config.asgi_application = None;
+        config.wsgi_application = Some("app:web".to_owned());
+        assert_eq!(
+            infer_start_command(&config, false).as_deref(),
+            Some("uvicorn app:web --interface=wsgi --host 0.0.0.0 --port $PORT")
+        );
+
+        config.server = Some(PythonServer::Hypercorn);
+        config.asgi_application = Some("app:api".to_owned());
+        config.wsgi_application = None;
+        assert_eq!(
+            infer_start_command(&config, false).as_deref(),
+            Some("hypercorn app:api --bind 0.0.0.0:$PORT")
+        );
+
+        config.server = None;
+        config.asgi_application = None;
+        config.framework = Some(PythonFramework::Streamlit);
+        config.main_file = Some("streamlit_app.py".to_owned());
+        assert_eq!(
+            infer_start_command(&config, false).as_deref(),
+            Some(
+                "streamlit run streamlit_app.py --server.port $PORT \
+                 --server.address 0.0.0.0 --server.headless true"
+            )
+        );
+
+        config.framework = Some(PythonFramework::Mcp);
+        config.main_file = Some("main.py".to_owned());
+        assert_eq!(
+            infer_start_command(&config, false).as_deref(),
+            Some(
+                "python $VIRTUAL_ENV/bin/mcp run main.py \
+                 --transport=streamable-http"
+            )
+        );
+
+        config.framework = Some(PythonFramework::Django);
+        config.main_file = None;
+        assert_eq!(
+            infer_start_command(&config, false).as_deref(),
+            Some("python manage.py runserver 0.0.0.0:$PORT")
+        );
+    }
+
+    #[test]
+    fn test_infer_start_command_reports_missing_evidence() {
+        for config in [
+            PythonConfig {
+                framework: Some(PythonFramework::Streamlit),
+                ..PythonConfig::default()
+            },
+            PythonConfig {
+                framework: Some(PythonFramework::Mcp),
+                ..PythonConfig::default()
+            },
+            PythonConfig {
+                server: Some(PythonServer::Daphne),
+                ..PythonConfig::default()
+            },
+            PythonConfig {
+                server: Some(PythonServer::Hypercorn),
+                ..PythonConfig::default()
+            },
+            PythonConfig {
+                server: Some(PythonServer::Uvicorn),
+                ..PythonConfig::default()
+            },
+        ] {
+            assert_eq!(infer_start_command(&config, false), None);
+        }
     }
 }

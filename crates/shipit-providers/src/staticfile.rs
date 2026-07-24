@@ -164,10 +164,21 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         });
     }
     if !is_python_php_js_project {
-        // Python returns 10 whether or not an index file exists.
         return Some(DetectResult {
             name: NAME,
-            score: 10,
+            score: if exists(
+                path,
+                &[
+                    "index.html",
+                    "index.htm",
+                    "public/index.html",
+                    "public/index.htm",
+                ],
+            ) {
+                15
+            } else {
+                10
+            },
         });
     }
     if base
@@ -181,7 +192,62 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
             score: 70,
         });
     }
+    if is_unbuilt_node_static_site(path, base) {
+        return Some(DetectResult {
+            name: NAME,
+            score: 15,
+        });
+    }
     None
+}
+
+fn is_unbuilt_node_static_site(path: &Path, base: &BaseConfig) -> bool {
+    if !exists(path, &["index.html", "index.htm"]) {
+        return false;
+    }
+
+    let Some(package_json) = crate::node::parse_package_json(path) else {
+        return false;
+    };
+    let scripts = crate::node::package_scripts(Some(&package_json));
+    if scripts
+        .get("start")
+        .is_some_and(|start| !start.trim().is_empty())
+    {
+        return false;
+    }
+    if base
+        .commands
+        .build
+        .as_deref()
+        .is_some_and(|build| !build.is_empty())
+        || ["build", "generate", "export", "docs:build"]
+            .iter()
+            .any(|name| {
+                scripts
+                    .get(name)
+                    .is_some_and(|command| !command.trim().is_empty())
+            })
+    {
+        return false;
+    }
+    if crate::node_static::detect(path, base).is_some() {
+        return false;
+    }
+
+    let found_runtime_deps = crate::node::check_package_json_deps(
+        Some(&package_json),
+        crate::node::FRAMEWORK_DEPENDENCIES,
+    );
+    if crate::node::detect_framework(Some(&package_json), &found_runtime_deps, Some(path)).is_some()
+    {
+        return false;
+    }
+
+    crate::node::infer_start_command(path, Some(&package_json), false)
+        .ok()
+        .flatten()
+        .is_none()
 }
 
 /// Port of `compute_redirects_config`: render a `_redirects` file into
@@ -408,7 +474,8 @@ fn translate_destination(
 mod tests {
     //! Port of `tests/test_staticfile_provider.py`.
 
-    use super::compute_redirects_config;
+    use super::{compute_redirects_config, detect};
+    use crate::base::BaseConfig;
 
     #[test]
     fn test_staticfile_redirects_generate_sws_config_from_static_dir() {
@@ -514,5 +581,52 @@ mod tests {
                 .contains("conditions and forced redirects are not supported"),
             "{error:#}"
         );
+    }
+
+    #[test]
+    fn test_staticfile_detects_unbuilt_node_project_with_root_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("index.html"), "<h1>Static app</h1>\n").unwrap();
+        std::fs::write(
+            tmp.path().join("package.json"),
+            r#"{
+  "scripts": {
+    "copy:web": "node scripts/copy-web.mjs",
+    "build:apk": "npm run copy:web && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.2.1"
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let result = detect(tmp.path(), &BaseConfig::default()).expect("staticfile detects");
+
+        assert_eq!(result.score, 15);
+        assert_eq!(
+            crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+            "staticfile"
+        );
+    }
+
+    #[test]
+    fn test_staticfile_does_not_claim_node_project_with_runtime_or_build() {
+        for package_json in [
+            "{\"scripts\": {\"start\": \"node server.js\"}}\n",
+            "{\"scripts\": {\"build\": \"node build.js\"}}\n",
+            "{\"dependencies\": {\"express\": \"^5.0.0\"}}\n",
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            std::fs::write(tmp.path().join("index.html"), "<h1>Fallback page</h1>\n").unwrap();
+            std::fs::write(tmp.path().join("package.json"), package_json).unwrap();
+
+            assert_eq!(detect(tmp.path(), &BaseConfig::default()), None);
+            assert_eq!(
+                crate::load_provider(tmp.path(), &BaseConfig::default(), None).unwrap(),
+                "node"
+            );
+        }
     }
 }

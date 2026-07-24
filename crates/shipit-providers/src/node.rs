@@ -763,28 +763,33 @@ pub fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
         }
     }
 
+    let package_json = parse_package_json(path);
+    let has_package_start = package_scripts(package_json.as_ref())
+        .get("start")
+        .is_some_and(|start| !start.trim().is_empty());
+    let package_score = if has_package_start { 30 } else { 10 };
+
     if let Some(install) = non_empty(&base.commands.install) {
         if INSTALL_COMMANDS.contains(&install) {
             return Some(DetectResult {
                 name: "node",
-                score: 30,
+                score: package_score,
             });
         }
     }
 
-    let package_json = parse_package_json(path);
     let found_deps = check_package_json_deps(package_json.as_ref(), FRAMEWORK_DEPENDENCIES);
     if detect_framework(package_json.as_ref(), &found_deps, Some(path)).is_some() {
         return Some(DetectResult {
             name: "node",
-            score: 45,
+            score: if has_package_start { 45 } else { 10 },
         });
     }
 
     if path.join("package.json").is_file() {
         return Some(DetectResult {
             name: "node",
-            score: 30,
+            score: package_score,
         });
     }
 
@@ -1317,16 +1322,16 @@ fn get_build_command(
     }
 }
 
-fn infer_start_command(path: &Path, package_json: Option<&JsonMap>) -> Result<Option<String>> {
+pub(crate) fn infer_start_command(
+    path: &Path,
+    package_json: Option<&JsonMap>,
+    warn: bool,
+) -> Result<Option<String>> {
     let scripts = package_scripts(package_json);
     if let Some(start_script) = scripts.get("start").copied() {
-        if !start_script.is_empty() {
-            let trimmed = start_script.trim();
-            return if trimmed.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(trimmed.to_owned()))
-            };
+        let trimmed = start_script.trim();
+        if !trimmed.is_empty() {
+            return Ok(Some(trimmed.to_owned()));
         }
     }
 
@@ -1340,10 +1345,21 @@ fn infer_start_command(path: &Path, package_json: Option<&JsonMap>) -> Result<Op
         }
     }
 
+    if warn && path.join("package.json").is_file() {
+        eprintln!("Warning: no start or main script found in package.json");
+    }
+
     let require_node_evidence = !path.join("package.json").is_file();
-    common_entry_file(path, require_node_evidence)
+    let command = common_entry_file(path, require_node_evidence)
         .map(node_entry_command)
-        .transpose()
+        .transpose()?;
+    if command.is_none() && warn {
+        eprintln!(
+            "Warning: no entry file found for Node project (tried: {})",
+            COMMON_ENTRY_FILES.join(", ")
+        );
+    }
+    Ok(command)
 }
 
 fn node_entry_command(entry_file: &str) -> Result<String> {
@@ -1395,7 +1411,7 @@ pub fn load_config(path: &Path, base: BaseConfig) -> Result<NodeConfig> {
             config.base.commands.start = framework.start_command().map(str::to_owned);
         }
         if non_empty(&config.base.commands.start).is_none() {
-            config.base.commands.start = infer_start_command(path, package_json.as_ref())?;
+            config.base.commands.start = infer_start_command(path, package_json.as_ref(), true)?;
         }
     }
 
@@ -1838,6 +1854,22 @@ mod tests {
         write(
             &tmp.path().join("package.json"),
             "{\"main\": \"src/server.js\"}\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node src/server.js")
+        );
+    }
+
+    #[test]
+    fn test_node_start_command_ignores_empty_script_and_uses_package_main() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\"scripts\": {\"start\": \"  \"}, \"main\": \"src/server.js\"}\n",
         );
 
         let config = load_config(tmp.path(), BaseConfig::default());

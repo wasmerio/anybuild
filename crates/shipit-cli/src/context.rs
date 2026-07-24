@@ -422,4 +422,40 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn mcp_cli_start_uses_the_served_virtual_environment() {
+        let tmp = tempfile::tempdir().unwrap();
+        let workspace = tmp.path().join("mcp-app");
+        std::fs::create_dir(&workspace).unwrap();
+        std::fs::write(
+            workspace.join("pyproject.toml"),
+            "[project]\nname = \"mcp-app\"\ndependencies = [\"mcp\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            workspace.join("main.py"),
+            "from mcp.server.fastmcp import FastMCP\nmcp = FastMCP()\n",
+        )
+        .unwrap();
+
+        let serve = evaluate_project_plan(&workspace, tmp.path(), serde_json::json!({}));
+
+        assert_eq!(
+            serve.commands.get("start").map(String::as_str),
+            Some(
+                "python $VIRTUAL_ENV/bin/mcp run main.py \
+                 --transport=streamable-http"
+            )
+        );
+        assert!(
+            serve
+                .env
+                .as_ref()
+                .and_then(|env| env.get("VIRTUAL_ENV"))
+                .is_some_and(|venv| venv.ends_with("/venv")),
+            "{:?}",
+            serve.env
+        );
+    }
 }
