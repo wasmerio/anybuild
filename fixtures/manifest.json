@@ -1,5 +1,5 @@
 {
- "starlib": "resources/starlib",
+ "starlib": "crates/anybuild/resources/starlib",
  "snapshots": "tests/plan_snapshots",
  "cases": [
   {

@@ -416,7 +416,10 @@ pub fn load_config_with_deps(
 
 fn cannot_infer_start(reason: &str, warn: bool) -> Option<String> {
     if warn {
-        eprintln!("Warning: {reason}");
+        anybuild_common::event::emit(anybuild_common::event::Event::Diagnostic {
+            level: anybuild_common::event::DiagnosticLevel::Warning,
+            message: reason.to_owned(),
+        });
     }
     None
 }

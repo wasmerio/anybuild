@@ -19,7 +19,7 @@ use crate::BuildBackend;
 /// (port of `ui.py` + the rich Rule/Panel rendering used by them).
 pub use crate::ui;
 
-use crate::ui::{console_print, rule};
+use crate::ui::{build_step, console_print, rule};
 
 /// Port of `utils.py::download_file`.
 pub fn download_file(url: &str, path: &Path) -> Result<()> {
@@ -212,10 +212,10 @@ impl LocalBuildBackend {
                     .map(|dep| dep.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                console_print(&format!("Using dependencies: {deps}"));
+                build_step(format!("Using dependencies: {deps}"));
             }
             Step::Workdir(step) => {
-                console_print(&format!("Working in {}", step.path.display()));
+                build_step(format!("Working in {}", step.path.display()));
                 self.workdir = step.path.clone();
                 std::fs::create_dir_all(&step.path)?;
             }
@@ -226,7 +226,7 @@ impl LocalBuildBackend {
                     for input in inputs {
                         let source = pythonic_join(&self.src_dir, input);
                         let target = pythonic_join(&build_path, input);
-                        console_print(&format!("Copying {} to {}", input, target.display()));
+                        build_step(format!("Copying {} to {}", input, target.display()));
                         if let Some(parent) = target.parent() {
                             std::fs::create_dir_all(parent)?;
                         }
@@ -240,7 +240,7 @@ impl LocalBuildBackend {
                     let all_inputs = inputs.join(", ");
                     extra = format!(" # using {all_inputs}");
                 }
-                console_print(&format!("$ {}{}", step.command, extra));
+                build_step(format!("$ {}{}", step.command, extra));
                 let command_line = &step.command;
                 let parts = shell_words::split(command_line)
                     .map_err(|e| anyhow!("Failed to parse command {command_line:?}: {e}"))?;
@@ -256,7 +256,7 @@ impl LocalBuildBackend {
                     .map(|path| pythonic_join(&build_path, path))
                     .collect();
                 search_paths.extend(std::env::split_paths(
-                    &std::env::var_os("PATH").unwrap_or_default(),
+                    &anybuild_common::event::environment_var("PATH").unwrap_or_default(),
                 ));
                 if which(program, &search_paths).is_none() {
                     bail!("Program is not installed: {program}");
@@ -269,6 +269,7 @@ impl LocalBuildBackend {
                     .collect::<Vec<_>>()
                     .join(":");
                 let mut command = Command::new("bash");
+                anybuild_common::event::prepare_command(&mut command);
                 command
                     .arg("-c")
                     .arg(command_line)
@@ -276,8 +277,7 @@ impl LocalBuildBackend {
                     .envs(env.iter())
                     .env("PATH", &full_path)
                     .current_dir(&build_path);
-                let status = command
-                    .status()
+                let status = anybuild_common::event::command_status(&mut command)
                     .with_context(|| format!("Failed to run: {command_line}"))?;
                 if !status.success() {
                     bail!(
@@ -297,7 +297,7 @@ impl LocalBuildBackend {
                 ignore_matches.push("Anybuild".to_owned());
 
                 if step.is_download() {
-                    console_print(&format!("Download from {} to {}", step.source, step.target));
+                    build_step(format!("Download from {} to {}", step.source, step.target));
                     download_file(&step.source, &pythonic_join(&build_path, &step.target))?;
                 } else {
                     let base = match step.base.as_str() {
@@ -305,7 +305,7 @@ impl LocalBuildBackend {
                         "assets" => &self.assets_path,
                         other => bail!("Unknown base: {other}"),
                     };
-                    console_print(&format!(
+                    build_step(format!(
                         "Copy to {} from {}{}",
                         step.target, step.source, ignore_extra
                     ));
@@ -328,7 +328,7 @@ impl LocalBuildBackend {
                 }
             }
             Step::Env(step) => {
-                console_print(&format!(
+                build_step(format!(
                     "Setting environment variables: EnvStep(variables={})",
                     py_dict_repr(&step.variables)
                 ));
@@ -337,7 +337,7 @@ impl LocalBuildBackend {
                 }
             }
             Step::Path(step) => {
-                console_print(&format!("Add {} to PATH", step.path));
+                build_step(format!("Add {} to PATH", step.path));
                 let old = env.get("PATH").cloned().unwrap_or_default();
                 env.insert("PATH".to_owned(), format!("{}:{}", step.path, old));
             }
@@ -346,7 +346,7 @@ impl LocalBuildBackend {
                 if !target.is_absolute() {
                     target = build_path.join(&target);
                 }
-                console_print(&format!("Write file {}", target.display()));
+                build_step(format!("Write file {}", target.display()));
                 if let Some(parent) = target.parent() {
                     std::fs::create_dir_all(parent)?;
                 }

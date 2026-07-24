@@ -3,6 +3,8 @@ name = "anybuild-e2e"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository = "https://github.com/wasmerio/anybuild"
+homepage = "https://github.com/wasmerio/anybuild"
 description = "Anybuild end-to-end suite: drives the anybuild binary against the examples"
 publish = false
 

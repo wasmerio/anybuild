@@ -3,6 +3,8 @@ name = "anybuild-common"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository = "https://github.com/wasmerio/anybuild"
+homepage = "https://github.com/wasmerio/anybuild"
 description = "Shared filesystem and persistence utilities for Anybuild"
 
 [dependencies]

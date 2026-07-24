@@ -1,0 +1,10 @@
+[package]
+name = "anybuild-sdk-consumer"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+anybuild = { path = "../../crates/anybuild" }

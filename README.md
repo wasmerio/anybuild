@@ -118,6 +118,31 @@ Anybuild works with three execution environments:
 - Docker builder when container isolation is required.
 - Wasmer runner for portable WebAssembly packaging and deployment.
 
+## Rust SDK
+
+The `anybuild` crate exposes the same project pipeline without invoking the
+CLI:
+
+```rust
+use anybuild::{Anybuild, BuildOptions, RunOptions};
+
+let project = Anybuild::new(".")
+    .with_subdir("apps/web")
+    .with_env("ANYBUILD_NODE_VERSION", "22");
+
+let plan = project.plan(Default::default())?;
+let build = project.build(BuildOptions::default())?;
+let run = project.run(RunOptions::default().start())?;
+
+# Ok::<(), anybuild::Error>(())
+```
+
+Generation, planning, building, running, deployment, and the combined
+`auto` pipeline all return structured outcomes. The SDK does not print its
+own diagnostics; callers can install an `EventHandler` with
+`with_event_handler`. Child processes inherit the terminal by default, or
+can report captured output as events with `ProcessIo::Events`.
+
 ## Development
 
 Anybuild is a Rust workspace. Build and run the CLI with:

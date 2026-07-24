@@ -34,6 +34,30 @@ fn legacy_binary_alias_is_available() {
 }
 
 #[test]
+fn plan_command_delegates_to_the_sdk_contract() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();
+    let sdk = anybuild::Anybuild::new(tmp.path()).with_provider("staticfile");
+    sdk.generate(Default::default()).unwrap();
+    let expected = sdk.plan(Default::default()).unwrap();
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("plan")
+        .arg(tmp.path())
+        .args(["--provider", "staticfile"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let actual: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(actual["provider"], expected.provider);
+    assert_eq!(actual["config"], expected.config);
+}
+
+#[test]
 fn legacy_project_file_and_state_directory_are_renamed() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();

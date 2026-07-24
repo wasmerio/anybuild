@@ -152,8 +152,9 @@ impl Runner for LocalRunner {
     }
 
     fn prepare(&mut self, _env: &IndexMap<String, String>, _prepare: &[RunStep]) -> Result<()> {
-        let status = Command::new(&self.prepare_bash_script)
-            .status()
+        let mut command = Command::new(&self.prepare_bash_script);
+        anybuild_common::event::prepare_command(&mut command);
+        let status = anybuild_common::event::command_status(&mut command)
             .with_context(|| format!("Failed to run {}", self.prepare_bash_script.display()))?;
         if !status.success() {
             bail!(
@@ -176,11 +177,11 @@ impl Runner for LocalRunner {
     ) -> Result<()> {
         let command_path = self.serve_bin_path.join(command);
         let mut process = Command::new(&command_path);
+        anybuild_common::event::prepare_command(&mut process);
         if let Some(env) = env {
             process.envs(env.iter());
         }
-        let status = process
-            .status()
+        let status = anybuild_common::event::command_status(&mut process)
             .with_context(|| format!("Failed to run {}", command_path.display()))?;
         if !status.success() {
             bail!(

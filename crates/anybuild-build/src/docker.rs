@@ -159,6 +159,7 @@ impl DockerBuildBackend {
             extra_args.push(docker_opts.clone());
         }
         let mut cmd = std::process::Command::new(&self.docker_client);
+        anybuild_common::event::prepare_command(&mut cmd);
         cmd.arg("build")
             .arg("-f")
             .arg(absolute_path(&self.docker_file_path))
@@ -171,8 +172,7 @@ impl DockerBuildBackend {
             .arg(".")
             .args(&extra_args)
             .current_dir(absolute_path(&self.src_dir));
-        let status = cmd
-            .status()
+        let status = anybuild_common::event::command_status(&mut cmd)
             .with_context(|| format!("failed to run {}", self.docker_client))?;
         ensure!(
             status.success(),
@@ -389,11 +389,11 @@ impl BuildBackend for DockerBuildBackend {
             &self.docker_ignore_path,
             "\n.anybuild\nAnybuild\n.shipit\nShipit\n",
         )?;
-        println!("\nBuilding Docker file");
+        crate::ui::console_print("\nBuilding Docker file");
         self.build_dockerfile(name, &docker_file_contents)?;
         // rich Rule(characters="-") stand-in.
-        println!("{}", "-".repeat(80));
-        println!("Build complete ✅");
+        crate::ui::console_print(&"-".repeat(80));
+        crate::ui::console_print("Build complete ✅");
         Ok(())
     }
 

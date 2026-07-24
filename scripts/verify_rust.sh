@@ -24,6 +24,9 @@ if command -v cargo-nextest >/dev/null; then
 else
   cargo test --workspace
 fi
+CARGO_TARGET_DIR="$PWD/target/sdk-consumer" \
+  cargo check --locked --manifest-path fixtures/sdk-consumer/Cargo.toml --quiet
+echo "external SDK consumer compiles"
 
 echo "=== [5/5] CLI smoke ==="
 version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)

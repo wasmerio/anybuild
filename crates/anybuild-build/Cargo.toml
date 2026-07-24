@@ -3,6 +3,8 @@ name = "anybuild-build"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository = "https://github.com/wasmerio/anybuild"
+homepage = "https://github.com/wasmerio/anybuild"
 description = "Anybuild build backends: local and docker step executors"
 
 [features]
@@ -15,8 +17,8 @@ syntax-highlighting = ["dep:syntect", "dep:two-face"]
 anyhow.workspace = true
 base64 = "0.22"
 indexmap.workspace = true
-anybuild-common = { path = "../anybuild-common" }
-anybuild-plan = { path = "../anybuild-plan" }
+anybuild-common = { path = "../anybuild-common", version = "0.23.0" }
+anybuild-plan = { path = "../anybuild-plan", version = "0.23.0" }
 globset = "0.4"
 shell-words = "1"
 walkdir = "2"

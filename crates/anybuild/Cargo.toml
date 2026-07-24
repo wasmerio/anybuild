@@ -1,29 +1,29 @@
 [package]
-name = "anybuild-run"
+name = "anybuild"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Rust SDK for detecting, building, running, and deploying projects"
 repository = "https://github.com/wasmerio/anybuild"
 homepage = "https://github.com/wasmerio/anybuild"
-description = "Anybuild runners: local and wasmer"
+readme = "../../README.md"
+keywords = ["build", "deployment", "starlark", "wasmer"]
+categories = ["development-tools", "api-bindings"]
 
 [dependencies]
 anyhow.workspace = true
 indexmap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml = "0.9"
-sha2 = "0.10"
-shlex = "1"
-toml_edit = "0.22"
+thiserror.workspace = true
+dotenvy = "0.15"
+tempfile = "3"
 anybuild-build = { path = "../anybuild-build", version = "0.23.0", default-features = false }
 anybuild-common = { path = "../anybuild-common", version = "0.23.0" }
 anybuild-plan = { path = "../anybuild-plan", version = "0.23.0" }
 anybuild-providers = { path = "../anybuild-providers", version = "0.23.0" }
+anybuild-run = { path = "../anybuild-run", version = "0.23.0", default-features = false }
+anybuild-starlark = { path = "../anybuild-starlark", version = "0.23.0" }
 
 [dev-dependencies]
 tempfile = "3"
-
-[features]
-default = ["syntax-highlighting"]
-syntax-highlighting = ["anybuild-build/syntax-highlighting"]

@@ -10,15 +10,18 @@ Wasmer, and supports examples for popular frameworks.
 
 ## Architecture
 
+- **SDK**: `crates/anybuild` owns project resolution, generation, planning,
+  building, running, deployment, embedded resources, and structured events.
 - **CLI**: `crates/anybuild-cli` implements the commands `build`, `run`,
-  `deploy`, and `auto`.
+  `deploy`, and `auto` as a thin adapter over the SDK.
 - **Build backends**: `LocalBuildBackend` runs steps on the host while
   `DockerBuildBackend` produces artifacts inside a container and exports them.
 - **Runners**: `LocalRunner` executes the generated commands locally, and
   `WasmerRunner` packages artifacts and runs them with Wasmer.
 - **Starlark runtime**: Build steps are defined in an `Anybuild` file and executed
   through the `Ctx` interface.
-- **Assets**: Templates and config snippets live under `resources/assets`.
+- **Assets**: Templates and config snippets live under
+  `crates/anybuild/resources/assets`.
 - **Examples**: Sample apps in `examples/` show how to use the tool.
 
 ## Bash commands

@@ -3,6 +3,8 @@ name = "anybuild-plan"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository = "https://github.com/wasmerio/anybuild"
+homepage = "https://github.com/wasmerio/anybuild"
 description = "Anybuild plan types: steps, mounts, volumes, services, serves"
 
 [dependencies]

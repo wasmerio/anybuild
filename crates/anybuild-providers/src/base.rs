@@ -4,9 +4,11 @@
 //! `model_dump(mode="json")`: every field present, `None` as null, enums
 //! as strings, sets as sorted lists (use `BTreeSet`).
 
+use std::cell::RefCell;
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::procfile::Procfile;
@@ -18,11 +20,37 @@ pub struct DetectResult {
     pub score: i32,
 }
 
+thread_local! {
+    static ENVIRONMENT: RefCell<Option<IndexMap<String, String>>> =
+        const { RefCell::new(None) };
+}
+
+#[doc(hidden)]
+pub fn scope_environment<T>(
+    environment: &IndexMap<String, String>,
+    operation: impl FnOnce() -> T,
+) -> T {
+    ENVIRONMENT.with(|current| {
+        let previous = current.replace(Some(environment.clone()));
+        let result = operation();
+        current.replace(previous);
+        result
+    })
+}
+
+#[doc(hidden)]
+pub fn environment_var(name: &str) -> Option<String> {
+    ENVIRONMENT.with(|environment| match environment.borrow().as_ref() {
+        Some(environment) => environment.get(name).cloned(),
+        None => std::env::var(name).ok(),
+    })
+}
+
 fn env_value(field: &str) -> Option<(String, String)> {
     let field = field.to_uppercase();
     for prefix in ["ANYBUILD_", "SHIPIT_"] {
         let name = format!("{prefix}{field}");
-        if let Ok(value) = std::env::var(&name) {
+        if let Some(value) = environment_var(&name) {
             return Some((name, value));
         }
     }

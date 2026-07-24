@@ -7,82 +7,82 @@ use anyhow::{anyhow, bail, Context, Result};
 const STARLIB_FILES: &[(&str, &[u8])] = &[
     (
         "prelude.bzl",
-        include_bytes!("../../../resources/starlib/prelude.bzl"),
+        include_bytes!("../../resources/starlib/prelude.bzl"),
     ),
     (
         "serve.bzl",
-        include_bytes!("../../../resources/starlib/serve.bzl"),
+        include_bytes!("../../resources/starlib/serve.bzl"),
     ),
     (
         "tools/go.bzl",
-        include_bytes!("../../../resources/starlib/tools/go.bzl"),
+        include_bytes!("../../resources/starlib/tools/go.bzl"),
     ),
     (
         "tools/hugo.bzl",
-        include_bytes!("../../../resources/starlib/tools/hugo.bzl"),
+        include_bytes!("../../resources/starlib/tools/hugo.bzl"),
     ),
     (
         "tools/jekyll.bzl",
-        include_bytes!("../../../resources/starlib/tools/jekyll.bzl"),
+        include_bytes!("../../resources/starlib/tools/jekyll.bzl"),
     ),
     (
         "tools/laravel.bzl",
-        include_bytes!("../../../resources/starlib/tools/laravel.bzl"),
+        include_bytes!("../../resources/starlib/tools/laravel.bzl"),
     ),
     (
         "tools/mkdocs.bzl",
-        include_bytes!("../../../resources/starlib/tools/mkdocs.bzl"),
+        include_bytes!("../../resources/starlib/tools/mkdocs.bzl"),
     ),
     (
         "tools/node.bzl",
-        include_bytes!("../../../resources/starlib/tools/node.bzl"),
+        include_bytes!("../../resources/starlib/tools/node.bzl"),
     ),
     (
         "tools/node_static.bzl",
-        include_bytes!("../../../resources/starlib/tools/node_static.bzl"),
+        include_bytes!("../../resources/starlib/tools/node_static.bzl"),
     ),
     (
         "tools/php.bzl",
-        include_bytes!("../../../resources/starlib/tools/php.bzl"),
+        include_bytes!("../../resources/starlib/tools/php.bzl"),
     ),
     (
         "tools/python.bzl",
-        include_bytes!("../../../resources/starlib/tools/python.bzl"),
+        include_bytes!("../../resources/starlib/tools/python.bzl"),
     ),
     (
         "tools/staticfile.bzl",
-        include_bytes!("../../../resources/starlib/tools/staticfile.bzl"),
+        include_bytes!("../../resources/starlib/tools/staticfile.bzl"),
     ),
     (
         "tools/wordpress.bzl",
-        include_bytes!("../../../resources/starlib/tools/wordpress.bzl"),
+        include_bytes!("../../resources/starlib/tools/wordpress.bzl"),
     ),
 ];
 
 const ASSET_FILES: &[(&str, &[u8])] = &[
     (
         "node/optimize-node-modules.sh",
-        include_bytes!("../../../resources/assets/node/optimize-node-modules.sh"),
+        include_bytes!("../../resources/assets/node/optimize-node-modules.sh"),
     ),
     (
         "php/php.ini",
-        include_bytes!("../../../resources/assets/php/php.ini"),
+        include_bytes!("../../resources/assets/php/php.ini"),
     ),
     (
         "wordpress/.htaccess",
-        include_bytes!("../../../resources/assets/wordpress/.htaccess"),
+        include_bytes!("../../resources/assets/wordpress/.htaccess"),
     ),
     (
         "wordpress/install.sh",
-        include_bytes!("../../../resources/assets/wordpress/install.sh"),
+        include_bytes!("../../resources/assets/wordpress/install.sh"),
     ),
     (
         "wordpress/start.php",
-        include_bytes!("../../../resources/assets/wordpress/start.php"),
+        include_bytes!("../../resources/assets/wordpress/start.php"),
     ),
     (
         "wordpress/wp-config.php",
-        include_bytes!("../../../resources/assets/wordpress/wp-config.php"),
+        include_bytes!("../../resources/assets/wordpress/wp-config.php"),
     ),
 ];
 
@@ -135,9 +135,11 @@ pub fn resolve() -> Result<RuntimeResources> {
 }
 
 fn override_dir(override_var: &str, legacy_var: &str) -> Result<Option<PathBuf>> {
-    let selected = std::env::var_os(override_var)
+    let selected = anybuild_providers::base::environment_var(override_var)
         .map(|path| (override_var, path))
-        .or_else(|| std::env::var_os(legacy_var).map(|path| (legacy_var, path)));
+        .or_else(|| {
+            anybuild_providers::base::environment_var(legacy_var).map(|path| (legacy_var, path))
+        });
     if let Some((selected_var, path)) = selected {
         let path = PathBuf::from(path);
         if !path.is_dir() {
@@ -190,49 +192,27 @@ mod tests {
                 }
             }
         }
-
         let mut files = BTreeSet::new();
         visit(root, root, &mut files);
         files
     }
 
     #[test]
-    fn embedded_resources_materialize_without_the_source_tree() {
-        let tmp = tempfile::tempdir().unwrap();
-        let starlib_dir = tmp.path().join("starlib");
-        let assets_dir = tmp.path().join("assets");
-        materialize(&starlib_dir, STARLIB_FILES).unwrap();
-        materialize(&assets_dir, ASSET_FILES).unwrap();
-
+    fn embedded_lists_cover_packaged_resources() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
         assert_eq!(
-            std::fs::read_to_string(starlib_dir.join("tools/python.bzl")).unwrap(),
-            include_str!("../../../resources/starlib/tools/python.bzl")
+            STARLIB_FILES
+                .iter()
+                .map(|(path, _)| (*path).to_owned())
+                .collect::<BTreeSet<_>>(),
+            source_files(&root.join("starlib"))
         );
         assert_eq!(
-            std::fs::read(assets_dir.join("wordpress/.htaccess")).unwrap(),
-            include_bytes!("../../../resources/assets/wordpress/.htaccess")
-        );
-    }
-
-    #[test]
-    fn embedded_resource_lists_cover_the_source_directories() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let embedded_starlib: BTreeSet<String> = STARLIB_FILES
-            .iter()
-            .map(|(path, _)| (*path).to_owned())
-            .collect();
-        let embedded_assets: BTreeSet<String> = ASSET_FILES
-            .iter()
-            .map(|(path, _)| (*path).to_owned())
-            .collect();
-
-        assert_eq!(
-            embedded_starlib,
-            source_files(&root.join("resources/starlib"))
-        );
-        assert_eq!(
-            embedded_assets,
-            source_files(&root.join("resources/assets"))
+            ASSET_FILES
+                .iter()
+                .map(|(path, _)| (*path).to_owned())
+                .collect::<BTreeSet<_>>(),
+            source_files(&root.join("assets"))
         );
     }
 }

@@ -5,10 +5,7 @@
 mod args;
 mod commands;
 mod context;
-mod generator;
-mod paths;
-mod resources;
-mod volumes;
+mod render;
 
 use std::path::PathBuf;
 
@@ -115,7 +112,7 @@ enum Command {
 /// The typer callback's `print_help()`: a rounded panel with the version,
 /// printed to stderr before every command except `plan`.
 fn print_banner() {
-    let content = format!("Anybuild {}", generator::anybuild_version());
+    let content = format!("Anybuild {}", anybuild::version());
     let width = content.chars().count() + 2;
     eprintln!("╭{}╮", "─".repeat(width));
     eprintln!("│ {content} │");
@@ -131,7 +128,7 @@ fn main() {
         args.get(1).and_then(|arg| arg.to_str()),
         Some("--version" | "-v")
     ) {
-        println!("{}", generator::anybuild_version());
+        println!("{}", anybuild::version());
         return;
     }
     let needs_auto = match args.get(1) {

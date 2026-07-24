@@ -3,10 +3,13 @@ name = "anybuild-providers"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository = "https://github.com/wasmerio/anybuild"
+homepage = "https://github.com/wasmerio/anybuild"
 description = "Anybuild providers: project detection and config loading"
 
 [dependencies]
 anyhow.workspace = true
+anybuild-common = { path = "../anybuild-common", version = "0.23.0" }
 indexmap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -17,5 +20,5 @@ shlex = "2"
 walkdir = "2"
 
 [dev-dependencies]
-anybuild-common = { path = "../anybuild-common" }
+anybuild-common = { path = "../anybuild-common", version = "0.23.0" }
 tempfile = "3"

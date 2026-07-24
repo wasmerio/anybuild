@@ -1346,7 +1346,10 @@ pub(crate) fn infer_start_command(
     }
 
     if warn && path.join("package.json").is_file() {
-        eprintln!("Warning: no start or main script found in package.json");
+        anybuild_common::event::emit(anybuild_common::event::Event::Diagnostic {
+            level: anybuild_common::event::DiagnosticLevel::Warning,
+            message: "no start or main script found in package.json".to_owned(),
+        });
     }
 
     let require_node_evidence = !path.join("package.json").is_file();
@@ -1354,10 +1357,13 @@ pub(crate) fn infer_start_command(
         .map(node_entry_command)
         .transpose()?;
     if command.is_none() && warn {
-        eprintln!(
-            "Warning: no entry file found for Node project (tried: {})",
-            COMMON_ENTRY_FILES.join(", ")
-        );
+        anybuild_common::event::emit(anybuild_common::event::Event::Diagnostic {
+            level: anybuild_common::event::DiagnosticLevel::Warning,
+            message: format!(
+                "no entry file found for Node project (tried: {})",
+                COMMON_ENTRY_FILES.join(", ")
+            ),
+        });
     }
     Ok(command)
 }

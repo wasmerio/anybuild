@@ -359,7 +359,7 @@ fn apply_runner_flips(provider: &str, config_json: &mut JsonValue) {
     }
 }
 
-use anybuild_build::ui::print_syntax_panel;
+use anybuild_build::ui::{console_print, print_syntax_panel};
 
 #[cfg(test)]
 #[derive(Debug, Clone)]
@@ -412,7 +412,9 @@ impl WasmerRunner {
 
     /// Query the Wasmer CLI version recorded alongside build artifacts.
     fn get_wasmer_version(&self) -> Result<String> {
-        let output = std::process::Command::new(&self.bin)
+        let mut command = std::process::Command::new(&self.bin);
+        anybuild_common::event::prepare_command(&mut command);
+        let output = command
             .arg("--version")
             .output()
             .with_context(|| format!("failed to run {} --version", self.bin))?;
@@ -491,7 +493,7 @@ impl WasmerRunner {
             .collect::<Vec<_>>()
             .join("\n");
         let content = format!("#!/bin/bash\n\n{body}");
-        println!("\nCreated prepare.sh script to run before packaging ✅");
+        console_print("\nCreated prepare.sh script to run before packaging ✅");
         print_syntax_panel(&content, "bash");
 
         let script_path = prepare_dir.join("prepare.sh");
@@ -548,7 +550,7 @@ impl WasmerRunner {
         }
 
         if !deps.is_empty() {
-            println!("Mapping dependencies to Wasmer packages:");
+            console_print("Mapping dependencies to Wasmer packages:");
         }
         let mut dependencies = Table::new();
         dependencies.decor_mut().set_prefix("\n");
@@ -575,7 +577,10 @@ impl WasmerRunner {
             let Some(mapped_dependency) = mapped_dependencies.get(version.as_str()) else {
                 bail!("Dependency {}@{} not found in Wasmer", dep.name, version);
             };
-            println!("* {}@{} mapped to {}", dep.name, version, mapped_dependency);
+            console_print(&format!(
+                "* {}@{} mapped to {}",
+                dep.name, version, mapped_dependency
+            ));
             let (package_name, package_version) = mapped_dependency
                 .split_once('@')
                 .ok_or_else(|| anyhow!("invalid mapped dependency {mapped_dependency}"))?;
@@ -731,14 +736,14 @@ impl WasmerRunner {
             "[command.\"annotations.wasi\"]",
             "[command.annotations.wasi]",
         );
-        println!("\nCreated wasmer.toml manifest ✅");
+        console_print("\nCreated wasmer.toml manifest ✅");
         print_syntax_panel(manifest.trim(), "toml");
         std::fs::write(self.wasmer_dir_path.join("wasmer.toml"), &manifest)?;
 
         // ---- app.yaml ----
         let original_app_yaml_path = self.src_dir.join("app.yaml");
         let mut yaml_config: serde_yaml::Mapping = if original_app_yaml_path.exists() {
-            println!("Using original app.yaml found in source directory");
+            console_print("Using original app.yaml found in source directory");
             let text = std::fs::read_to_string(&original_app_yaml_path)?;
             match serde_yaml::from_str::<YamlValue>(&text)? {
                 YamlValue::Mapping(map) => map,
@@ -905,7 +910,7 @@ impl WasmerRunner {
 
         let app_yaml = dump_yaml_sorted(&YamlValue::Mapping(yaml_config))?;
 
-        println!("\nCreated app.yaml manifest ✅");
+        console_print("\nCreated app.yaml manifest ✅");
         print_syntax_panel(app_yaml.trim(), "yaml");
         std::fs::write(self.wasmer_dir_path.join("app.yaml"), &app_yaml)?;
         Ok(())
@@ -960,13 +965,13 @@ impl WasmerRunner {
         #[cfg(not(test))]
         {
             let mut cmd = std::process::Command::new(command);
+            anybuild_common::event::prepare_command(&mut cmd);
             cmd.args(extra_args);
             if let Some(env) = env {
                 cmd.env_clear();
                 cmd.envs(env);
             }
-            let status = cmd
-                .status()
+            let status = anybuild_common::event::command_status(&mut cmd)
                 .with_context(|| format!("failed to run {command}"))?;
             ensure!(
                 status.success(),
@@ -1074,7 +1079,10 @@ impl WasmerRunner {
             serde_json::to_string(&sha256)?,
         );
         std::fs::write(config_path, payload)?;
-        println!("\nSaved deploy config to {}", config_path.display());
+        console_print(&format!(
+            "\nSaved deploy config to {}",
+            config_path.display()
+        ));
         Ok(())
     }
 
@@ -1213,7 +1221,7 @@ impl Runner for WasmerRunner {
         if let Some(registry) = &self.wasmer_registry {
             extra_args.insert(0, format!("--registry={registry}"));
         }
-        let mut run_env: IndexMap<String, String> = std::env::vars().collect();
+        let mut run_env = anybuild_common::event::process_environment();
         if let Some(env) = env {
             for (key, value) in env {
                 run_env.insert(key.clone(), value.clone());

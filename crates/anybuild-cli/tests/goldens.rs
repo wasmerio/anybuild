@@ -181,7 +181,7 @@ fn update_manifest_anybuild_texts(root: &Path) -> usize {
     }
     std::fs::write(
         &manifest_path,
-        anybuild_common::pyjson::to_python_json(&raw),
+        format!("{}\n", serde_json::to_string_pretty(&raw).unwrap()),
     )
     .unwrap();
     changed

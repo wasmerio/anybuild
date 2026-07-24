@@ -9,26 +9,6 @@
 
 use std::io::IsTerminal;
 
-/// `console.print(...)` — rich writes to stderr (`Console(stderr=True)`).
-pub fn console_print(text: &str) {
-    anybuild_common::event::emit(anybuild_common::event::Event::Diagnostic {
-        level: anybuild_common::event::DiagnosticLevel::Info,
-        message: text.to_owned(),
-    });
-}
-
-/// Report a build step without coupling the executor to terminal output.
-pub fn build_step(description: impl Into<String>) {
-    anybuild_common::event::emit(anybuild_common::event::Event::BuildStep {
-        description: description.into(),
-    });
-}
-
-/// `Rule(characters="-")` at rich's piped-output width (80).
-pub fn rule() {
-    console_print(&"-".repeat(80));
-}
-
 /// rich's color decision for a stream: NO_COLOR wins, FORCE_COLOR forces,
 /// otherwise color only when stderr is a terminal.
 pub fn colors_enabled() -> bool {
@@ -43,25 +23,6 @@ pub fn colors_enabled() -> bool {
 
 const BRIGHT_BLACK: &str = "\x1b[90m";
 const RESET: &str = "\x1b[0m";
-
-/// Rich `Panel(Syntax(..., line_numbers=True), box=box.SQUARE,
-/// expand=False, border_style="bright_black")`: a square box around
-/// line-numbered content, capped at width 80 (long lines cropped).
-pub fn print_panel(content: &str) {
-    anybuild_common::event::emit(anybuild_common::event::Event::Content {
-        content: content.to_owned(),
-        language: None,
-    });
-}
-
-/// `print_panel` with monokai syntax highlighting for `lang` (one of the
-/// lexer tokens the Python CLI used: json/bash/toml/yaml/dockerfile).
-pub fn print_syntax_panel(content: &str, lang: &str) {
-    anybuild_common::event::emit(anybuild_common::event::Event::Content {
-        content: content.to_owned(),
-        language: Some(lang.to_owned()),
-    });
-}
 
 /// Pure renderer behind the panel printers (separable for tests).
 /// Geometry is always computed from the plain text, so colored and plain
