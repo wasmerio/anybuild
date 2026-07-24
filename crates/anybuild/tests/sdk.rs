@@ -179,6 +179,21 @@ fn build_run_and_auto_use_the_library_pipeline() {
     assert_eq!(auto.build.plan.provider, "staticfile");
 }
 
+#[test]
+fn temporary_generation_is_scoped_to_the_operation() {
+    let project = static_project();
+    let outcome = Anybuild::new(project.path())
+        .with_provider("staticfile")
+        .auto(AutoOptions {
+            generation: GenerationPolicy::Temporary,
+            ..Default::default()
+        })
+        .unwrap();
+    let generated = outcome.generated.expect("temporary definition is reported");
+    assert!(!generated.path.exists());
+    assert!(!project.path().join("Anybuild").exists());
+}
+
 #[cfg(unix)]
 #[test]
 fn deploy_config_can_use_piped_process_events() {

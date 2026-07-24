@@ -18,12 +18,20 @@ serde_json.workspace = true
 thiserror.workspace = true
 dotenvy = "0.15"
 tempfile = "3"
-anybuild-build = { path = "../anybuild-build", version = "0.23.0", default-features = false }
-anybuild-common = { path = "../anybuild-common", version = "0.23.0" }
-anybuild-plan = { path = "../anybuild-plan", version = "0.23.0" }
-anybuild-providers = { path = "../anybuild-providers", version = "0.23.0" }
-anybuild-run = { path = "../anybuild-run", version = "0.23.0", default-features = false }
-anybuild-starlark = { path = "../anybuild-starlark", version = "0.23.0" }
+allocative.workspace = true
+base64 = "0.22"
+globset = "0.4"
+path-clean = "1"
+regex = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+shell-words = "1"
+shlex = "1"
+starlark.workspace = true
+toml = "0.8"
+toml_edit = "0.22"
+ureq = "2"
+walkdir = "2"
 
 [dev-dependencies]
 tempfile = "3"

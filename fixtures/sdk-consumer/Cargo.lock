@@ -70,88 +70,27 @@ dependencies = [
 name = "anybuild"
 version = "0.23.0"
 dependencies = [
- "anybuild-build",
- "anybuild-common",
- "anybuild-plan",
- "anybuild-providers",
- "anybuild-run",
- "anybuild-starlark",
- "anyhow",
- "dotenvy",
- "indexmap",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
-name = "anybuild-build"
-version = "0.23.0"
-dependencies = [
- "anybuild-common",
- "anybuild-plan",
+ "allocative",
  "anyhow",
  "base64",
+ "dotenvy",
  "globset",
- "indexmap",
- "shell-words",
- "ureq",
- "walkdir",
-]
-
-[[package]]
-name = "anybuild-common"
-version = "0.23.0"
-dependencies = [
- "anyhow",
  "indexmap",
  "path-clean",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "anybuild-plan"
-version = "0.23.0"
-dependencies = [
- "indexmap",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "anybuild-providers"
-version = "0.23.0"
-dependencies = [
- "anybuild-common",
- "anyhow",
- "globset",
- "indexmap",
  "regex",
- "serde",
- "serde_json",
- "shlex 2.0.1",
- "toml",
- "walkdir",
-]
-
-[[package]]
-name = "anybuild-run"
-version = "0.23.0"
-dependencies = [
- "anybuild-build",
- "anybuild-common",
- "anybuild-plan",
- "anybuild-providers",
- "anyhow",
- "indexmap",
  "serde",
  "serde_json",
  "serde_yaml",
  "sha2",
+ "shell-words",
  "shlex 1.3.0",
+ "starlark",
+ "tempfile",
+ "thiserror",
+ "toml",
  "toml_edit",
+ "ureq",
+ "walkdir",
 ]
 
 [[package]]
@@ -159,19 +98,6 @@ name = "anybuild-sdk-consumer"
 version = "0.0.0"
 dependencies = [
  "anybuild",
-]
-
-[[package]]
-name = "anybuild-starlark"
-version = "0.23.0"
-dependencies = [
- "allocative",
- "anybuild-plan",
- "anyhow",
- "indexmap",
- "serde",
- "serde_json",
- "starlark",
 ]
 
 [[package]]

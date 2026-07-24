@@ -5,19 +5,19 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use anybuild_build::docker::DockerBuildBackend;
-use anybuild_build::local::LocalBuildBackend;
-use anybuild_build::BuildBackend;
-use anybuild_plan::layout::{MountLayout, WasmerServeLayout};
-use anybuild_plan::Serve;
-use anybuild_providers::{
+use crate::build::docker::DockerBuildBackend;
+use crate::build::local::LocalBuildBackend;
+use crate::build::BuildBackend;
+use crate::plan::layout::{MountLayout, WasmerServeLayout};
+use crate::plan::Serve;
+use crate::providers::{
     base::BaseConfig, load_provider, load_provider_config, workspace, ProviderConfig,
 };
-use anybuild_run::local::LocalRunner;
-use anybuild_run::wasmer::WasmerRunner;
-use anybuild_run::Runner;
-use anybuild_starlark::eval::{evaluate_anybuild, EvaluateOptions};
-use anybuild_starlark::loader::StdlibSource;
+use crate::run::local::LocalRunner;
+use crate::run::wasmer::WasmerRunner;
+use crate::run::Runner;
+use crate::starlark::eval::{evaluate_anybuild, EvaluateOptions};
+use crate::starlark::loader::StdlibSource;
 use anyhow::{anyhow, Result};
 
 use crate::internal::paths::{
@@ -25,6 +25,7 @@ use crate::internal::paths::{
     ProjectPaths,
 };
 use crate::internal::resources;
+use crate::operation::OperationContext;
 use crate::sdk::CommandOverrides;
 
 /// Which backend/runner pair to resolve (the wasmer/docker flag surface
@@ -52,10 +53,11 @@ pub struct Environment {
 pub fn resolve_environment(
     paths: &ProjectPaths,
     options: &EnvironmentOptions,
+    operation: &OperationContext,
 ) -> Result<Environment> {
-    migrate_legacy_state_dir(paths)?;
+    migrate_legacy_state_dir(paths, operation)?;
     let anybuild_dir = default_anybuild_dir(paths);
-    let runtime_resources = resources::resolve()?;
+    let runtime_resources = resources::resolve(operation)?;
     let build_backend: Rc<RefCell<dyn BuildBackend>> =
         if options.docker || options.docker_client.is_some() {
             Rc::new(RefCell::new(DockerBuildBackend::new(
@@ -64,12 +66,14 @@ pub fn resolve_environment(
                 options.docker_client.clone(),
                 options.docker_opts.clone(),
                 Some(anybuild_dir.clone()),
+                operation.clone(),
             )?))
         } else {
             Rc::new(RefCell::new(LocalBuildBackend::new(
                 paths.workspace_root.clone(),
                 runtime_resources.assets_dir.clone(),
                 Some(anybuild_dir.clone()),
+                operation.clone(),
             )))
         };
     let runner: Box<dyn Runner> = if options.wasmer {
@@ -80,12 +84,14 @@ pub fn resolve_environment(
             options.wasmer_token.clone(),
             options.wasmer_bin.clone(),
             Some(anybuild_dir.clone()),
+            operation.clone(),
         ))
     } else {
         Box::new(LocalRunner::new(
             build_backend.clone(),
             paths.workspace_root.clone(),
             Some(anybuild_dir.clone()),
+            operation.clone(),
         ))
     };
     Ok(Environment {
@@ -96,7 +102,7 @@ pub fn resolve_environment(
     })
 }
 
-fn migrate_legacy_state_dir(paths: &ProjectPaths) -> Result<()> {
+fn migrate_legacy_state_dir(paths: &ProjectPaths, operation: &OperationContext) -> Result<()> {
     let current = paths.workspace_root.join(".anybuild");
     let legacy = paths.workspace_root.join(".shipit");
     if current.exists() || !legacy.exists() {
@@ -109,7 +115,7 @@ fn migrate_legacy_state_dir(paths: &ProjectPaths) -> Result<()> {
             current.display()
         )
     })?;
-    crate::event::emit(crate::Event::LegacyRenamed {
+    operation.emit(crate::Event::LegacyRenamed {
         from: legacy,
         to: current,
     });
@@ -153,8 +159,12 @@ pub struct ProjectContext {
     pub runner: Box<dyn Runner>,
 }
 
-pub fn base_config_for(app_path: &Path, overrides: &CommandOverrides) -> Result<BaseConfig> {
-    let mut base = BaseConfig::from_env()?;
+pub fn base_config_for(
+    app_path: &Path,
+    overrides: &CommandOverrides,
+    operation: &OperationContext,
+) -> Result<BaseConfig> {
+    let mut base = BaseConfig::from_env(operation)?;
     base.commands.enrich_from_path(app_path);
     if let Some(start) = &overrides.start_command {
         base.commands.start = Some(start.clone());
@@ -167,7 +177,7 @@ pub fn base_config_for(app_path: &Path, overrides: &CommandOverrides) -> Result<
     }
     let mut serve_port = overrides.serve_port;
     if serve_port.is_none() {
-        if let Some(env_port) = anybuild_common::event::environment_var("PORT") {
+        if let Some(env_port) = operation.environment_var("PORT") {
             if !env_port.is_empty() && env_port.chars().all(|c| c.is_ascii_digit()) {
                 serve_port = env_port.parse().ok();
             }
@@ -184,12 +194,18 @@ pub fn base_config_for(app_path: &Path, overrides: &CommandOverrides) -> Result<
 pub fn load_project_config(
     paths: &ProjectPaths,
     overrides: &CommandOverrides,
+    operation: &OperationContext,
 ) -> Result<(&'static str, ProviderConfig)> {
-    let base = base_config_for(&paths.app_path, overrides)?;
-    let provider = load_provider(&paths.app_path, &base, overrides.use_provider.as_deref())?;
-    let mut config = load_provider_config(provider, &paths.app_path, base)?;
+    let base = base_config_for(&paths.app_path, overrides, operation)?;
+    let provider = load_provider(
+        &paths.app_path,
+        &base,
+        overrides.use_provider.as_deref(),
+        operation,
+    )?;
+    let mut config = load_provider_config(provider, &paths.app_path, base, operation)?;
     if let Some(patch) = &overrides.config {
-        config = anybuild_providers::merge_config_json(provider, &config, patch)?;
+        config = crate::providers::merge_config_json(provider, &config, patch)?;
     }
     workspace::apply_subdir_provider_config(&mut config, paths.subdir.as_deref());
     workspace::apply_subdir_workspace_config(&paths.workspace_root, &mut config);
@@ -204,15 +220,16 @@ pub fn resolve_project_context(
     anybuild_path: Option<&Path>,
     overrides: &CommandOverrides,
     env_options: &EnvironmentOptions,
+    operation: &OperationContext,
 ) -> Result<ProjectContext> {
     let mut paths = resolve_project_paths(path, subdir)?;
-    let anybuild_file = get_anybuild_path(&paths, anybuild_path)?;
+    let anybuild_file = get_anybuild_path(&paths, anybuild_path, operation)?;
     if paths.subdir.is_none() {
         if let Some(marker) = read_anybuild_subdir(&anybuild_file) {
             paths = resolve_project_paths(&paths.workspace_root.clone(), Some(&marker))?;
         }
     }
-    let environment = resolve_environment(&paths, env_options)?;
+    let environment = resolve_environment(&paths, env_options, operation)?;
     let Environment {
         anybuild_dir,
         runtime_resources,
@@ -220,7 +237,7 @@ pub fn resolve_project_context(
         mut runner,
     } = environment;
 
-    let (provider, provider_config) = load_project_config(&paths, overrides)?;
+    let (provider, provider_config) = load_project_config(&paths, overrides, operation)?;
     // Apply the runner's config hook before evaluation (identity for the
     // local runner; the Wasmer runner selects its runtime dependencies and
     // preparation behavior through config overrides).

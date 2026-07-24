@@ -1,0 +1,30 @@
+//! Runtime implementations.
+
+use anyhow::Result;
+use indexmap::IndexMap;
+
+use crate::plan::{RunStep, Serve, Step};
+use crate::providers::ProviderConfig;
+
+pub mod local;
+pub mod wasmer;
+
+/// Port of `runners/base.py::Runner`.
+pub trait Runner {
+    /// Apply the runner's config hook before evaluation. The Wasmer runner
+    /// uses this to select Wasmer-specific dependencies and preparation.
+    fn prepare_config(&mut self, config: ProviderConfig) -> ProviderConfig;
+    fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step>;
+    fn build(&mut self, serve: &Serve) -> Result<()>;
+    fn prepare(&mut self, env: &IndexMap<String, String>, prepare: &[RunStep]) -> Result<()>;
+    fn has_serve_command(&self, command: &str) -> bool;
+    fn run_serve_command(
+        &mut self,
+        command: &str,
+        volume_mappings: Option<&IndexMap<String, String>>,
+        env: Option<&IndexMap<String, String>>,
+    ) -> Result<()>;
+    /// Concrete-type escape hatch (Python's `assert isinstance(runner, ...)`
+    /// in the deploy command).
+    fn as_any(&mut self) -> &mut dyn std::any::Any;
+}

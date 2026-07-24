@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Result};
 
+use crate::operation::OperationContext;
+
 #[derive(Debug, Clone)]
 pub struct ProjectPaths {
     pub workspace_root: PathBuf,
@@ -67,7 +69,10 @@ pub fn legacy_anybuild_path(paths: &ProjectPaths) -> PathBuf {
     }
 }
 
-pub fn migrate_legacy_anybuild(paths: &ProjectPaths) -> Result<Option<PathBuf>> {
+pub fn migrate_legacy_anybuild(
+    paths: &ProjectPaths,
+    operation: &OperationContext,
+) -> Result<Option<PathBuf>> {
     let current = default_anybuild_path(paths);
     if current.exists() {
         return Ok(Some(current));
@@ -83,7 +88,7 @@ pub fn migrate_legacy_anybuild(paths: &ProjectPaths) -> Result<Option<PathBuf>> 
             current.display()
         )
     })?;
-    crate::event::emit(crate::Event::LegacyRenamed {
+    operation.emit(crate::Event::LegacyRenamed {
         from: legacy,
         to: current.clone(),
     });
@@ -164,11 +169,15 @@ pub fn read_anybuild_subdir(anybuild_file: &Path) -> Option<String> {
     None
 }
 
-pub fn get_anybuild_path(paths: &ProjectPaths, anybuild_path: Option<&Path>) -> Result<PathBuf> {
+pub fn get_anybuild_path(
+    paths: &ProjectPaths,
+    anybuild_path: Option<&Path>,
+    operation: &OperationContext,
+) -> Result<PathBuf> {
     match anybuild_path {
         None => {
             let default = default_anybuild_path(paths);
-            if migrate_legacy_anybuild(paths)?.is_none() {
+            if migrate_legacy_anybuild(paths, operation)?.is_none() {
                 let mut command = format!("anybuild generate {}", paths.workspace_root.display());
                 if let Some(subdir) = &paths.subdir {
                     command = format!("{command} --subdir={subdir}");

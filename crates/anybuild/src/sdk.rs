@@ -5,10 +5,11 @@ use indexmap::IndexMap;
 use serde::Serialize;
 use serde_json::Value;
 
-use anybuild_plan::{Serve, Service, Step};
+use crate::plan::{Serve, Service, Step};
 
 use crate::error::{Error, ErrorKind, Result};
-use crate::event::{self, DiagnosticLevel, Event, EventHandler, Reporter};
+pub use crate::event::ProcessIo;
+use crate::event::{DiagnosticLevel, Event, EventHandler, Reporter};
 use crate::internal::context::{
     resolve_environment, resolve_project_context, EnvironmentOptions, ProjectContext,
 };
@@ -19,7 +20,7 @@ use crate::internal::paths::{
 use crate::internal::volumes::{
     build_volumes, load_volume_mappings, merge_volume_mappings, parse_cli_volume_mappings,
 };
-pub use anybuild_common::event::ProcessIo;
+use crate::operation::OperationContext;
 
 #[derive(Debug, Clone, Default)]
 pub struct CommandOverrides {
@@ -255,6 +256,12 @@ pub struct AutoOutcome {
     pub deploy: Option<DeployOutcome>,
 }
 
+struct PreparedDefinition {
+    path: Option<PathBuf>,
+    generated: Option<GeneratedAnybuild>,
+    _temporary: Option<tempfile::NamedTempFile>,
+}
+
 /// Project-oriented entry point for the Anybuild SDK.
 pub struct Anybuild {
     root: PathBuf,
@@ -335,43 +342,46 @@ impl Anybuild {
     }
 
     pub fn generate(&self, options: GenerateOptions) -> Result<GeneratedAnybuild> {
-        self.operation(ErrorKind::Generation, "generate", || {
-            self.generate_inner(options)
-        })
+        self.operation(
+            ErrorKind::Generation,
+            "generate",
+            ProcessIo::Inherit,
+            |context| self.generate_inner(options, context),
+        )
     }
 
     pub fn plan(&self, options: PlanOptions) -> Result<ProjectPlan> {
         let process_io = options.process_io;
-        self.operation(ErrorKind::Evaluation, "plan", || {
-            event::scope_process_io(process_io, || self.plan_inner(options))
+        self.operation(ErrorKind::Evaluation, "plan", process_io, |context| {
+            self.plan_inner(options, context)
         })
     }
 
     pub fn build(&self, options: BuildOptions) -> Result<BuildOutcome> {
         let process_io = options.process_io;
-        self.operation(ErrorKind::Build, "build", || {
-            event::scope_process_io(process_io, || self.build_inner(options))
+        self.operation(ErrorKind::Build, "build", process_io, |context| {
+            self.build_inner(options, context)
         })
     }
 
     pub fn run(&self, options: RunOptions) -> Result<RunOutcome> {
         let process_io = options.process_io;
-        self.operation(ErrorKind::Run, "run", || {
-            event::scope_process_io(process_io, || self.run_inner(options))
+        self.operation(ErrorKind::Run, "run", process_io, |context| {
+            self.run_inner(options, context)
         })
     }
 
     pub fn deploy(&self, options: DeployOptions) -> Result<DeployOutcome> {
         let process_io = options.process_io;
-        self.operation(ErrorKind::Deploy, "deploy", || {
-            event::scope_process_io(process_io, || self.deploy_inner(options))
+        self.operation(ErrorKind::Deploy, "deploy", process_io, |context| {
+            self.deploy_inner(options, context)
         })
     }
 
     pub fn auto(&self, options: AutoOptions) -> Result<AutoOutcome> {
         let process_io = options.build.process_io;
-        self.operation(ErrorKind::Build, "auto", || {
-            event::scope_process_io(process_io, || self.auto_inner(options))
+        self.operation(ErrorKind::Build, "auto", process_io, |context| {
+            self.auto_inner(options, context)
         })
     }
 
@@ -379,19 +389,16 @@ impl Anybuild {
         &self,
         kind: ErrorKind,
         name: &'static str,
-        operation: impl FnOnce() -> AnyResult<T>,
+        process_io: ProcessIo,
+        operation: impl FnOnce(&OperationContext) -> AnyResult<T>,
     ) -> Result<T> {
-        let environment = self.effective_env();
-        anybuild_common::event::scope_process_environment(
-            &environment,
+        let context = OperationContext::new(
+            self.effective_env(),
             self.inherit_process_env,
-            || {
-                anybuild_providers::base::scope_environment(&environment, || {
-                    event::scope(&self.reporter, operation)
-                })
-            },
-        )
-        .map_err(|source| Error::new(kind, name, self.root.clone(), source))
+            process_io,
+            self.reporter.clone(),
+        );
+        operation(&context).map_err(|source| Error::new(kind, name, self.root.clone(), source))
     }
 
     fn effective_env(&self) -> IndexMap<String, String> {
@@ -408,13 +415,17 @@ impl Anybuild {
         resolve_project_paths(&self.root, self.subdir.as_deref())
     }
 
-    fn generate_inner(&self, options: GenerateOptions) -> AnyResult<GeneratedAnybuild> {
+    fn generate_inner(
+        &self,
+        options: GenerateOptions,
+        context: &OperationContext,
+    ) -> AnyResult<GeneratedAnybuild> {
         let paths = self.paths()?;
         let output = options
             .output
             .unwrap_or_else(|| default_anybuild_path(&paths));
         let (provider, provider_config) =
-            crate::internal::context::load_project_config(&paths, &self.overrides)?;
+            crate::internal::context::load_project_config(&paths, &self.overrides, context)?;
         let content = generate_anybuild(
             provider,
             provider_config.base().name.as_deref(),
@@ -425,11 +436,11 @@ impl Anybuild {
         }
         std::fs::write(&output, &content)?;
         let path = output.canonicalize().unwrap_or(output);
-        let config = anybuild_providers::exclude_defaults_json(&provider_config);
-        event::emit(Event::ProviderDetected {
+        let config = crate::providers::exclude_defaults_json(&provider_config);
+        context.emit(Event::ProviderDetected {
             provider: provider.to_owned(),
         });
-        event::emit(Event::FileWritten {
+        context.emit(Event::FileWritten {
             kind: "anybuild",
             path: path.clone(),
         });
@@ -441,47 +452,39 @@ impl Anybuild {
         })
     }
 
-    fn plan_inner(&self, mut options: PlanOptions) -> AnyResult<ProjectPlan> {
+    fn plan_inner(
+        &self,
+        options: PlanOptions,
+        context: &OperationContext,
+    ) -> AnyResult<ProjectPlan> {
         let paths = self.paths()?;
-        let temporary;
-        if options.temporary {
-            if options.anybuild_path.is_some() {
-                bail!("Cannot use both a temporary Anybuild file and an explicit path");
-            }
-            temporary = Some(tempfile::Builder::new().prefix("Anybuild").tempfile()?);
-            options.anybuild_path = temporary.as_ref().map(|file| file.path().to_path_buf());
-            options.regenerate = true;
+        let policy = if options.temporary {
+            GenerationPolicy::Temporary
+        } else if options.regenerate {
+            GenerationPolicy::Always
         } else {
-            temporary = None;
-        }
-        if !options.regenerate {
-            match &options.anybuild_path {
-                Some(path) if !path.exists() => options.regenerate = true,
-                None if migrate_legacy_anybuild(&paths)?.is_none() => options.regenerate = true,
-                _ => {}
-            }
-        }
-        if options.regenerate {
-            self.generate_inner(GenerateOptions {
-                output: options.anybuild_path.clone(),
-            })?;
-        }
-        let context = resolve_project_context(
+            GenerationPolicy::IfMissing
+        };
+        let definition = self.prepare_definition(&paths, options.anybuild_path, policy, context)?;
+        let project = resolve_project_context(
             &paths.workspace_root,
             paths.subdir.as_deref(),
-            options.anybuild_path.as_deref(),
+            definition.path.as_deref(),
             &CommandOverrides {
                 serve_port: options.serve_port,
                 ..self.overrides.clone()
             },
             &environment_options(&options.build_environment, &options.runtime_environment),
+            context,
         )?;
-        let plan = project_plan(&context);
-        drop(temporary);
-        Ok(plan)
+        Ok(project_plan(&project))
     }
 
-    fn build_inner(&self, options: BuildOptions) -> AnyResult<BuildOutcome> {
+    fn build_inner(
+        &self,
+        options: BuildOptions,
+        operation: &OperationContext,
+    ) -> AnyResult<BuildOutcome> {
         let mut path = self.root.clone();
         let mut subdir = self.subdir.clone();
         let mut build_environment = options.build_environment.clone();
@@ -494,6 +497,7 @@ impl Anybuild {
                 options.anybuild_path.as_deref(),
                 &self.overrides,
                 &env_options,
+                operation,
             )?;
             if skip_safe
                 && matches!(build_environment, BuildEnvironment::Docker(_))
@@ -504,7 +508,7 @@ impl Anybuild {
                     .iter()
                     .any(|step| matches!(step, Step::Run(_)))
             {
-                event::emit(Event::Diagnostic {
+                operation.emit(Event::Diagnostic {
                     level: DiagnosticLevel::Info,
                     message: "Building locally because every build step is safe".to_owned(),
                 });
@@ -555,7 +559,7 @@ impl Anybuild {
                     .runner
                     .prepare(&env, context.serve.prepare.as_deref().unwrap_or_default())?;
             }
-            event::emit(Event::ArtifactCreated {
+            operation.emit(Event::ArtifactCreated {
                 path: context.anybuild_dir.clone(),
             });
             return Ok(BuildOutcome {
@@ -565,11 +569,16 @@ impl Anybuild {
         }
     }
 
-    fn run_inner(&self, options: RunOptions) -> AnyResult<RunOutcome> {
+    fn run_inner(
+        &self,
+        options: RunOptions,
+        operation: &OperationContext,
+    ) -> AnyResult<RunOutcome> {
         let paths = self.paths()?;
         let mut environment = resolve_environment(
             &paths,
             &environment_options(&options.build_environment, &options.runtime_environment),
+            operation,
         )?;
         let mut commands = options.commands.clone();
         if options.after_deploy && !commands.iter().any(|name| name == "after_deploy") {
@@ -603,7 +612,7 @@ impl Anybuild {
                 outcome.skipped.push(command);
                 continue;
             }
-            event::emit(Event::CommandStarted {
+            operation.emit(Event::CommandStarted {
                 name: command.clone(),
                 command: None,
             });
@@ -615,7 +624,11 @@ impl Anybuild {
         Ok(outcome)
     }
 
-    fn deploy_inner(&self, options: DeployOptions) -> AnyResult<DeployOutcome> {
+    fn deploy_inner(
+        &self,
+        options: DeployOptions,
+        operation: &OperationContext,
+    ) -> AnyResult<DeployOutcome> {
         let paths = self.paths()?;
         let environment = resolve_environment(
             &paths,
@@ -623,11 +636,12 @@ impl Anybuild {
                 &BuildEnvironment::Local,
                 &RuntimeEnvironment::Wasmer(options.wasmer.clone()),
             ),
+            operation,
         )?;
         let mut runner = environment.runner;
         let runner = runner
             .as_any()
-            .downcast_mut::<anybuild_run::wasmer::WasmerRunner>()
+            .downcast_mut::<crate::run::wasmer::WasmerRunner>()
             .expect("Wasmer runtime resolves a WasmerRunner");
         let outcome = match options.target {
             DeployTarget::WriteConfig { path } => {
@@ -639,7 +653,7 @@ impl Anybuild {
                 DeployOutcome::Published { owner, name }
             }
         };
-        event::emit(Event::Deployment {
+        operation.emit(Event::Deployment {
             description: match &outcome {
                 DeployOutcome::Published { .. } => "Published Wasmer application".to_owned(),
                 DeployOutcome::ConfigWritten { path } => {
@@ -650,58 +664,87 @@ impl Anybuild {
         Ok(outcome)
     }
 
-    fn auto_inner(&self, mut options: AutoOptions) -> AnyResult<AutoOutcome> {
+    fn auto_inner(
+        &self,
+        mut options: AutoOptions,
+        operation: &OperationContext,
+    ) -> AnyResult<AutoOutcome> {
         let paths = self.paths()?;
-        let temporary;
-        let generated = match options.generation {
-            GenerationPolicy::Temporary => {
-                temporary = Some(tempfile::Builder::new().prefix("Anybuild").tempfile()?);
-                let path = temporary.as_ref().unwrap().path().to_path_buf();
-                options.build.anybuild_path = Some(path.clone());
-                Some(self.generate_inner(GenerateOptions { output: Some(path) })?)
-            }
-            GenerationPolicy::Always => {
-                temporary = None;
-                let generated = self.generate_inner(GenerateOptions {
-                    output: options.build.anybuild_path.clone(),
-                })?;
-                options.build.anybuild_path = Some(generated.path.clone());
-                Some(generated)
-            }
-            GenerationPolicy::IfMissing => {
-                temporary = None;
-                let missing = match &options.build.anybuild_path {
-                    Some(path) => !path.exists(),
-                    None => migrate_legacy_anybuild(&paths)?.is_none(),
-                };
-                if missing {
-                    let generated = self.generate_inner(GenerateOptions {
-                        output: options.build.anybuild_path.clone(),
-                    })?;
-                    options.build.anybuild_path = Some(generated.path.clone());
-                    Some(generated)
-                } else {
-                    None
-                }
-            }
-        };
-        let build = self.build_inner(options.build)?;
+        let definition = self.prepare_definition(
+            &paths,
+            options.build.anybuild_path.take(),
+            options.generation,
+            operation,
+        )?;
+        options.build.anybuild_path = definition.path.clone();
+        let build = self.build_inner(options.build, operation)?;
         let run = options
             .run
-            .map(|options| event::scope_process_io(options.process_io, || self.run_inner(options)))
+            .map(|options| {
+                let context = operation.with_process_io(options.process_io);
+                self.run_inner(options, &context)
+            })
             .transpose()?;
         let deploy = options
             .deploy
             .map(|options| {
-                event::scope_process_io(options.process_io, || self.deploy_inner(options))
+                let context = operation.with_process_io(options.process_io);
+                self.deploy_inner(options, &context)
             })
             .transpose()?;
-        drop(temporary);
         Ok(AutoOutcome {
-            generated,
+            generated: definition.generated,
             build,
             run,
             deploy,
+        })
+    }
+
+    fn prepare_definition(
+        &self,
+        paths: &ProjectPaths,
+        explicit_path: Option<PathBuf>,
+        policy: GenerationPolicy,
+        operation: &OperationContext,
+    ) -> AnyResult<PreparedDefinition> {
+        if policy == GenerationPolicy::Temporary && explicit_path.is_some() {
+            bail!("Cannot use both a temporary Anybuild file and an explicit path");
+        }
+
+        let temporary = if policy == GenerationPolicy::Temporary {
+            Some(tempfile::Builder::new().prefix("Anybuild").tempfile()?)
+        } else {
+            None
+        };
+        let output = temporary
+            .as_ref()
+            .map(|file| file.path().to_path_buf())
+            .or(explicit_path);
+        let should_generate = match policy {
+            GenerationPolicy::Always | GenerationPolicy::Temporary => true,
+            GenerationPolicy::IfMissing => match &output {
+                Some(path) => !path.exists(),
+                None => migrate_legacy_anybuild(paths, operation)?.is_none(),
+            },
+        };
+        let generated = should_generate
+            .then(|| {
+                self.generate_inner(
+                    GenerateOptions {
+                        output: output.clone(),
+                    },
+                    operation,
+                )
+            })
+            .transpose()?;
+        let path = generated
+            .as_ref()
+            .map(|generated| generated.path.clone())
+            .or(output);
+        Ok(PreparedDefinition {
+            path,
+            generated,
+            _temporary: temporary,
         })
     }
 }
@@ -764,7 +807,7 @@ fn project_plan(context: &ProjectContext) -> ProjectPlan {
     }
     ProjectPlan {
         provider: context.provider.to_owned(),
-        config: anybuild_providers::exclude_defaults_json(&config),
+        config: crate::providers::exclude_defaults_json(&config),
         services: context.serve.services.clone().unwrap_or_default(),
         serve: context.serve.clone(),
     }

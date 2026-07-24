@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 
+use crate::operation::OperationContext;
+
 const STARLIB_FILES: &[(&str, &[u8])] = &[
     (
         "prelude.bzl",
@@ -92,9 +94,9 @@ pub struct RuntimeResources {
     _temp_dir: Option<tempfile::TempDir>,
 }
 
-pub fn resolve() -> Result<RuntimeResources> {
-    let starlib_override = override_dir("ANYBUILD_STARLIB", "SHIPIT_STARLIB")?;
-    let assets_override = override_dir("ANYBUILD_ASSETS", "SHIPIT_ASSETS")?;
+pub fn resolve(operation: &OperationContext) -> Result<RuntimeResources> {
+    let starlib_override = override_dir(operation, "ANYBUILD_STARLIB", "SHIPIT_STARLIB")?;
+    let assets_override = override_dir(operation, "ANYBUILD_ASSETS", "SHIPIT_ASSETS")?;
     let temp_dir = if starlib_override.is_none() || assets_override.is_none() {
         Some(
             tempfile::Builder::new()
@@ -134,11 +136,18 @@ pub fn resolve() -> Result<RuntimeResources> {
     })
 }
 
-fn override_dir(override_var: &str, legacy_var: &str) -> Result<Option<PathBuf>> {
-    let selected = anybuild_providers::base::environment_var(override_var)
+fn override_dir(
+    operation: &OperationContext,
+    override_var: &str,
+    legacy_var: &str,
+) -> Result<Option<PathBuf>> {
+    let selected = operation
+        .environment_var(override_var)
         .map(|path| (override_var, path))
         .or_else(|| {
-            anybuild_providers::base::environment_var(legacy_var).map(|path| (legacy_var, path))
+            operation
+                .environment_var(legacy_var)
+                .map(|path| (legacy_var, path))
         });
     if let Some((selected_var, path)) = selected {
         let path = PathBuf::from(path);

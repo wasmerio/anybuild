@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Result};
 use indexmap::IndexMap;
 
-use anybuild_common::paths::normalize_absolute;
-use anybuild_common::volumes::{
+use crate::common::paths::normalize_absolute;
+use crate::common::volumes::{
     load_volume_mappings as load_persisted_volume_mappings, volume_mappings_path, volumes_dir,
 };
-use anybuild_plan::{Serve, Volume};
+use crate::plan::{Serve, Volume};
 
 fn effective_anybuild_dir(src_dir: &Path, anybuild_dir: Option<&Path>) -> PathBuf {
     anybuild_dir

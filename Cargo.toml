@@ -1,13 +1,7 @@
 [workspace]
 members = [
     "crates/anybuild",
-    "crates/anybuild-common",
-    "crates/anybuild-plan",
-    "crates/anybuild-starlark",
-    "crates/anybuild-providers",
     "crates/anybuild-cli",
-    "crates/anybuild-run",
-    "crates/anybuild-build",
     "crates/anybuild-e2e",
 ]
 # `cargo build`/`cargo test` without flags skip the e2e crate; its tests
@@ -15,13 +9,7 @@ members = [
 # them explicitly with: cargo nextest run -p anybuild-e2e --run-ignored all
 default-members = [
     "crates/anybuild",
-    "crates/anybuild-common",
-    "crates/anybuild-plan",
-    "crates/anybuild-starlark",
-    "crates/anybuild-providers",
     "crates/anybuild-cli",
-    "crates/anybuild-run",
-    "crates/anybuild-build",
 ]
 resolver = "2"
 
