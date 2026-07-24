@@ -19,6 +19,12 @@ concurrency:
 jobs:
   release_please:
     name: Release Please
+    # Disabled during the Rust transition: the release-please config is
+    # still Python-typed (release-type: python, bumps uv.lock and
+    # src/shipit/version.py) and a created release triggers the PyPI
+    # publish below. Re-enable after converting the config to the Rust
+    # workspace (release-type: rust + a Rust distribution path).
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

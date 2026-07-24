@@ -1,0 +1,32 @@
+[package]
+name = "shipit-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shipit: detect, build, and serve projects"
+
+[[bin]]
+name = "shipit"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap = { version = "4", features = ["derive"] }
+dotenvy = "0.15"
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shipit-build = { path = "../shipit-build", default-features = false }
+shipit-common = { path = "../shipit-common" }
+shipit-plan = { path = "../shipit-plan" }
+shipit-providers = { path = "../shipit-providers" }
+shipit-run = { path = "../shipit-run", default-features = false }
+shipit-starlark = { path = "../shipit-starlark" }
+tempfile = "3"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = ["syntax-highlighting"]
+syntax-highlighting = ["shipit-build/syntax-highlighting"]

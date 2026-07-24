@@ -15,6 +15,10 @@
         {
           "type": "generic",
           "path": "src/shipit/version.py"
+        },
+        {
+          "type": "generic",
+          "path": "Cargo.toml"
         }
       ]
     }

@@ -15,7 +15,7 @@ def hugo_build(config, static_app = None):
             use(hugo),
             workdir(temp.path),
             copy(".", ".", ignore = [".git"]),
-            run("hugo build --gc --minify", group = "build"),
+            run("hugo --gc --minify", group = "build"),
             run("cp -R {}/* {}/".format(config.static_dir, static_app.path)),
         ],
         mounts = [static_app] + ([static_config] if static_config != None else []),

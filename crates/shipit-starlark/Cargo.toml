@@ -1,0 +1,18 @@
+[package]
+name = "shipit-starlark"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shipit Starlark evaluation host: module loader, builtins, config bridge"
+
+[dependencies]
+anyhow.workspace = true
+allocative.workspace = true
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shipit-plan = { path = "../shipit-plan" }
+starlark.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

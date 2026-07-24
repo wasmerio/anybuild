@@ -1,0 +1,42 @@
+[workspace]
+members = [
+    "crates/shipit-common",
+    "crates/shipit-plan",
+    "crates/shipit-starlark",
+    "crates/shipit-providers",
+    "crates/shipit-cli",
+    "crates/shipit-run",
+    "crates/shipit-build",
+    "crates/shipit-e2e",
+]
+# `cargo build`/`cargo test` without flags skip the e2e crate; its tests
+# are additionally #[ignore]d so `--workspace` runs skip them too. Run
+# them explicitly with: cargo nextest run -p shipit-e2e --run-ignored all
+default-members = [
+    "crates/shipit-common",
+    "crates/shipit-plan",
+    "crates/shipit-starlark",
+    "crates/shipit-providers",
+    "crates/shipit-cli",
+    "crates/shipit-run",
+    "crates/shipit-build",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.23.0"  # x-release-please-version
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+anyhow = "1"
+indexmap = { version = "2", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+starlark = "0.14"
+syntect = { version = "5", default-features = false, features = ["default-fancy"] }
+two-face = { version = "0.5", default-features = false, features = ["syntect-fancy"] }
+allocative = "0.3"
+
+[profile.release]
+lto = "thin"

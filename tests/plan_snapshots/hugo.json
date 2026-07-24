@@ -24,7 +24,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "hugo build --gc --minify",
+   "command": "hugo --gc --minify",
    "group": "build"
   },
   {

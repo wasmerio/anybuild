@@ -1,0 +1,19 @@
+# cargo-nextest profiles.
+#
+#   cargo nextest run                     # gate suites (fast, no retries)
+#   cargo nextest run --profile e2e \
+#     -p shipit-e2e --run-ignored all     # end-to-end suite
+
+[profile.default]
+# Gates are deterministic; a retry would only mask a real regression.
+retries = 0
+
+[profile.e2e]
+# pytest-rerunfailures parity: reruns=2 with a 2s delay.
+retries = { backoff = "fixed", count = 2, delay = "2s" }
+fail-fast = false
+# Matches the pytest -n 4 the suite has always run with.
+test-threads = 4
+# Builds legitimately take minutes; flag slow tests but only kill a test
+# after 10 minutes (120s period x 5).
+slow-timeout = { period = "120s", terminate-after = 5 }

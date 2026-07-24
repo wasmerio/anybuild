@@ -1,5 +1,15 @@
 name: Reusable Test + E2E
 
+# Fully Rust-based testing: the gate job builds the workspace, runs the
+# nextest gate suites against the committed fixtures (fixtures/,
+# tests/plan_snapshots/ — no Python oracle needed at test time), and
+# archives the e2e test binaries. The e2e matrix runs slices of the
+# shipit-e2e crate against the debug binary.
+#
+# uv/Python appear in the e2e jobs only as the runtime toolchain of the
+# example apps being built (uv/python for python examples), not as a test
+# harness.
+
 on:
   workflow_call:
     inputs:
@@ -14,45 +24,60 @@ permissions:
 
 jobs:
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Rust build + gates
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.13"]
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          enable-cache: true
+          components: rustfmt, clippy
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Build workspace (deny warnings)
+        run: cargo build --workspace
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: Run Clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run gate suites
+        run: cargo nextest run --workspace
+
+      - name: Archive e2e test binaries
+        run: cargo nextest archive -p shipit-e2e --archive-file shipit-e2e.tar.zst
+
+      - name: Upload shipit binary
+        uses: actions/upload-artifact@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          name: shipit-debug
+          path: target/debug/shipit
+          retention-days: 1
+          if-no-files-found: error
 
-      - name: Verify lockfile is up to date
-        run: uv lock --check
-
-      - name: Install dependencies
-        run: uv sync --locked --dev
-
-      - name: Bytecode compile check
-        run: uv run python -m compileall -q src tests
-
-      - name: Run mypy
-        run: uv run mypy
-
-      - name: Run tests (excluding e2e)
-        run: uv run pytest -m "not e2e" -q
+      - name: Upload e2e archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: shipit-e2e-archive
+          path: shipit-e2e.tar.zst
+          retention-days: 1
+          if-no-files-found: error
 
   e2e:
-    name: E2E ${{ matrix.suite }} (Python 3.13)
+    name: E2E ${{ matrix.suite }} ${{ matrix.mode }}
     if: ${{ inputs.run_e2e }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -68,6 +93,18 @@ jobs:
           - python
           - node
           - php
+        mode:
+          - wasmer
+        # Docker-mode slices, only for the suites that have such cases.
+        include:
+          - suite: static
+            mode: wasmer_and_docker
+          - suite: staticpython
+            mode: wasmer_and_docker
+          - suite: python
+            mode: wasmer_and_docker
+          - suite: php
+            mode: wasmer_and_docker
     services:
       mysql:
         image: mysql:8.0
@@ -86,6 +123,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      # Toolchains for the example apps the suite builds (not a harness).
       - name: Set up uv
         uses: astral-sh/setup-uv@v8.3.2
         with:
@@ -96,28 +140,43 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install MySQL client
+      - name: Install MySQL client + hugo
+        # hugo builds run the local binary even in wasmer mode.
         run: |
           sudo apt-get update
-          sudo apt-get install -y default-mysql-client
+          sudo apt-get install -y default-mysql-client hugo
 
       - name: Set up Wasmer
         uses: wasmerio/setup-wasmer@v3.1
         with:
           version: v7.2.1
 
+      - name: Download shipit binary
+        uses: actions/download-artifact@v4
+        with:
+          name: shipit-debug
+          path: shipit-bin
+
+      - name: Download e2e archive
+        uses: actions/download-artifact@v4
+        with:
+          name: shipit-e2e-archive
+
       - name: Verify toolchain
         run: |
+          chmod +x shipit-bin/shipit
           uv --version
           python --version
           wasmer --version
           docker --version
+          ./shipit-bin/shipit generate --help > /dev/null
 
-      - name: Install dependencies
-        run: uv sync --locked --dev
-
-      - name: Run e2e tests
+      - name: Run e2e tests (Rust binary)
+        env:
+          SHIPIT_BIN: ${{ github.workspace }}/shipit-bin/shipit
         run: |
-          uv run pytest -m "e2e and e2e_${{ matrix.suite }}" \
-            -v tests/test_e2e.py -n 4 \
-            -k "(BuildMode.Wasmer and not cdn and not hugo and not python-streamlit and not BuildMode.WasmerAndDocker)"
+          cargo nextest run \
+            --archive-file shipit-e2e.tar.zst \
+            --workspace-remap "$GITHUB_WORKSPACE" \
+            --profile e2e --run-ignored all \
+            -E 'test(/^${{ matrix.suite }}__${{ matrix.mode }}__/) and not test(/cdn|python_streamlit/)'
