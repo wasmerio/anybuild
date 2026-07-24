@@ -2,56 +2,54 @@
 
 This file provides guidance to AI agents working in this repository.
 
-## What is Shipit
+## What is Anybuild
 
-Shipit is a Python CLI for building, running, and deploying projects
+Anybuild is a CLI for building, running, and deploying projects
 described with Starlark files. It can build locally, in Docker, or using
 Wasmer, and supports examples for popular frameworks.
 
 ## Architecture
 
-- **CLI**: `src/shipit/cli.py` implements the Typer commands `build`, `run`,
+- **CLI**: `crates/anybuild-cli` implements the commands `build`, `run`,
   `deploy`, and `auto`.
 - **Build backends**: `LocalBuildBackend` runs steps on the host while
   `DockerBuildBackend` produces artifacts inside a container and exports them.
 - **Runners**: `LocalRunner` executes the generated commands locally, and
   `WasmerRunner` packages artifacts and runs them with Wasmer.
-- **Starlark runtime**: Build steps are defined in a `Shipit` file and executed
+- **Starlark runtime**: Build steps are defined in an `Anybuild` file and executed
   through the `Ctx` interface.
-- **Assets**: Templates and config snippets live under `src/shipit/assets`.
+- **Assets**: Templates and config snippets live under `resources/assets`.
 - **Examples**: Sample apps in `examples/` show how to use the tool.
 
 ## Bash commands
 
-- `uv run shipit` – Generate the Shipit, build, and run the project.
-- `uv run shipit generate` – Generate the `Shipit` file.
-- `uv run shipit build` – Build the project defined by the `Shipit` file.
-- `uv run shipit run` – Run the built project.
-- `uv run shipit deploy` – Deploy the built Wasmer project.
-- `uv run python` – Run Python (always prefer this over calling `python`
-  directly).
-- `uv run pytest` – Run the test suite (if tests exist).
+- `cargo run -- .` – Generate the Anybuild and build the project.
+- `cargo run -- generate` – Generate the `Anybuild` file.
+- `cargo run -- build` – Build the project defined by the `Anybuild` file.
+- `cargo run -- run` – Run the built project.
+- `cargo run -- deploy` – Deploy the built Wasmer project.
+- `cargo test --workspace` – Run the Rust test suite.
+- `scripts/verify_rust.sh` – Run formatting, build, Clippy, tests, and smoke
+  gates.
 
 ## Testing
 
-- Pytest is declared as a dev dependency in `pyproject.toml` under
-  `[tool.uv].dev-dependencies`. Running `uv run pytest` will automatically use
-  the project environment and install pytest if needed.
-- No global installation or manual virtualenv activation is required.
+- `cargo test --workspace` runs the unit, integration, snapshot, fixture, and
+  generated-file tests. End-to-end tests are ignored by default.
+- `scripts/verify_rust.sh --e2e` also runs the Wasmer end-to-end slice.
 
 ## Code style
 
-- Follow Python conventions (PEP 8) and existing patterns in the codebase.
-- Use type hints where reasonable.
-- Stick to the repo’s current Python baseline (3.13) and avoid shims for older
-  versions; if a feature exists in 3.13, just use it without compatibility code.
+- Follow Rust conventions and existing patterns in the workspace.
+- Run `cargo fmt --all` after editing Rust code.
+- Keep the workspace clean under `cargo clippy --workspace --all-targets`.
 - Avoid comments that simply restate code; explain *why*, not *what*.
 - Keep imports grouped and sorted.
 - Lines should be kept to 80 characters where possible.
 
 ## Workflow
 
-- After making changes, run `uv run pytest` to verify nothing broke.
+- After making changes, run `scripts/verify_rust.sh` to verify nothing broke.
 - Keep commits focused and write clear commit messages.
 - Do not run tests or commands unrelated to your changes unless asked.
 

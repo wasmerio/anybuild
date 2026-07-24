@@ -1,25 +1,25 @@
 [workspace]
 members = [
-    "crates/shipit-common",
-    "crates/shipit-plan",
-    "crates/shipit-starlark",
-    "crates/shipit-providers",
-    "crates/shipit-cli",
-    "crates/shipit-run",
-    "crates/shipit-build",
-    "crates/shipit-e2e",
+    "crates/anybuild-common",
+    "crates/anybuild-plan",
+    "crates/anybuild-starlark",
+    "crates/anybuild-providers",
+    "crates/anybuild-cli",
+    "crates/anybuild-run",
+    "crates/anybuild-build",
+    "crates/anybuild-e2e",
 ]
 # `cargo build`/`cargo test` without flags skip the e2e crate; its tests
 # are additionally #[ignore]d so `--workspace` runs skip them too. Run
-# them explicitly with: cargo nextest run -p shipit-e2e --run-ignored all
+# them explicitly with: cargo nextest run -p anybuild-e2e --run-ignored all
 default-members = [
-    "crates/shipit-common",
-    "crates/shipit-plan",
-    "crates/shipit-starlark",
-    "crates/shipit-providers",
-    "crates/shipit-cli",
-    "crates/shipit-run",
-    "crates/shipit-build",
+    "crates/anybuild-common",
+    "crates/anybuild-plan",
+    "crates/anybuild-starlark",
+    "crates/anybuild-providers",
+    "crates/anybuild-cli",
+    "crates/anybuild-run",
+    "crates/anybuild-build",
 ]
 resolver = "2"
 

@@ -8,7 +8,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
-	"github.com/wasmerio/shipit/examples/go-graphql/generated"
+	"github.com/wasmerio/anybuild/examples/go-graphql/generated"
 )
 
 func BenchmarkSimpleQueryNoArgs(b *testing.B) {

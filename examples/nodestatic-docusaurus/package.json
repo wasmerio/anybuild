@@ -1,5 +1,5 @@
 {
-  "name": "shipit-nodestatic-docusaurus-example",
+  "name": "anybuild-nodestatic-docusaurus-example",
   "private": true,
   "scripts": {
     "build": "docusaurus build",

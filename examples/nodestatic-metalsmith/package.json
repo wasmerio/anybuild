@@ -1,5 +1,5 @@
 {
-  "name": "shipit-nodestatic-metalsmith-example",
+  "name": "anybuild-nodestatic-metalsmith-example",
   "private": true,
   "scripts": {
     "build": "metalsmith"

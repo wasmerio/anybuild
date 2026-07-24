@@ -19,13 +19,13 @@ RUN \
   uv add -r requirements.txt
 COPY . .
 RUN uv run mkdocs build
-RUN mkdir -p /shipit/serve/bin
+RUN mkdir -p /anybuild/serve/bin
 RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh
 
-RUN cat > /shipit/serve/bin/start <<'EOF'
+RUN cat > /anybuild/serve/bin/start <<'EOF'
 #!/bin/bash
 cd /app
 static-web-server --log-level=info --root /app/site
 EOF
 
-RUN chmod 755 /shipit/serve/bin/start
+RUN chmod 755 /anybuild/serve/bin/start

@@ -4,7 +4,7 @@
 
 <main>
   <h1>Svelte Static Example</h1>
-  <p>Built by SvelteKit and served as static files by Shipit.</p>
+  <p>Built by SvelteKit and served as static files by Anybuild.</p>
 </main>
 
 <style>

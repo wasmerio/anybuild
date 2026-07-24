@@ -58,7 +58,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "pnpm deploy --filter @shipit-example/dashboard --prod --config.node-linker=hoisted app"
+   "command": "pnpm deploy --filter @anybuild-example/dashboard --prod --config.node-linker=hoisted app"
   },
   {
    "__type__": "WorkdirStep",

@@ -76,7 +76,7 @@
   "PAGER": "cat",
   "PHP_INI_SCAN_DIR": "opt/assets",
   "WPCONTENT_BASE_PATH": "opt/wpcontent_base",
-  "WP_PLUGINS_ACTIVATE": "php-wordpress-plugin/shipit-example-plugin.php"
+  "WP_PLUGINS_ACTIVATE": "php-wordpress-plugin/anybuild-example-plugin.php"
  },
  "mounts": [
   {
@@ -107,7 +107,7 @@
  "volumes": [
   {
    "name": "wp-content",
-   "path": "<SHIPIT_DIR>/volumes/wp-content",
+   "path": "<ANYBUILD_DIR>/volumes/wp-content",
    "serve_path": "app/wp-content"
   }
  ]

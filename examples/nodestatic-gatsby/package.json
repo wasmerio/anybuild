@@ -1,8 +1,8 @@
 {
-  "name": "shipit-nodestatic-gatsby-example",
+  "name": "anybuild-nodestatic-gatsby-example",
   "version": "1.0.0",
   "private": true,
-  "description": "shipit-nodestatic-gatsby-example",
+  "description": "anybuild-nodestatic-gatsby-example",
   "author": "M.Amin Rayej",
   "keywords": [
     "gatsby"

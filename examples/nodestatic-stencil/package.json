@@ -1,10 +1,10 @@
 {
-  "name": "shipit-nodestatic-stencil-example",
+  "name": "anybuild-nodestatic-stencil-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "SHIPIT_EXAMPLE_TITLE='Stencil Example' SHIPIT_EXAMPLE_OUTPUT=www node scripts/build-static.mjs && echo 'stencil build' >/dev/null"
+    "build": "ANYBUILD_EXAMPLE_TITLE='Stencil Example' ANYBUILD_EXAMPLE_OUTPUT=www node scripts/build-static.mjs && echo 'stencil build' >/dev/null"
   },
   "dependencies": {
     "@stencil/core": "1.3.3"

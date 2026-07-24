@@ -1,10 +1,10 @@
 {
-  "name": "shipit-nodestatic-sanity-example",
+  "name": "anybuild-nodestatic-sanity-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "SHIPIT_EXAMPLE_TITLE='Sanity Example' SHIPIT_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'sanity build' >/dev/null"
+    "build": "ANYBUILD_EXAMPLE_TITLE='Sanity Example' ANYBUILD_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'sanity build' >/dev/null"
   },
   "dependencies": {
     "sanity": "^3.99.0"

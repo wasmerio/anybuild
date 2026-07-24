@@ -16,7 +16,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/introspection"
 	gqlparser "github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
-	"github.com/wasmerio/shipit/examples/go-graphql/models"
+	"github.com/wasmerio/anybuild/examples/go-graphql/models"
 )
 
 // region    ************************** generated!.gotpl **************************

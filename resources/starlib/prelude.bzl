@@ -1,0 +1,11 @@
+"""Shared helpers for Anybuild provider libraries."""
+
+def merged(base, overrides):
+    """Merge two dicts into a new one; overrides win. None-safe."""
+    result = dict(base or {})
+    result.update(overrides or {})
+    return result
+
+def compact(items):
+    """Drop None entries from a list (conditional steps)."""
+    return [item for item in items if item != None]

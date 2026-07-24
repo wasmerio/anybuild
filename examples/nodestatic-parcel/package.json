@@ -1,10 +1,10 @@
 {
-  "name": "shipit-nodestatic-parcel-example",
+  "name": "anybuild-nodestatic-parcel-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "SHIPIT_EXAMPLE_TITLE='Parcel Example' SHIPIT_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'parcel build' >/dev/null"
+    "build": "ANYBUILD_EXAMPLE_TITLE='Parcel Example' ANYBUILD_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'parcel build' >/dev/null"
   },
   "source": "src/index.html",
   "devDependencies": {

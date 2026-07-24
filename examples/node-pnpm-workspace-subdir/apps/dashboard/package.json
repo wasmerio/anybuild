@@ -1,5 +1,5 @@
 {
-  "name": "@shipit-example/dashboard",
+  "name": "@anybuild-example/dashboard",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@astrojs/node": "^10.1.1",
-    "@shipit-example/ui": "workspace:*",
+    "@anybuild-example/ui": "workspace:*",
     "astro": "^6.3.7"
   }
 }

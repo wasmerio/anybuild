@@ -1,10 +1,10 @@
 {
-  "name": "shipit-nodestatic-vue-example",
+  "name": "anybuild-nodestatic-vue-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "SHIPIT_EXAMPLE_TITLE='Vue Example' SHIPIT_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'vue-cli-service build' >/dev/null"
+    "build": "ANYBUILD_EXAMPLE_TITLE='Vue Example' ANYBUILD_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'vue-cli-service build' >/dev/null"
   },
   "dependencies": {
     "core-js": "3.30.2",

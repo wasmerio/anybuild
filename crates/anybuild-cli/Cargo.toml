@@ -1,0 +1,37 @@
+[package]
+name = "anybuild-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Anybuild: detect, build, and serve projects"
+default-run = "anybuild"
+
+[[bin]]
+name = "anybuild"
+path = "src/main.rs"
+
+[[bin]]
+name = "shipit"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap = { version = "4", features = ["derive"] }
+dotenvy = "0.15"
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anybuild-build = { path = "../anybuild-build", default-features = false }
+anybuild-common = { path = "../anybuild-common" }
+anybuild-plan = { path = "../anybuild-plan" }
+anybuild-providers = { path = "../anybuild-providers" }
+anybuild-run = { path = "../anybuild-run", default-features = false }
+anybuild-starlark = { path = "../anybuild-starlark" }
+tempfile = "3"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = ["syntax-highlighting"]
+syntax-highlighting = ["anybuild-build/syntax-highlighting"]

@@ -1,10 +1,10 @@
 {
-  "name": "shipit-nodestatic-brunch-example",
+  "name": "anybuild-nodestatic-brunch-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "SHIPIT_EXAMPLE_TITLE='Brunch Example' SHIPIT_EXAMPLE_OUTPUT=public node scripts/build-static.mjs && echo 'brunch build --production' >/dev/null"
+    "build": "ANYBUILD_EXAMPLE_TITLE='Brunch Example' ANYBUILD_EXAMPLE_OUTPUT=public node scripts/build-static.mjs && echo 'brunch build --production' >/dev/null"
   },
   "devDependencies": {
     "brunch": "2.10.17"

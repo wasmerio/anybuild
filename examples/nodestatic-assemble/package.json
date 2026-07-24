@@ -1,5 +1,5 @@
 {
-  "name": "shipit-nodestatic-assemble-example",
+  "name": "anybuild-nodestatic-assemble-example",
   "private": true,
   "scripts": {
     "build": "grunt assemble"

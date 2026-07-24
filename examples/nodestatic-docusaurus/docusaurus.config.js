@@ -1,10 +1,10 @@
 const config = {
   title: "Docusaurus Example",
-  tagline: "Static docs built by Shipit",
+  tagline: "Static docs built by Anybuild",
   favicon: "img/favicon.ico",
   url: "https://example.com",
   baseUrl: "/",
-  organizationName: "shipit",
+  organizationName: "anybuild",
   projectName: "nodestatic-docusaurus",
   trailingSlash: false,
   presets: [

@@ -59,7 +59,7 @@
     ".source"
    ],
    "source": ".",
-   "target": "opt/wpcontent_base/themes/shipit-example-theme"
+   "target": "opt/wpcontent_base/themes/anybuild-example-theme"
   }
  ],
  "commands": {
@@ -76,7 +76,7 @@
   "PAGER": "cat",
   "PHP_INI_SCAN_DIR": "opt/assets",
   "WPCONTENT_BASE_PATH": "opt/wpcontent_base",
-  "WP_DEFAULT_THEME": "shipit-example-theme"
+  "WP_DEFAULT_THEME": "anybuild-example-theme"
  },
  "mounts": [
   {
@@ -107,7 +107,7 @@
  "volumes": [
   {
    "name": "wp-content",
-   "path": "<SHIPIT_DIR>/volumes/wp-content",
+   "path": "<ANYBUILD_DIR>/volumes/wp-content",
    "serve_path": "app/wp-content"
   }
  ]

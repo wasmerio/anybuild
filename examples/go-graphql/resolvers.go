@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wasmerio/shipit/examples/go-graphql/generated"
-	"github.com/wasmerio/shipit/examples/go-graphql/models"
+	"github.com/wasmerio/anybuild/examples/go-graphql/generated"
+	"github.com/wasmerio/anybuild/examples/go-graphql/models"
 )
 
 type Resolver struct {

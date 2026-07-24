@@ -27,15 +27,15 @@ fi
 
 echo "=== [5/5] CLI smoke ==="
 version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
-target/debug/shipit generate /nonexistent-shipit-banner-check \
-  >/dev/null 2>/tmp/shipit-banner.txt || true
-grep -q "Shipit ${version}" /tmp/shipit-banner.txt \
-  && echo "banner ok (Shipit ${version})" \
-  || { echo "banner mismatch"; cat /tmp/shipit-banner.txt; exit 1; }
+target/debug/anybuild generate /nonexistent-anybuild-banner-check \
+  >/dev/null 2>/tmp/anybuild-banner.txt || true
+grep -q "Anybuild ${version}" /tmp/anybuild-banner.txt \
+  && echo "banner ok (Anybuild ${version})" \
+  || { echo "banner mismatch"; cat /tmp/anybuild-banner.txt; exit 1; }
 
 if [[ "${1:-}" == "--e2e" ]]; then
   echo "=== e2e (wasmer mode) with the Rust binary ==="
-  cargo nextest run --profile e2e -p shipit-e2e --run-ignored all \
+  cargo nextest run --profile e2e -p anybuild-e2e --run-ignored all \
     -E 'test(/__wasmer__/) and not test(/cdn|hugo|python_streamlit|python_django|python_fastapi/)'
 fi
 

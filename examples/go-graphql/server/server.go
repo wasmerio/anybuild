@@ -11,8 +11,8 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
-	starwars "github.com/wasmerio/shipit/examples/go-graphql"
-	"github.com/wasmerio/shipit/examples/go-graphql/generated"
+	starwars "github.com/wasmerio/anybuild/examples/go-graphql"
+	"github.com/wasmerio/anybuild/examples/go-graphql/generated"
 )
 
 func main() {

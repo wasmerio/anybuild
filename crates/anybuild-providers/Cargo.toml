@@ -1,0 +1,21 @@
+[package]
+name = "anybuild-providers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Anybuild providers: project detection and config loading"
+
+[dependencies]
+anyhow.workspace = true
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex = "1"
+toml = "0.8"
+globset = "0.4"
+shlex = "2"
+walkdir = "2"
+
+[dev-dependencies]
+anybuild-common = { path = "../anybuild-common" }
+tempfile = "3"

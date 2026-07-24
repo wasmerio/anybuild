@@ -1,10 +1,10 @@
 {
-  "name": "shipit-nodestatic-preact-example",
+  "name": "anybuild-nodestatic-preact-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "SHIPIT_EXAMPLE_TITLE='Preact Example' SHIPIT_EXAMPLE_OUTPUT=build node scripts/build-static.mjs && echo 'preact build' >/dev/null"
+    "build": "ANYBUILD_EXAMPLE_TITLE='Preact Example' ANYBUILD_EXAMPLE_OUTPUT=build node scripts/build-static.mjs && echo 'preact build' >/dev/null"
   },
   "dependencies": {
     "preact": "10.15.0",

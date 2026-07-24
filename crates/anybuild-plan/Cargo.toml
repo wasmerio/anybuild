@@ -1,0 +1,11 @@
+[package]
+name = "anybuild-plan"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Anybuild plan types: steps, mounts, volumes, services, serves"
+
+[dependencies]
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true

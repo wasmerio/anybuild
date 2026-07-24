@@ -1,0 +1,13 @@
+[package]
+name = "anybuild-e2e"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Anybuild end-to-end suite: drives the anybuild binary against the examples"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+libc = "0.2"
+regex = "1"
+ureq = "2"

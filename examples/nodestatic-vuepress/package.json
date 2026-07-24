@@ -1,5 +1,5 @@
 {
-  "name": "shipit-nodestatic-vuepress-example",
+  "name": "anybuild-nodestatic-vuepress-example",
   "private": true,
   "scripts": {
     "docs:build": "vuepress build docs"

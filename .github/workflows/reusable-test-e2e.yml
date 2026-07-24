@@ -4,7 +4,7 @@ name: Reusable Test + E2E
 # nextest gate suites against the committed fixtures (fixtures/,
 # tests/plan_snapshots/ — no Python oracle needed at test time), and
 # archives the e2e test binaries. The e2e matrix runs slices of the
-# shipit-e2e crate against the debug binary.
+# anybuild-e2e crate against the debug binary.
 #
 # uv/Python appear in the e2e jobs only as the runtime toolchain of the
 # example apps being built (uv/python for python examples), not as a test
@@ -58,21 +58,21 @@ jobs:
         run: cargo nextest run --workspace
 
       - name: Archive e2e test binaries
-        run: cargo nextest archive -p shipit-e2e --archive-file shipit-e2e.tar.zst
+        run: cargo nextest archive -p anybuild-e2e --archive-file anybuild-e2e.tar.zst
 
-      - name: Upload shipit binary
+      - name: Upload anybuild binary
         uses: actions/upload-artifact@v4
         with:
-          name: shipit-debug
-          path: target/debug/shipit
+          name: anybuild-debug
+          path: target/debug/anybuild
           retention-days: 1
           if-no-files-found: error
 
       - name: Upload e2e archive
         uses: actions/upload-artifact@v4
         with:
-          name: shipit-e2e-archive
-          path: shipit-e2e.tar.zst
+          name: anybuild-e2e-archive
+          path: anybuild-e2e.tar.zst
           retention-days: 1
           if-no-files-found: error
 
@@ -151,32 +151,32 @@ jobs:
         with:
           version: v7.2.1
 
-      - name: Download shipit binary
+      - name: Download anybuild binary
         uses: actions/download-artifact@v4
         with:
-          name: shipit-debug
-          path: shipit-bin
+          name: anybuild-debug
+          path: anybuild-bin
 
       - name: Download e2e archive
         uses: actions/download-artifact@v4
         with:
-          name: shipit-e2e-archive
+          name: anybuild-e2e-archive
 
       - name: Verify toolchain
         run: |
-          chmod +x shipit-bin/shipit
+          chmod +x anybuild-bin/anybuild
           uv --version
           python --version
           wasmer --version
           docker --version
-          ./shipit-bin/shipit generate --help > /dev/null
+          ./anybuild-bin/anybuild generate --help > /dev/null
 
       - name: Run e2e tests (Rust binary)
         env:
-          SHIPIT_BIN: ${{ github.workspace }}/shipit-bin/shipit
+          ANYBUILD_BIN: ${{ github.workspace }}/anybuild-bin/anybuild
         run: |
           cargo nextest run \
-            --archive-file shipit-e2e.tar.zst \
+            --archive-file anybuild-e2e.tar.zst \
             --workspace-remap "$GITHUB_WORKSPACE" \
             --profile e2e --run-ignored all \
             -E 'test(/^${{ matrix.suite }}__${{ matrix.mode }}__/) and not test(/cdn|python_streamlit/)'

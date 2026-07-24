@@ -5,7 +5,7 @@ const port = process.env.PORT || 3000;
 
 app.use((ctx) => {
   ctx.type = 'text/plain';
-  ctx.body = 'Hello from Koa on Shipit';
+  ctx.body = 'Hello from Koa on Anybuild';
 });
 
 app.listen(port, () => {
