@@ -130,7 +130,7 @@ fn configs_match_python() {
             }
             case["config"] = config;
         }
-        std::fs::write(&manifest_path, crate::common::pyjson::to_python_json(&raw)).unwrap();
+        std::fs::write(&manifest_path, serde_json::to_string_pretty(&raw).unwrap()).unwrap();
         eprintln!(
             "configs: rewrote {total} case(s) in {} ({changed} changed)",
             manifest_path.display()
