@@ -83,7 +83,7 @@ fn nitro_projects_build_and_start_with_the_node_server_preset() {
             step,
             Step::Run(run)
                 if run.command
-                    .contains("bunx optimize-deps@0.1.1 .output/server --replace")
+                    .contains("bunx optimize-deps@0.1.2 .output/server --replace")
         )
     }));
 }

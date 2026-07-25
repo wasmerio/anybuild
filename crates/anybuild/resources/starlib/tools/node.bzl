@@ -41,7 +41,7 @@ _OPTIMIZE_DEPS_PATHS = {
     "astro": ["dist"],
     "nitro": [".output/server"],
 }
-OPTIMIZE_DEPS_VERSION = "0.1.1"
+OPTIMIZE_DEPS_VERSION = "0.1.2"
 NODE_MODULES_OPTIMIZER_ASSET = "node/optimize-node-modules.sh"
 
 def _manager_version(config):
