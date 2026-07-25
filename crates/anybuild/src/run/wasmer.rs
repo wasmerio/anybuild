@@ -354,7 +354,10 @@ fn apply_runner_flips(provider: &str, config_json: &mut JsonValue) {
     if is_node_config(provider) {
         map.insert("use_edgejs".to_owned(), JsonValue::Bool(true));
         if map.get("precompile_edgejs").is_none_or(JsonValue::is_null) {
-            map.insert("precompile_edgejs".to_owned(), JsonValue::Bool(true));
+            // Nitro bundles can retain dependency sources that the recursive
+            // EdgeJS precompiler cannot parse; loaded modules are still cached.
+            let is_nitro = map.get("framework").and_then(JsonValue::as_str) == Some("nitro");
+            map.insert("precompile_edgejs".to_owned(), JsonValue::Bool(!is_nitro));
         }
         map.insert("remove_native_binaries".to_owned(), JsonValue::Bool(true));
     }
@@ -1772,6 +1775,18 @@ mod tests {
         let mut null_json = serde_json::json!({ "precompile_edgejs": null });
         apply_runner_flips("node", &mut null_json);
         assert_eq!(null_json["precompile_edgejs"], JsonValue::Bool(true));
+
+        let mut nitro_json = serde_json::json!({ "framework": "nitro", "precompile_edgejs": null });
+        apply_runner_flips("node", &mut nitro_json);
+        assert_eq!(nitro_json["precompile_edgejs"], JsonValue::Bool(false));
+
+        let mut explicit_nitro_json =
+            serde_json::json!({ "framework": "nitro", "precompile_edgejs": true });
+        apply_runner_flips("node", &mut explicit_nitro_json);
+        assert_eq!(
+            explicit_nitro_json["precompile_edgejs"],
+            JsonValue::Bool(true)
+        );
     }
 
     #[test]

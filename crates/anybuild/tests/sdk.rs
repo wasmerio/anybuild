@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use anybuild::plan::Step;
 use anybuild::{
     Anybuild, AutoOptions, BuildOptions, DeployOptions, DeployOutcome, DeployTarget, Event,
     GenerateOptions, GenerationPolicy, PlanOptions, ProcessIo, RunOptions, WasmerOptions,
@@ -47,6 +48,36 @@ fn generate_and_plan_return_structured_data() {
     assert_eq!(plan.provider, "staticfile");
     assert_eq!(plan.serve.provider, "staticfile");
     assert!(plan.serve.commands["start"].contains("static-web-server"));
+}
+
+#[test]
+fn nitro_projects_build_and_start_with_the_node_server_preset() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project.path().join("package.json"),
+        r#"{"scripts":{"build":"vite build"},"dependencies":{"@tanstack/react-start":"1.0.0","nitro":"3.0.0"}}"#,
+    )
+    .unwrap();
+    std::fs::write(project.path().join("bun.lock"), "").unwrap();
+
+    let sdk = Anybuild::new(project.path());
+    sdk.generate(GenerateOptions::default()).unwrap();
+    let plan = sdk.plan(PlanOptions::default()).unwrap();
+
+    assert_eq!(plan.provider, "node");
+    assert_eq!(plan.config["package_manager"], "bun");
+    assert_eq!(
+        plan.serve.commands["start"],
+        "node .output/server/index.mjs"
+    );
+    assert!(plan.serve.build.iter().any(|step| {
+        matches!(
+            step,
+            Step::Env(env)
+                if env.variables.get("NITRO_PRESET").map(String::as_str)
+                    == Some("node-server")
+        )
+    }));
 }
 
 #[test]

@@ -1,0 +1,4 @@
+node_modules
+.output
+.anybuild
+src/routeTree.gen.ts

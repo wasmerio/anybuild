@@ -63,7 +63,7 @@ fn apply_node_workspace_config(
 
     let app_has_lockfile = PackageManager::ALL
         .iter()
-        .any(|manager| app_path.join(manager.lockfile()).exists());
+        .any(|manager| manager.has_lockfile(&app_path));
     if app_has_lockfile {
         return;
     }

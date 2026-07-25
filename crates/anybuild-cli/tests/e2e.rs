@@ -110,6 +110,8 @@ e2e_tests! {
     node__wasmer__node_nestjs => ("node_nestjs", Wasmer);
     // examples/node-nitro (Wasmer only)
     node__wasmer__node_nitro => ("node_nitro", Wasmer);
+    // examples/node-tanstack-start-nitro (Wasmer only)
+    node__wasmer__node_tanstack_start_nitro => ("node_tanstack_start_nitro", Wasmer);
     // examples/node-hydrogen (Wasmer only)
     node__wasmer__node_hydrogen => ("node_hydrogen", Wasmer);
     // examples/node-react-router (Wasmer only)

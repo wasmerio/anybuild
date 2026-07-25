@@ -8,7 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
-const EXPECTED_GOLDENS: usize = 80;
+const EXPECTED_GOLDENS: usize = 81;
 const UPDATE_FIXTURES_ENV: &str = "ANYBUILD_UPDATE_FIXTURES";
 
 fn repo_root() -> PathBuf {

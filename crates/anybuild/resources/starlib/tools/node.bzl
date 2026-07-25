@@ -9,10 +9,10 @@ load("//anybuild:prelude.bzl", "compact")
 load("//anybuild:serve.bzl", "build", "serve")
 
 _LOCKFILES = {
-    "npm": "package-lock.json",
-    "pnpm": "pnpm-lock.yaml",
-    "yarn": "yarn.lock",
-    "bun": "bun.lockb",
+    "npm": ["package-lock.json"],
+    "pnpm": ["pnpm-lock.yaml"],
+    "yarn": ["yarn.lock"],
+    "bun": ["bun.lock", "bun.lockb"],
 }
 
 _INSTALL_COMMANDS = {
@@ -53,6 +53,12 @@ def _manager_version(config):
         return config.bun_version
     return None
 
+def _lockfile(manager):
+    for lockfile in _LOCKFILES[manager]:
+        if file_exists(lockfile):
+            return lockfile
+    return None
+
 def node_toolchain(config, serving = True):
     """Build-time packages: node, the package manager, and extras."""
     node = dep("node", config.node_version)
@@ -83,8 +89,8 @@ def node_install_steps(config):
     if not file_exists("package.json"):
         return []
     manager = config.package_manager
-    lockfile = _LOCKFILES[manager]
-    has_lockfile = file_exists(lockfile)
+    lockfile = _lockfile(manager)
+    has_lockfile = lockfile != None
     install = _INSTALL_COMMANDS[manager]
     if manager == "bun" and has_lockfile:
         install += " --no-save"
@@ -124,16 +130,23 @@ def node_copy_step(config):
     if config.app_subdir or config.install_requires_all_files:
         return None
     ignore = ["node_modules", ".git"]
-    if config.package_manager and file_exists(_LOCKFILES[config.package_manager]):
-        ignore.append(_LOCKFILES[config.package_manager])
+    if config.package_manager:
+        lockfile = _lockfile(config.package_manager)
+        if lockfile:
+            ignore.append(lockfile)
     return copy(".", ignore = ignore)
 
 def node_build_step(config, outputs = ["."], serving = True):
     if not config.build_command:
         return []
+    steps = []
+    if config.framework == "nitro":
+        steps.append(env(NITRO_PRESET = "node-server"))
     if serving:
-        return [run(config.build_command, outputs = outputs, group = "build")]
-    return [run(config.build_command, group = "build")]
+        steps.append(run(config.build_command, outputs = outputs, group = "build"))
+    else:
+        steps.append(run(config.build_command, group = "build"))
+    return steps
 
 def node_optimize_steps(config, assets = None, include_prune = True, serving = True):
     """Prune dev deps and shrink node_modules for the serve environment."""

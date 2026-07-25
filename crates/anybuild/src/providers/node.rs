@@ -60,13 +60,19 @@ impl PackageManager {
         }
     }
 
-    pub fn lockfile(self) -> &'static str {
+    fn lockfiles(self) -> &'static [&'static str] {
         match self {
-            PackageManager::Npm => "package-lock.json",
-            PackageManager::Pnpm => "pnpm-lock.yaml",
-            PackageManager::Yarn => "yarn.lock",
-            PackageManager::Bun => "bun.lockb",
+            PackageManager::Npm => &["package-lock.json"],
+            PackageManager::Pnpm => &["pnpm-lock.yaml"],
+            PackageManager::Yarn => &["yarn.lock"],
+            PackageManager::Bun => &["bun.lock", "bun.lockb"],
         }
+    }
+
+    pub(crate) fn has_lockfile(self, path: &Path) -> bool {
+        self.lockfiles()
+            .iter()
+            .any(|lockfile| path.join(lockfile).exists())
     }
 
     pub fn run_command(self, command: &str) -> String {
@@ -481,10 +487,11 @@ impl NodeFramework {
     }
 
     pub fn start_command(self) -> Option<&'static str> {
-        if self == NodeFramework::Next {
-            return Some("node server.mjs");
+        match self {
+            NodeFramework::Next => Some("node server.mjs"),
+            NodeFramework::Nitro => Some("node .output/server/index.mjs"),
+            _ => None,
         }
-        None
     }
 
     fn from_value(value: &str) -> Option<Self> {
@@ -866,17 +873,10 @@ pub fn detect_package_manager(path: &Path) -> PackageManager {
     if path.join("pnpm-workspace.yaml").exists() {
         return PackageManager::Pnpm;
     }
-    if path.join("package-lock.json").exists() {
-        return PackageManager::Npm;
-    }
-    if path.join("pnpm-lock.yaml").exists() {
-        return PackageManager::Pnpm;
-    }
-    if path.join("yarn.lock").exists() {
-        return PackageManager::Yarn;
-    }
-    if path.join("bun.lockb").exists() {
-        return PackageManager::Bun;
+    for manager in PackageManager::ALL {
+        if manager.has_lockfile(path) {
+            return manager;
+        }
     }
     PackageManager::Npm
 }
@@ -1429,8 +1429,14 @@ pub fn load_config(
 
     // infer_start=True in the Python default path.
     if non_empty(&config.base.commands.start).is_none() {
-        if let Some(framework) = config.framework {
-            config.base.commands.start = framework.start_command().map(str::to_owned);
+        if config.framework == Some(NodeFramework::Nitro) {
+            config.base.commands.start =
+                infer_start_command(path, package_json.as_ref(), false, operation)?;
+        }
+        if non_empty(&config.base.commands.start).is_none() {
+            if let Some(framework) = config.framework {
+                config.base.commands.start = framework.start_command().map(str::to_owned);
+            }
         }
         if non_empty(&config.base.commands.start).is_none() {
             config.base.commands.start =
@@ -1508,6 +1514,7 @@ mod tests {
             ("package-lock.json", PackageManager::Npm),
             ("pnpm-lock.yaml", PackageManager::Pnpm),
             ("yarn.lock", PackageManager::Yarn),
+            ("bun.lock", PackageManager::Bun),
             ("bun.lockb", PackageManager::Bun),
         ] {
             let tmp = tempfile::tempdir().unwrap();
@@ -1744,6 +1751,10 @@ mod tests {
                 "yarn dlx next-bundle@1.0.0 --build-command 'yarn run build'",
             ),
             (
+                "bun.lock",
+                "bunx next-bundle@1.0.0 --build-command 'bun run build'",
+            ),
+            (
                 "bun.lockb",
                 "bunx next-bundle@1.0.0 --build-command 'bun run build'",
             ),
@@ -1878,6 +1889,23 @@ mod tests {
         assert_eq!(
             config.base.commands.start.as_deref(),
             Some("node server.js")
+        );
+    }
+
+    #[test]
+    fn test_nitro_infers_node_server_start_command() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\"scripts\":{\"build\":\"vite build\"},\"dependencies\":{\"nitro\":\"3.0.0\"}}\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.framework, Some(NodeFramework::Nitro));
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node .output/server/index.mjs")
         );
     }
 

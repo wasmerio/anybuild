@@ -504,6 +504,16 @@ pub static CASES: &[Case] = &[
         build_modes: Some(WASMER_ONLY),
         ..BASE
     },
+    // TanStack Start using Nitro without an explicit preset or start script
+    Case {
+        test_id: "node_tanstack_start_nitro",
+        suite: Suite::Node,
+        path: Some("examples/node-tanstack-start-nitro"),
+        serve_pattern: r"Listening on:",
+        http: &[body("/", r"Hello from TanStack Start on Anybuild")],
+        build_modes: Some(WASMER_ONLY),
+        ..BASE
+    },
     // Hydrogen-compatible Node runtime fixture
     Case {
         test_id: "node_hydrogen",
