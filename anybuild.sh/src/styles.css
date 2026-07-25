@@ -1,0 +1,78 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-bg: #070B17;
+  --color-bg-2: #0A1020;
+  --color-card: rgba(15, 22, 43, 0.72);
+  --color-card-elev: #151E36;
+  --color-border: #22304D;
+  --color-fg: #F7F9FC;
+  --color-fg-muted: #AEB7C8;
+  --color-fg-dim: #70798D;
+  --color-violet: #7758FF;
+  --color-indigo: #6348F3;
+  --color-blue: #4B7FFF;
+
+  --radius-card: 18px;
+  --radius-btn: 12px;
+}
+
+@theme inline {
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-fg);
+  --color-border-default: var(--color-border);
+}
+
+:root {
+  --brand-gradient: linear-gradient(135deg, #4B7FFF 0%, #6348F3 52%, #7758FF 100%);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html, body { background: var(--color-bg); color: var(--color-fg); }
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+}
+
+@utility text-gradient {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-brand {
+  background: var(--brand-gradient);
+}
+
+@utility glow-violet {
+  box-shadow: 0 20px 60px -20px rgba(119, 88, 255, 0.55), 0 0 0 1px rgba(119, 88, 255, 0.15) inset;
+}
+
+@utility card-surface {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  backdrop-filter: blur(8px);
+}
+
+@utility noise {
+  background-image: radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@utility animate-marquee {
+  animation: marquee 40s linear infinite;
+}
