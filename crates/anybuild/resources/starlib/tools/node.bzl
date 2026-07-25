@@ -37,7 +37,10 @@ _DLX_PREFIXES = {
 }
 
 # Frameworks whose node_modules can be shrunk further after the build.
-_OPTIMIZE_DEPS_PATHS = {"astro": ["dist"]}
+_OPTIMIZE_DEPS_PATHS = {
+    "astro": ["dist"],
+    "nitro": [".output/server"],
+}
 OPTIMIZE_DEPS_VERSION = "0.1.1"
 NODE_MODULES_OPTIMIZER_ASSET = "node/optimize-node-modules.sh"
 
@@ -155,7 +158,7 @@ def node_optimize_steps(config, assets = None, include_prune = True, serving = T
     steps = []
     if include_prune:
         steps.append(run(_PRUNE_COMMANDS[config.package_manager], group = "prune"))
-    optimize_paths = _OPTIMIZE_DEPS_PATHS.get(config.framework, [])
+    optimize_paths = _OPTIMIZE_DEPS_PATHS.get(config.framework, []) if config.build_command else []
     if optimize_paths and config.optimize_node_dependencies:
         steps.append(run(_DLX_PREFIXES[config.package_manager] + "optimize-deps@{} {} --replace".format(OPTIMIZE_DEPS_VERSION, ", ".join(optimize_paths))))
     if serving and config.remove_native_binaries:
