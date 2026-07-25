@@ -31,16 +31,31 @@ jobs:
     steps:
       - name: Create or update release PR
         id: release
+        continue-on-error: true
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repo-url: ${{ github.repository }}
+
+      - name: Wait before retry
+        if: steps.release.outcome == 'failure'
+        run: sleep 30
+
+      - name: Create or update release PR (retry)
+        id: release_retry
+        if: steps.release.outcome == 'failure'
         uses: googleapis/release-please-action@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repo-url: ${{ github.repository }}
 
       - name: Trigger PyPI publish
-        if: ${{ steps.release.outputs.release_created == 'true' }}
+        if: |
+          steps.release.outputs.release_created == 'true' ||
+          steps.release_retry.outputs.release_created == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name || steps.release_retry.outputs.tag_name }}
         run: |
           gh workflow run pypi-publish.yml \
             --repo "$GITHUB_REPOSITORY" \
