@@ -2,7 +2,7 @@
 #
 #   cargo nextest run                     # gate suites (fast, no retries)
 #   cargo nextest run --profile e2e \
-#     -p anybuild-e2e --run-ignored all     # end-to-end suite
+#     -p anybuild-cli --test e2e --run-ignored all  # end-to-end suite
 
 [profile.default]
 # Gates are deterministic; a retry would only mask a real regression.

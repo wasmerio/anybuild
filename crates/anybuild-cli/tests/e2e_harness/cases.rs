@@ -7,7 +7,7 @@
 //! duplicate ids carry the same `0`/`1`/`2` suffixes pytest generates
 //! (php_nobuild0/1/2, php_wordpress0/1).
 
-use crate::BuildMode;
+use super::BuildMode;
 
 /// Suite assignment, mirroring `E2ETechnology` + `_technology_for_case`.
 /// CI slices per suite with nextest filters like `test(/^php__/)`, matching

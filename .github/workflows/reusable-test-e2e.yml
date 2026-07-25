@@ -4,7 +4,7 @@ name: Reusable Test + E2E
 # nextest gate suites against the committed fixtures (fixtures/,
 # tests/plan_snapshots/ — no Python oracle needed at test time), and
 # archives the e2e test binaries. The e2e matrix runs slices of the
-# anybuild-e2e crate against the debug binary.
+# CLI e2e test target against the debug binary.
 #
 # uv/Python appear in the e2e jobs only as the runtime toolchain of the
 # example apps being built (uv/python for python examples), not as a test
@@ -58,7 +58,7 @@ jobs:
         run: cargo nextest run --workspace
 
       - name: Archive e2e test binaries
-        run: cargo nextest archive -p anybuild-e2e --archive-file anybuild-e2e.tar.zst
+        run: cargo nextest archive -p anybuild-cli --test e2e --archive-file anybuild-e2e.tar.zst
 
       - name: Upload anybuild binary
         uses: actions/upload-artifact@v4

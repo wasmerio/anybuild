@@ -150,20 +150,13 @@ dependencies = [
  "anybuild",
  "anyhow",
  "clap",
+ "libc",
+ "regex",
  "serde",
  "serde_json",
  "syntect",
  "tempfile",
  "two-face",
-]
-
-[[package]]
-name = "anybuild-e2e"
-version = "0.23.0"
-dependencies = [
- "anyhow",
- "libc",
- "regex",
  "ureq",
 ]
 

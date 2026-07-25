@@ -167,7 +167,7 @@ The end-to-end suite builds and serves the `examples/` projects with the
 real binary. Run a wasmer-mode slice with:
 
 ```bash
-cargo build && cargo nextest run --profile e2e -p anybuild-e2e \
+cargo build && cargo nextest run --profile e2e -p anybuild-cli --test e2e \
   --run-ignored all -E 'test(/^node__wasmer__/)'
 ```
 

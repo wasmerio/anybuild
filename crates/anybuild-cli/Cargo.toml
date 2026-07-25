@@ -26,7 +26,10 @@ syntect = { workspace = true, optional = true }
 two-face = { workspace = true, optional = true }
 
 [dev-dependencies]
+libc = "0.2"
+regex = "1"
 tempfile = "3"
+ureq = "2"
 
 [features]
 default = ["syntax-highlighting"]

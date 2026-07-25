@@ -16,7 +16,9 @@
 // which the snake-case lint dislikes.
 #![allow(non_snake_case)]
 
-use anybuild_e2e::BuildMode::{Local, Wasmer, WasmerAndDocker};
+mod e2e_harness;
+
+use e2e_harness::BuildMode::{Local, Wasmer, WasmerAndDocker};
 
 macro_rules! e2e_tests {
     ($($name:ident => ($id:literal, $mode:expr);)*) => {
@@ -24,7 +26,7 @@ macro_rules! e2e_tests {
             #[test]
             #[ignore = "e2e: needs wasmer/docker; run via nextest --run-ignored all"]
             fn $name() {
-                if let Err(err) = anybuild_e2e::run_case($id, $mode) {
+                if let Err(err) = e2e_harness::run_case($id, $mode) {
                     panic!("{err:#}");
                 }
             }
@@ -36,10 +38,10 @@ macro_rules! e2e_tests {
         /// named.
         #[test]
         fn e2e_test_list_matches_case_table() {
-            let generated: Vec<(&str, &str, anybuild_e2e::BuildMode)> = vec![
+            let generated: Vec<(&str, &str, e2e_harness::BuildMode)> = vec![
                 $( (stringify!($name), $id, $mode) ),*
             ];
-            anybuild_e2e::verify_test_list(&generated);
+            e2e_harness::verify_test_list(&generated);
         }
     };
 }

@@ -1,6 +1,6 @@
-//! End-to-end harness for the anybuild CLI, ported from
+//! End-to-end harness for the Anybuild CLI, ported from
 //! `tests/test_e2e.py` (pytest). The case table lives in [`cases`];
-//! `tests/e2e.rs` materializes one `#[test]` per (case, build-mode) pair
+//! `../e2e.rs` materializes one `#[test]` per (case, build-mode) pair
 //! named `<suite>__<mode>__<example>` so nextest filter expressions can
 //! slice per suite (`test(/^php__/)`) and per mode (`test(/__wasmer__/)`).
 //!
@@ -1137,7 +1137,7 @@ fn yaml_key_value(line: &str, key: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 fn workspace_root() -> PathBuf {
-    // crates/anybuild-e2e -> crates -> workspace root
+    // crates/anybuild-cli -> crates -> workspace root
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)

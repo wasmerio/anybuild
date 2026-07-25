@@ -2,14 +2,6 @@
 members = [
     "crates/anybuild",
     "crates/anybuild-cli",
-    "crates/anybuild-e2e",
-]
-# `cargo build`/`cargo test` without flags skip the e2e crate; its tests
-# are additionally #[ignore]d so `--workspace` runs skip them too. Run
-# them explicitly with: cargo nextest run -p anybuild-e2e --run-ignored all
-default-members = [
-    "crates/anybuild",
-    "crates/anybuild-cli",
 ]
 resolver = "2"
 

@@ -38,7 +38,7 @@ grep -q "Anybuild ${version}" /tmp/anybuild-banner.txt \
 
 if [[ "${1:-}" == "--e2e" ]]; then
   echo "=== e2e (wasmer mode) with the Rust binary ==="
-  cargo nextest run --profile e2e -p anybuild-e2e --run-ignored all \
+  cargo nextest run --profile e2e -p anybuild-cli --test e2e --run-ignored all \
     -E 'test(/__wasmer__/) and not test(/cdn|hugo|python_streamlit|python_django|python_fastapi/)'
 fi
 
