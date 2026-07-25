@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowRight, ChevronDown, Copy, Download, ExternalLink, Github } from "lucide-react";
+import { ArrowRight, Copy, Download, ExternalLink, Github } from "lucide-react";
 import { BuildFlow } from "@/components/build-flow";
 import { FeatureBento } from "@/components/feature-bento";
+import { UseDemo } from "@/components/use-demo";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -44,52 +45,12 @@ function BrandIcon({ className = "h-7 w-7" }: { className?: string }) {
   );
 }
 
-const usageOptions = {
-  local: {
-    label: "Without sandbox",
-    command: "anybuild . --start",
-  },
-  docker: {
-    label: "With Docker",
-    command: "anybuild . --docker --start",
-  },
-  wasmer: {
-    label: "With Wasmer",
-    command: "anybuild . --wasmer --start",
-  },
-};
-
-type UsageOption = keyof typeof usageOptions;
-const usageOptionOrder: UsageOption[] = ["local", "docker", "wasmer"];
-
-const deploymentOptions = {
-  cloudflare: {
-    label: "Cloudflare",
-    command: "anybuild . --cloudflare-deploy",
-  },
-  wasmer: {
-    label: "Wasmer",
-    command: "anybuild . --wasmer-deploy",
-  },
-  fly: {
-    label: "Fly.io",
-    command: "anybuild . --fly-deploy",
-  },
-};
-
-type DeploymentOption = keyof typeof deploymentOptions;
-const deploymentOptionOrder: DeploymentOption[] = ["cloudflare", "wasmer", "fly"];
-
 function Index() {
   const [installMethod, setInstallMethod] = useState<"shell" | "cargo">("shell");
-  const [usageOption, setUsageOption] = useState<UsageOption>("local");
-  const [deploymentOption, setDeploymentOption] = useState<DeploymentOption>("cloudflare");
   const installCommand =
     installMethod === "shell"
       ? "curl -fsSL https://anybuild.sh/install | sh"
       : "cargo install anybuild-cli";
-  const usageCommand = usageOptions[usageOption].command;
-  const deploymentCommand = deploymentOptions[deploymentOption].command;
 
   return (
     <div className="relative min-h-screen bg-[#070B17] text-[#F7F9FC]">
@@ -257,89 +218,7 @@ function Index() {
           </div>
         </section>
 
-        {/* Usage */}
-        <section id="use" className="mt-24 scroll-mt-12 text-center">
-          <h2 className="text-[38px] font-bold tracking-[-0.03em] text-white sm:text-[46px]">
-            Use anybuild
-          </h2>
-
-          <div className="mt-9 grid items-center gap-5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-            <article className="min-w-0 overflow-hidden rounded-[18px] border border-[#2A3550] bg-[#050912] shadow-[0_24px_70px_-42px_rgba(0,0,0,0.95)]">
-              <div className="flex min-h-[62px] items-center justify-between gap-4 border-b border-[#2A3550] bg-[#0A1020]/70 px-5 sm:px-6">
-                <span className="font-mono text-[14px] text-[#AEB7C8]">Run locally</span>
-                <div className="relative">
-                  <select
-                    aria-label="Local runtime"
-                    value={usageOption}
-                    onChange={(event) => setUsageOption(event.target.value as UsageOption)}
-                    className="min-w-[170px] appearance-none rounded-[9px] border border-[#34415E] bg-[#050912] py-2 pr-9 pl-3 text-[13px] text-white outline-none transition-colors hover:border-[#526180] focus:border-[#7758FF]"
-                  >
-                    {usageOptionOrder.map((option) => (
-                      <option key={option} value={option}>
-                        {usageOptions[option].label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-[#70798D]" />
-                </div>
-              </div>
-              <div className="flex min-h-[132px] items-center gap-4 px-6 py-8 text-left">
-                <span className="font-mono text-[20px] font-medium text-[#7758FF]">$</span>
-                <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[15px] text-[#F7F9FC]">
-                  {usageCommand}
-                </code>
-                <button
-                  type="button"
-                  aria-label="Copy run command"
-                  onClick={() => navigator.clipboard.writeText(usageCommand)}
-                  className="shrink-0 rounded-[9px] border border-[#34415E] p-3 text-[#AEB7C8] transition-colors hover:border-[#526180] hover:bg-white/5 hover:text-white"
-                >
-                  <Copy className="h-5 w-5" />
-                </button>
-              </div>
-            </article>
-
-            <p className="mx-auto max-w-[150px] text-[14px] leading-relaxed text-[#70798D]">
-              or deploy it to your favorite provider
-            </p>
-
-            <article className="min-w-0 overflow-hidden rounded-[18px] border border-[#2A3550] bg-[#050912] shadow-[0_24px_70px_-42px_rgba(0,0,0,0.95)]">
-              <div className="grid min-h-[62px] grid-cols-3 border-b border-[#2A3550] bg-[#0A1020]/70">
-                {deploymentOptionOrder.map((option, index) => (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={deploymentOption === option}
-                    onClick={() => setDeploymentOption(option)}
-                    className={`px-2 text-[13px] transition-colors ${
-                      index > 0 ? "border-l border-[#2A3550]" : ""
-                    } ${
-                      deploymentOption === option
-                        ? "bg-[#11192C] text-white"
-                        : "text-[#70798D] hover:text-[#AEB7C8]"
-                    }`}
-                  >
-                    {deploymentOptions[option].label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex min-h-[132px] items-center gap-4 px-6 py-8 text-left">
-                <span className="font-mono text-[20px] font-medium text-[#7758FF]">$</span>
-                <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[15px] text-[#F7F9FC]">
-                  {deploymentCommand}
-                </code>
-                <button
-                  type="button"
-                  aria-label="Copy deployment command"
-                  onClick={() => navigator.clipboard.writeText(deploymentCommand)}
-                  className="shrink-0 rounded-[9px] border border-[#34415E] p-3 text-[#AEB7C8] transition-colors hover:border-[#526180] hover:bg-white/5 hover:text-white"
-                >
-                  <Copy className="h-5 w-5" />
-                </button>
-              </div>
-            </article>
-          </div>
-        </section>
+        <UseDemo />
 
         <FeatureBento logo={<BrandIcon className="h-7 w-7" />} />
       </main>

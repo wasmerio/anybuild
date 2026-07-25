@@ -175,6 +175,7 @@
 [0.042, "o", "\r\u001b[2K⠁ Compiling start                                                               \r\u001b[2K"]
 [0.329, "o", "Serving /app\r\n"]
 [0.000, "o", "Listening on http://127.0.0.1:8080\r\n"]
+[0.000, "m", "site-live"]
 [7.232, "o", "^D\b\b"]
 [0.724, "o", "^C"]
 [0.002, "o", "\r\n"]
