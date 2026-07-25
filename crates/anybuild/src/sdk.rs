@@ -618,7 +618,7 @@ impl Anybuild {
             });
             environment
                 .runner
-                .run_serve_command(&command, Some(&mappings), Some(&env))?;
+                .run_serve_command(&command, Some(&mappings), &[], Some(&env))?;
             outcome.executed.push(command);
         }
         Ok(outcome)

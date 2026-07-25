@@ -25,7 +25,7 @@ use crate::operation::OperationContext;
 use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
 use crate::providers::{config_from_json, merge_config_json, ProviderConfig};
 
-use crate::run::Runner;
+use crate::run::{HostMount, Runner};
 
 pub const ANYBUILD_CONFIG_ANNOTATION: &str = "anybuildcli.com/config";
 pub const ANYBUILD_PROVIDER_ANNOTATION: &str = "anybuildcli.com/provider";
@@ -35,6 +35,7 @@ pub const WASMER_VERSION_ANNOTATION: &str = "wasmer.io/version";
 pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
 pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.1.0";
 pub const PHPIX_VERSION: &str = "0.3.0-rc.3";
+const PREPARE_COMMAND_PREFIX: &str = "__anybuild_prepare_";
 
 /// The workspace package version is embedded in every Rust crate and kept in
 /// sync with the Python package by release-please.
@@ -138,7 +139,7 @@ pub fn mapper() -> &'static IndexMap<&'static str, MapperItem> {
                 ]),
                 scripts: &["edge"],
                 env: Some(&[]),
-                aliases: &[("node", "edge")],
+                aliases: &[("node", "edge"), ("edgejs", "edge")],
                 architecture_dependencies: IndexMap::new(),
             },
         );
@@ -281,6 +282,27 @@ fn path_str(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+fn prepare_command_name(index: usize) -> String {
+    format!("{PREPARE_COMMAND_PREFIX}{index}")
+}
+
+fn command_requires_shell(command: &str) -> bool {
+    command.chars().any(|character| {
+        matches!(
+            character,
+            '|' | '&' | ';' | '<' | '>' | '$' | '*' | '{' | '}'
+        )
+    })
+}
+
+fn host_mount_arg(host_path: &Path, guest_path: &str) -> Result<String> {
+    let host_path = absolute_path(host_path);
+    std::fs::create_dir_all(&host_path)
+        .with_context(|| format!("creating volume dir {}", host_path.display()))?;
+    let resolved = host_path.canonicalize().unwrap_or(host_path);
+    Ok(format!("--volume={}:{guest_path}", resolved.display()))
+}
+
 /// Port of `volumes.volume_mapdir_args`.
 fn volume_mapdir_args(
     build_backend: &dyn BuildBackend,
@@ -288,11 +310,10 @@ fn volume_mapdir_args(
 ) -> Result<Vec<String>> {
     let mut args = Vec::new();
     for (name, guest_path) in volume_mappings {
-        let host_path = absolute_path(&build_backend.get_volume_path(name));
-        std::fs::create_dir_all(&host_path)
-            .with_context(|| format!("creating volume dir {}", host_path.display()))?;
-        let resolved = host_path.canonicalize().unwrap_or(host_path);
-        args.push(format!("--volume={}:{}", resolved.display(), guest_path));
+        args.push(host_mount_arg(
+            &build_backend.get_volume_path(name),
+            guest_path,
+        )?);
     }
     Ok(args)
 }
@@ -630,9 +651,31 @@ impl WasmerRunner {
 
         let mut modules: Option<ArrayOfTables> = None;
 
-        if !serve.commands.is_empty() {
+        let mut command_lines: Vec<(String, String)> = serve
+            .commands
+            .iter()
+            .map(|(name, command)| (name.clone(), command.clone()))
+            .collect();
+        if let Some(prepare_steps) = &serve.prepare {
+            for (index, step) in prepare_steps.iter().enumerate() {
+                if command_requires_shell(&step.command) {
+                    continue;
+                }
+                let Some(parts) = shlex::split(&step.command) else {
+                    continue;
+                };
+                if parts
+                    .first()
+                    .is_some_and(|program| binaries.contains_key(program))
+                {
+                    command_lines.push((prepare_command_name(index), step.command.clone()));
+                }
+            }
+        }
+
+        if !command_lines.is_empty() {
             let mut commands = ArrayOfTables::new();
-            for (index, (command_name, command_line)) in serve.commands.iter().enumerate() {
+            for (index, (command_name, command_line)) in command_lines.iter().enumerate() {
                 let mut parts = shlex::split(command_line)
                     .ok_or_else(|| anyhow!("Could not parse command: {command_line}"))?;
                 ensure!(!parts.is_empty(), "Command {command_name} is empty");
@@ -712,7 +755,11 @@ impl WasmerRunner {
                 if let Some(cwd) = serve.cwd.as_deref().filter(|cwd| !cwd.is_empty()) {
                     wasi_args.insert("cwd", value(cwd));
                 }
-                let main_args = main_args_for_module(&command_module, &parts[1..]);
+                let main_args = if command_name.starts_with(PREPARE_COMMAND_PREFIX) {
+                    parts[1..].to_vec()
+                } else {
+                    main_args_for_module(&command_module, &parts[1..])
+                };
                 wasi_args.insert("main-args", value(multiline_array(&main_args)));
                 if let Some(serve_env) = &serve.env {
                     for (key, value) in serve_env {
@@ -1188,12 +1235,33 @@ impl Runner for WasmerRunner {
         self.build_serve(serve)
     }
 
-    /// Port of `prepare`: run prepare.sh inside `wasmer run`.
-    fn prepare(&mut self, _env: &IndexMap<String, String>, _prepare: &[RunStep]) -> Result<()> {
+    /// Run dependency-backed preparation directly, falling back to the
+    /// generated shell script for commands that need shell syntax.
+    fn prepare(&mut self, _env: &IndexMap<String, String>, prepare: &[RunStep]) -> Result<()> {
+        let direct_commands: Vec<String> = (0..prepare.len()).map(prepare_command_name).collect();
+        if !direct_commands.is_empty()
+            && direct_commands
+                .iter()
+                .all(|command| self.has_serve_command(command))
+        {
+            let volume_mappings = load_volume_mappings(&self.anybuild_dir)?;
+            for command in direct_commands {
+                self.run_serve_command(&command, Some(&volume_mappings), &[], None)?;
+            }
+            return Ok(());
+        }
+
         let prepare_dir = self.wasmer_dir_path.join("prepare");
-        let mut volume_mappings = load_volume_mappings(&self.anybuild_dir)?;
-        volume_mappings.insert("/prepare".to_owned(), path_str(&prepare_dir));
-        self.run_serve_command("bash /prepare/prepare.sh", Some(&volume_mappings), None)
+        let volume_mappings = load_volume_mappings(&self.anybuild_dir)?;
+        self.run_serve_command(
+            "bash /prepare/prepare.sh",
+            Some(&volume_mappings),
+            &[HostMount {
+                host_path: &prepare_dir,
+                guest_path: "/prepare",
+            }],
+            None,
+        )
     }
 
     /// Port of `has_serve_command`.
@@ -1220,6 +1288,7 @@ impl Runner for WasmerRunner {
         &mut self,
         command: &str,
         volume_mappings: Option<&IndexMap<String, String>>,
+        host_mounts: &[HostMount<'_>],
         env: Option<&IndexMap<String, String>>,
     ) -> Result<()> {
         let parsed_command = shlex::split(command).unwrap_or_default();
@@ -1253,6 +1322,9 @@ impl Runner for WasmerRunner {
             &*self.build_backend.borrow(),
             volume_mappings.unwrap_or(&empty),
         )?);
+        for mount in host_mounts {
+            args.push(host_mount_arg(mount.host_path, mount.guest_path)?);
+        }
         args.extend(extra_args);
         if !command_args.is_empty() {
             args.push("--".to_owned());
@@ -1867,7 +1939,7 @@ mod tests {
         )
         .unwrap();
 
-        runner.run_serve_command("start", None, None).unwrap();
+        runner.run_serve_command("start", None, &[], None).unwrap();
 
         let captured = runner.captured_commands.last().unwrap();
         assert_eq!(captured.command, "wasmer");
@@ -1885,7 +1957,9 @@ mod tests {
 
         let mut env = IndexMap::new();
         env.insert("PORT".to_owned(), "45678".to_owned());
-        runner.run_serve_command("start", None, Some(&env)).unwrap();
+        runner
+            .run_serve_command("start", None, &[], Some(&env))
+            .unwrap();
 
         let captured = runner.captured_commands.last().unwrap();
         assert_eq!(captured.command, "wasmer");
@@ -1897,6 +1971,63 @@ mod tests {
             .extra_args
             .iter()
             .any(|arg| arg == "--command=start"));
+    }
+
+    #[test]
+    fn test_wasmer_prepare_mounts_generated_script_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_runner(tmp.path());
+        let prepare_dir = runner.wasmer_dir_path.join("prepare");
+        let prepare = [RunStep {
+            command: "echo prepare".to_owned(),
+            inputs: None,
+            outputs: None,
+            group: None,
+        }];
+
+        runner.prepare(&IndexMap::new(), &prepare).unwrap();
+
+        let captured = runner.captured_commands.last().unwrap();
+        let mounted_prepare_dir = prepare_dir.canonicalize().unwrap();
+        assert!(captured
+            .extra_args
+            .iter()
+            .any(|arg| arg == &format!("--volume={}:/prepare", mounted_prepare_dir.display())));
+        assert!(prepare_dir.is_dir());
+    }
+
+    #[test]
+    fn test_wasmer_prepare_runs_dependency_binary_directly() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_runner(tmp.path());
+        let mut serve = serve(
+            "node",
+            "node",
+            vec![package("node", Some("22"), None)],
+            Some("/app"),
+            &[("start", "node server.js")],
+        );
+        serve.prepare = Some(vec![RunStep {
+            command: "edgejs --precompile /app".to_owned(),
+            inputs: None,
+            outputs: None,
+            group: None,
+        }]);
+        runner.build_serve(&serve).unwrap();
+
+        runner
+            .prepare(&IndexMap::new(), serve.prepare.as_deref().unwrap())
+            .unwrap();
+
+        let captured = runner.captured_commands.last().unwrap();
+        assert!(captured
+            .extra_args
+            .iter()
+            .any(|arg| arg == "--command=__anybuild_prepare_0"));
+        assert!(!captured
+            .extra_args
+            .iter()
+            .any(|arg| arg.ends_with(":/prepare")));
     }
 
     #[test]

@@ -18,7 +18,7 @@ use crate::operation::OperationContext;
 use crate::plan::{RunStep, Serve, Step};
 use crate::providers::ProviderConfig;
 
-use crate::run::Runner;
+use crate::run::{HostMount, Runner};
 
 pub struct LocalRunner {
     build_backend: Rc<RefCell<dyn BuildBackend>>,
@@ -182,6 +182,7 @@ impl Runner for LocalRunner {
         &mut self,
         command: &str,
         _volume_mappings: Option<&IndexMap<String, String>>,
+        _host_mounts: &[HostMount<'_>],
         env: Option<&IndexMap<String, String>>,
     ) -> Result<()> {
         let command_path = self.serve_bin_path.join(command);

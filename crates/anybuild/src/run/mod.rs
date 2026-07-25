@@ -1,5 +1,7 @@
 //! Runtime implementations.
 
+use std::path::Path;
+
 use anyhow::Result;
 use indexmap::IndexMap;
 
@@ -8,6 +10,11 @@ use crate::providers::ProviderConfig;
 
 pub mod local;
 pub mod wasmer;
+
+pub(crate) struct HostMount<'a> {
+    pub host_path: &'a Path,
+    pub guest_path: &'a str,
+}
 
 /// Port of `runners/base.py::Runner`.
 pub trait Runner {
@@ -22,6 +29,7 @@ pub trait Runner {
         &mut self,
         command: &str,
         volume_mappings: Option<&IndexMap<String, String>>,
+        host_mounts: &[HostMount<'_>],
         env: Option<&IndexMap<String, String>>,
     ) -> Result<()>;
     /// Concrete-type escape hatch (Python's `assert isinstance(runner, ...)`
