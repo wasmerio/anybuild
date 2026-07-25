@@ -148,11 +148,13 @@ function Index() {
             </span>
           </div>
           <nav className="flex items-center gap-7 text-[15px] text-[#AEB7C8]">
-            <a href="#" className="transition-colors hover:text-white">
+            <a href="/docs" className="transition-colors hover:text-white">
               Docs
             </a>
             <a
-              href="#"
+              href="https://github.com/wasmerio/anybuild"
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center gap-1.5 transition-colors hover:text-white"
             >
               GitHub <ExternalLink className="h-3.5 w-3.5" />
@@ -189,7 +191,9 @@ function Index() {
                 Get Started <ArrowRight className="h-4 w-4" />
               </a>
               <a
-                href="#"
+                href="https://github.com/wasmerio/anybuild"
+                target="_blank"
+                rel="noreferrer"
                 className="inline-flex items-center gap-2 rounded-[12px] border border-[#22304D] bg-[#0A1020]/60 px-5 py-3 text-[15px] font-medium text-white transition-colors hover:border-[#3a4a6e]"
               >
                 <Github className="h-4 w-4" /> View on GitHub
