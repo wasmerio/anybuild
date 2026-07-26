@@ -13,6 +13,7 @@ use crate::providers::base::{env_str, BaseConfig, HasBase};
 use crate::providers::staticfile::{
     self, compute_redirects_config, parse_simple_yaml, StaticFileConfig,
 };
+use crate::providers::DetectableConfig;
 
 pub const NAME: &str = "jekyll";
 
@@ -98,30 +99,32 @@ pub(crate) enum DetectionEvidence {
     Structural,
 }
 
-pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
-    if exists(path, &["_config.yml", "_config.yaml"]) {
-        if exists(path, &["Gemfile"]) {
+impl DetectableConfig for JekyllConfig {
+    type Evidence = DetectionEvidence;
+
+    fn detection_evidence(
+        path: &Path,
+        base: &BaseConfig,
+        _operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        if exists(path, &["_config.yml", "_config.yaml"]) {
+            if exists(path, &["Gemfile"]) {
+                return Some(DetectionEvidence::Strong);
+            }
+            return Some(DetectionEvidence::Structural);
+        }
+        if base
+            .commands
+            .build
+            .as_deref()
+            .is_some_and(|build| build.starts_with("jekyll "))
+        {
             return Some(DetectionEvidence::Strong);
         }
-        return Some(DetectionEvidence::Structural);
+        None
     }
-    if base
-        .commands
-        .build
-        .as_deref()
-        .is_some_and(|build| build.starts_with("jekyll "))
-    {
-        return Some(DetectionEvidence::Strong);
-    }
-    None
-}
 
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<JekyllConfig>> {
-    detection_evidence(path, base)
-        .map(|_| load_config(path, base.clone(), operation))
-        .transpose()
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
+    }
 }

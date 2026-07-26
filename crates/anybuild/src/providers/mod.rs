@@ -1,8 +1,8 @@
 //! Project detection and provider configuration.
 //!
 //! Provider registry and generation dispatch.
-//! Each provider module exposes `detect_and_load(path, base)`; selection
-//! scores live here and registry order breaks ties.
+//! Each typed provider config implements `DetectableConfig`; selection scores
+//! live here and registry order breaks ties.
 
 use std::path::Path;
 
@@ -28,6 +28,28 @@ pub mod wordpress;
 pub mod workspace;
 
 pub use base::{BaseConfig, HasBase};
+
+pub(crate) trait DetectableConfig: HasBase + Sized {
+    type Evidence: Copy;
+
+    fn detection_evidence(
+        path: &Path,
+        base: &BaseConfig,
+        operation: &OperationContext,
+    ) -> Option<Self::Evidence>;
+
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self>;
+
+    fn detect(
+        path: &Path,
+        base: &BaseConfig,
+        operation: &OperationContext,
+    ) -> Result<Option<Self>> {
+        Self::detection_evidence(path, base, operation)
+            .map(|_| Self::load(path, base.clone(), operation))
+            .transpose()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProviderKind {
@@ -272,6 +294,24 @@ fn capitalize(value: &str) -> String {
         .unwrap_or_default()
 }
 
+fn detect_typed<C: DetectableConfig>(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+    wrap: fn(C) -> ProviderConfig,
+) -> Result<Option<ProviderConfig>> {
+    C::detect(path, base, operation).map(|config| config.map(wrap))
+}
+
+fn load_typed<C: DetectableConfig>(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+    wrap: fn(C) -> ProviderConfig,
+) -> Result<ProviderConfig> {
+    C::load(path, base.clone(), operation).map(wrap)
+}
+
 impl ProviderKind {
     pub(crate) const fn name(self) -> &'static str {
         match self {
@@ -303,23 +343,33 @@ impl ProviderKind {
         operation: &OperationContext,
     ) -> Option<i32> {
         Some(match self {
-            Self::Laravel if laravel::matches(path) => 95,
-            Self::Hugo => match hugo::detection_evidence(path, base)? {
+            Self::Laravel => {
+                laravel::LaravelConfig::detection_evidence(path, base, operation)?;
+                95
+            }
+            Self::Hugo => match hugo::HugoConfig::detection_evidence(path, base, operation)? {
                 hugo::DetectionEvidence::Strong => 80,
                 hugo::DetectionEvidence::Structural => 40,
             },
-            Self::Mkdocs if mkdocs::matches(path, base) => 85,
-            Self::Python => match python::detection_evidence(path, base)? {
-                python::DetectionEvidence::DjangoDependencies => 70,
-                python::DetectionEvidence::Dependencies => 50,
-                python::DetectionEvidence::Command => 80,
-                python::DetectionEvidence::Entrypoint => 10,
-            },
-            Self::Wordpress => match wordpress::detection_evidence(path, operation)? {
-                wordpress::DetectionEvidence::Site => 80,
-                wordpress::DetectionEvidence::Extension => 75,
-            },
-            Self::Php => match php::detection_evidence(path, base)? {
+            Self::Mkdocs => {
+                mkdocs::MkdocsConfig::detection_evidence(path, base, operation)?;
+                85
+            }
+            Self::Python => {
+                match python::PythonConfig::detection_evidence(path, base, operation)? {
+                    python::DetectionEvidence::DjangoDependencies => 70,
+                    python::DetectionEvidence::Dependencies => 50,
+                    python::DetectionEvidence::Command => 80,
+                    python::DetectionEvidence::Entrypoint => 10,
+                }
+            }
+            Self::Wordpress => {
+                match wordpress::WordPressConfig::detection_evidence(path, base, operation)? {
+                    wordpress::DetectionEvidence::Site => 80,
+                    wordpress::DetectionEvidence::Extension => 75,
+                }
+            }
+            Self::Php => match php::PhpConfig::detection_evidence(path, base, operation)? {
                 php::DetectionEvidence::DrupalWeb => 70,
                 php::DetectionEvidence::Framework => 65,
                 php::DetectionEvidence::ComposerEntrypoint => 60,
@@ -327,11 +377,13 @@ impl ProviderKind {
                 php::DetectionEvidence::StartCommand => 70,
                 php::DetectionEvidence::InstallCommand => 30,
             },
-            Self::NodeStatic => match node_static::detection_evidence(path, base)? {
-                node_static::DetectionEvidence::Strong => 60,
-                node_static::DetectionEvidence::Weak => 20,
-            },
-            Self::Node => match node::detection_evidence(path, base)? {
+            Self::NodeStatic => {
+                match node_static::NodeStaticConfig::detection_evidence(path, base, operation)? {
+                    node_static::DetectionEvidence::Strong => 60,
+                    node_static::DetectionEvidence::Weak => 20,
+                }
+            }
+            Self::Node => match node::NodeConfig::detection_evidence(path, base, operation)? {
                 node::DetectionEvidence::StartCommand => 35,
                 node::DetectionEvidence::PackageWithStart => 30,
                 node::DetectionEvidence::Package => 10,
@@ -339,55 +391,47 @@ impl ProviderKind {
                 node::DetectionEvidence::Framework => 10,
                 node::DetectionEvidence::Entrypoint => 30,
             },
-            Self::Jekyll => match jekyll::detection_evidence(path, base)? {
-                jekyll::DetectionEvidence::Strong => 85,
-                jekyll::DetectionEvidence::Structural => 40,
-            },
-            Self::Go if go::matches(path) => 80,
-            Self::StaticFile => match staticfile::detection_evidence(path, base, operation)? {
-                staticfile::DetectionEvidence::Staticfile => 50,
-                staticfile::DetectionEvidence::Html
-                | staticfile::DetectionEvidence::UnbuiltNodeSite => 15,
-                staticfile::DetectionEvidence::Fallback => 10,
-                staticfile::DetectionEvidence::StartCommand => 70,
-            },
-            _ => return None,
+            Self::Jekyll => {
+                match jekyll::JekyllConfig::detection_evidence(path, base, operation)? {
+                    jekyll::DetectionEvidence::Strong => 85,
+                    jekyll::DetectionEvidence::Structural => 40,
+                }
+            }
+            Self::Go => {
+                go::GoConfig::detection_evidence(path, base, operation)?;
+                80
+            }
+            Self::StaticFile => {
+                match staticfile::StaticFileConfig::detection_evidence(path, base, operation)? {
+                    staticfile::DetectionEvidence::Staticfile => 50,
+                    staticfile::DetectionEvidence::Html
+                    | staticfile::DetectionEvidence::UnbuiltNodeSite => 15,
+                    staticfile::DetectionEvidence::Fallback => 10,
+                    staticfile::DetectionEvidence::StartCommand => 70,
+                }
+            }
         })
     }
 
-    fn detect_and_load(
+    fn detect(
         self,
         path: &Path,
         base: &BaseConfig,
         operation: &OperationContext,
     ) -> Result<Option<ProviderConfig>> {
-        Ok(match self {
-            Self::Laravel => {
-                laravel::detect_and_load(path, base, operation)?.map(ProviderConfig::Laravel)
-            }
-            Self::Hugo => hugo::detect_and_load(path, base, operation)?.map(ProviderConfig::Hugo),
-            Self::Mkdocs => {
-                mkdocs::detect_and_load(path, base, operation)?.map(ProviderConfig::Mkdocs)
-            }
-            Self::Python => {
-                python::detect_and_load(path, base, operation)?.map(ProviderConfig::Python)
-            }
-            Self::Wordpress => {
-                wordpress::detect_and_load(path, base, operation)?.map(ProviderConfig::Wordpress)
-            }
-            Self::Php => php::detect_and_load(path, base, operation)?.map(ProviderConfig::Php),
-            Self::NodeStatic => {
-                node_static::detect_and_load(path, base, operation)?.map(ProviderConfig::NodeStatic)
-            }
-            Self::Node => node::detect_and_load(path, base, operation)?.map(ProviderConfig::Node),
-            Self::Jekyll => {
-                jekyll::detect_and_load(path, base, operation)?.map(ProviderConfig::Jekyll)
-            }
-            Self::Go => go::detect_and_load(path, base, operation)?.map(ProviderConfig::Go),
-            Self::StaticFile => {
-                staticfile::detect_and_load(path, base, operation)?.map(ProviderConfig::StaticFile)
-            }
-        })
+        match self {
+            Self::Laravel => detect_typed(path, base, operation, ProviderConfig::Laravel),
+            Self::Hugo => detect_typed(path, base, operation, ProviderConfig::Hugo),
+            Self::Mkdocs => detect_typed(path, base, operation, ProviderConfig::Mkdocs),
+            Self::Python => detect_typed(path, base, operation, ProviderConfig::Python),
+            Self::Wordpress => detect_typed(path, base, operation, ProviderConfig::Wordpress),
+            Self::Php => detect_typed(path, base, operation, ProviderConfig::Php),
+            Self::NodeStatic => detect_typed(path, base, operation, ProviderConfig::NodeStatic),
+            Self::Node => detect_typed(path, base, operation, ProviderConfig::Node),
+            Self::Jekyll => detect_typed(path, base, operation, ProviderConfig::Jekyll),
+            Self::Go => detect_typed(path, base, operation, ProviderConfig::Go),
+            Self::StaticFile => detect_typed(path, base, operation, ProviderConfig::StaticFile),
+        }
     }
 
     fn load(
@@ -396,33 +440,19 @@ impl ProviderKind {
         base: &BaseConfig,
         operation: &OperationContext,
     ) -> Result<ProviderConfig> {
-        Ok(match self {
-            Self::Python => {
-                ProviderConfig::Python(python::load_config(path, base.clone(), operation)?)
-            }
-            Self::Node => ProviderConfig::Node(node::load_config(path, base.clone(), operation)?),
-            Self::NodeStatic => {
-                ProviderConfig::NodeStatic(node_static::load_config(path, base.clone(), operation)?)
-            }
-            Self::Php => ProviderConfig::Php(php::load_config(path, base.clone(), operation)?),
-            Self::Wordpress => {
-                ProviderConfig::Wordpress(wordpress::load_config(path, base.clone(), operation)?)
-            }
-            Self::Laravel => {
-                ProviderConfig::Laravel(laravel::load_config(path, base.clone(), operation)?)
-            }
-            Self::Go => ProviderConfig::Go(go::load_config(path, base.clone(), operation)?),
-            Self::StaticFile => {
-                ProviderConfig::StaticFile(staticfile::load_config(path, base.clone(), operation)?)
-            }
-            Self::Hugo => ProviderConfig::Hugo(hugo::load_config(path, base.clone(), operation)?),
-            Self::Jekyll => {
-                ProviderConfig::Jekyll(jekyll::load_config(path, base.clone(), operation)?)
-            }
-            Self::Mkdocs => {
-                ProviderConfig::Mkdocs(mkdocs::load_config(path, base.clone(), operation)?)
-            }
-        })
+        match self {
+            Self::Python => load_typed(path, base, operation, ProviderConfig::Python),
+            Self::Node => load_typed(path, base, operation, ProviderConfig::Node),
+            Self::NodeStatic => load_typed(path, base, operation, ProviderConfig::NodeStatic),
+            Self::Php => load_typed(path, base, operation, ProviderConfig::Php),
+            Self::Wordpress => load_typed(path, base, operation, ProviderConfig::Wordpress),
+            Self::Laravel => load_typed(path, base, operation, ProviderConfig::Laravel),
+            Self::Go => load_typed(path, base, operation, ProviderConfig::Go),
+            Self::StaticFile => load_typed(path, base, operation, ProviderConfig::StaticFile),
+            Self::Hugo => load_typed(path, base, operation, ProviderConfig::Hugo),
+            Self::Jekyll => load_typed(path, base, operation, ProviderConfig::Jekyll),
+            Self::Mkdocs => load_typed(path, base, operation, ProviderConfig::Mkdocs),
+        }
     }
 }
 
@@ -448,10 +478,7 @@ pub(crate) fn select_provider(
     let mut candidates = Vec::new();
     for (registry_index, kind) in REGISTRY.iter().copied().enumerate() {
         let (candidate_operation, events) = operation.capture_events();
-        let Some(result) = kind
-            .detect_and_load(path, base, &candidate_operation)
-            .transpose()
-        else {
+        let Some(result) = kind.detect(path, base, &candidate_operation).transpose() else {
             continue;
         };
         candidates.push(Candidate {

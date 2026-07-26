@@ -23,6 +23,7 @@ use crate::providers::node::{
     self, JsonMap, NodeConfig, NodeConfigFields, NodeFramework, PackageManager,
 };
 use crate::providers::staticfile::compute_redirects_config;
+use crate::providers::DetectableConfig;
 
 // ---------------------------------------------------------------------------
 // Config
@@ -733,102 +734,106 @@ pub(crate) enum DetectionEvidence {
     Weak,
 }
 
-pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
-    let package_json = node::parse_package_json(path);
-    let found_deps =
-        node::check_package_json_deps(package_json.as_ref(), &STATIC_DETECT_DEPENDENCIES);
+impl DetectableConfig for NodeStaticConfig {
+    type Evidence = DetectionEvidence;
 
-    if has_runtime_dependency(&found_deps) || node::has_hydrogen_config(Some(path)) {
-        return None;
-    }
-    if found_deps.contains("@remix-run/node")
-        && !has_static_remix_output(path, package_json.as_ref())
-    {
-        return None;
-    }
+    fn detection_evidence(
+        path: &Path,
+        base: &BaseConfig,
+        _operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        let package_json = node::parse_package_json(path);
+        let found_deps =
+            node::check_package_json_deps(package_json.as_ref(), &STATIC_DETECT_DEPENDENCIES);
 
-    let mut has_package_manager_build_command = false;
-    if let Some(build) = node::non_empty(&base.commands.build) {
-        // Iterate over all generators and check if the build command
-        // matches.
-        for framework in NodeFramework::ALL {
-            if !framework.can_be_static() {
-                continue;
-            }
-            let command = framework
-                .build_static_command()
-                .expect("static frameworks have build commands");
-            if build.contains(command) {
-                return Some(DetectionEvidence::Strong);
-            }
+        if has_runtime_dependency(&found_deps) || node::has_hydrogen_config(Some(path)) {
+            return None;
+        }
+        if found_deps.contains("@remix-run/node")
+            && !has_static_remix_output(path, package_json.as_ref())
+        {
+            return None;
         }
 
-        let frameworks = NodeFramework::detect_from_command(build);
-        if !frameworks.is_empty() && !frameworks.contains(&NodeFramework::Next) {
+        let mut has_package_manager_build_command = false;
+        if let Some(build) = node::non_empty(&base.commands.build) {
+            // Iterate over all generators and check if the build command
+            // matches.
+            for framework in NodeFramework::ALL {
+                if !framework.can_be_static() {
+                    continue;
+                }
+                let command = framework
+                    .build_static_command()
+                    .expect("static frameworks have build commands");
+                if build.contains(command) {
+                    return Some(DetectionEvidence::Strong);
+                }
+            }
+
+            let frameworks = NodeFramework::detect_from_command(build);
+            if !frameworks.is_empty() && !frameworks.contains(&NodeFramework::Next) {
+                return Some(DetectionEvidence::Strong);
+            }
+
+            has_package_manager_build_command = node::is_package_manager_build_command(build);
+        }
+
+        if found_deps.contains("next") && has_next_static_export_config(path) {
             return Some(DetectionEvidence::Strong);
         }
 
-        has_package_manager_build_command = node::is_package_manager_build_command(build);
-    }
-
-    if found_deps.contains("next") && has_next_static_export_config(path) {
-        return Some(DetectionEvidence::Strong);
-    }
-
-    for build_command in detect_script_commands(package_json.as_ref()) {
-        for framework in NodeFramework::ALL {
-            if !framework.can_be_static() {
-                continue;
+        for build_command in detect_script_commands(package_json.as_ref()) {
+            for framework in NodeFramework::ALL {
+                if !framework.can_be_static() {
+                    continue;
+                }
+                let command = framework
+                    .build_static_command()
+                    .expect("static frameworks have build commands");
+                if build_command.contains(command) {
+                    return Some(DetectionEvidence::Strong);
+                }
             }
-            let command = framework
-                .build_static_command()
-                .expect("static frameworks have build commands");
-            if build_command.contains(command) {
+            let all_frameworks = NodeFramework::detect_from_command(build_command);
+            if !all_frameworks.is_empty()
+                && all_frameworks
+                    .iter()
+                    .all(|framework| framework.is_pure_static())
+            {
                 return Some(DetectionEvidence::Strong);
             }
         }
-        let all_frameworks = NodeFramework::detect_from_command(build_command);
-        if !all_frameworks.is_empty()
-            && all_frameworks
-                .iter()
-                .all(|framework| framework.is_pure_static())
+
+        let pure_static_deps: BTreeSet<&str> = found_deps
+            .iter()
+            .copied()
+            .filter(|dep| PURE_STATIC_DEPENDENCIES.contains(dep))
+            .collect();
+        let static_deps: BTreeSet<&str> = found_deps
+            .iter()
+            .copied()
+            .filter(|dep| STATIC_DEPENDENCIES.contains(dep))
+            .collect();
+
+        if !pure_static_deps.is_empty()
+            && static_deps.difference(&pure_static_deps).next().is_none()
         {
             return Some(DetectionEvidence::Strong);
         }
+
+        if !static_deps.is_empty() {
+            return Some(DetectionEvidence::Weak);
+        }
+        if has_package_manager_build_command {
+            return Some(DetectionEvidence::Weak);
+        }
+        None
     }
 
-    let pure_static_deps: BTreeSet<&str> = found_deps
-        .iter()
-        .copied()
-        .filter(|dep| PURE_STATIC_DEPENDENCIES.contains(dep))
-        .collect();
-    let static_deps: BTreeSet<&str> = found_deps
-        .iter()
-        .copied()
-        .filter(|dep| STATIC_DEPENDENCIES.contains(dep))
-        .collect();
-
-    if !pure_static_deps.is_empty() && static_deps.difference(&pure_static_deps).next().is_none() {
-        return Some(DetectionEvidence::Strong);
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
     }
-
-    if !static_deps.is_empty() {
-        return Some(DetectionEvidence::Weak);
-    }
-    if has_package_manager_build_command {
-        return Some(DetectionEvidence::Weak);
-    }
-    None
-}
-
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<NodeStaticConfig>> {
-    detection_evidence(path, base)
-        .map(|_| load_config(path, base.clone(), operation))
-        .transpose()
 }
 
 // ---------------------------------------------------------------------------

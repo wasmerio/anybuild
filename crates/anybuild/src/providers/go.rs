@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
 use crate::providers::base::{env_str, is_blank, BaseConfig, HasBase};
+use crate::providers::DetectableConfig;
 
 pub const NAME: &str = "go";
 
@@ -145,16 +146,18 @@ fn sorted_entries(path: &Path) -> Vec<String> {
     entries
 }
 
-pub(crate) fn matches(path: &Path) -> bool {
-    path.join("go.mod").exists() || path.join("go.sum").exists()
-}
+impl DetectableConfig for GoConfig {
+    type Evidence = ();
 
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<GoConfig>> {
-    matches(path)
-        .then(|| load_config(path, base.clone(), operation))
-        .transpose()
+    fn detection_evidence(
+        path: &Path,
+        _base: &BaseConfig,
+        _operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        (path.join("go.mod").exists() || path.join("go.sum").exists()).then_some(())
+    }
+
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
+    }
 }

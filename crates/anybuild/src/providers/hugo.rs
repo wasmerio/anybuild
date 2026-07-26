@@ -13,6 +13,7 @@ use crate::providers::base::{env_str, is_blank, BaseConfig, HasBase};
 use crate::providers::staticfile::{
     self, compute_redirects_config, parse_simple_yaml, StaticFileConfig,
 };
+use crate::providers::DetectableConfig;
 
 pub const NAME: &str = "hugo";
 
@@ -163,35 +164,37 @@ pub(crate) enum DetectionEvidence {
     Structural,
 }
 
-pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
-    if exists(path, &["hugo.toml", "hugo.json", "hugo.yaml", "hugo.yml"]) {
-        return Some(DetectionEvidence::Strong);
-    }
-    if exists(
-        path,
-        &["config.toml", "config.json", "config.yaml", "config.yml"],
-    ) && exists(path, &["content"])
-        && (exists(path, &["static"]) || exists(path, &["themes"]))
-    {
-        return Some(DetectionEvidence::Structural);
-    }
-    if base
-        .commands
-        .build
-        .as_deref()
-        .is_some_and(|build| build.starts_with("hugo "))
-    {
-        return Some(DetectionEvidence::Strong);
-    }
-    None
-}
+impl DetectableConfig for HugoConfig {
+    type Evidence = DetectionEvidence;
 
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<HugoConfig>> {
-    detection_evidence(path, base)
-        .map(|_| load_config(path, base.clone(), operation))
-        .transpose()
+    fn detection_evidence(
+        path: &Path,
+        base: &BaseConfig,
+        _operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        if exists(path, &["hugo.toml", "hugo.json", "hugo.yaml", "hugo.yml"]) {
+            return Some(DetectionEvidence::Strong);
+        }
+        if exists(
+            path,
+            &["config.toml", "config.json", "config.yaml", "config.yml"],
+        ) && exists(path, &["content"])
+            && (exists(path, &["static"]) || exists(path, &["themes"]))
+        {
+            return Some(DetectionEvidence::Structural);
+        }
+        if base
+            .commands
+            .build
+            .as_deref()
+            .is_some_and(|build| build.starts_with("hugo "))
+        {
+            return Some(DetectionEvidence::Strong);
+        }
+        None
+    }
+
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
+    }
 }

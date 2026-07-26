@@ -19,6 +19,7 @@ use crate::providers::base::{
 use crate::providers::install_context::{
     discover_python_dependency_files, discover_python_install_context,
 };
+use crate::providers::DetectableConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PythonFramework {
@@ -285,36 +286,38 @@ pub(crate) enum DetectionEvidence {
     Entrypoint,
 }
 
-pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
-    if exists(path, &["pyproject.toml", "requirements.txt"]) {
-        if exists(path, &["manage.py"]) {
-            return Some(DetectionEvidence::DjangoDependencies);
-        }
-        return Some(DetectionEvidence::Dependencies);
-    }
-    if let Some(start) = base.commands.start.as_deref() {
-        if start.starts_with("python ")
-            || start.starts_with("uv ")
-            || start.starts_with("uvicorn ")
-            || start.starts_with("gunicorn ")
-        {
-            return Some(DetectionEvidence::Command);
-        }
-    }
-    if detect_main_file(path).is_some() {
-        return Some(DetectionEvidence::Entrypoint);
-    }
-    None
-}
+impl DetectableConfig for PythonConfig {
+    type Evidence = DetectionEvidence;
 
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<PythonConfig>> {
-    detection_evidence(path, base)
-        .map(|_| load_config(path, base.clone(), operation))
-        .transpose()
+    fn detection_evidence(
+        path: &Path,
+        base: &BaseConfig,
+        _operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        if exists(path, &["pyproject.toml", "requirements.txt"]) {
+            if exists(path, &["manage.py"]) {
+                return Some(DetectionEvidence::DjangoDependencies);
+            }
+            return Some(DetectionEvidence::Dependencies);
+        }
+        if let Some(start) = base.commands.start.as_deref() {
+            if start.starts_with("python ")
+                || start.starts_with("uv ")
+                || start.starts_with("uvicorn ")
+                || start.starts_with("gunicorn ")
+            {
+                return Some(DetectionEvidence::Command);
+            }
+        }
+        if detect_main_file(path).is_some() {
+            return Some(DetectionEvidence::Entrypoint);
+        }
+        None
+    }
+
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
+    }
 }
 
 /// Port of `PythonProvider.load_config`.

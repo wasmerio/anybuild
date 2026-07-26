@@ -13,6 +13,7 @@ use serde_json::{Map, Value};
 
 use crate::operation::OperationContext;
 use crate::providers::base::{env_bool, env_enum, env_int, env_str, BaseConfig, HasBase};
+use crate::providers::DetectableConfig;
 
 pub const NAME: &str = "php";
 
@@ -255,59 +256,63 @@ pub(crate) enum DetectionEvidence {
     InstallCommand,
 }
 
-pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
-    let framework = detect_framework(path, None);
-    if framework == Some(PhpFramework::Drupal) && path.join("web/index.php").exists() {
-        return Some(DetectionEvidence::DrupalWeb);
-    }
-    if matches!(
-        framework,
-        Some(PhpFramework::Drupal | PhpFramework::Moodle | PhpFramework::Symfony)
-    ) && exists(path, &["index.php", "public/index.php", "web/index.php"])
-    {
-        return Some(DetectionEvidence::Framework);
-    }
-    if path.join("composer.json").exists() && exists(path, &["public/index.php", "web/index.php"]) {
-        return Some(DetectionEvidence::ComposerEntrypoint);
-    }
-    if exists(
-        path,
-        &[
-            "index.php",
-            "public/index.php",
-            "web/index.php",
-            "app/index.php",
-        ],
-    ) {
-        return Some(DetectionEvidence::Entrypoint);
-    }
-    if base
-        .commands
-        .start
-        .as_deref()
-        .is_some_and(|start| start.starts_with("php "))
-    {
-        return Some(DetectionEvidence::StartCommand);
-    }
-    if base
-        .commands
-        .install
-        .as_deref()
-        .is_some_and(|install| install.starts_with("composer "))
-    {
-        return Some(DetectionEvidence::InstallCommand);
-    }
-    None
-}
+impl DetectableConfig for PhpConfig {
+    type Evidence = DetectionEvidence;
 
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<PhpConfig>> {
-    detection_evidence(path, base)
-        .map(|_| load_config(path, base.clone(), operation))
-        .transpose()
+    fn detection_evidence(
+        path: &Path,
+        base: &BaseConfig,
+        _operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        let framework = detect_framework(path, None);
+        if framework == Some(PhpFramework::Drupal) && path.join("web/index.php").exists() {
+            return Some(DetectionEvidence::DrupalWeb);
+        }
+        if matches!(
+            framework,
+            Some(PhpFramework::Drupal | PhpFramework::Moodle | PhpFramework::Symfony)
+        ) && exists(path, &["index.php", "public/index.php", "web/index.php"])
+        {
+            return Some(DetectionEvidence::Framework);
+        }
+        if path.join("composer.json").exists()
+            && exists(path, &["public/index.php", "web/index.php"])
+        {
+            return Some(DetectionEvidence::ComposerEntrypoint);
+        }
+        if exists(
+            path,
+            &[
+                "index.php",
+                "public/index.php",
+                "web/index.php",
+                "app/index.php",
+            ],
+        ) {
+            return Some(DetectionEvidence::Entrypoint);
+        }
+        if base
+            .commands
+            .start
+            .as_deref()
+            .is_some_and(|start| start.starts_with("php "))
+        {
+            return Some(DetectionEvidence::StartCommand);
+        }
+        if base
+            .commands
+            .install
+            .as_deref()
+            .is_some_and(|install| install.starts_with("composer "))
+        {
+            return Some(DetectionEvidence::InstallCommand);
+        }
+        None
+    }
+
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
+    }
 }
 
 #[cfg(test)]

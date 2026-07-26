@@ -17,6 +17,7 @@ use crate::operation::OperationContext;
 use crate::providers::base::{env_str, BaseConfig, HasBase};
 use crate::providers::python::PythonConfig;
 use crate::providers::staticfile;
+use crate::providers::DetectableConfig;
 
 pub const NAME: &str = "mkdocs";
 
@@ -212,22 +213,24 @@ pub fn load_config(
     Ok(serde_json::from_value(Value::Object(merged))?)
 }
 
-pub(crate) fn matches(path: &Path, base: &BaseConfig) -> bool {
-    if exists(path, &["mkdocs.yml", "mkdocs.yaml"]) {
-        return true;
-    }
-    base.commands
-        .build
-        .as_deref()
-        .is_some_and(|build| build.starts_with("mkdocs "))
-}
+impl DetectableConfig for MkdocsConfig {
+    type Evidence = ();
 
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<MkdocsConfig>> {
-    matches(path, base)
-        .then(|| load_config(path, base.clone(), operation))
-        .transpose()
+    fn detection_evidence(
+        path: &Path,
+        base: &BaseConfig,
+        _operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        (exists(path, &["mkdocs.yml", "mkdocs.yaml"])
+            || base
+                .commands
+                .build
+                .as_deref()
+                .is_some_and(|build| build.starts_with("mkdocs ")))
+        .then_some(())
+    }
+
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
+    }
 }

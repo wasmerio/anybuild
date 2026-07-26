@@ -13,6 +13,7 @@ use serde_json::Value;
 use crate::operation::OperationContext;
 use crate::providers::base::{env_bool, env_enum, env_json, env_str, BaseConfig, HasBase};
 use crate::providers::install_context::{discover_js_install_context, read_json_object};
+use crate::providers::DetectableConfig;
 
 pub(crate) use crate::providers::install_context::JsonMap;
 
@@ -775,60 +776,62 @@ pub(crate) enum DetectionEvidence {
     Entrypoint,
 }
 
-pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
-    if let Some(start) = non_empty(&base.commands.start) {
-        if is_node_command(start) {
-            return Some(DetectionEvidence::StartCommand);
+impl DetectableConfig for NodeConfig {
+    type Evidence = DetectionEvidence;
+
+    fn detection_evidence(
+        path: &Path,
+        base: &BaseConfig,
+        _operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        if let Some(start) = non_empty(&base.commands.start) {
+            if is_node_command(start) {
+                return Some(DetectionEvidence::StartCommand);
+            }
         }
-    }
 
-    let package_json = parse_package_json(path);
-    let has_package_start = package_scripts(package_json.as_ref())
-        .get("start")
-        .is_some_and(|start| !start.trim().is_empty());
+        let package_json = parse_package_json(path);
+        let has_package_start = package_scripts(package_json.as_ref())
+            .get("start")
+            .is_some_and(|start| !start.trim().is_empty());
 
-    if let Some(install) = non_empty(&base.commands.install) {
-        if INSTALL_COMMANDS.contains(&install) {
+        if let Some(install) = non_empty(&base.commands.install) {
+            if INSTALL_COMMANDS.contains(&install) {
+                return Some(if has_package_start {
+                    DetectionEvidence::PackageWithStart
+                } else {
+                    DetectionEvidence::Package
+                });
+            }
+        }
+
+        let found_deps = check_package_json_deps(package_json.as_ref(), FRAMEWORK_DEPENDENCIES);
+        if detect_framework(package_json.as_ref(), &found_deps, Some(path)).is_some() {
+            return Some(if has_package_start {
+                DetectionEvidence::FrameworkWithStart
+            } else {
+                DetectionEvidence::Framework
+            });
+        }
+
+        if path.join("package.json").is_file() {
             return Some(if has_package_start {
                 DetectionEvidence::PackageWithStart
             } else {
                 DetectionEvidence::Package
             });
         }
+
+        if common_entry_file(path, true).is_some() {
+            return Some(DetectionEvidence::Entrypoint);
+        }
+
+        None
     }
 
-    let found_deps = check_package_json_deps(package_json.as_ref(), FRAMEWORK_DEPENDENCIES);
-    if detect_framework(package_json.as_ref(), &found_deps, Some(path)).is_some() {
-        return Some(if has_package_start {
-            DetectionEvidence::FrameworkWithStart
-        } else {
-            DetectionEvidence::Framework
-        });
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
     }
-
-    if path.join("package.json").is_file() {
-        return Some(if has_package_start {
-            DetectionEvidence::PackageWithStart
-        } else {
-            DetectionEvidence::Package
-        });
-    }
-
-    if common_entry_file(path, true).is_some() {
-        return Some(DetectionEvidence::Entrypoint);
-    }
-
-    None
-}
-
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<NodeConfig>> {
-    detection_evidence(path, base)
-        .map(|_| load_config(path, base.clone(), operation))
-        .transpose()
 }
 
 fn common_entry_file(path: &Path, require_node_evidence: bool) -> Option<&'static str> {

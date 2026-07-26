@@ -17,6 +17,7 @@ use crate::operation::OperationContext;
 use crate::providers::base::{BaseConfig, HasBase};
 use crate::providers::node::NodeConfigFields;
 use crate::providers::php;
+use crate::providers::DetectableConfig;
 
 pub const NAME: &str = "laravel";
 
@@ -106,16 +107,18 @@ pub fn load_config(
     Ok(serde_json::from_value(Value::Object(merged)).expect("laravel config deserializes"))
 }
 
-pub(crate) fn matches(path: &Path) -> bool {
-    path.join("artisan").exists() && path.join("composer.json").exists()
-}
+impl DetectableConfig for LaravelConfig {
+    type Evidence = ();
 
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<LaravelConfig>> {
-    matches(path)
-        .then(|| load_config(path, base.clone(), operation))
-        .transpose()
+    fn detection_evidence(
+        path: &Path,
+        _base: &BaseConfig,
+        _operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        (path.join("artisan").exists() && path.join("composer.json").exists()).then_some(())
+    }
+
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
+    }
 }

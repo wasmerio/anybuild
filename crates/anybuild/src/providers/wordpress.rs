@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::operation::OperationContext;
 use crate::providers::base::{env_enum, env_str, is_blank, BaseConfig, HasBase};
 use crate::providers::php::{self, PhpConfig};
+use crate::providers::DetectableConfig;
 
 pub const NAME: &str = "wordpress";
 
@@ -112,35 +113,34 @@ pub(crate) enum DetectionEvidence {
     Extension,
 }
 
-pub(crate) fn detection_evidence(
-    path: &Path,
-    operation: &OperationContext,
-) -> Option<DetectionEvidence> {
-    if path.join("wp-content").exists()
-        && path.join("index.php").exists()
-        && path.join("wp-load.php").exists()
-    {
-        return Some(DetectionEvidence::Site);
+impl DetectableConfig for WordPressConfig {
+    type Evidence = DetectionEvidence;
+
+    fn detection_evidence(
+        path: &Path,
+        _base: &BaseConfig,
+        operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        if path.join("wp-content").exists()
+            && path.join("index.php").exists()
+            && path.join("wp-load.php").exists()
+        {
+            return Some(DetectionEvidence::Site);
+        }
+
+        // Python truthiness: an empty ANYBUILD_WP_VERSION does not force detection.
+        if env_str(operation, "wp_version").is_some_and(|v| !v.is_empty()) {
+            return Some(DetectionEvidence::Site);
+        }
+        if detect_extension(path).is_some() {
+            return Some(DetectionEvidence::Extension);
+        }
+        None
     }
 
-    // Python truthiness: an empty ANYBUILD_WP_VERSION does not force detection.
-    if env_str(operation, "wp_version").is_some_and(|v| !v.is_empty()) {
-        return Some(DetectionEvidence::Site);
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
     }
-    if detect_extension(path).is_some() {
-        return Some(DetectionEvidence::Extension);
-    }
-    None
-}
-
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<WordPressConfig>> {
-    detection_evidence(path, operation)
-        .map(|_| load_config(path, base.clone(), operation))
-        .transpose()
 }
 
 /// Port of `WordPressProvider.detect_extension`.

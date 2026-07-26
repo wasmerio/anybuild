@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
 use crate::providers::base::{env_bool, env_str, BaseConfig, HasBase};
+use crate::providers::DetectableConfig;
 
 pub const NAME: &str = "staticfile";
 
@@ -171,55 +172,53 @@ pub(crate) enum DetectionEvidence {
     UnbuiltNodeSite,
 }
 
-pub(crate) fn detection_evidence(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Option<DetectionEvidence> {
-    let is_python_php_js_project =
-        exists(path, &["package.json", "pyproject.toml", "composer.json"]);
-    if exists(path, &["Staticfile"]) {
-        return Some(DetectionEvidence::Staticfile);
-    }
-    if !is_python_php_js_project {
-        return Some(
-            if exists(
-                path,
-                &[
-                    "index.html",
-                    "index.htm",
-                    "public/index.html",
-                    "public/index.htm",
-                ],
-            ) {
-                DetectionEvidence::Html
-            } else {
-                DetectionEvidence::Fallback
-            },
-        );
-    }
-    if base
-        .commands
-        .start
-        .as_deref()
-        .is_some_and(|start| start.starts_with("static-web-server "))
-    {
-        return Some(DetectionEvidence::StartCommand);
-    }
-    if is_unbuilt_node_static_site(path, base, operation) {
-        return Some(DetectionEvidence::UnbuiltNodeSite);
-    }
-    None
-}
+impl DetectableConfig for StaticFileConfig {
+    type Evidence = DetectionEvidence;
 
-pub fn detect_and_load(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<Option<StaticFileConfig>> {
-    detection_evidence(path, base, operation)
-        .map(|_| load_config(path, base.clone(), operation))
-        .transpose()
+    fn detection_evidence(
+        path: &Path,
+        base: &BaseConfig,
+        operation: &OperationContext,
+    ) -> Option<Self::Evidence> {
+        let is_python_php_js_project =
+            exists(path, &["package.json", "pyproject.toml", "composer.json"]);
+        if exists(path, &["Staticfile"]) {
+            return Some(DetectionEvidence::Staticfile);
+        }
+        if !is_python_php_js_project {
+            return Some(
+                if exists(
+                    path,
+                    &[
+                        "index.html",
+                        "index.htm",
+                        "public/index.html",
+                        "public/index.htm",
+                    ],
+                ) {
+                    DetectionEvidence::Html
+                } else {
+                    DetectionEvidence::Fallback
+                },
+            );
+        }
+        if base
+            .commands
+            .start
+            .as_deref()
+            .is_some_and(|start| start.starts_with("static-web-server "))
+        {
+            return Some(DetectionEvidence::StartCommand);
+        }
+        if is_unbuilt_node_static_site(path, base, operation) {
+            return Some(DetectionEvidence::UnbuiltNodeSite);
+        }
+        None
+    }
+
+    fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
+        load_config(path, base, operation)
+    }
 }
 
 fn is_unbuilt_node_static_site(
@@ -256,7 +255,9 @@ fn is_unbuilt_node_static_site(
     {
         return false;
     }
-    if crate::providers::node_static::detection_evidence(path, base).is_some() {
+    if crate::providers::node_static::NodeStaticConfig::detection_evidence(path, base, operation)
+        .is_some()
+    {
         return false;
     }
 
