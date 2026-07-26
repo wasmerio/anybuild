@@ -1,11 +1,7 @@
-//! The e2e case table, ported 1:1 from `tests/test_e2e.py`.
+//! The e2e case table, ported from `tests/test_e2e.py`.
 //!
-//! Every field of the pytest `E2ECase` dataclass is preserved here. Cases
-//! appear in the same order as the pytest parametrize list. `test_id` is the
-//! pytest case id (name, else path, else download stem) with the
-//! `examples/` prefix stripped and non-identifier characters mapped to `_`;
-//! duplicate ids carry the same `0`/`1`/`2` suffixes pytest generates
-//! (php_nobuild0/1/2, php_wordpress0/1).
+//! Cases retain the pytest coverage while allowing the Rust harness to
+//! assign explicit providers and stable descriptive test ids.
 
 use super::BuildMode;
 
@@ -145,9 +141,9 @@ pub struct Case {
     pub path: Option<&'static str>,
     pub download: Option<&'static str>,
     pub name: Option<&'static str>,
+    pub provider: Option<&'static str>,
     pub serve_pattern: &'static str,
     pub http: &'static [HttpRequest],
-    pub use_random_port: bool,
     pub env: &'static [(&'static str, &'static str)],
     pub extra_env: &'static [(&'static str, &'static str)],
     pub create_db: bool,
@@ -192,9 +188,9 @@ const BASE: Case = Case {
     path: None,
     download: None,
     name: None,
+    provider: None,
     serve_pattern: "",
     http: &[],
-    use_random_port: true,
     env: &[],
     extra_env: &[],
     create_db: false,
@@ -237,18 +233,10 @@ pub static CASES: &[Case] = &[
     },
     // Simple PHP site that calls phpinfo()
     Case {
-        test_id: "php_nobuild0",
+        test_id: "php_nobuild",
         suite: Suite::Php,
         path: Some("examples/php-nobuild"),
-        serve_pattern: PHPIX_LISTENING,
-        http: &[body("/", r"PHP Version 8\.3\.[0-9]+")],
-        ..BASE
-    },
-    // Simple PHP site that calls phpinfo() with no port
-    Case {
-        test_id: "php_nobuild1",
-        suite: Suite::Php,
-        path: Some("examples/php-nobuild"),
+        name: Some("php_nobuild"),
         serve_pattern: PHPIX_LISTENING,
         http: &[body("/", r"PHP Version 8\.3\.[0-9]+")],
         ..BASE
@@ -281,7 +269,6 @@ pub static CASES: &[Case] = &[
         download: Some("https://wordpress.org/wordpress-6.9.4.zip"),
         serve_pattern: r"listening addr",
         http: &[body_status("/", 200, r"WordPress")],
-        use_random_port: false,
         env: WORDPRESS_DB_ENV,
         create_db: true,
         create_wp_content_volume: true,
@@ -298,9 +285,9 @@ pub static CASES: &[Case] = &[
         test_id: "php_wordpress_empty",
         suite: Suite::Php,
         path: Some("examples/php-wordpress-empty"),
+        provider: Some("wordpress"),
         serve_pattern: r"listening addr",
         http: &[body_status("/", 200, r"WordPress")],
-        use_random_port: false,
         env: &[
             ("DB_NAME", "test"),
             ("DB_USERNAME", "root"),
@@ -329,7 +316,6 @@ pub static CASES: &[Case] = &[
         name: Some("wordpress_bro_barbershop_theme"),
         serve_pattern: r"listening addr",
         http: &[status("/", 200)],
-        use_random_port: false,
         env: &[
             ("DB_NAME", "test"),
             ("DB_USERNAME", "root"),
@@ -362,9 +348,10 @@ pub static CASES: &[Case] = &[
     },
     // Non-WordPress phpix mode should not force a memory capability.
     Case {
-        test_id: "php_nobuild2",
+        test_id: "php_nobuild_phpix",
         suite: Suite::Php,
         path: Some("examples/php-nobuild"),
+        name: Some("php_nobuild_phpix"),
         serve_pattern: PHPIX_LISTENING,
         http: &[body("/", r"PHP Version 8\.3\.[0-9]+")],
         extra_env: &[("ANYBUILD_PHPIX", "true")],

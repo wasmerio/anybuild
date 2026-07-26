@@ -52,13 +52,9 @@ e2e_tests! {
     static__wasmer__cdn => ("cdn", Wasmer);
     static__wasmer_and_docker__cdn => ("cdn", WasmerAndDocker);
     // examples/php-nobuild (phpinfo)
-    php__local__php_nobuild0 => ("php_nobuild0", Local);
-    php__wasmer__php_nobuild0 => ("php_nobuild0", Wasmer);
-    php__wasmer_and_docker__php_nobuild0 => ("php_nobuild0", WasmerAndDocker);
-    // examples/php-nobuild (phpinfo, no port)
-    php__local__php_nobuild1 => ("php_nobuild1", Local);
-    php__wasmer__php_nobuild1 => ("php_nobuild1", Wasmer);
-    php__wasmer_and_docker__php_nobuild1 => ("php_nobuild1", WasmerAndDocker);
+    php__local__php_nobuild => ("php_nobuild", Local);
+    php__wasmer__php_nobuild => ("php_nobuild", Wasmer);
+    php__wasmer_and_docker__php_nobuild => ("php_nobuild", WasmerAndDocker);
     // examples/php-api
     php__local__php_api => ("php_api", Local);
     php__wasmer__php_api => ("php_api", Wasmer);
@@ -76,7 +72,7 @@ e2e_tests! {
     // examples/php-wordpress phpix memory cap (Wasmer only)
     php__wasmer__php_wordpress1 => ("php_wordpress1", Wasmer);
     // examples/php-nobuild phpix no memory cap (Wasmer only)
-    php__wasmer__php_nobuild2 => ("php_nobuild2", Wasmer);
+    php__wasmer__php_nobuild_phpix => ("php_nobuild_phpix", Wasmer);
     // examples/static-nobuild
     static__local__static_nobuild => ("static_nobuild", Local);
     static__wasmer__static_nobuild => ("static_nobuild", Wasmer);

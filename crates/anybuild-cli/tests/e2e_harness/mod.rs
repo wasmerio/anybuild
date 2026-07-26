@@ -65,13 +65,9 @@ pub fn run_case(test_id: &str, build_mode: BuildMode) -> Result<()> {
     );
 
     let repo_root = workspace_root();
-    let project_path = materialize_case(case, &repo_root)?;
-
-    let port = if case.use_random_port {
-        get_free_port()
-    } else {
-        8080 // This is the default port if not specified.
-    };
+    let materialized = materialize_case(case, &repo_root)?;
+    let project_path = &materialized.path;
+    let port = get_free_port();
 
     // The spawned commands inherit the full process environment; these
     // pairs are layered on top (mirrors `os.environ.copy()` + updates).
@@ -89,7 +85,7 @@ pub fn run_case(test_id: &str, build_mode: BuildMode) -> Result<()> {
         case,
         build_mode,
         &repo_root,
-        &project_path,
+        project_path,
         port,
         &mut envs,
         &mut created_db_name,
@@ -165,7 +161,8 @@ fn run_case_inner(
     if case.download.is_some() || !case.commands.is_empty() {
         // Build first, then serve via `anybuild run --start`, then execute
         // each RunCommand via `anybuild run --command=...`.
-        let build_cmd = anybuild_build_command(repo_root, project_path, build_mode, port)?;
+        let build_cmd =
+            anybuild_build_command(repo_root, project_path, build_mode, port, case.provider)?;
         let build_result =
             run_completed_command(&build_cmd, repo_root, envs, Duration::from_secs(180))?;
         let build_output = build_result.output();
@@ -189,6 +186,7 @@ fn run_case_inner(
             true,
             None,
             &volume_specs,
+            port,
         )?;
         run_server_and_check(case, &run_cmd, repo_root, envs, project_path, port, false)?;
 
@@ -201,6 +199,7 @@ fn run_case_inner(
                 false,
                 Some(command.command),
                 &volume_specs,
+                port,
             )?;
             let result = run_completed_command(&cmd, repo_root, envs, Duration::from_secs(180))?;
             print_run_command_output(command, &cmd, &result);
@@ -215,6 +214,7 @@ fn run_case_inner(
         build_mode,
         port,
         case.run_after_deploy,
+        case.provider,
     )?;
     run_server_and_check(case, &cmd, repo_root, envs, project_path, port, true)
 }
@@ -799,12 +799,16 @@ fn anybuild_auto_command(
     build_mode: BuildMode,
     port: u16,
     run_after_deploy: bool,
+    provider: Option<&str>,
 ) -> Result<Vec<String>> {
     let mut cmd = anybuild_base_command(repo_root)?;
     cmd.push(project_path.to_string_lossy().into_owned());
     cmd.push("--skip-prepare".to_string());
     cmd.push("--start".to_string());
     cmd.push("--regenerate".to_string());
+    if let Some(provider) = provider {
+        cmd.push(format!("--provider={provider}"));
+    }
     if run_after_deploy {
         cmd.push("--after-deploy".to_string());
     }
@@ -818,16 +822,21 @@ fn anybuild_build_command(
     project_path: &Path,
     build_mode: BuildMode,
     port: u16,
+    provider: Option<&str>,
 ) -> Result<Vec<String>> {
     let mut cmd = anybuild_base_command(repo_root)?;
     cmd.push(project_path.to_string_lossy().into_owned());
     cmd.push("--skip-prepare".to_string());
     cmd.push("--regenerate".to_string());
+    if let Some(provider) = provider {
+        cmd.push(format!("--provider={provider}"));
+    }
     append_build_mode_flags(&mut cmd, build_mode);
     cmd.push(format!("--serve-port={port}"));
     Ok(cmd)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn anybuild_run_command(
     repo_root: &Path,
     project_path: &Path,
@@ -836,6 +845,7 @@ fn anybuild_run_command(
     start: bool,
     command: Option<&str>,
     volume_specs: &[String],
+    port: u16,
 ) -> Result<Vec<String>> {
     let mut cmd = anybuild_base_command(repo_root)?;
     cmd.push("run".to_string());
@@ -853,6 +863,7 @@ fn anybuild_run_command(
         cmd.push("--volume".to_string());
         cmd.push(spec.clone());
     }
+    cmd.push(format!("--serve-port={port}"));
     // Run-mode flags are identical to build-mode flags (the pytest file
     // keeps two identical helpers; collapsed here).
     append_build_mode_flags(&mut cmd, build_mode);
@@ -878,21 +889,59 @@ fn append_build_mode_flags(cmd: &mut Vec<String>, build_mode: BuildMode) {
 // Case materialization (path or downloaded archive)
 // ---------------------------------------------------------------------------
 
-fn materialize_case(case: &Case, repo_root: &Path) -> Result<PathBuf> {
+struct MaterializedCase {
+    path: PathBuf,
+    _temp: tempfile::TempDir,
+}
+
+fn materialize_case(case: &Case, repo_root: &Path) -> Result<MaterializedCase> {
     ensure!(
         !(case.path.is_some() && case.download.is_some()),
         "E2ECase can define either path or download, not both"
     );
+    let temp = tempfile::Builder::new()
+        .prefix(&format!("anybuild-e2e-{}-", case.test_id))
+        .tempdir()?;
     if let Some(path) = case.path {
-        return Ok(repo_root.join(path));
+        let source = repo_root.join(path);
+        let name = source
+            .file_name()
+            .context("E2E fixture path must have a final component")?;
+        let destination = temp.path().join(name);
+        copy_fixture_dir(&source, &destination)?;
+        return Ok(MaterializedCase {
+            path: destination,
+            _temp: temp,
+        });
     }
     let Some(url) = case.download else {
         bail!("E2ECase requires either path or download");
     };
-    let tmp =
-        std::env::temp_dir().join(format!("anybuild-e2e-{}-{:016x}", case.test_id, rand_u64()));
-    fs::create_dir_all(&tmp)?;
-    download_and_extract_archive(url, &tmp)
+    let path = download_and_extract_archive(url, temp.path())?;
+    Ok(MaterializedCase { path, _temp: temp })
+}
+
+fn copy_fixture_dir(source: &Path, destination: &Path) -> Result<()> {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if matches!(name.to_str(), Some(".anybuild" | ".shipit")) {
+            continue;
+        }
+        let source_path = entry.path();
+        let destination_path = destination.join(name);
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            copy_fixture_dir(&source_path, &destination_path)?;
+        } else if file_type.is_symlink() {
+            let target = fs::read_link(&source_path)?;
+            std::os::unix::fs::symlink(target, destination_path)?;
+        } else {
+            fs::copy(source_path, destination_path)?;
+        }
+    }
+    Ok(())
 }
 
 fn download_and_extract_archive(url: &str, tmp_path: &Path) -> Result<PathBuf> {
@@ -1380,9 +1429,7 @@ mod tests {
         }
     }
 
-    /// Recomputes the pytest case ids (str(case) plus pytest's duplicate
-    /// 0/1/2 suffixing), sanitizes them the way the test names do, and
-    /// checks they equal the hardcoded `test_id`s.
+    /// Recomputes ids from each case's explicit name, path, or download.
     #[test]
     fn test_ids_match_pytest_ids() {
         let base_ids: Vec<String> = CASES
@@ -1434,5 +1481,46 @@ mod tests {
         assert_eq!(extract_phpix_memory_limit(none), None);
         let other_limit = "scaling:\n  memory:\n    limit: 9Gb\ncapabilities:\n  memory: {}\n";
         assert_eq!(extract_phpix_memory_limit(other_limit), None);
+    }
+
+    #[test]
+    fn commands_include_provider_and_port() {
+        let root = workspace_root();
+        let project = root.join("examples/php-wordpress-empty");
+        let build =
+            anybuild_build_command(&root, &project, BuildMode::Wasmer, 43210, Some("wordpress"))
+                .unwrap();
+        assert!(build.iter().any(|arg| arg == "--provider=wordpress"));
+        assert!(build.iter().any(|arg| arg == "--serve-port=43210"));
+
+        let run = anybuild_run_command(
+            &root,
+            &project,
+            BuildMode::Wasmer,
+            true,
+            true,
+            None,
+            &[],
+            43210,
+        )
+        .unwrap();
+        assert!(run.iter().any(|arg| arg == "--serve-port=43210"));
+    }
+
+    #[test]
+    fn fixture_copy_excludes_generated_state() {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("index.php"), "<?php").unwrap();
+        fs::create_dir(source.path().join(".anybuild")).unwrap();
+        fs::write(source.path().join(".anybuild/state"), "stale").unwrap();
+        fs::create_dir(source.path().join(".shipit")).unwrap();
+
+        let destination_root = tempfile::tempdir().unwrap();
+        let destination = destination_root.path().join("fixture");
+        copy_fixture_dir(source.path(), &destination).unwrap();
+
+        assert!(destination.join("index.php").is_file());
+        assert!(!destination.join(".anybuild").exists());
+        assert!(!destination.join(".shipit").exists());
     }
 }
