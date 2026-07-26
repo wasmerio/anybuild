@@ -344,21 +344,16 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(119, 88, 255, 0.72);
-  border-radius: 24px;
-  background: linear-gradient(145deg, rgba(26, 35, 67, 0.98), rgba(10, 15, 31, 0.98));
+  border: 1px solid #34415f;
+  border-radius: 26px;
+  background: linear-gradient(155deg, #131b30 0%, #0b1121 100%);
   transform: translate(-50%, -50%);
-}
-
-.build-flow__center-logo {
-  position: relative;
-  filter: drop-shadow(0 10px 25px rgba(99, 72, 243, 0.4));
 }
 
 .build-flow__center > span {
   position: relative;
   margin-top: 0.2rem;
-  color: white;
+  color: #f7f9fc;
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -367,7 +362,7 @@
 .build-flow__center > small {
   position: relative;
   margin-top: 0.2rem;
-  color: var(--color-fg-dim);
+  color: #8993a8;
   font-size: 0.6rem;
   letter-spacing: 0.04em;
 }
