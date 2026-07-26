@@ -2,7 +2,6 @@ import { Check, CircleHelp, X } from "lucide-react";
 
 type AnswerValue =
   | boolean
-  | "when-indicated"
   | "via-starlark"
   | {
       count: string;
@@ -25,15 +24,6 @@ const capabilities: Array<{
     railpack: false,
     devbox: false,
     buildpacks: false,
-  },
-  {
-    area: "Uses your existing dependencies",
-    description:
-      "Uses dependencies already declared by the project instead of requiring a separate package definition.",
-    anybuild: "when-indicated",
-    railpack: true,
-    devbox: true,
-    buildpacks: true,
   },
   {
     area: "Can deploy to Edge providers",
@@ -107,12 +97,7 @@ function Answer({ value }: { value: AnswerValue }) {
     );
   }
 
-  const qualifier =
-    value === "when-indicated"
-      ? "When indicated"
-      : value === "via-starlark"
-        ? "Via Starlark"
-        : null;
+  const qualifier = value === "via-starlark" ? "Via Starlark" : null;
   const isSupported = value !== false;
   const label = qualifier ?? (isSupported ? "Yes" : "No");
 

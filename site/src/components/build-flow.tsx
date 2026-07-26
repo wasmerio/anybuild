@@ -68,12 +68,12 @@ const artifacts = {
     color: "#F38020",
   },
   wasmer: {
-    label: "Wasmer package",
+    label: "Package",
     icon: wasmerIcon,
     color: "#654FF0",
   },
   docker: {
-    label: "Docker container",
+    label: "Container",
     icon: "https://cdn.simpleicons.org/docker",
     color: "#2496ED",
   },
