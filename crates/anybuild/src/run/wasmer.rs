@@ -23,7 +23,7 @@ use crate::build::BuildBackend;
 use crate::common::volumes::load_volume_mappings;
 use crate::operation::OperationContext;
 use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
-use crate::providers::{config_from_json, merge_config_json, ProviderConfig};
+use crate::providers::{config_from_json, ProviderConfig};
 
 use crate::run::{HostMount, Runner};
 
@@ -1175,7 +1175,7 @@ impl Runner for WasmerRunner {
                 "cross_platform": "wasix_wasm32",
                 "precompile_python": true,
             });
-            match merge_config_json(provider, &config, &patch) {
+            match config.merge_json(&patch) {
                 Ok(patched) => patched,
                 Err(_) => config,
             }

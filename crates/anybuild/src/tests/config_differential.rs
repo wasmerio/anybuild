@@ -186,7 +186,7 @@ fn compute_config(case: &Case) -> Result<serde_json::Value, String> {
         }
     } else {
         workspace::apply_subdir_provider_config(&mut config, case.subdir.as_deref());
-        workspace::apply_subdir_workspace_config(&case.workspace, &mut config);
+        config.apply_workspace_config(&case.workspace);
     }
 
     Ok(config.to_json())

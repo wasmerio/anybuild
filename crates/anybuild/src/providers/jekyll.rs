@@ -13,9 +13,7 @@ use crate::providers::base::{env_str, BaseConfig, HasBase};
 use crate::providers::staticfile::{
     self, compute_redirects_config, parse_simple_yaml, StaticFileConfig,
 };
-use crate::providers::DetectableConfig;
-
-pub const NAME: &str = "jekyll";
+use crate::providers::Provider;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JekyllConfig {
@@ -99,9 +97,10 @@ pub(crate) enum DetectionEvidence {
     Structural,
 }
 
-impl DetectableConfig for JekyllConfig {
+impl Provider for JekyllConfig {
     type Evidence = DetectionEvidence;
 
+    const NAME: &'static str = "jekyll";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Jekyll version", "jekyll_version"),
         ("Ruby version", "ruby_version"),

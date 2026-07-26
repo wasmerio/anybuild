@@ -1,13 +1,13 @@
 //! Project detection and provider configuration.
 //!
 //! Provider registry and generation dispatch.
-//! Each typed provider config implements `DetectableConfig`; selection scores
+//! Each typed provider config implements `Provider`; selection scores
 //! live here and registry order breaks ties.
 
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 
 use crate::event::ProviderDetail;
 use crate::operation::OperationContext;
@@ -30,9 +30,10 @@ pub mod workspace;
 
 pub use base::{BaseConfig, HasBase};
 
-pub(crate) trait DetectableConfig: HasBase + Serialize + Sized {
+pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Sized {
     type Evidence: Copy;
 
+    const NAME: &'static str;
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[];
 
     fn detection_evidence(
@@ -54,112 +55,180 @@ pub(crate) trait DetectableConfig: HasBase + Serialize + Sized {
     }
 
     fn detection_details(&self) -> Vec<ProviderDetail> {
-        detection_details_from_fields(self, Self::DETECTION_DETAILS)
+        detection_details_from_fields(self, Self::DETECTION_DETAILS, Self::format_detection_detail)
     }
+
+    fn format_detection_detail(_field: &str, value: &str) -> String {
+        value.to_owned()
+    }
+
+    fn provider_name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::to_value(self).expect("config serializes")
+    }
+
+    fn defaults_json() -> Result<serde_json::Value> {
+        Ok(serde_json::to_value(Self::default())?)
+    }
+
+    fn exclude_defaults_json(&self) -> serde_json::Value {
+        let defaults = Self::defaults_json().expect("default config serializes");
+        exclude_defaults(self.to_json(), defaults)
+    }
+
+    fn from_json(json: serde_json::Value) -> Result<Self> {
+        Ok(serde_json::from_value(json)?)
+    }
+
+    fn merge_json(&self, patch: &serde_json::Value) -> Result<Self> {
+        let mut merged = self.to_json();
+        let (Some(target), Some(patch_map)) = (merged.as_object_mut(), patch.as_object()) else {
+            return Err(anyhow!("Config must be a dictionary"));
+        };
+        target.extend(patch_map.clone());
+        Self::from_json(merged)
+    }
+
+    fn apply_workspace_config(&mut self, _workspace_root: &Path) {}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProviderKind {
-    Laravel,
-    Hugo,
-    Mkdocs,
-    Python,
-    Wordpress,
-    Php,
-    NodeStatic,
-    Node,
-    Jekyll,
-    Go,
-    StaticFile,
-}
+macro_rules! provider_registry {
+    ($($variant:ident => $config:path),+ $(,)?) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub(crate) enum ProviderKind {
+            $($variant),+
+        }
 
-/// Order resolves equal scores and remains compatible with the original
-/// provider registry.
-const REGISTRY: &[ProviderKind] = &[
-    ProviderKind::Laravel,
-    ProviderKind::Hugo,
-    ProviderKind::Mkdocs,
-    ProviderKind::Python,
-    ProviderKind::Wordpress,
-    ProviderKind::Php,
-    ProviderKind::NodeStatic,
-    ProviderKind::Node,
-    ProviderKind::Jekyll,
-    ProviderKind::Go,
-    ProviderKind::StaticFile,
-];
+        /// Order resolves equal scores and remains compatible with the
+        /// original provider registry.
+        const REGISTRY: &[ProviderKind] = &[$(ProviderKind::$variant),+];
 
-/// Every provider's loaded config.
-#[derive(Debug, Clone)]
-pub enum ProviderConfig {
-    Python(python::PythonConfig),
-    Node(node::NodeConfig),
-    NodeStatic(node_static::NodeStaticConfig),
-    Php(php::PhpConfig),
-    Wordpress(wordpress::WordPressConfig),
-    Laravel(laravel::LaravelConfig),
-    Go(go::GoConfig),
-    StaticFile(staticfile::StaticFileConfig),
-    Hugo(hugo::HugoConfig),
-    Jekyll(jekyll::JekyllConfig),
-    Mkdocs(mkdocs::MkdocsConfig),
-}
+        /// Every provider's loaded config.
+        #[derive(Debug, Clone)]
+        pub enum ProviderConfig {
+            $($variant($config)),+
+        }
 
-macro_rules! each_config {
-    ($self:expr, $config:ident => $body:expr) => {
-        match $self {
-            ProviderConfig::Python($config) => $body,
-            ProviderConfig::Node($config) => $body,
-            ProviderConfig::NodeStatic($config) => $body,
-            ProviderConfig::Php($config) => $body,
-            ProviderConfig::Wordpress($config) => $body,
-            ProviderConfig::Laravel($config) => $body,
-            ProviderConfig::Go($config) => $body,
-            ProviderConfig::StaticFile($config) => $body,
-            ProviderConfig::Hugo($config) => $body,
-            ProviderConfig::Jekyll($config) => $body,
-            ProviderConfig::Mkdocs($config) => $body,
+        impl ProviderConfig {
+            pub fn provider_name(&self) -> &'static str {
+                match self {
+                    $(Self::$variant(config) => config.provider_name()),+
+                }
+            }
+
+            /// The JSON view consumed by the evaluation host and annotations.
+            pub fn to_json(&self) -> serde_json::Value {
+                match self {
+                    $(Self::$variant(config) => config.to_json()),+
+                }
+            }
+
+            pub fn base(&self) -> &BaseConfig {
+                match self {
+                    $(Self::$variant(config) => config.base()),+
+                }
+            }
+
+            pub fn base_mut(&mut self) -> &mut BaseConfig {
+                match self {
+                    $(Self::$variant(config) => config.base_mut()),+
+                }
+            }
+
+            pub(crate) fn detection_details(&self) -> Vec<ProviderDetail> {
+                match self {
+                    $(Self::$variant(config) => config.detection_details()),+
+                }
+            }
+
+            pub(crate) fn apply_workspace_config(&mut self, workspace_root: &Path) {
+                match self {
+                    $(Self::$variant(config) => config.apply_workspace_config(workspace_root)),+
+                }
+            }
+
+            pub(crate) fn merge_json(&self, patch: &serde_json::Value) -> Result<Self> {
+                match self {
+                    $(Self::$variant(config) => config.merge_json(patch).map(Self::$variant)),+
+                }
+            }
+
+            fn exclude_defaults_json(&self) -> serde_json::Value {
+                match self {
+                    $(Self::$variant(config) => config.exclude_defaults_json()),+
+                }
+            }
+        }
+
+        impl ProviderKind {
+            pub(crate) fn name(self) -> &'static str {
+                match self {
+                    $(Self::$variant => <$config as Provider>::NAME),+
+                }
+            }
+
+            fn from_name(name: &str) -> Option<Self> {
+                REGISTRY
+                    .iter()
+                    .copied()
+                    .find(|kind| kind.name().eq_ignore_ascii_case(name))
+            }
+
+            fn detect(
+                self,
+                path: &Path,
+                base: &BaseConfig,
+                operation: &OperationContext,
+            ) -> Result<Option<ProviderConfig>> {
+                match self {
+                    $(Self::$variant => detect_typed(path, base, operation, ProviderConfig::$variant)),+
+                }
+            }
+
+            fn load(
+                self,
+                path: &Path,
+                base: &BaseConfig,
+                operation: &OperationContext,
+            ) -> Result<ProviderConfig> {
+                match self {
+                    $(Self::$variant => load_typed(path, base, operation, ProviderConfig::$variant)),+
+                }
+            }
+
+            fn defaults_json(self) -> Result<serde_json::Value> {
+                match self {
+                    $(Self::$variant => <$config as Provider>::defaults_json()),+
+                }
+            }
+
+            fn config_from_json(self, json: serde_json::Value) -> Result<ProviderConfig> {
+                match self {
+                    $(Self::$variant => from_json_typed(json, ProviderConfig::$variant)),+
+                }
+            }
         }
     };
 }
 
+provider_registry! {
+    Laravel => laravel::LaravelConfig,
+    Hugo => hugo::HugoConfig,
+    Mkdocs => mkdocs::MkdocsConfig,
+    Python => python::PythonConfig,
+    Wordpress => wordpress::WordPressConfig,
+    Php => php::PhpConfig,
+    NodeStatic => node_static::NodeStaticConfig,
+    Node => node::NodeConfig,
+    Jekyll => jekyll::JekyllConfig,
+    Go => go::GoConfig,
+    StaticFile => staticfile::StaticFileConfig,
+}
+
 impl ProviderConfig {
-    pub fn provider_name(&self) -> &'static str {
-        match self {
-            ProviderConfig::Python(_) => "python",
-            ProviderConfig::Node(_) => "node",
-            ProviderConfig::NodeStatic(_) => "node-static",
-            ProviderConfig::Php(_) => "php",
-            ProviderConfig::Wordpress(_) => "wordpress",
-            ProviderConfig::Laravel(_) => "laravel",
-            ProviderConfig::Go(_) => "go",
-            ProviderConfig::StaticFile(_) => "staticfile",
-            ProviderConfig::Hugo(_) => "hugo",
-            ProviderConfig::Jekyll(_) => "jekyll",
-            ProviderConfig::Mkdocs(_) => "mkdocs",
-        }
-    }
-
-    /// `model_dump(mode="json")` equivalent: the JSON view consumed by the
-    /// evaluation host and the wasmer annotations.
-    pub fn to_json(&self) -> serde_json::Value {
-        each_config!(self, config => {
-            serde_json::to_value(config).expect("config serializes")
-        })
-    }
-
-    pub fn base(&self) -> &BaseConfig {
-        each_config!(self, config => config.base())
-    }
-
-    pub fn base_mut(&mut self) -> &mut BaseConfig {
-        each_config!(self, config => config.base_mut())
-    }
-
-    pub(crate) fn detection_details(&self) -> Vec<ProviderDetail> {
-        each_config!(self, config => config.detection_details())
-    }
-
     /// Set `cross_platform` when the provider supports it (python only).
     #[cfg(test)]
     pub fn set_cross_platform(&mut self, value: &str) -> bool {
@@ -177,6 +246,7 @@ impl ProviderConfig {
 pub(crate) fn detection_details_from_fields<T: Serialize>(
     config: &T,
     fields: &[(&str, &str)],
+    format: fn(&str, &str) -> String,
 ) -> Vec<ProviderDetail> {
     let config = serde_json::to_value(config).expect("config serializes");
     fields
@@ -188,49 +258,19 @@ pub(crate) fn detection_details_from_fields<T: Serialize>(
                 .filter(|value| !value.is_empty())?;
             Some(ProviderDetail {
                 label: (*label).to_owned(),
-                value: display_detail(label, value),
+                value: format(field, value),
             })
         })
         .collect()
 }
 
-fn display_detail(label: &str, value: &str) -> String {
-    if matches!(label, "Framework" | "Server" | "Extension") {
-        display_config_value(value)
-    } else {
-        value.to_owned()
-    }
-}
-
-fn display_config_value(value: &str) -> String {
-    match value {
-        "next" => "Next.js".to_owned(),
-        "create-react-app" => "Create React App".to_owned(),
-        "docusaurus-old" | "docusaurus" => "Docusaurus".to_owned(),
-        "fastapi" => "FastAPI".to_owned(),
-        "python-fasthtml" => "FastHTML".to_owned(),
-        "mkdocs" => "MkDocs".to_owned(),
-        "mcp" => "MCP".to_owned(),
-        "node" => "Node.js".to_owned(),
-        "npm" => "npm".to_owned(),
-        "pnpm" => "pnpm".to_owned(),
-        "umijs" => "UmiJS".to_owned(),
-        "vitepress" => "VitePress".to_owned(),
-        "vuepress" => "VuePress".to_owned(),
-        "sveltekit" => "SvelteKit".to_owned(),
-        "solidstart" => "SolidStart".to_owned(),
-        "tanstack-start" => "TanStack Start".to_owned(),
-        "react-router" => "React Router".to_owned(),
-        "nuxt" | "nuxt3" => "Nuxt".to_owned(),
-        "wordpress" => "WordPress".to_owned(),
-        value if value.contains(['-', '_']) => value
-            .split(['-', '_'])
-            .filter(|part| !part.is_empty())
-            .map(capitalize)
-            .collect::<Vec<_>>()
-            .join(" "),
-        value => capitalize(value),
-    }
+pub(crate) fn humanize(value: &str) -> String {
+    value
+        .split(['-', '_'])
+        .filter(|part| !part.is_empty())
+        .map(capitalize)
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn capitalize(value: &str) -> String {
@@ -241,7 +281,7 @@ fn capitalize(value: &str) -> String {
         .unwrap_or_default()
 }
 
-fn detect_typed<C: DetectableConfig>(
+fn detect_typed<C: Provider>(
     path: &Path,
     base: &BaseConfig,
     operation: &OperationContext,
@@ -250,7 +290,7 @@ fn detect_typed<C: DetectableConfig>(
     C::detect(path, base, operation).map(|config| config.map(wrap))
 }
 
-fn load_typed<C: DetectableConfig>(
+fn load_typed<C: Provider>(
     path: &Path,
     base: &BaseConfig,
     operation: &OperationContext,
@@ -259,30 +299,14 @@ fn load_typed<C: DetectableConfig>(
     C::load(path, base.clone(), operation).map(wrap)
 }
 
+fn from_json_typed<C: Provider>(
+    json: serde_json::Value,
+    wrap: fn(C) -> ProviderConfig,
+) -> Result<ProviderConfig> {
+    C::from_json(json).map(wrap)
+}
+
 impl ProviderKind {
-    pub(crate) const fn name(self) -> &'static str {
-        match self {
-            Self::Laravel => laravel::NAME,
-            Self::Hugo => hugo::NAME,
-            Self::Mkdocs => mkdocs::NAME,
-            Self::Python => "python",
-            Self::Wordpress => wordpress::NAME,
-            Self::Php => php::NAME,
-            Self::NodeStatic => "node-static",
-            Self::Node => "node",
-            Self::Jekyll => jekyll::NAME,
-            Self::Go => go::NAME,
-            Self::StaticFile => staticfile::NAME,
-        }
-    }
-
-    fn from_name(name: &str) -> Option<Self> {
-        REGISTRY
-            .iter()
-            .copied()
-            .find(|kind| kind.name().eq_ignore_ascii_case(name))
-    }
-
     fn detection_score(
         self,
         path: &Path,
@@ -359,48 +383,6 @@ impl ProviderKind {
             }
         })
     }
-
-    fn detect(
-        self,
-        path: &Path,
-        base: &BaseConfig,
-        operation: &OperationContext,
-    ) -> Result<Option<ProviderConfig>> {
-        match self {
-            Self::Laravel => detect_typed(path, base, operation, ProviderConfig::Laravel),
-            Self::Hugo => detect_typed(path, base, operation, ProviderConfig::Hugo),
-            Self::Mkdocs => detect_typed(path, base, operation, ProviderConfig::Mkdocs),
-            Self::Python => detect_typed(path, base, operation, ProviderConfig::Python),
-            Self::Wordpress => detect_typed(path, base, operation, ProviderConfig::Wordpress),
-            Self::Php => detect_typed(path, base, operation, ProviderConfig::Php),
-            Self::NodeStatic => detect_typed(path, base, operation, ProviderConfig::NodeStatic),
-            Self::Node => detect_typed(path, base, operation, ProviderConfig::Node),
-            Self::Jekyll => detect_typed(path, base, operation, ProviderConfig::Jekyll),
-            Self::Go => detect_typed(path, base, operation, ProviderConfig::Go),
-            Self::StaticFile => detect_typed(path, base, operation, ProviderConfig::StaticFile),
-        }
-    }
-
-    fn load(
-        self,
-        path: &Path,
-        base: &BaseConfig,
-        operation: &OperationContext,
-    ) -> Result<ProviderConfig> {
-        match self {
-            Self::Python => load_typed(path, base, operation, ProviderConfig::Python),
-            Self::Node => load_typed(path, base, operation, ProviderConfig::Node),
-            Self::NodeStatic => load_typed(path, base, operation, ProviderConfig::NodeStatic),
-            Self::Php => load_typed(path, base, operation, ProviderConfig::Php),
-            Self::Wordpress => load_typed(path, base, operation, ProviderConfig::Wordpress),
-            Self::Laravel => load_typed(path, base, operation, ProviderConfig::Laravel),
-            Self::Go => load_typed(path, base, operation, ProviderConfig::Go),
-            Self::StaticFile => load_typed(path, base, operation, ProviderConfig::StaticFile),
-            Self::Hugo => load_typed(path, base, operation, ProviderConfig::Hugo),
-            Self::Jekyll => load_typed(path, base, operation, ProviderConfig::Jekyll),
-            Self::Mkdocs => load_typed(path, base, operation, ProviderConfig::Mkdocs),
-        }
-    }
 }
 
 struct Candidate {
@@ -475,33 +457,28 @@ fn finish_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
 /// The declared field defaults for a provider config (pydantic's notion
 /// for `exclude_defaults`). Defaults never apply the environment overlay.
 pub fn defaults_json(name: &str) -> Result<serde_json::Value> {
-    let value = match name {
-        "python" => serde_json::to_value(python::PythonConfig::default())?,
-        "node" => serde_json::to_value(node::NodeConfig::default())?,
-        "node-static" => serde_json::to_value(node_static::NodeStaticConfig::default())?,
-        "php" => serde_json::to_value(php::PhpConfig::default())?,
-        "wordpress" => serde_json::to_value(wordpress::WordPressConfig::default())?,
-        "laravel" => serde_json::to_value(laravel::LaravelConfig::default())?,
-        "go" => serde_json::to_value(go::GoConfig::default())?,
-        "staticfile" => serde_json::to_value(staticfile::StaticFileConfig::default())?,
-        "hugo" => serde_json::to_value(hugo::HugoConfig::default())?,
-        "jekyll" => serde_json::to_value(jekyll::JekyllConfig::default())?,
-        "mkdocs" => serde_json::to_value(mkdocs::MkdocsConfig::default())?,
-        other => return Err(anyhow!("unknown provider {other:?}")),
-    };
-    Ok(value)
+    ProviderKind::from_name(name)
+        .ok_or_else(|| anyhow!("unknown provider {name:?}"))?
+        .defaults_json()
 }
 
 /// Pydantic's `model_dump(mode="json", exclude_defaults=True)` for a typed
 /// provider config.
 pub fn exclude_defaults_json(config: &ProviderConfig) -> serde_json::Value {
-    exclude_defaults_from_json(config.provider_name(), config.to_json())
+    config.exclude_defaults_json()
 }
 
 /// Apply a provider's declared defaults to an already serialized config.
 /// This is used by the Wasmer runner after applying runtime overrides.
 pub fn exclude_defaults_from_json(name: &str, dumped: serde_json::Value) -> serde_json::Value {
-    let Ok(serde_json::Value::Object(defaults)) = defaults_json(name) else {
+    let Ok(defaults) = defaults_json(name) else {
+        return dumped;
+    };
+    exclude_defaults(dumped, defaults)
+}
+
+fn exclude_defaults(dumped: serde_json::Value, defaults: serde_json::Value) -> serde_json::Value {
+    let serde_json::Value::Object(defaults) = defaults else {
         return dumped;
     };
     match dumped {
@@ -538,37 +515,9 @@ fn exclude_default_object(
 
 /// Deserialize a config JSON back into the provider's typed config.
 pub fn config_from_json(name: &str, json: serde_json::Value) -> Result<ProviderConfig> {
-    Ok(match name {
-        "python" => ProviderConfig::Python(serde_json::from_value(json)?),
-        "node" => ProviderConfig::Node(serde_json::from_value(json)?),
-        "node-static" => ProviderConfig::NodeStatic(serde_json::from_value(json)?),
-        "php" => ProviderConfig::Php(serde_json::from_value(json)?),
-        "wordpress" => ProviderConfig::Wordpress(serde_json::from_value(json)?),
-        "laravel" => ProviderConfig::Laravel(serde_json::from_value(json)?),
-        "go" => ProviderConfig::Go(serde_json::from_value(json)?),
-        "staticfile" => ProviderConfig::StaticFile(serde_json::from_value(json)?),
-        "hugo" => ProviderConfig::Hugo(serde_json::from_value(json)?),
-        "jekyll" => ProviderConfig::Jekyll(serde_json::from_value(json)?),
-        "mkdocs" => ProviderConfig::Mkdocs(serde_json::from_value(json)?),
-        other => return Err(anyhow!("unknown provider {other:?}")),
-    })
-}
-
-/// Port of the `--config` JSON merge in `generator.load_provider_config`:
-/// `model_dump() | patch`, revalidated into the typed config.
-pub fn merge_config_json(
-    name: &str,
-    config: &ProviderConfig,
-    patch: &serde_json::Value,
-) -> Result<ProviderConfig> {
-    let mut merged = config.to_json();
-    let (Some(target), Some(patch_map)) = (merged.as_object_mut(), patch.as_object()) else {
-        return Err(anyhow!("Config must be a dictionary"));
-    };
-    for (key, value) in patch_map {
-        target.insert(key.clone(), value.clone());
-    }
-    config_from_json(name, merged)
+    ProviderKind::from_name(name)
+        .ok_or_else(|| anyhow!("unknown provider {name:?}"))?
+        .config_from_json(json)
 }
 
 #[cfg(test)]
@@ -811,6 +760,17 @@ mod config_inheritance_tests {
             let round_trip = config_from_json(name, json.clone()).unwrap().to_json();
             assert_eq!(keys(&round_trip), keys(&json));
             assert_eq!(round_trip, json);
+        }
+    }
+
+    #[test]
+    fn every_registered_provider_round_trips_its_declared_defaults() {
+        for kind in REGISTRY {
+            let defaults = kind.defaults_json().unwrap();
+            let config = kind.config_from_json(defaults.clone()).unwrap();
+
+            assert_eq!(config.provider_name(), kind.name());
+            assert_eq!(config.to_json(), defaults);
         }
     }
 }

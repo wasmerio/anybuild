@@ -203,10 +203,10 @@ pub fn load_project_config(
     )?;
     let provider = provider.name();
     if let Some(patch) = &overrides.config {
-        config = crate::providers::merge_config_json(provider, &config, patch)?;
+        config = config.merge_json(patch)?;
     }
     workspace::apply_subdir_provider_config(&mut config, paths.subdir.as_deref());
-    workspace::apply_subdir_workspace_config(&paths.workspace_root, &mut config);
+    config.apply_workspace_config(&paths.workspace_root);
     operation.provider_detected(provider, config.detection_details());
     Ok((provider, config))
 }

@@ -13,9 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::operation::OperationContext;
 use crate::providers::base::{env_enum, env_str, is_blank, BaseConfig, HasBase};
 use crate::providers::php::{self, PhpConfig};
-use crate::providers::DetectableConfig;
-
-pub const NAME: &str = "wordpress";
+use crate::providers::{humanize, Provider};
 
 /// Python reads this many characters from the top of a candidate file.
 const HEADER_SCAN_BYTES: usize = 8192;
@@ -113,14 +111,23 @@ pub(crate) enum DetectionEvidence {
     Extension,
 }
 
-impl DetectableConfig for WordPressConfig {
+impl Provider for WordPressConfig {
     type Evidence = DetectionEvidence;
 
+    const NAME: &'static str = "wordpress";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Extension", "wp_extension_kind"),
         ("WordPress version", "wp_version"),
         ("PHP version", "php_version"),
     ];
+
+    fn format_detection_detail(field: &str, value: &str) -> String {
+        if field == "wp_extension_kind" {
+            humanize(value)
+        } else {
+            value.to_owned()
+        }
+    }
 
     fn detection_evidence(
         path: &Path,
@@ -263,7 +270,7 @@ mod tests {
 
     use crate::providers::{
         load_provider_config_for_test as load_provider_config,
-        load_provider_for_test as load_provider, merge_config_json, BaseConfig, ProviderConfig,
+        load_provider_for_test as load_provider, BaseConfig, ProviderConfig,
     };
 
     fn write_plugin(project_dir: &Path, filename: &str) {
@@ -348,12 +355,9 @@ mod tests {
         // load, then merge the user config over the model dump.
         let config =
             load_provider_config("wordpress", &project_dir, BaseConfig::default()).unwrap();
-        let config = merge_config_json(
-            "wordpress",
-            &config,
-            &serde_json::json!({"wp_version": "6.8.3"}),
-        )
-        .unwrap();
+        let config = config
+            .merge_json(&serde_json::json!({"wp_version": "6.8.3"}))
+            .unwrap();
 
         assert_eq!(wordpress(&config).wp_version.as_deref(), Some("6.8.3"));
     }
@@ -374,8 +378,9 @@ mod tests {
         assert_eq!(provider, "wordpress");
         assert!(!wordpress(&config).php.phpix);
 
-        let config =
-            merge_config_json("wordpress", &config, &serde_json::json!({"phpix": true})).unwrap();
+        let config = config
+            .merge_json(&serde_json::json!({"phpix": true}))
+            .unwrap();
         let config = wordpress(&config);
         assert!(config.php.phpix);
         // A full site (not an extension) keeps wp_version unset unless the

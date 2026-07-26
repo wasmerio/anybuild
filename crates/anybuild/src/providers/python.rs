@@ -19,7 +19,7 @@ use crate::providers::base::{
 use crate::providers::install_context::{
     discover_python_dependency_files, discover_python_install_context,
 };
-use crate::providers::DetectableConfig;
+use crate::providers::{humanize, Provider};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PythonFramework {
@@ -286,14 +286,26 @@ pub(crate) enum DetectionEvidence {
     Entrypoint,
 }
 
-impl DetectableConfig for PythonConfig {
+impl Provider for PythonConfig {
     type Evidence = DetectionEvidence;
 
+    const NAME: &'static str = "python";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Framework", "framework"),
         ("Server", "server"),
         ("Python version", "python_version"),
     ];
+
+    fn format_detection_detail(field: &str, value: &str) -> String {
+        match field {
+            "framework" => PythonFramework::parse(value)
+                .map(PythonFramework::display_name)
+                .map(str::to_owned)
+                .unwrap_or_else(|| humanize(value)),
+            "server" => humanize(value),
+            _ => value.to_owned(),
+        }
+    }
 
     fn detection_evidence(
         path: &Path,

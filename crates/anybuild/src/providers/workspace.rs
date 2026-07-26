@@ -1,5 +1,4 @@
 //! Subdirectory workspace config application.
-//! `apply_subdir_provider_config` / `apply_subdir_workspace_config`).
 
 use std::path::Path;
 
@@ -14,48 +13,18 @@ pub fn apply_subdir_provider_config(config: &mut ProviderConfig, subdir: Option<
     config.base_mut().app_subdir = subdir.map(str::to_owned);
 }
 
-/// Port of `apply_subdir_workspace_config`: subdir node apps without
-/// their own lockfile inherit the workspace root's package manager, and
-/// `<pm> run …` build commands are rewritten to match.
-pub fn apply_subdir_workspace_config(workspace_root: &Path, config: &mut ProviderConfig) {
-    // cli.py takes the subdir from ProjectPaths; by the time this runs
-    // apply_subdir_provider_config has recorded it on the config.
-    let Some(subdir) = config
-        .base()
-        .app_subdir
-        .clone()
-        .filter(|subdir| !subdir.is_empty())
-    else {
-        return;
-    };
-
-    // `hasattr(provider_config, "package_manager")`: node / node-static.
-    match config {
-        ProviderConfig::Node(node) => apply_node_workspace_config(
-            workspace_root,
-            &subdir,
-            &mut node.node.package_manager,
-            &mut node.node.build_command,
-            &mut node.base.commands,
-        ),
-        ProviderConfig::NodeStatic(node_static) => apply_node_workspace_config(
-            workspace_root,
-            &subdir,
-            &mut node_static.node.package_manager,
-            &mut node_static.node.build_command,
-            &mut node_static.base.commands,
-        ),
-        _ => {}
-    }
-}
-
-fn apply_node_workspace_config(
+/// Subdirectory Node apps without their own lockfile inherit the workspace
+/// root's package manager, and `<pm> run …` commands are rewritten to match.
+pub(crate) fn apply_node_workspace_config(
     workspace_root: &Path,
-    subdir: &str,
+    subdir: Option<&str>,
     package_manager: &mut Option<PackageManager>,
     build_command: &mut Option<String>,
     commands: &mut CustomCommands,
 ) {
+    let Some(subdir) = subdir.filter(|subdir| !subdir.is_empty()) else {
+        return;
+    };
     let app_path = workspace_root.join(subdir);
     if !app_path.join("package.json").exists() {
         return;

@@ -17,9 +17,7 @@ use crate::operation::OperationContext;
 use crate::providers::base::{env_str, BaseConfig, HasBase};
 use crate::providers::python::PythonConfig;
 use crate::providers::staticfile;
-use crate::providers::DetectableConfig;
-
-pub const NAME: &str = "mkdocs";
+use crate::providers::Provider;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MkdocsConfig {
@@ -213,9 +211,10 @@ pub fn load_config(
     Ok(serde_json::from_value(Value::Object(merged))?)
 }
 
-impl DetectableConfig for MkdocsConfig {
+impl Provider for MkdocsConfig {
     type Evidence = ();
 
+    const NAME: &'static str = "mkdocs";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("MkDocs version", "mkdocs_version"),
         ("Python version", "python_version"),

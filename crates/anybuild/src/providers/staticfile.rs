@@ -14,9 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
 use crate::providers::base::{env_bool, env_str, BaseConfig, HasBase};
-use crate::providers::DetectableConfig;
-
-pub const NAME: &str = "staticfile";
+use crate::providers::Provider;
 
 pub const REDIRECTS_SOURCE: &str = "_redirects";
 pub const REDIRECT_STATUS_CODES: [i64; 2] = [301, 302];
@@ -172,9 +170,10 @@ pub(crate) enum DetectionEvidence {
     UnbuiltNodeSite,
 }
 
-impl DetectableConfig for StaticFileConfig {
+impl Provider for StaticFileConfig {
     type Evidence = DetectionEvidence;
 
+    const NAME: &'static str = "staticfile";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Output directory", "static_dir"),
         ("SWS version", "sws_version"),

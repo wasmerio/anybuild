@@ -23,7 +23,7 @@ use crate::providers::node::{
     self, JsonMap, NodeConfig, NodeConfigFields, NodeFramework, PackageManager,
 };
 use crate::providers::staticfile::compute_redirects_config;
-use crate::providers::DetectableConfig;
+use crate::providers::{workspace, Provider};
 
 // ---------------------------------------------------------------------------
 // Config
@@ -734,14 +734,33 @@ pub(crate) enum DetectionEvidence {
     Weak,
 }
 
-impl DetectableConfig for NodeStaticConfig {
+impl Provider for NodeStaticConfig {
     type Evidence = DetectionEvidence;
 
+    const NAME: &'static str = "node-static";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Framework", "framework"),
         ("Package manager", "package_manager"),
         ("Output directory", "static_dir"),
     ];
+
+    fn format_detection_detail(field: &str, value: &str) -> String {
+        if field == "framework" {
+            node::display_framework(value)
+        } else {
+            value.to_owned()
+        }
+    }
+
+    fn apply_workspace_config(&mut self, workspace_root: &Path) {
+        workspace::apply_node_workspace_config(
+            workspace_root,
+            self.base.app_subdir.as_deref(),
+            &mut self.node.package_manager,
+            &mut self.node.build_command,
+            &mut self.base.commands,
+        );
+    }
 
     fn detection_evidence(
         path: &Path,

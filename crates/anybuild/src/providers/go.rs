@@ -10,9 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
 use crate::providers::base::{env_str, is_blank, BaseConfig, HasBase};
-use crate::providers::DetectableConfig;
-
-pub const NAME: &str = "go";
+use crate::providers::Provider;
 
 const BUILD_FILE_CANDIDATES: [&str; 5] = ["main.go", "server.go", "serve.go", "api.go", "web.go"];
 
@@ -146,9 +144,10 @@ fn sorted_entries(path: &Path) -> Vec<String> {
     entries
 }
 
-impl DetectableConfig for GoConfig {
+impl Provider for GoConfig {
     type Evidence = ();
 
+    const NAME: &'static str = "go";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Go version", "go_version"),
         ("Entrypoint", "go_build_file"),

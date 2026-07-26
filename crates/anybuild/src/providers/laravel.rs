@@ -17,9 +17,7 @@ use crate::operation::OperationContext;
 use crate::providers::base::{BaseConfig, HasBase};
 use crate::providers::node::NodeConfigFields;
 use crate::providers::php;
-use crate::providers::DetectableConfig;
-
-pub const NAME: &str = "laravel";
+use crate::providers::Provider;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LaravelConfig {
@@ -107,9 +105,10 @@ pub fn load_config(
     Ok(serde_json::from_value(Value::Object(merged)).expect("laravel config deserializes"))
 }
 
-impl DetectableConfig for LaravelConfig {
+impl Provider for LaravelConfig {
     type Evidence = ();
 
+    const NAME: &'static str = "laravel";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Package manager", "package_manager"),
         ("PHP version", "php_version"),

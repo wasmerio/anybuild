@@ -13,7 +13,7 @@ use serde_json::Value;
 use crate::operation::OperationContext;
 use crate::providers::base::{env_bool, env_enum, env_json, env_str, BaseConfig, HasBase};
 use crate::providers::install_context::{discover_js_install_context, read_json_object};
-use crate::providers::DetectableConfig;
+use crate::providers::{humanize, workspace, Provider};
 
 pub(crate) use crate::providers::install_context::JsonMap;
 
@@ -776,14 +776,33 @@ pub(crate) enum DetectionEvidence {
     Entrypoint,
 }
 
-impl DetectableConfig for NodeConfig {
+impl Provider for NodeConfig {
     type Evidence = DetectionEvidence;
 
+    const NAME: &'static str = "node";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Framework", "framework"),
         ("Package manager", "package_manager"),
         ("Node version", "node_version"),
     ];
+
+    fn format_detection_detail(field: &str, value: &str) -> String {
+        if field == "framework" {
+            display_framework(value)
+        } else {
+            value.to_owned()
+        }
+    }
+
+    fn apply_workspace_config(&mut self, workspace_root: &Path) {
+        workspace::apply_node_workspace_config(
+            workspace_root,
+            self.base.app_subdir.as_deref(),
+            &mut self.node.package_manager,
+            &mut self.node.build_command,
+            &mut self.base.commands,
+        );
+    }
 
     fn detection_evidence(
         path: &Path,
@@ -837,6 +856,23 @@ impl DetectableConfig for NodeConfig {
 
     fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
         load_config(path, base, operation)
+    }
+}
+
+pub(crate) fn display_framework(value: &str) -> String {
+    match value {
+        "next" => "Next.js".to_owned(),
+        "create-react-app" => "Create React App".to_owned(),
+        "docusaurus-old" | "docusaurus" => "Docusaurus".to_owned(),
+        "umijs" => "UmiJS".to_owned(),
+        "vitepress" => "VitePress".to_owned(),
+        "vuepress" => "VuePress".to_owned(),
+        "sveltekit" => "SvelteKit".to_owned(),
+        "solidstart" => "SolidStart".to_owned(),
+        "tanstack-start" => "TanStack Start".to_owned(),
+        "react-router" => "React Router".to_owned(),
+        "nuxt" | "nuxt3" => "Nuxt".to_owned(),
+        value => humanize(value),
     }
 }
 

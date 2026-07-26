@@ -13,9 +13,7 @@ use crate::providers::base::{env_str, is_blank, BaseConfig, HasBase};
 use crate::providers::staticfile::{
     self, compute_redirects_config, parse_simple_yaml, StaticFileConfig,
 };
-use crate::providers::DetectableConfig;
-
-pub const NAME: &str = "hugo";
+use crate::providers::Provider;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HugoConfig {
@@ -164,9 +162,10 @@ pub(crate) enum DetectionEvidence {
     Structural,
 }
 
-impl DetectableConfig for HugoConfig {
+impl Provider for HugoConfig {
     type Evidence = DetectionEvidence;
 
+    const NAME: &'static str = "hugo";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Hugo version", "hugo_version"),
         ("Output directory", "static_dir"),
