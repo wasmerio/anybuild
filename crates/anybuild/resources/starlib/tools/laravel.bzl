@@ -3,6 +3,9 @@
 load("//anybuild/tools:node.bzl", "node_build_step", "node_install_steps", "node_toolchain")
 load("//anybuild/tools:php.bzl", "php_build", "php_serve")
 
+def laravel_config(schema = 1, **kwargs):
+    return config(provider = "laravel", schema = schema, **kwargs)
+
 def laravel_build(config, app = None, assets = None):
     """php_build with the node install/build hooked into its phases."""
     node_tc = node_toolchain(config, serving = False)
@@ -28,11 +31,11 @@ def laravel_prepare(config, app):
 
 def laravel_commands(config):
     return {
-        "start": f"php -S localhost:{PORT} -t public",
+        "start": "php -S localhost:{} -t public".format(config.port),
         "after_deploy": "php artisan migrate",
     }
 
-def laravel_serve(config, build, name = None, provider = "laravel", **overrides):
+def laravel_serve(config, build, name = None, provider = None, **overrides):
     """php serve with Laravel's artisan commands and cache-warming prepare."""
     return php_serve(
         config,

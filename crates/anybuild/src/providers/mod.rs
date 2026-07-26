@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::event::ProviderDetail;
@@ -30,10 +30,20 @@ pub mod workspace;
 
 pub use base::{BaseConfig, HasBase};
 
+const SNAPSHOT_EXCLUDED_FIELDS: &[&str] = &[
+    "name",
+    "port",
+    "app_subdir",
+    "install_inputs",
+    "redirects_config",
+    "package_name",
+];
+
 pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Sized {
     type Evidence: Copy;
 
     const NAME: &'static str;
+    const CONFIG_SCHEMA: u32 = 1;
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[];
 
     fn detection_evidence(
@@ -79,20 +89,46 @@ pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Si
         exclude_defaults(self.to_json(), defaults)
     }
 
+    fn persisted_json(&self) -> serde_json::Value {
+        persisted_config_json(self)
+    }
+
     fn from_json(json: serde_json::Value) -> Result<Self> {
         Ok(serde_json::from_value(json)?)
     }
 
     fn merge_json(&self, patch: &serde_json::Value) -> Result<Self> {
         let mut merged = self.to_json();
-        let (Some(target), Some(patch_map)) = (merged.as_object_mut(), patch.as_object()) else {
+        if !merged.is_object() || !patch.is_object() {
             return Err(anyhow!("Config must be a dictionary"));
-        };
-        target.extend(patch_map.clone());
+        }
+        merge_json_value(&mut merged, patch);
         Self::from_json(merged)
     }
 
     fn apply_workspace_config(&mut self, _workspace_root: &Path) {}
+
+    fn validate(&self, _path: &Path) -> Result<()> {
+        Ok(())
+    }
+}
+
+fn merge_json_value(target: &mut serde_json::Value, patch: &serde_json::Value) {
+    match (target, patch) {
+        (serde_json::Value::Object(target), serde_json::Value::Object(patch)) => {
+            for (key, value) in patch {
+                match target.get_mut(key) {
+                    Some(target) if target.is_object() && value.is_object() => {
+                        merge_json_value(target, value);
+                    }
+                    _ => {
+                        target.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+        (target, patch) => *target = patch.clone(),
+    }
 }
 
 macro_rules! provider_registry {
@@ -150,6 +186,12 @@ macro_rules! provider_registry {
                 }
             }
 
+            pub(crate) fn validate(&self, path: &Path) -> Result<()> {
+                match self {
+                    $(Self::$variant(config) => config.validate(path)),+
+                }
+            }
+
             pub(crate) fn merge_json(&self, patch: &serde_json::Value) -> Result<Self> {
                 match self {
                     $(Self::$variant(config) => config.merge_json(patch).map(Self::$variant)),+
@@ -161,6 +203,18 @@ macro_rules! provider_registry {
                     $(Self::$variant(config) => config.exclude_defaults_json()),+
                 }
             }
+
+            pub(crate) fn persisted_json(&self) -> serde_json::Value {
+                match self {
+                    $(Self::$variant(config) => config.persisted_json()),+
+                }
+            }
+
+            pub(crate) fn config_schema(&self) -> u32 {
+                match self {
+                    $(Self::$variant(_) => <$config as Provider>::CONFIG_SCHEMA),+
+                }
+            }
         }
 
         impl ProviderKind {
@@ -170,7 +224,7 @@ macro_rules! provider_registry {
                 }
             }
 
-            fn from_name(name: &str) -> Option<Self> {
+            pub(crate) fn from_name(name: &str) -> Option<Self> {
                 REGISTRY
                     .iter()
                     .copied()
@@ -188,7 +242,7 @@ macro_rules! provider_registry {
                 }
             }
 
-            fn load(
+            pub(crate) fn load(
                 self,
                 path: &Path,
                 base: &BaseConfig,
@@ -202,6 +256,12 @@ macro_rules! provider_registry {
             fn defaults_json(self) -> Result<serde_json::Value> {
                 match self {
                     $(Self::$variant => <$config as Provider>::defaults_json()),+
+                }
+            }
+
+            fn config_schema(self) -> u32 {
+                match self {
+                    $(Self::$variant => <$config as Provider>::CONFIG_SCHEMA),+
                 }
             }
 
@@ -454,6 +514,10 @@ fn finish_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
     config
 }
 
+pub(crate) fn finalize_config(path: &Path, config: ProviderConfig) -> ProviderConfig {
+    finish_config(path, config)
+}
+
 /// The declared field defaults for a provider config (pydantic's notion
 /// for `exclude_defaults`). Defaults never apply the environment overlay.
 pub fn defaults_json(name: &str) -> Result<serde_json::Value> {
@@ -462,10 +526,132 @@ pub fn defaults_json(name: &str) -> Result<serde_json::Value> {
         .defaults_json()
 }
 
+pub(crate) fn provider_schema(name: &str) -> Result<u32> {
+    let kind = ProviderKind::from_name(name).ok_or_else(|| anyhow!("unknown provider {name:?}"))?;
+    Ok(kind.config_schema())
+}
+
 /// Pydantic's `model_dump(mode="json", exclude_defaults=True)` for a typed
 /// provider config.
 pub fn exclude_defaults_json(config: &ProviderConfig) -> serde_json::Value {
     config.exclude_defaults_json()
+}
+
+/// The stable, provider-owned portion written into an Anybuild file.
+///
+/// Values that merely cache project analysis remain live, while runtime
+/// versions are pinned even when they currently equal the provider default.
+fn persisted_config_json<C: Provider>(config: &C) -> serde_json::Value {
+    let full = config.to_json();
+    let reduced = config.exclude_defaults_json();
+    let Some(full) = full.as_object() else {
+        return serde_json::json!({});
+    };
+    let reduced = reduced.as_object();
+    let mut persisted = serde_json::Map::new();
+    for (key, value) in full {
+        if SNAPSHOT_EXCLUDED_FIELDS.contains(&key.as_str()) {
+            continue;
+        }
+        let pin = key.ends_with("_version");
+        let changed = reduced.and_then(|values| values.get(key));
+        if pin && !value.is_null() {
+            persisted.insert(key.clone(), value.clone());
+        } else if let Some(changed) = changed {
+            persisted.insert(key.clone(), changed.clone());
+        }
+    }
+    serde_json::Value::Object(persisted)
+}
+
+pub(crate) fn load_explicit_provider(
+    name: &str,
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<ProviderConfig> {
+    let kind = ProviderKind::from_name(name).ok_or_else(|| anyhow!("unknown provider {name:?}"))?;
+    kind.load(path, base, &operation.without_environment())
+        .map(|config| finish_config(path, config))
+        .with_context(|| format!("loading {name} config"))
+}
+
+pub(crate) fn apply_environment(
+    config: ProviderConfig,
+    operation: &OperationContext,
+) -> Result<ProviderConfig> {
+    let provider = config.provider_name();
+    let mut json = config.to_json();
+    let fields = json
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("{provider} config did not serialize to an object"))?;
+    let mut applied = None;
+    for (field, current) in fields.iter_mut() {
+        let upper = field.to_ascii_uppercase();
+        let anybuild = format!("ANYBUILD_{upper}");
+        let shipit = format!("SHIPIT_{upper}");
+        let Some((name, raw)) = operation
+            .environment_var(&anybuild)
+            .map(|value| (anybuild, value))
+            .or_else(|| {
+                operation
+                    .environment_var(&shipit)
+                    .map(|value| (shipit, value))
+            })
+            .or_else(|| {
+                (field == "port")
+                    .then(|| {
+                        operation
+                            .environment_var("PORT")
+                            .map(|value| ("PORT".into(), value))
+                    })
+                    .flatten()
+            })
+        else {
+            continue;
+        };
+        *current = parse_environment_value(&name, &raw, current)?;
+        applied = Some((name, raw));
+    }
+    config_from_json(provider, serde_json::Value::Object(fields.clone())).map_err(|error| {
+        match applied {
+            Some((name, raw)) => anyhow!("Invalid value for {name}: {raw:?}: {error}"),
+            None => error,
+        }
+    })
+}
+
+fn parse_environment_value(
+    name: &str,
+    raw: &str,
+    current: &serde_json::Value,
+) -> Result<serde_json::Value> {
+    use serde_json::Value;
+    let invalid =
+        |expected: &str| anyhow!("Invalid value for {name}: {raw:?}; expected {expected}");
+    match current {
+        Value::Bool(_) => match raw.trim().to_ascii_lowercase().as_str() {
+            "true" | "t" | "yes" | "y" | "on" | "1" => Ok(Value::Bool(true)),
+            "false" | "f" | "no" | "n" | "off" | "0" => Ok(Value::Bool(false)),
+            _ => Err(invalid("a boolean")),
+        },
+        Value::Number(number) if number.is_i64() || number.is_u64() => raw
+            .trim()
+            .parse::<i64>()
+            .map(|value| Value::Number(value.into()))
+            .map_err(|_| invalid("an integer")),
+        Value::Number(_) => {
+            let value = raw.trim().parse::<f64>().map_err(|_| invalid("a number"))?;
+            serde_json::Number::from_f64(value)
+                .map(Value::Number)
+                .ok_or_else(|| invalid("a finite number"))
+        }
+        Value::Array(_) | Value::Object(_) => {
+            serde_json::from_str(raw).map_err(|_| invalid("valid JSON"))
+        }
+        Value::String(_) => Ok(Value::String(raw.to_owned())),
+        Value::Null => Ok(serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.into()))),
+    }
 }
 
 /// Apply a provider's declared defaults to an already serialized config.

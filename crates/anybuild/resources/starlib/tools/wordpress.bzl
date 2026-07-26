@@ -18,6 +18,9 @@ load(
     "php_use_deps",
 )
 
+def wordpress_config(schema = 1, **kwargs):
+    return config(provider = "wordpress", schema = schema, **kwargs)
+
 def _wp_cli_url(config):
     version = config.wp_cli_version
     if version:
@@ -116,7 +119,7 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
 def wordpress_commands(config, app, assets):
     commands = php_commands(config, app)
     if config.phpix and "start" in commands:
-        commands["start"] = "phpix --startup-script={}/start-wp.php -S localhost:{} -t {}".format(assets.serve_path, PORT, app.serve_path)
+        commands["start"] = "phpix --startup-script={}/start-wp.php -S localhost:{} -t {}".format(assets.serve_path, config.port, app.serve_path)
     return merged({
         "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path),
         "after_deploy": "bash {}/setup-wp.sh".format(assets.serve_path),
@@ -135,7 +138,7 @@ def wordpress_env(config, wpcontent_base):
         env_vars["WP_DEFAULT_THEME"] = config.wp_extension_activate_target
     return env_vars
 
-def wordpress_serve(config, build, name = None, provider = "wordpress", **overrides):
+def wordpress_serve(config, build, name = None, provider = None, **overrides):
     app = build.app
     assets = build.assets
     wpcontent_base = build.wpcontent_base

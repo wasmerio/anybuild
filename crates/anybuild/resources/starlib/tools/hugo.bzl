@@ -3,6 +3,9 @@
 load("//anybuild:serve.bzl", "build")
 load("//anybuild/tools:staticfile.bzl", "staticfile_serve", "sws_config_mount")
 
+def hugo_config(schema = 1, **kwargs):
+    return config(provider = "hugo", schema = schema, **kwargs)
+
 def hugo_build(config, static_app = None):
     """Build the site with hugo into the static_app mount."""
     hugo = dep("hugo", config.hugo_version)

@@ -859,6 +859,15 @@ impl Provider for NodeStaticConfig {
     fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
         load_config(path, base, operation)
     }
+
+    fn validate(&self, _path: &Path) -> Result<()> {
+        if let Some(framework) = self.framework {
+            framework.get_static_output_dir().ok_or_else(|| {
+                anyhow!("framework {framework:?} does not have a static output directory")
+            })?;
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------

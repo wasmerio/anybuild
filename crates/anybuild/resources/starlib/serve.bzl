@@ -76,13 +76,13 @@ def _override_serve_commands(config, commands):
         result["after_deploy"] = config.commands.after_deploy
     for key in ("start", "after_deploy"):
         if result.get(key):
-            result[key] = result[key].replace("$PORT", PORT)
+            result[key] = result[key].replace("$PORT", str(config.port))
     return result
 
 def serve(
         config,
         build,
-        provider,
+        provider = None,
         name = None,
         commands = {},
         env = {},
@@ -107,7 +107,7 @@ def serve(
     # This module's serve() shadows the raw builtin, so call its alias.
     return _serve(
         name = name or config.name,
-        provider = provider,
+        provider = provider or config.provider,
         cwd = cwd,
         build = _override_group_commands(config, steps),
         deps = list(build.serve_deps) + list(serve_deps) + list(extra_deps),

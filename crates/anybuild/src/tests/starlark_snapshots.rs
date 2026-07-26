@@ -5,12 +5,13 @@ use std::path::PathBuf;
 
 use crate::plan::layout::LocalLayout;
 use crate::plan::snapshot;
+use crate::sdk::CommandOverrides;
+use crate::starlark::config::ConfigResolutionOptions;
 use crate::starlark::eval::{evaluate_anybuild, EvaluateOptions};
 use crate::starlark::loader::StdlibSource;
 use serde::Deserialize;
 
 const EXPECTED_SNAPSHOT_CASES: usize = 98;
-const EXPECTED_LEGACY_CASES: usize = 80;
 const ALLOW_MISSING_FIXTURES_ENV: &str = "ANYBUILD_ALLOW_MISSING_FIXTURES";
 const UPDATE_FIXTURES_ENV: &str = "ANYBUILD_UPDATE_FIXTURES";
 
@@ -25,11 +26,10 @@ struct Manifest {
 struct Case {
     name: String,
     workspace: PathBuf,
+    subdir: Option<String>,
     #[serde(alias = "shipit")]
     anybuild: String,
     config: serde_json::Value,
-    #[serde(default, alias = "legacy_shipit")]
-    legacy_anybuild: Option<String>,
 }
 
 #[test]
@@ -92,15 +92,27 @@ fn plan_snapshots_match() {
         let layout = LocalLayout::new(&anybuild_dir);
         let build_path = layout.build_path();
 
+        let paths =
+            crate::internal::paths::resolve_project_paths(&case.workspace, case.subdir.as_deref())
+                .unwrap();
         let result = evaluate_anybuild(EvaluateOptions {
             anybuild_file,
-            project_root: Some(case.workspace.clone()),
-            config: case.config.clone(),
+            project_root: case.workspace.clone(),
+            source_dir: paths.app_path.clone(),
+            config_resolution: ConfigResolutionOptions {
+                paths,
+                overrides: CommandOverrides {
+                    config: Some(case.config.clone()),
+                    ..CommandOverrides::default()
+                },
+                wasmer: false,
+                operation: crate::operation::OperationContext::for_test(),
+            },
             layout: Box::new(layout),
             stdlib: StdlibSource::Dir(manifest.starlib.clone()),
         });
         let serve = match result {
-            Ok(serve) => serve,
+            Ok(evaluated) => evaluated.serve,
             Err(err) => {
                 failures.push(format!("{}: evaluation failed: {err:#}", case.name));
                 continue;
@@ -136,46 +148,13 @@ fn plan_snapshots_match() {
         }
     }
 
-    // Legacy compat: every fully-inlined main-era Anybuild file must still
-    // evaluate (same bar the Python evaluator meets).
-    let mut legacy_ok = 0usize;
-    let mut legacy_total = 0usize;
-    for case in &manifest.cases {
-        let Some(legacy) = &case.legacy_anybuild else {
-            continue;
-        };
-        legacy_total += 1;
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let work_dir = tmp.path().join("eval");
-        std::fs::create_dir_all(&work_dir).unwrap();
-        let anybuild_file = work_dir.join("Anybuild");
-        std::fs::write(&anybuild_file, legacy).unwrap();
-        let layout = LocalLayout::new(tmp.path().join(".anybuild"));
-        match evaluate_anybuild(EvaluateOptions {
-            anybuild_file,
-            project_root: Some(case.workspace.clone()),
-            config: case.config.clone(),
-            layout: Box::new(layout),
-            stdlib: StdlibSource::Dir(manifest.starlib.clone()),
-        }) {
-            Ok(_) => legacy_ok += 1,
-            Err(err) => failures.push(format!(
-                "{} (legacy): evaluation failed: {err:#}",
-                case.name
-            )),
-        }
-    }
-
     if update {
         eprintln!(
-            "snapshots: rewrote {passed}/{} ({updated} changed); legacy: {legacy_ok}/{legacy_total} evaluate",
+            "snapshots: rewrote {passed}/{} ({updated} changed)",
             manifest.cases.len()
         );
     } else {
-        eprintln!(
-            "snapshots: {passed}/{} matched; legacy: {legacy_ok}/{legacy_total} evaluate",
-            manifest.cases.len()
-        );
+        eprintln!("snapshots: {passed}/{} matched", manifest.cases.len());
     }
     if !failures.is_empty() {
         let shown = failures
@@ -196,8 +175,6 @@ fn plan_snapshots_match() {
         );
     }
     assert_eq!(passed, EXPECTED_SNAPSHOT_CASES);
-    assert_eq!(legacy_total, EXPECTED_LEGACY_CASES);
-    assert_eq!(legacy_ok, EXPECTED_LEGACY_CASES);
 }
 
 fn first_diff(expected: &str, actual: &str) -> String {

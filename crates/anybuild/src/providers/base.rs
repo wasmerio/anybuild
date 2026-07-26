@@ -143,18 +143,6 @@ impl Default for BaseConfig {
     }
 }
 
-impl BaseConfig {
-    /// Apply the fallible Anybuild overlay to the declared defaults.
-    pub fn from_env(operation: &OperationContext) -> Result<Self> {
-        Ok(Self {
-            name: env_str(operation, "name"),
-            port: env_int(operation, "port")?.or(Some(8080)),
-            commands: CustomCommands::default(),
-            app_subdir: env_str(operation, "app_subdir"),
-        })
-    }
-}
-
 /// Every provider config embeds the base and exposes it uniformly.
 pub trait HasBase {
     fn base(&self) -> &BaseConfig;

@@ -3,6 +3,9 @@
 load("//anybuild:serve.bzl", "build")
 load("//anybuild/tools:staticfile.bzl", "staticfile_serve", "sws_config_mount")
 
+def jekyll_config(schema = 1, **kwargs):
+    return config(provider = "jekyll", schema = schema, **kwargs)
+
 def jekyll_build(config, static_app = None):
     """Build the site with jekyll into the static_app mount."""
     ruby = dep("ruby", config.ruby_version)

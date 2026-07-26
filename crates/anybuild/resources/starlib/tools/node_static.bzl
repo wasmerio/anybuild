@@ -21,6 +21,9 @@ load(
     "sws_config_step",
 )
 
+def nodestatic_config(schema = 1, **kwargs):
+    return config(provider = "node-static", schema = schema, **kwargs)
+
 def nodestatic_build(config, static_app = None):
     """Build the site with node into static_app; nothing of node is served."""
     tc = node_toolchain(config, serving = False)

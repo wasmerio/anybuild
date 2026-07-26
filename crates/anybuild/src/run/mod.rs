@@ -18,9 +18,8 @@ pub(crate) struct HostMount<'a> {
 
 /// Port of `runners/base.py::Runner`.
 pub trait Runner {
-    /// Apply the runner's config hook before evaluation. The Wasmer runner
-    /// uses this to select Wasmer-specific dependencies and preparation.
-    fn prepare_config(&mut self, config: ProviderConfig) -> ProviderConfig;
+    /// Retain the already resolved config for packaging metadata.
+    fn record_provider_config(&mut self, _config: &ProviderConfig) {}
     fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step>;
     fn build(&mut self, serve: &Serve) -> Result<()>;
     fn prepare(&mut self, env: &IndexMap<String, String>, prepare: &[RunStep]) -> Result<()>;

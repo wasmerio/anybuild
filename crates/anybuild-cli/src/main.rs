@@ -62,6 +62,9 @@ enum Command {
         /// Output path of the generated Anybuild file.
         #[arg(short, long, alias = "output")]
         out: Option<PathBuf>,
+        /// Check whether the persisted provider config matches detection.
+        #[arg(long)]
+        check: bool,
     },
     /// Evaluate the project and emit config, commands, and services.
     Plan {
@@ -148,7 +151,7 @@ fn main() {
     }
     let result = match cli.command {
         Command::Auto(args) => commands::auto::run(args),
-        Command::Generate { shared, out } => commands::generate::run(shared, out),
+        Command::Generate { shared, out, check } => commands::generate::run(shared, out, check),
         Command::Plan {
             shared,
             out,

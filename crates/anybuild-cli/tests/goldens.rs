@@ -50,6 +50,10 @@ fn example_env(name: &str) -> Vec<(&'static str, &'static str)> {
     }
 }
 
+fn example_provider(name: &str) -> Option<&'static str> {
+    (name == "php-wordpress-empty").then_some("wordpress")
+}
+
 #[test]
 fn generated_files_match_examples() {
     let root = repo_root();
@@ -86,7 +90,7 @@ fn generated_files_match_examples() {
             std::env::set_var(key, value);
         }
 
-        let result = generate_for(&example_dir, subdir);
+        let result = generate_for(&example_dir, subdir, example_provider(&name));
 
         for (key, _) in &env {
             std::env::remove_var(key);
@@ -167,7 +171,11 @@ fn update_manifest_anybuild_texts(root: &Path) -> usize {
         for (key, value) in &env {
             std::env::set_var(key, value);
         }
-        let generated = generate_for(&root.join(&workspace), subdir.as_deref());
+        let generated = generate_for(
+            &root.join(&workspace),
+            subdir.as_deref(),
+            example_provider(base_name),
+        );
         for (key, _) in &env {
             std::env::remove_var(key);
         }
@@ -201,13 +209,20 @@ fn strip_baked_name(text: &str) -> String {
     format!("{}{}", &text[..start], &text[end..])
 }
 
-fn generate_for(workspace: &Path, subdir: Option<&str>) -> anyhow::Result<String> {
+fn generate_for(
+    workspace: &Path,
+    subdir: Option<&str>,
+    provider: Option<&str>,
+) -> anyhow::Result<String> {
     let tmp = tempfile::tempdir()?;
     let out = tmp.path().join("Anybuild.generated");
     let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"));
     command.arg("generate").arg(workspace);
     if let Some(subdir) = subdir {
         command.args(["--subdir", subdir]);
+    }
+    if let Some(provider) = provider {
+        command.args(["--provider", provider]);
     }
     command.arg("--out").arg(&out);
     // Env vars set by the caller are inherited.

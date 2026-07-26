@@ -24,6 +24,7 @@ use crate::plan::{
     CopyStep, EnvStep, Mount, Package, PathStep, RunStep, Serve, Service, Step, UseStep, Volume,
     WorkdirStep, WriteFileStep,
 };
+use crate::starlark::config::{ConfigResolutionOptions, ConfigValue, ResolvedConfig};
 
 use crate::starlark::values::{MountValue, PackageValue, ServiceValue, StepValue, VolumeValue};
 
@@ -33,6 +34,8 @@ pub struct Ctx {
     pub layout: Box<dyn MountLayout>,
     pub source_dir: Option<PathBuf>,
     pub serves: RefCell<IndexMap<String, Serve>>,
+    pub config_resolution: Option<ConfigResolutionOptions>,
+    pub resolved_config: RefCell<Option<ResolvedConfig>>,
 }
 
 impl Ctx {
@@ -41,7 +44,14 @@ impl Ctx {
             layout,
             source_dir,
             serves: RefCell::new(IndexMap::new()),
+            config_resolution: None,
+            resolved_config: RefCell::new(None),
         }
+    }
+
+    pub fn with_config_resolution(mut self, options: ConfigResolutionOptions) -> Self {
+        self.config_resolution = Some(options);
+        self
     }
 
     /// Port of `Ctx.file_exists`: app-dir-scoped, lexical escape check
@@ -250,6 +260,39 @@ fn build_serve(
 
 #[starlark::starlark_module]
 pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
+    fn config(
+        provider: &str,
+        schema: i32,
+        #[starlark(kwargs)] kwargs: UnpackDictEntries<String, Value>,
+        eval: &mut Evaluator,
+    ) -> anyhow::Result<ConfigValue> {
+        if schema < 0 {
+            bail!("config schema must be non-negative");
+        }
+        let resolution = ctx(eval)?
+            .config_resolution
+            .clone()
+            .ok_or_else(|| anyhow!("config() is not available in this evaluation"))?;
+        if ctx(eval)?.resolved_config.borrow().is_some() {
+            bail!("Only one provider config may be constructed per Anybuild file");
+        }
+        let values = kwargs
+            .entries
+            .into_iter()
+            .map(|(key, value)| Ok((key, value.to_json_value()?)))
+            .collect::<Result<serde_json::Map<String, serde_json::Value>>>()?;
+        let resolved =
+            resolution.resolve(provider, schema as u32, serde_json::Value::Object(values))?;
+        let config = resolved
+            .effective
+            .to_json()
+            .as_object()
+            .cloned()
+            .ok_or_else(|| anyhow!("provider config must be a dictionary"))?;
+        ctx(eval)?.resolved_config.replace(Some(resolved));
+        Ok(ConfigValue::provider(config, provider))
+    }
+
     fn dep(
         name: &str,
         version: Option<NoneOr<&str>>,

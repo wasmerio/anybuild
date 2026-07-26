@@ -58,6 +58,48 @@ fn plan_command_delegates_to_the_sdk_contract() {
 }
 
 #[test]
+fn generate_check_reports_drift_without_rewriting() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();
+    std::fs::write(tmp.path().join("Staticfile"), "root: public\n").unwrap();
+    let generated = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("generate")
+        .arg(tmp.path())
+        .args(["--provider", "staticfile"])
+        .output()
+        .unwrap();
+    assert!(generated.status.success());
+    let before = std::fs::read_to_string(tmp.path().join("Anybuild")).unwrap();
+
+    let current = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("generate")
+        .arg(tmp.path())
+        .args(["--check", "--provider", "staticfile"])
+        .output()
+        .unwrap();
+    assert!(
+        current.status.success(),
+        "{}",
+        String::from_utf8_lossy(&current.stderr)
+    );
+
+    std::fs::write(tmp.path().join("Staticfile"), "root: dist\n").unwrap();
+    let drifted = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("generate")
+        .arg(tmp.path())
+        .args(["--check", "--provider", "staticfile"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&drifted.stderr);
+    assert!(!drifted.status.success(), "{stderr}");
+    assert!(stderr.contains("config.static_dir"), "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(tmp.path().join("Anybuild")).unwrap(),
+        before
+    );
+}
+
+#[test]
 fn plan_reports_the_detected_provider_and_its_details() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(
@@ -92,8 +134,9 @@ fn legacy_project_file_and_state_directory_are_renamed() {
     std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();
     std::fs::write(
         tmp.path().join("Shipit"),
-        r#"load("//shipit/tools:staticfile.shipit", "staticfile_build", "staticfile_serve")
+        r#"load("//shipit/tools:staticfile.shipit", "staticfile_build", "staticfile_config", "staticfile_serve")
 
+config = staticfile_config()
 build = staticfile_build(config)
 staticfile_serve(config, build, name = "legacy")
 "#,
@@ -133,10 +176,11 @@ fn legacy_subdir_project_file_is_renamed() {
     std::fs::write(app.join("index.html"), "<h1>test</h1>\n").unwrap();
     std::fs::write(
         tmp.path().join("Shipit.apps-site"),
-        r#"load("//shipit/tools:staticfile.shipit", "staticfile_build", "staticfile_serve")
+        r#"load("//shipit/tools:staticfile.shipit", "staticfile_build", "staticfile_config", "staticfile_serve")
 
 app_subdir = "apps/site"
 
+config = staticfile_config()
 build = staticfile_build(config)
 staticfile_serve(config, build, name = "legacy-subdir")
 "#,
@@ -233,6 +277,13 @@ fn runtime_node_framework_is_rejected_by_node_static_without_panicking() {
         .arg("generate")
         .arg(tmp.path())
         .args(["--provider", "node-static"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("plan")
+        .arg(tmp.path())
+        .args(["--provider", "node-static"])
         .env("ANYBUILD_FRAMEWORK", "express")
         .output()
         .unwrap();
@@ -257,10 +308,18 @@ fn malformed_typed_env_overrides_are_reported_as_errors() {
         ("FRAMEWORK", "not-a-framework"),
         ("EXTRA_DEPENDENCIES", "not-json"),
     ] {
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        let generated = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
             .arg("generate")
             .arg(tmp.path())
             .args(["--provider", "node", "--out"])
+            .arg(tmp.path().join(format!("Anybuild.{field}")))
+            .output()
+            .unwrap();
+        assert!(generated.status.success());
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+            .arg("plan")
+            .arg(tmp.path())
+            .args(["--provider", "node", "--anybuild-path"])
             .arg(tmp.path().join(format!("Anybuild.{field}")))
             .env(format!("ANYBUILD_{field}"), value)
             .output()
@@ -282,8 +341,9 @@ fn empty_string_env_override_is_preserved() {
     std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();
     std::fs::write(
         tmp.path().join("Anybuild"),
-        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_build", "staticfile_serve")
+        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_build", "staticfile_config", "staticfile_serve")
 
+config = staticfile_config()
 build = staticfile_build(config)
 staticfile_serve(config, build, name = "empty-env")
 "#,
@@ -313,8 +373,9 @@ fn anybuild_env_takes_precedence_and_shipit_env_remains_supported() {
     std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();
     std::fs::write(
         tmp.path().join("Anybuild"),
-        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_build", "staticfile_serve")
+        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_build", "staticfile_config", "staticfile_serve")
 
+config = staticfile_config()
 build = staticfile_build(config)
 staticfile_serve(config, build, name = "env-precedence")
 "#,
@@ -354,6 +415,10 @@ fn empty_string_env_still_triggers_python_truthiness_fallbacks() {
     let project = tmp.path().join("truthy-proj");
     std::fs::create_dir(&project).unwrap();
     std::fs::write(project.join("index.html"), "<h1>test</h1>\n").unwrap();
+    anybuild::Anybuild::new(&project)
+        .with_provider("staticfile")
+        .generate(Default::default())
+        .unwrap();
 
     // ANYBUILD_NAME="" must fall back to the directory name (generator.py:57),
     // and ANYBUILD_WP_VERSION="" must not force wordpress detection
@@ -384,8 +449,9 @@ fn copied_binary_uses_embedded_runtime_resources() {
     std::fs::write(project.join("index.html"), "<h1>relocatable</h1>\n").unwrap();
     std::fs::write(
         project.join("Anybuild"),
-        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_build", "staticfile_serve")
+        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_build", "staticfile_config", "staticfile_serve")
 
+config = staticfile_config()
 build = staticfile_build(config)
 staticfile_serve(config, build, name = "relocatable")
 "#,

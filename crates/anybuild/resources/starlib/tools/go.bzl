@@ -2,6 +2,9 @@
 
 load("//anybuild:serve.bzl", "build", "serve")
 
+def go_config(schema = 1, **kwargs):
+    return config(provider = "go", schema = schema, **kwargs)
+
 def go_build(config, app = None, temp = None):
     """Compile the Go binary in the temp mount and copy it into app."""
     go = dep("go", config.go_version)
@@ -36,7 +39,7 @@ def go_build(config, app = None, temp = None):
         temp = temp,
     )
 
-def go_serve(config, build, name = None, provider = "go", **overrides):
+def go_serve(config, build, name = None, provider = None, **overrides):
     """Serve the compiled binary from the app mount."""
     app = build.app
     return serve(

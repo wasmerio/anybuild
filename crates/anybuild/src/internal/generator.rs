@@ -9,11 +9,9 @@ pub fn anybuild_version() -> &'static str {
 }
 
 pub struct Entrypoint {
+    pub config: (&'static str, &'static str),
     pub build: (&'static str, &'static str),
     pub serve: (&'static str, &'static str),
-    /// The deployment identity the generated file passes to the serve when
-    /// it differs from the serve function's default.
-    pub provider: Option<&'static str>,
 }
 
 const STATICFILE_SERVE: (&str, &str) = ("//anybuild/tools:staticfile.bzl", "staticfile_serve");
@@ -22,59 +20,59 @@ const STATICFILE_SERVE: (&str, &str) = ("//anybuild/tools:staticfile.bzl", "stat
 pub fn entrypoint(provider: &str) -> Result<Entrypoint> {
     let ep = match provider {
         "python" => Entrypoint {
+            config: ("//anybuild/tools:python.bzl", "python_config"),
             build: ("//anybuild/tools:python.bzl", "python_build"),
             serve: ("//anybuild/tools:python.bzl", "python_serve"),
-            provider: None,
         },
         "staticfile" => Entrypoint {
+            config: ("//anybuild/tools:staticfile.bzl", "staticfile_config"),
             build: ("//anybuild/tools:staticfile.bzl", "staticfile_build"),
             serve: STATICFILE_SERVE,
-            provider: None,
         },
         "hugo" => Entrypoint {
+            config: ("//anybuild/tools:hugo.bzl", "hugo_config"),
             build: ("//anybuild/tools:hugo.bzl", "hugo_build"),
             serve: STATICFILE_SERVE,
-            provider: Some("hugo"),
         },
         "mkdocs" => Entrypoint {
+            config: ("//anybuild/tools:mkdocs.bzl", "mkdocs_config"),
             build: ("//anybuild/tools:mkdocs.bzl", "mkdocs_build"),
             serve: STATICFILE_SERVE,
-            provider: Some("mkdocs"),
         },
         "jekyll" => Entrypoint {
+            config: ("//anybuild/tools:jekyll.bzl", "jekyll_config"),
             build: ("//anybuild/tools:jekyll.bzl", "jekyll_build"),
             serve: STATICFILE_SERVE,
-            provider: Some("jekyll"),
         },
         "node-static" => Entrypoint {
+            config: ("//anybuild/tools:node_static.bzl", "nodestatic_config"),
             build: ("//anybuild/tools:node_static.bzl", "nodestatic_build"),
             serve: STATICFILE_SERVE,
-            provider: Some("node-static"),
         },
         "go" => Entrypoint {
+            config: ("//anybuild/tools:go.bzl", "go_config"),
             build: ("//anybuild/tools:go.bzl", "go_build"),
             serve: ("//anybuild/tools:go.bzl", "go_serve"),
-            provider: None,
         },
         "php" => Entrypoint {
+            config: ("//anybuild/tools:php.bzl", "php_config"),
             build: ("//anybuild/tools:php.bzl", "php_build"),
             serve: ("//anybuild/tools:php.bzl", "php_serve"),
-            provider: None,
         },
         "wordpress" => Entrypoint {
+            config: ("//anybuild/tools:wordpress.bzl", "wordpress_config"),
             build: ("//anybuild/tools:wordpress.bzl", "wordpress_build"),
             serve: ("//anybuild/tools:wordpress.bzl", "wordpress_serve"),
-            provider: None,
         },
         "node" => Entrypoint {
+            config: ("//anybuild/tools:node.bzl", "node_config"),
             build: ("//anybuild/tools:node.bzl", "node_build"),
             serve: ("//anybuild/tools:node.bzl", "node_serve"),
-            provider: None,
         },
         "laravel" => Entrypoint {
+            config: ("//anybuild/tools:laravel.bzl", "laravel_config"),
             build: ("//anybuild/tools:laravel.bzl", "laravel_build"),
             serve: ("//anybuild/tools:laravel.bzl", "laravel_serve"),
-            provider: None,
         },
         other => {
             return Err(anyhow!(
@@ -90,7 +88,10 @@ pub fn generate_anybuild_loader(
     entrypoint: &Entrypoint,
     subdir: Option<&str>,
     name: Option<&str>,
+    schema: u32,
+    config: &serde_json::Value,
 ) -> String {
+    let (config_module, config_function) = entrypoint.config;
     let (build_module, build_function) = entrypoint.build;
     let (serve_module, serve_function) = entrypoint.serve;
     let mut out: Vec<String> = vec![
@@ -101,12 +102,15 @@ pub fn generate_anybuild_loader(
         "# This file is yours to edit: add steps or override the serve below.".to_owned(),
         String::new(),
     ];
+    debug_assert_eq!(config_module, build_module);
     if build_module == serve_module {
         out.push(format!(
-            "load(\"{build_module}\", \"{build_function}\", \"{serve_function}\")"
+            "load(\"{build_module}\", \"{build_function}\", \"{config_function}\", \"{serve_function}\")"
         ));
     } else {
-        out.push(format!("load(\"{build_module}\", \"{build_function}\")"));
+        out.push(format!(
+            "load(\"{build_module}\", \"{build_function}\", \"{config_function}\")"
+        ));
         out.push(format!("load(\"{serve_module}\", \"{serve_function}\")"));
     }
     out.push(String::new());
@@ -117,6 +121,8 @@ pub fn generate_anybuild_loader(
         ));
         out.push(String::new());
     }
+    out.extend(serialize_config(config_function, schema, config));
+    out.push(String::new());
     out.push(format!("build = {build_function}(config)"));
     out.push(String::new());
     let mut serve_args: Vec<String> = vec!["config".to_owned(), "build".to_owned()];
@@ -128,9 +134,6 @@ pub fn generate_anybuild_loader(
             serde_json::to_string(name).expect("string serializes")
         ));
     }
-    if let Some(provider) = entrypoint.provider {
-        serve_args.push(format!("provider = \"{provider}\""));
-    }
     out.push(format!("{serve_function}({})", serve_args.join(", ")));
     out.push(String::new());
     out.join("\n")
@@ -141,7 +144,92 @@ pub fn generate_anybuild(
     provider: &str,
     config_name: Option<&str>,
     subdir: Option<&str>,
+    schema: u32,
+    config: &serde_json::Value,
 ) -> Result<String> {
     let ep = entrypoint(provider)?;
-    Ok(generate_anybuild_loader(&ep, subdir, config_name))
+    Ok(generate_anybuild_loader(
+        &ep,
+        subdir,
+        config_name,
+        schema,
+        config,
+    ))
+}
+
+fn serialize_config(function: &str, schema: u32, config: &serde_json::Value) -> Vec<String> {
+    let mut out = vec![
+        format!("config = {function}("),
+        format!("    schema = {schema},"),
+    ];
+    if let Some(config) = config.as_object() {
+        for (key, value) in config {
+            out.push(format!("    {key} = {},", starlark_literal(value, 1)));
+        }
+    }
+    out.push(")".to_owned());
+    out
+}
+
+fn starlark_literal(value: &serde_json::Value, indent: usize) -> String {
+    use serde_json::Value;
+    match value {
+        Value::Null => "None".to_owned(),
+        Value::Bool(true) => "True".to_owned(),
+        Value::Bool(false) => "False".to_owned(),
+        Value::Number(number) => number.to_string(),
+        Value::String(value) => serde_json::to_string(value).expect("string serializes"),
+        Value::Array(values) if values.is_empty() => "[]".to_owned(),
+        Value::Array(values) => {
+            let child = "    ".repeat(indent + 1);
+            let close = "    ".repeat(indent);
+            let values = values
+                .iter()
+                .map(|value| format!("{child}{},", starlark_literal(value, indent + 1)))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("[\n{values}\n{close}]")
+        }
+        Value::Object(values) if values.is_empty() => "{}".to_owned(),
+        Value::Object(values) => {
+            let child = "    ".repeat(indent + 1);
+            let close = "    ".repeat(indent);
+            let values = values
+                .iter()
+                .map(|(key, value)| {
+                    format!(
+                        "{child}{}: {},",
+                        serde_json::to_string(key).expect("key serializes"),
+                        starlark_literal(value, indent + 1)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("{{\n{values}\n{close}}}")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_literals_are_deterministic_starlark() {
+        let config = serde_json::json!({
+            "enabled": true,
+            "missing": null,
+            "items": ["one", false],
+            "mapping": {"answer": 42},
+        });
+        let generated = generate_anybuild("node", Some("app"), None, 1, &config).unwrap();
+        assert!(generated.contains("    enabled = True,\n"));
+        assert!(generated.contains("    missing = None,\n"));
+        assert!(generated.contains("    items = [\n        \"one\",\n        False,\n    ],\n"));
+        assert!(generated.contains("    mapping = {\n        \"answer\": 42,\n    },\n"));
+        assert_eq!(
+            generated,
+            generate_anybuild("node", Some("app"), None, 1, &config).unwrap()
+        );
+    }
 }

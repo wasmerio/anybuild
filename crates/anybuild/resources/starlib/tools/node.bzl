@@ -8,6 +8,9 @@ laravel) can reuse exactly the fragments they need.
 load("//anybuild:prelude.bzl", "compact")
 load("//anybuild:serve.bzl", "build", "serve")
 
+def node_config(schema = 1, **kwargs):
+    return config(provider = "node", schema = schema, **kwargs)
+
 _LOCKFILES = {
     "npm": ["package-lock.json"],
     "pnpm": ["pnpm-lock.yaml"],
@@ -214,7 +217,7 @@ def node_build(config, build_mount = None, app = None):
         assets = assets,
     )
 
-def node_serve(config, build, name = None, provider = "node", prepare = None, **overrides):
+def node_serve(config, build, name = None, provider = None, prepare = None, **overrides):
     """Serve the exported app with the start command detected at load time."""
     app = build.app
     commands = {}

@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 use anybuild::plan::Step;
 use anybuild::{
     Anybuild, AutoOptions, BuildOptions, DeployOptions, DeployOutcome, DeployTarget, Event,
-    GenerateOptions, GenerationPolicy, PlanOptions, ProcessIo, RunOptions, WasmerOptions,
+    GenerateOptions, GenerationCheckStatus, GenerationPolicy, PlanOptions, ProcessIo, RunOptions,
+    WasmerOptions,
 };
 
 fn static_project() -> tempfile::TempDir {
@@ -139,7 +140,9 @@ fn env_files_layer_from_workspace_to_subdir_and_named_environment() {
     std::fs::write(app.join(".env.prod"), "VALUE=prod\n").unwrap();
     std::fs::write(
         project.path().join("Anybuild.apps-site"),
-        r#"app_subdir = "apps/site"
+        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_config")
+app_subdir = "apps/site"
+config = staticfile_config()
 serve(
     name = "env",
     provider = "staticfile",
@@ -181,11 +184,94 @@ fn environment_is_snapshotted_and_overrides_are_isolated() {
 }
 
 #[test]
+fn persisted_config_is_stable_and_generation_check_reports_drift() {
+    let project = static_project();
+    std::fs::write(project.path().join("Staticfile"), "root: public\n").unwrap();
+    let sdk = Anybuild::new(project.path())
+        .inherit_process_env(false)
+        .with_provider("staticfile")
+        .with_env("ANYBUILD_STATIC_DIR", "runtime")
+        .with_config(serde_json::json!({"static_dir": "cli"}));
+
+    let generated = sdk.generate(GenerateOptions::default()).unwrap();
+    assert!(generated.content.contains("static_dir = \"public\""));
+    assert!(!generated.content.contains("runtime"));
+    assert!(!generated.content.contains("static_dir = \"cli\""));
+    assert_eq!(generated.config["static_dir"], "public");
+
+    let plan = sdk.plan(PlanOptions::default()).unwrap();
+    assert_eq!(plan.config["static_dir"], "cli");
+
+    let current = sdk.check_generation(GenerateOptions::default()).unwrap();
+    assert_eq!(current.status, GenerationCheckStatus::Current);
+
+    std::fs::write(project.path().join("Staticfile"), "root: dist\n").unwrap();
+    let drifted = sdk.check_generation(GenerateOptions::default()).unwrap();
+    assert_eq!(drifted.status, GenerationCheckStatus::Drifted);
+    assert!(drifted
+        .differences
+        .iter()
+        .any(|difference| difference.path == "config.static_dir"));
+
+    let plan = sdk.plan(PlanOptions::default()).unwrap();
+    assert_eq!(plan.config["static_dir"], "cli");
+}
+
+#[test]
+fn generation_check_reports_a_missing_definition_without_writing() {
+    let project = static_project();
+    let checked = Anybuild::new(project.path())
+        .with_provider("staticfile")
+        .check_generation(GenerateOptions::default())
+        .unwrap();
+    assert_eq!(checked.status, GenerationCheckStatus::Missing);
+    assert!(!checked.path.exists());
+}
+
+#[test]
+fn persisted_config_metadata_and_fields_are_validated() {
+    let project = static_project();
+    let generated = Anybuild::new(project.path())
+        .with_provider("staticfile")
+        .generate(GenerateOptions::default())
+        .unwrap();
+
+    let unsupported = generated.content.replace("schema = 1", "schema = 99");
+    std::fs::write(project.path().join("Anybuild"), unsupported).unwrap();
+    let error = Anybuild::new(project.path())
+        .plan(PlanOptions::default())
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("Unsupported staticfile config schema 99"));
+
+    let unknown = generated
+        .content
+        .replace("schema = 1,", "schema = 1,\n    unknown_field = True,");
+    std::fs::write(project.path().join("Anybuild"), unknown).unwrap();
+    let error = Anybuild::new(project.path())
+        .plan(PlanOptions::default())
+        .unwrap_err();
+    assert!(error.to_string().contains("Unknown persisted config field"));
+
+    std::fs::write(project.path().join("Anybuild"), generated.content).unwrap();
+    let error = Anybuild::new(project.path())
+        .with_provider("node")
+        .plan(PlanOptions::default())
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("declares provider \"staticfile\""));
+}
+
+#[test]
 fn compatibility_renames_are_reported_as_events() {
     let project = static_project();
     std::fs::write(
         project.path().join("Shipit"),
-        r#"serve(
+        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_config")
+config = staticfile_config()
+serve(
     name = "legacy",
     provider = "staticfile",
     build = [],
@@ -223,7 +309,9 @@ fn build_run_and_auto_use_the_library_pipeline() {
     let project = static_project();
     std::fs::write(
         project.path().join("Anybuild"),
-        r#"serve(
+        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_config")
+config = staticfile_config()
+serve(
     name = "sdk",
     provider = "staticfile",
     build = [],

@@ -14,6 +14,7 @@ use crate::providers::{base::BaseConfig, select_provider, workspace, ProviderCon
 use crate::run::local::LocalRunner;
 use crate::run::wasmer::WasmerRunner;
 use crate::run::Runner;
+use crate::starlark::config::{ConfigResolutionOptions, PersistedConfig};
 use crate::starlark::eval::{evaluate_anybuild, EvaluateOptions};
 use crate::starlark::loader::StdlibSource;
 use anyhow::{anyhow, Result};
@@ -53,7 +54,18 @@ pub fn resolve_environment(
     options: &EnvironmentOptions,
     operation: &OperationContext,
 ) -> Result<Environment> {
-    migrate_legacy_state_dir(paths, operation)?;
+    resolve_environment_inner(paths, options, operation, true)
+}
+
+fn resolve_environment_inner(
+    paths: &ProjectPaths,
+    options: &EnvironmentOptions,
+    operation: &OperationContext,
+    migrate_state: bool,
+) -> Result<Environment> {
+    if migrate_state {
+        migrate_legacy_state_dir(paths, operation)?;
+    }
     let anybuild_dir = default_anybuild_dir(paths);
     let runtime_resources = resources::resolve(operation)?;
     let build_backend: Rc<RefCell<dyn BuildBackend>> =
@@ -151,6 +163,7 @@ pub struct ProjectContext {
     pub anybuild_dir: PathBuf,
     pub provider: &'static str,
     pub provider_config: ProviderConfig,
+    pub persisted_config: PersistedConfig,
     pub serve: Serve,
     _runtime_resources: resources::RuntimeResources,
     pub build_backend: Rc<RefCell<dyn BuildBackend>>,
@@ -159,31 +172,11 @@ pub struct ProjectContext {
 
 pub fn base_config_for(
     app_path: &Path,
-    overrides: &CommandOverrides,
-    operation: &OperationContext,
+    _overrides: &CommandOverrides,
+    _operation: &OperationContext,
 ) -> Result<BaseConfig> {
-    let mut base = BaseConfig::from_env(operation)?;
+    let mut base = BaseConfig::default();
     base.commands.enrich_from_path(app_path);
-    if let Some(start) = &overrides.start_command {
-        base.commands.start = Some(start.clone());
-    }
-    if let Some(install) = &overrides.install_command {
-        base.commands.install = Some(install.clone());
-    }
-    if let Some(build) = &overrides.build_command {
-        base.commands.build = Some(build.clone());
-    }
-    let mut serve_port = overrides.serve_port;
-    if serve_port.is_none() {
-        if let Some(env_port) = operation.environment_var("PORT") {
-            if !env_port.is_empty() && env_port.chars().all(|c| c.is_ascii_digit()) {
-                serve_port = env_port.parse().ok();
-            }
-        }
-    }
-    if let Some(port) = serve_port {
-        base.port = Some(port);
-    }
     Ok(base)
 }
 
@@ -195,16 +188,14 @@ pub fn load_project_config(
     operation: &OperationContext,
 ) -> Result<(&'static str, ProviderConfig)> {
     let base = base_config_for(&paths.app_path, overrides, operation)?;
+    let clean_operation = operation.without_environment();
     let (provider, mut config) = select_provider(
         &paths.app_path,
         &base,
         overrides.use_provider.as_deref(),
-        operation,
+        &clean_operation,
     )?;
     let provider = provider.name();
-    if let Some(patch) = &overrides.config {
-        config = config.merge_json(patch)?;
-    }
     workspace::apply_subdir_provider_config(&mut config, paths.subdir.as_deref());
     config.apply_workspace_config(&paths.workspace_root);
     operation.provider_detected(provider, config.detection_details());
@@ -221,6 +212,45 @@ pub fn resolve_project_context(
     env_options: &EnvironmentOptions,
     operation: &OperationContext,
 ) -> Result<ProjectContext> {
+    resolve_project_context_inner(
+        path,
+        subdir,
+        anybuild_path,
+        overrides,
+        env_options,
+        operation,
+        true,
+    )
+}
+
+pub fn resolve_project_context_for_check(
+    path: &Path,
+    subdir: Option<&str>,
+    anybuild_path: &Path,
+    overrides: &CommandOverrides,
+    operation: &OperationContext,
+) -> Result<ProjectContext> {
+    resolve_project_context_inner(
+        path,
+        subdir,
+        Some(anybuild_path),
+        overrides,
+        &EnvironmentOptions::default(),
+        operation,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_project_context_inner(
+    path: &Path,
+    subdir: Option<&str>,
+    anybuild_path: Option<&Path>,
+    overrides: &CommandOverrides,
+    env_options: &EnvironmentOptions,
+    operation: &OperationContext,
+    migrate_state: bool,
+) -> Result<ProjectContext> {
     let mut paths = resolve_project_paths(path, subdir)?;
     let anybuild_file = get_anybuild_path(&paths, anybuild_path, operation)?;
     if paths.subdir.is_none() {
@@ -228,7 +258,7 @@ pub fn resolve_project_context(
             paths = resolve_project_paths(&paths.workspace_root.clone(), Some(&marker))?;
         }
     }
-    let environment = resolve_environment(&paths, env_options, operation)?;
+    let environment = resolve_environment_inner(&paths, env_options, operation, migrate_state)?;
     let Environment {
         anybuild_dir,
         runtime_resources,
@@ -236,29 +266,32 @@ pub fn resolve_project_context(
         mut runner,
     } = environment;
 
-    let (provider, provider_config) = load_project_config(&paths, overrides, operation)?;
-    // Apply the runner's config hook before evaluation (identity for the
-    // local runner; the Wasmer runner selects its runtime dependencies and
-    // preparation behavior through config overrides).
-    let provider_config = runner.prepare_config(provider_config);
-
-    let serve = evaluate_anybuild(EvaluateOptions {
+    let evaluated = evaluate_anybuild(EvaluateOptions {
         anybuild_file,
-        project_root: Some(paths.workspace_root.clone()),
-        config: provider_config.to_json(),
+        project_root: paths.workspace_root.clone(),
+        source_dir: paths.app_path.clone(),
+        config_resolution: ConfigResolutionOptions {
+            paths: paths.clone(),
+            overrides: overrides.clone(),
+            wasmer: env_options.wasmer,
+            operation: operation.clone(),
+        },
         layout: Box::new(EnvironmentLayout {
             backend: build_backend.clone(),
             wasmer: env_options.wasmer,
         }),
         stdlib: StdlibSource::Dir(runtime_resources.starlib_dir.clone()),
     })?;
+    runner.record_provider_config(&evaluated.provider_config);
+    let provider = evaluated.provider_config.provider_name();
 
     Ok(ProjectContext {
         paths,
         anybuild_dir,
         provider,
-        provider_config,
-        serve,
+        provider_config: evaluated.provider_config,
+        persisted_config: evaluated.persisted,
+        serve: evaluated.serve,
         _runtime_resources: runtime_resources,
         build_backend,
         runner,

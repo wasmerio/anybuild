@@ -19,9 +19,10 @@ pub use error::{Error, ErrorKind, Result};
 pub use event::{DiagnosticLevel, Event, EventHandler, ProcessIo, ProcessStream, ProviderDetail};
 pub use sdk::{
     Anybuild, AutoOptions, AutoOutcome, BuildEnvironment, BuildOptions, BuildOutcome,
-    CommandOverrides, DeployOptions, DeployOutcome, DeployTarget, DockerOptions, GenerateOptions,
-    GeneratedAnybuild, GenerationPolicy, PlanOptions, ProjectPlan, RunOptions, RunOutcome,
-    RuntimeEnvironment, WasmerOptions,
+    CommandOverrides, ConfigDifference, DeployOptions, DeployOutcome, DeployTarget, DockerOptions,
+    GenerateOptions, GeneratedAnybuild, GenerationCheck, GenerationCheckStatus, GenerationPolicy,
+    PlanOptions, ProjectPlan, ProviderConfigSnapshot, RunOptions, RunOutcome, RuntimeEnvironment,
+    WasmerOptions,
 };
 
 /// Version of the Anybuild SDK and CLI.

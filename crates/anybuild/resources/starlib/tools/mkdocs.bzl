@@ -9,6 +9,9 @@ load("//anybuild:serve.bzl", "build")
 load("//anybuild/tools:python.bzl", "python_build")
 load("//anybuild/tools:staticfile.bzl", "staticfile_serve", "sws_config_mount")
 
+def mkdocs_config(schema = 1, **kwargs):
+    return config(provider = "mkdocs", schema = schema, **kwargs)
+
 def mkdocs_build(config, static_app = None):
     """Install mkdocs with uv, then build the site into static_app."""
     py = python_build(config, serving = False)

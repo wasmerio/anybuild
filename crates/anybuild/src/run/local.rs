@@ -16,8 +16,6 @@ use crate::build::report::{console_print, print_panel};
 use crate::build::BuildBackend;
 use crate::operation::OperationContext;
 use crate::plan::{RunStep, Serve, Step};
-use crate::providers::ProviderConfig;
-
 use crate::run::{HostMount, Runner};
 
 pub struct LocalRunner {
@@ -134,10 +132,6 @@ fn set_executable(path: &std::path::Path) -> Result<()> {
 impl Runner for LocalRunner {
     fn as_any(&mut self) -> &mut dyn std::any::Any {
         self
-    }
-
-    fn prepare_config(&mut self, config: ProviderConfig) -> ProviderConfig {
-        config
     }
 
     fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step> {

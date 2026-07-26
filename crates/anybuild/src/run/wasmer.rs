@@ -23,7 +23,7 @@ use crate::build::BuildBackend;
 use crate::common::volumes::load_volume_mappings;
 use crate::operation::OperationContext;
 use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
-use crate::providers::{config_from_json, ProviderConfig};
+use crate::providers::ProviderConfig;
 
 use crate::run::{HostMount, Runner};
 
@@ -384,6 +384,36 @@ fn apply_runner_flips(provider: &str, config_json: &mut JsonValue) {
     }
 }
 
+pub(crate) fn provider_config_patch(config: &ProviderConfig) -> JsonValue {
+    let provider = config.provider_name();
+    let original = config.to_json();
+    let mut effective = original.clone();
+    if is_python_config(provider) {
+        if let Some(map) = effective.as_object_mut() {
+            map.insert(
+                "python_extra_index_url".to_owned(),
+                JsonValue::String("https://pythonindex.wasix.org/simple".to_owned()),
+            );
+            map.insert(
+                "cross_platform".to_owned(),
+                JsonValue::String("wasix_wasm32".to_owned()),
+            );
+            map.insert("precompile_python".to_owned(), JsonValue::Bool(true));
+        }
+    }
+    apply_runner_flips(provider, &mut effective);
+
+    let mut patch = serde_json::Map::new();
+    if let (Some(original), Some(effective)) = (original.as_object(), effective.as_object()) {
+        for (key, value) in effective {
+            if original.get(key) != Some(value) {
+                patch.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    JsonValue::Object(patch)
+}
+
 use crate::build::report::{console_print, print_syntax_panel};
 
 #[cfg(test)]
@@ -436,6 +466,15 @@ impl WasmerRunner {
             #[cfg(test)]
             captured_commands: Vec::new(),
         }
+    }
+
+    #[cfg(test)]
+    fn prepare_config(&mut self, config: ProviderConfig) -> ProviderConfig {
+        let config = config
+            .merge_json(&provider_config_patch(&config))
+            .unwrap_or(config);
+        self.record_provider_config(&config);
+        config
     }
 
     /// Query the Wasmer CLI version recorded alongside build artifacts.
@@ -1163,34 +1202,8 @@ impl Runner for WasmerRunner {
         self
     }
 
-    /// Port of `prepare_config`. See module docs for the invariant.
-    fn prepare_config(&mut self, config: ProviderConfig) -> ProviderConfig {
-        let provider = config.provider_name();
-
-        // Plan-visible overrides: the Anybuild plan intentionally reacts to
-        // these at evaluation time (cross-platform wheel builds etc.).
-        let config = if is_python_config(provider) {
-            let patch = serde_json::json!({
-                "python_extra_index_url": "https://pythonindex.wasix.org/simple",
-                "cross_platform": "wasix_wasm32",
-                "precompile_python": true,
-            });
-            match config.merge_json(&patch) {
-                Ok(patched) => patched,
-                Err(_) => config,
-            }
-        } else {
-            config
-        };
-
-        // Runtime selection must be visible while evaluating the plan: PHP
-        // plans need phpix dependencies/commands and Node plans need EdgeJS
-        // preparation whenever the Wasmer runner is selected.
-        let mut config_json = config.to_json();
-        apply_runner_flips(provider, &mut config_json);
-        let config = config_from_json(provider, config_json).unwrap_or(config);
+    fn record_provider_config(&mut self, config: &ProviderConfig) {
         self.provider_config = Some(config.to_json());
-        config
     }
 
     /// Port of `prepare_build_steps`: swap go for go-wasix and inject the

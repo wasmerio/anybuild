@@ -11,7 +11,8 @@ use crate::error::{Error, ErrorKind, Result};
 pub use crate::event::ProcessIo;
 use crate::event::{DiagnosticLevel, Event, EventHandler, Reporter};
 use crate::internal::context::{
-    resolve_environment, resolve_project_context, EnvironmentOptions, ProjectContext,
+    resolve_environment, resolve_project_context, resolve_project_context_for_check,
+    EnvironmentOptions, ProjectContext,
 };
 use crate::internal::generator::generate_anybuild;
 use crate::internal::paths::{
@@ -216,6 +217,37 @@ pub struct GeneratedAnybuild {
     pub config: Value,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GenerationCheckStatus {
+    Current,
+    Drifted,
+    Missing,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ProviderConfigSnapshot {
+    pub provider: String,
+    pub schema: u32,
+    pub values: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ConfigDifference {
+    pub path: String,
+    pub persisted: Option<Value>,
+    pub detected: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GenerationCheck {
+    pub path: PathBuf,
+    pub status: GenerationCheckStatus,
+    pub persisted: Option<ProviderConfigSnapshot>,
+    pub detected: ProviderConfigSnapshot,
+    pub differences: Vec<ConfigDifference>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ProjectPlan {
     pub provider: String,
@@ -350,6 +382,15 @@ impl Anybuild {
         )
     }
 
+    pub fn check_generation(&self, options: GenerateOptions) -> Result<GenerationCheck> {
+        self.operation(
+            ErrorKind::Generation,
+            "check generation",
+            ProcessIo::Inherit,
+            |context| self.check_generation_inner(options, context),
+        )
+    }
+
     pub fn plan(&self, options: PlanOptions) -> Result<ProjectPlan> {
         let process_io = options.process_io;
         self.operation(ErrorKind::Evaluation, "plan", process_io, |context| {
@@ -426,17 +467,19 @@ impl Anybuild {
             .unwrap_or_else(|| default_anybuild_path(&paths));
         let (provider, provider_config) =
             crate::internal::context::load_project_config(&paths, &self.overrides, context)?;
+        let config = provider_config.persisted_json();
         let content = generate_anybuild(
             provider,
             provider_config.base().name.as_deref(),
             paths.subdir.as_deref(),
+            provider_config.config_schema(),
+            &config,
         )?;
         if let Some(parent) = output.parent() {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(&output, &content)?;
         let path = output.canonicalize().unwrap_or(output);
-        let config = crate::providers::exclude_defaults_json(&provider_config);
         context.emit(Event::FileWritten {
             kind: "anybuild",
             path: path.clone(),
@@ -446,6 +489,61 @@ impl Anybuild {
             content,
             provider: provider.to_owned(),
             config,
+        })
+    }
+
+    fn check_generation_inner(
+        &self,
+        options: GenerateOptions,
+        context: &OperationContext,
+    ) -> AnyResult<GenerationCheck> {
+        let paths = self.paths()?;
+        let path = options
+            .output
+            .unwrap_or_else(|| default_anybuild_path(&paths));
+        let (detected_provider, detected_config) =
+            crate::internal::context::load_project_config(&paths, &self.overrides, context)?;
+        let detected = ProviderConfigSnapshot {
+            provider: detected_provider.to_owned(),
+            schema: detected_config.config_schema(),
+            values: detected_config.persisted_json(),
+        };
+        if !path.is_file() {
+            return Ok(GenerationCheck {
+                path,
+                status: GenerationCheckStatus::Missing,
+                persisted: None,
+                detected,
+                differences: Vec::new(),
+            });
+        }
+
+        let mut overrides = self.overrides.clone();
+        overrides.use_provider = None;
+        let project = resolve_project_context_for_check(
+            &paths.workspace_root,
+            paths.subdir.as_deref(),
+            &path,
+            &overrides,
+            context,
+        )?;
+        let persisted = ProviderConfigSnapshot {
+            provider: project.persisted_config.provider.clone(),
+            schema: project.persisted_config.schema,
+            values: project.persisted_config.values.clone(),
+        };
+        let differences = config_differences(&persisted, &detected);
+        let status = if differences.is_empty() {
+            GenerationCheckStatus::Current
+        } else {
+            GenerationCheckStatus::Drifted
+        };
+        Ok(GenerationCheck {
+            path,
+            status,
+            persisted: Some(persisted),
+            detected,
+            differences,
         })
     }
 
@@ -773,6 +871,63 @@ fn environment_options(
         docker,
         docker_client,
         docker_opts,
+    }
+}
+
+fn config_differences(
+    persisted: &ProviderConfigSnapshot,
+    detected: &ProviderConfigSnapshot,
+) -> Vec<ConfigDifference> {
+    let mut differences = Vec::new();
+    if persisted.provider != detected.provider {
+        differences.push(ConfigDifference {
+            path: "provider".to_owned(),
+            persisted: Some(Value::String(persisted.provider.clone())),
+            detected: Some(Value::String(detected.provider.clone())),
+        });
+    }
+    if persisted.schema != detected.schema {
+        differences.push(ConfigDifference {
+            path: "schema".to_owned(),
+            persisted: Some(Value::from(persisted.schema)),
+            detected: Some(Value::from(detected.schema)),
+        });
+    }
+    diff_values(
+        "config",
+        Some(&persisted.values),
+        Some(&detected.values),
+        &mut differences,
+    );
+    differences
+}
+
+fn diff_values(
+    path: &str,
+    persisted: Option<&Value>,
+    detected: Option<&Value>,
+    differences: &mut Vec<ConfigDifference>,
+) {
+    match (persisted, detected) {
+        (Some(Value::Object(left)), Some(Value::Object(right))) => {
+            let mut keys = left.keys().chain(right.keys()).collect::<Vec<_>>();
+            keys.sort();
+            keys.dedup();
+            for key in keys {
+                diff_values(
+                    &format!("{path}.{key}"),
+                    left.get(key),
+                    right.get(key),
+                    differences,
+                );
+            }
+        }
+        (left, right) if left == right => {}
+        (left, right) => differences.push(ConfigDifference {
+            path: path.to_owned(),
+            persisted: left.cloned(),
+            detected: right.cloned(),
+        }),
     }
 }
 

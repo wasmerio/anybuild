@@ -13,6 +13,9 @@ in config; simple existence checks use file_exists() directly.
 
 load("//anybuild:serve.bzl", "build", "serve")
 
+def python_config(schema = 1, **kwargs):
+    return config(provider = "python", schema = schema, **kwargs)
+
 def python_toolchain(config):
     return struct(
         python = dep("python", config.python_version),
@@ -177,7 +180,7 @@ def python_env(config, app, venv, site_packages):
         env_vars["STREAMLIT_SERVER_HEADLESS"] = "true"
     elif config.framework == "mcp":
         env_vars["FASTMCP_HOST"] = "0.0.0.0"
-        env_vars["FASTMCP_PORT"] = PORT
+        env_vars["FASTMCP_PORT"] = str(config.port)
         if not config.mcp_self_running:
             env_vars["VIRTUAL_ENV"] = venv.serve_path
     return env_vars
@@ -205,7 +208,7 @@ def python_serve(
         build,
         app = None,
         name = None,
-        provider = "python",
+        provider = None,
         prepare = None,
         services = None,
         **overrides):

@@ -8,6 +8,9 @@ around these.
 
 load("//anybuild:serve.bzl", "build", "serve")
 
+def php_config(schema = 1, **kwargs):
+    return config(provider = "php", schema = schema, **kwargs)
+
 def php_toolchain(config):
     return struct(
         php = dep("php", config.php_version, architecture = config.php_architecture),
@@ -97,9 +100,9 @@ def php_commands(config, app):
     docroot = app.serve_path
     if config.public_dir:
         docroot = "{}/{}".format(app.serve_path, config.public_dir)
-    return {"start": "{} -S localhost:{} -t {}".format(engine, PORT, docroot)}
+    return {"start": "{} -S localhost:{} -t {}".format(engine, config.port, docroot)}
 
-def php_serve(config, build, name = None, provider = "php", commands = None, **overrides):
+def php_serve(config, build, name = None, provider = None, commands = None, **overrides):
     """Serve a PHP build with the php (or phpix) dev server."""
     app = build.app
     return serve(

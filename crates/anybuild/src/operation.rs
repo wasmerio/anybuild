@@ -56,6 +56,14 @@ impl OperationContext {
         }
     }
 
+    pub fn without_environment(&self) -> Self {
+        Self {
+            environment: Arc::new(IndexMap::new()),
+            inherit_process_env: false,
+            ..self.clone()
+        }
+    }
+
     pub fn capture_events(&self) -> (Self, CapturedEvents) {
         let events = Arc::new(Mutex::new(Vec::new()));
         let captured = Arc::clone(&events);
