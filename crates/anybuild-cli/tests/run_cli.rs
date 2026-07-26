@@ -58,6 +58,35 @@ fn plan_command_delegates_to_the_sdk_contract() {
 }
 
 #[test]
+fn plan_reports_the_detected_provider_and_its_details() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("package.json"),
+        r#"{"scripts":{"build":"next build","start":"next start"},"dependencies":{"next":"15.0.0"}}"#,
+    )
+    .unwrap();
+    std::fs::write(tmp.path().join("package-lock.json"), "{}").unwrap();
+    anybuild::Anybuild::new(tmp.path())
+        .with_provider("node")
+        .generate(Default::default())
+        .unwrap();
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("plan")
+        .arg(tmp.path())
+        .args(["--provider", "node"])
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stderr.contains("Detected Node.js provider"), "{stderr}");
+    assert!(stderr.contains("  Framework: Next.js"), "{stderr}");
+    assert!(stderr.contains("  Package manager: npm"), "{stderr}");
+    assert!(stderr.contains("  Node version: 24"), "{stderr}");
+}
+
+#[test]
 fn legacy_project_file_and_state_directory_are_renamed() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();

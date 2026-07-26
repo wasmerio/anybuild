@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
 use crate::providers::base::{
-    env_bool, env_enum, env_json, env_str, is_blank, BaseConfig, DetectResult, HasBase,
+    env_bool, env_enum, env_json, env_str, is_blank, BaseConfig, HasBase,
 };
 use crate::providers::install_context::{
     discover_python_dependency_files, discover_python_install_context,
@@ -277,23 +277,20 @@ fn exists(path: &Path, candidates: &[&str]) -> bool {
     candidates.iter().any(|c| path.join(c).exists())
 }
 
-/// Port of `PythonProvider.detect`.
-pub fn detect(
-    path: &Path,
-    base: &BaseConfig,
-    _operation: &OperationContext,
-) -> Option<DetectResult> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetectionEvidence {
+    DjangoDependencies,
+    Dependencies,
+    Command,
+    Entrypoint,
+}
+
+pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
     if exists(path, &["pyproject.toml", "requirements.txt"]) {
         if exists(path, &["manage.py"]) {
-            return Some(DetectResult {
-                name: "python",
-                score: 70,
-            });
+            return Some(DetectionEvidence::DjangoDependencies);
         }
-        return Some(DetectResult {
-            name: "python",
-            score: 50,
-        });
+        return Some(DetectionEvidence::Dependencies);
     }
     if let Some(start) = base.commands.start.as_deref() {
         if start.starts_with("python ")
@@ -301,19 +298,23 @@ pub fn detect(
             || start.starts_with("uvicorn ")
             || start.starts_with("gunicorn ")
         {
-            return Some(DetectResult {
-                name: "python",
-                score: 80,
-            });
+            return Some(DetectionEvidence::Command);
         }
     }
     if detect_main_file(path).is_some() {
-        return Some(DetectResult {
-            name: "python",
-            score: 10,
-        });
+        return Some(DetectionEvidence::Entrypoint);
     }
     None
+}
+
+pub fn detect_and_load(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<PythonConfig>> {
+    detection_evidence(path, base)
+        .map(|_| load_config(path, base.clone(), operation))
+        .transpose()
 }
 
 /// Port of `PythonProvider.load_config`.

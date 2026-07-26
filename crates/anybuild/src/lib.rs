@@ -16,7 +16,7 @@ mod sdk;
 mod starlark;
 
 pub use error::{Error, ErrorKind, Result};
-pub use event::{DiagnosticLevel, Event, EventHandler, ProcessIo, ProcessStream};
+pub use event::{DiagnosticLevel, Event, EventHandler, ProcessIo, ProcessStream, ProviderDetail};
 pub use sdk::{
     Anybuild, AutoOptions, AutoOutcome, BuildEnvironment, BuildOptions, BuildOutcome,
     CommandOverrides, DeployOptions, DeployOutcome, DeployTarget, DockerOptions, GenerateOptions,

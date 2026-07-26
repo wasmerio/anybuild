@@ -13,7 +13,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
-use crate::providers::base::{env_bool, env_str, BaseConfig, DetectResult, HasBase};
+use crate::providers::base::{env_bool, env_str, BaseConfig, HasBase};
 
 pub const NAME: &str = "staticfile";
 
@@ -162,24 +162,28 @@ fn load_static_config(
     StaticFileConfig::from_env(base, operation)
 }
 
-/// Port of `StaticFileProvider.detect`.
-pub fn detect(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetectionEvidence {
+    Staticfile,
+    Html,
+    Fallback,
+    StartCommand,
+    UnbuiltNodeSite,
+}
+
+pub(crate) fn detection_evidence(
     path: &Path,
     base: &BaseConfig,
     operation: &OperationContext,
-) -> Option<DetectResult> {
+) -> Option<DetectionEvidence> {
     let is_python_php_js_project =
         exists(path, &["package.json", "pyproject.toml", "composer.json"]);
     if exists(path, &["Staticfile"]) {
-        return Some(DetectResult {
-            name: NAME,
-            score: 50,
-        });
+        return Some(DetectionEvidence::Staticfile);
     }
     if !is_python_php_js_project {
-        return Some(DetectResult {
-            name: NAME,
-            score: if exists(
+        return Some(
+            if exists(
                 path,
                 &[
                     "index.html",
@@ -188,11 +192,11 @@ pub fn detect(
                     "public/index.htm",
                 ],
             ) {
-                15
+                DetectionEvidence::Html
             } else {
-                10
+                DetectionEvidence::Fallback
             },
-        });
+        );
     }
     if base
         .commands
@@ -200,18 +204,22 @@ pub fn detect(
         .as_deref()
         .is_some_and(|start| start.starts_with("static-web-server "))
     {
-        return Some(DetectResult {
-            name: NAME,
-            score: 70,
-        });
+        return Some(DetectionEvidence::StartCommand);
     }
     if is_unbuilt_node_static_site(path, base, operation) {
-        return Some(DetectResult {
-            name: NAME,
-            score: 15,
-        });
+        return Some(DetectionEvidence::UnbuiltNodeSite);
     }
     None
+}
+
+pub fn detect_and_load(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<StaticFileConfig>> {
+    detection_evidence(path, base, operation)
+        .map(|_| load_config(path, base.clone(), operation))
+        .transpose()
 }
 
 fn is_unbuilt_node_static_site(
@@ -248,7 +256,7 @@ fn is_unbuilt_node_static_site(
     {
         return false;
     }
-    if crate::providers::node_static::detect(path, base, operation).is_some() {
+    if crate::providers::node_static::detection_evidence(path, base).is_some() {
         return false;
     }
 
@@ -496,12 +504,12 @@ fn translate_destination(
 mod tests {
     //! Port of `tests/test_staticfile_provider.py`.
 
-    use super::{compute_redirects_config, DetectResult, OperationContext};
+    use super::compute_redirects_config;
     use crate::providers::base::BaseConfig;
     use std::path::Path;
 
-    fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
-        super::detect(path, base, &OperationContext::for_test())
+    fn detect(path: &Path, base: &BaseConfig) -> Option<i32> {
+        crate::providers::detection_score_for_test("staticfile", path, base)
     }
 
     #[test]
@@ -631,7 +639,7 @@ mod tests {
 
         let result = detect(tmp.path(), &BaseConfig::default()).expect("staticfile detects");
 
-        assert_eq!(result.score, 15);
+        assert_eq!(result, 15);
         assert_eq!(
             crate::providers::load_provider_for_test(tmp.path(), &BaseConfig::default(), None)
                 .unwrap(),

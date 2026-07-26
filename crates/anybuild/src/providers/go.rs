@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
-use crate::providers::base::{env_str, is_blank, BaseConfig, DetectResult, HasBase};
+use crate::providers::base::{env_str, is_blank, BaseConfig, HasBase};
 
 pub const NAME: &str = "go";
 
@@ -145,17 +145,16 @@ fn sorted_entries(path: &Path) -> Vec<String> {
     entries
 }
 
-/// Port of `GoProvider.detect`.
-pub fn detect(
+pub(crate) fn matches(path: &Path) -> bool {
+    path.join("go.mod").exists() || path.join("go.sum").exists()
+}
+
+pub fn detect_and_load(
     path: &Path,
-    _base: &BaseConfig,
-    _operation: &OperationContext,
-) -> Option<DetectResult> {
-    if path.join("go.mod").exists() || path.join("go.sum").exists() {
-        return Some(DetectResult {
-            name: NAME,
-            score: 80,
-        });
-    }
-    None
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<GoConfig>> {
+    matches(path)
+        .then(|| load_config(path, base.clone(), operation))
+        .transpose()
 }

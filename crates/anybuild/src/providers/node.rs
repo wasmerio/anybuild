@@ -11,9 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::operation::OperationContext;
-use crate::providers::base::{
-    env_bool, env_enum, env_json, env_str, BaseConfig, DetectResult, HasBase,
-};
+use crate::providers::base::{env_bool, env_enum, env_json, env_str, BaseConfig, HasBase};
 use crate::providers::install_context::{discover_js_install_context, read_json_object};
 
 pub(crate) use crate::providers::install_context::JsonMap;
@@ -767,17 +765,20 @@ const INSTALL_COMMANDS: &[&str] = &[
     "bun i",
 ];
 
-pub fn detect(
-    path: &Path,
-    base: &BaseConfig,
-    _operation: &OperationContext,
-) -> Option<DetectResult> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetectionEvidence {
+    StartCommand,
+    PackageWithStart,
+    Package,
+    FrameworkWithStart,
+    Framework,
+    Entrypoint,
+}
+
+pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
     if let Some(start) = non_empty(&base.commands.start) {
         if is_node_command(start) {
-            return Some(DetectResult {
-                name: "node",
-                score: 35,
-            });
+            return Some(DetectionEvidence::StartCommand);
         }
     }
 
@@ -785,40 +786,49 @@ pub fn detect(
     let has_package_start = package_scripts(package_json.as_ref())
         .get("start")
         .is_some_and(|start| !start.trim().is_empty());
-    let package_score = if has_package_start { 30 } else { 10 };
 
     if let Some(install) = non_empty(&base.commands.install) {
         if INSTALL_COMMANDS.contains(&install) {
-            return Some(DetectResult {
-                name: "node",
-                score: package_score,
+            return Some(if has_package_start {
+                DetectionEvidence::PackageWithStart
+            } else {
+                DetectionEvidence::Package
             });
         }
     }
 
     let found_deps = check_package_json_deps(package_json.as_ref(), FRAMEWORK_DEPENDENCIES);
     if detect_framework(package_json.as_ref(), &found_deps, Some(path)).is_some() {
-        return Some(DetectResult {
-            name: "node",
-            score: if has_package_start { 45 } else { 10 },
+        return Some(if has_package_start {
+            DetectionEvidence::FrameworkWithStart
+        } else {
+            DetectionEvidence::Framework
         });
     }
 
     if path.join("package.json").is_file() {
-        return Some(DetectResult {
-            name: "node",
-            score: package_score,
+        return Some(if has_package_start {
+            DetectionEvidence::PackageWithStart
+        } else {
+            DetectionEvidence::Package
         });
     }
 
     if common_entry_file(path, true).is_some() {
-        return Some(DetectResult {
-            name: "node",
-            score: 30,
-        });
+        return Some(DetectionEvidence::Entrypoint);
     }
 
     None
+}
+
+pub fn detect_and_load(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<NodeConfig>> {
+    detection_evidence(path, base)
+        .map(|_| load_config(path, base.clone(), operation))
+        .transpose()
 }
 
 fn common_entry_file(path: &Path, require_node_evidence: bool) -> Option<&'static str> {
@@ -1484,8 +1494,8 @@ mod tests {
         super::load_config(path, base, &OperationContext::for_test()).unwrap()
     }
 
-    fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
-        super::detect(path, base, &OperationContext::for_test())
+    fn detect(path: &Path, base: &BaseConfig) -> Option<i32> {
+        crate::providers::detection_score_for_test("node", path, base)
     }
 
     fn example(name: &str) -> PathBuf {
@@ -1587,12 +1597,12 @@ mod tests {
         let base = BaseConfig::default();
 
         let node_static_result =
-            crate::providers::node_static::detect(&path, &base, &OperationContext::for_test());
+            crate::providers::detection_score_for_test("node-static", &path, &base);
         let node_result = detect(&path, &base);
 
         let node_static_result = node_static_result.expect("node-static detects");
         let node_result = node_result.expect("node detects");
-        assert!(node_static_result.score > node_result.score);
+        assert!(node_static_result > node_result);
         assert_eq!(
             crate::providers::load_provider_for_test(&path, &base, None).unwrap(),
             "node-static"

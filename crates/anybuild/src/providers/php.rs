@@ -12,9 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::operation::OperationContext;
-use crate::providers::base::{
-    env_bool, env_enum, env_int, env_str, BaseConfig, DetectResult, HasBase,
-};
+use crate::providers::base::{env_bool, env_enum, env_int, env_str, BaseConfig, HasBase};
 
 pub const NAME: &str = "php";
 
@@ -247,34 +245,30 @@ pub fn load_config(
     Ok(config)
 }
 
-/// Port of `PhpProvider.detect`.
-pub fn detect(
-    path: &Path,
-    base: &BaseConfig,
-    _operation: &OperationContext,
-) -> Option<DetectResult> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetectionEvidence {
+    DrupalWeb,
+    Framework,
+    ComposerEntrypoint,
+    Entrypoint,
+    StartCommand,
+    InstallCommand,
+}
+
+pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
     let framework = detect_framework(path, None);
     if framework == Some(PhpFramework::Drupal) && path.join("web/index.php").exists() {
-        return Some(DetectResult {
-            name: NAME,
-            score: 70,
-        });
+        return Some(DetectionEvidence::DrupalWeb);
     }
     if matches!(
         framework,
         Some(PhpFramework::Drupal | PhpFramework::Moodle | PhpFramework::Symfony)
     ) && exists(path, &["index.php", "public/index.php", "web/index.php"])
     {
-        return Some(DetectResult {
-            name: NAME,
-            score: 65,
-        });
+        return Some(DetectionEvidence::Framework);
     }
     if path.join("composer.json").exists() && exists(path, &["public/index.php", "web/index.php"]) {
-        return Some(DetectResult {
-            name: NAME,
-            score: 60,
-        });
+        return Some(DetectionEvidence::ComposerEntrypoint);
     }
     if exists(
         path,
@@ -285,10 +279,7 @@ pub fn detect(
             "app/index.php",
         ],
     ) {
-        return Some(DetectResult {
-            name: NAME,
-            score: 10,
-        });
+        return Some(DetectionEvidence::Entrypoint);
     }
     if base
         .commands
@@ -296,10 +287,7 @@ pub fn detect(
         .as_deref()
         .is_some_and(|start| start.starts_with("php "))
     {
-        return Some(DetectResult {
-            name: NAME,
-            score: 70,
-        });
+        return Some(DetectionEvidence::StartCommand);
     }
     if base
         .commands
@@ -307,12 +295,19 @@ pub fn detect(
         .as_deref()
         .is_some_and(|install| install.starts_with("composer "))
     {
-        return Some(DetectResult {
-            name: NAME,
-            score: 30,
-        });
+        return Some(DetectionEvidence::InstallCommand);
     }
     None
+}
+
+pub fn detect_and_load(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<PhpConfig>> {
+    detection_evidence(path, base)
+        .map(|_| load_config(path, base.clone(), operation))
+        .transpose()
 }
 
 #[cfg(test)]

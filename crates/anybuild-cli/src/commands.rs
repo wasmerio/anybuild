@@ -83,7 +83,12 @@ fn render_event(event: &Event) {
                 eprintln!("Renamed legacy {from} file to {to}.")
             }
         }
-        Event::ProviderDetected { .. } => {}
+        Event::ProviderDetected { provider, details } => {
+            eprintln!("Detected {} provider", provider_display_name(provider));
+            for detail in details {
+                eprintln!("  {}: {}", detail.label, detail.value);
+            }
+        }
         Event::FileWritten { kind, path } => {
             eprintln!("Generated {kind} at {}", path.display())
         }
@@ -101,5 +106,22 @@ fn render_event(event: &Event) {
         Event::ArtifactCreated { .. } => {}
         Event::Deployment { description } => println!("{description}"),
         _ => {}
+    }
+}
+
+fn provider_display_name(provider: &str) -> &str {
+    match provider {
+        "node" => "Node.js",
+        "node-static" => "static Node.js",
+        "staticfile" => "static site",
+        "wordpress" => "WordPress",
+        "mkdocs" => "MkDocs",
+        "php" => "PHP",
+        "go" => "Go",
+        "hugo" => "Hugo",
+        "jekyll" => "Jekyll",
+        "laravel" => "Laravel",
+        "python" => "Python",
+        other => other,
     }
 }

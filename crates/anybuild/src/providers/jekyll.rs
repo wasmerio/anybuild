@@ -9,7 +9,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
-use crate::providers::base::{env_str, BaseConfig, DetectResult, HasBase};
+use crate::providers::base::{env_str, BaseConfig, HasBase};
 use crate::providers::staticfile::{
     self, compute_redirects_config, parse_simple_yaml, StaticFileConfig,
 };
@@ -92,23 +92,18 @@ pub fn load_config(
     Ok(config)
 }
 
-/// Port of `JekyllProvider.detect`.
-pub fn detect(
-    path: &Path,
-    base: &BaseConfig,
-    _operation: &OperationContext,
-) -> Option<DetectResult> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetectionEvidence {
+    Strong,
+    Structural,
+}
+
+pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
     if exists(path, &["_config.yml", "_config.yaml"]) {
         if exists(path, &["Gemfile"]) {
-            return Some(DetectResult {
-                name: NAME,
-                score: 85,
-            });
+            return Some(DetectionEvidence::Strong);
         }
-        return Some(DetectResult {
-            name: NAME,
-            score: 40,
-        });
+        return Some(DetectionEvidence::Structural);
     }
     if base
         .commands
@@ -116,10 +111,17 @@ pub fn detect(
         .as_deref()
         .is_some_and(|build| build.starts_with("jekyll "))
     {
-        return Some(DetectResult {
-            name: NAME,
-            score: 85,
-        });
+        return Some(DetectionEvidence::Strong);
     }
     None
+}
+
+pub fn detect_and_load(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<JekyllConfig>> {
+    detection_evidence(path, base)
+        .map(|_| load_config(path, base.clone(), operation))
+        .transpose()
 }

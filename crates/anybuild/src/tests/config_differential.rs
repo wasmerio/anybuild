@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 
 use crate::operation::OperationContext;
-use crate::providers::{base::BaseConfig, load_provider, load_provider_config, workspace};
+use crate::providers::{base::BaseConfig, select_provider, workspace};
 use serde::Deserialize;
 
 const EXPECTED_CONFIG_CASES: usize = 98;
@@ -172,10 +172,8 @@ fn compute_config(case: &Case) -> Result<serde_json::Value, String> {
     let mut base = BaseConfig::default();
     base.commands.enrich_from_path(&app_path);
 
-    let provider = load_provider(&app_path, &base, None, &operation)
+    let (_, mut config) = select_provider(&app_path, &base, None, &operation)
         .map_err(|e| format!("detection failed: {e:#}"))?;
-    let mut config = load_provider_config(provider, &app_path, base, &operation)
-        .map_err(|e| format!("load_config failed: {e:#}"))?;
 
     if is_cross && !config.set_cross_platform("wasix_wasm32") {
         return Err("provider has no cross_platform field".to_owned());

@@ -12,6 +12,12 @@ pub enum DiagnosticLevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProviderDetail {
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Event {
@@ -25,6 +31,7 @@ pub enum Event {
     },
     ProviderDetected {
         provider: String,
+        details: Vec<ProviderDetail>,
     },
     FileWritten {
         kind: &'static str,

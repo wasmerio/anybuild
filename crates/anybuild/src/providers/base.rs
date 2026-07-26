@@ -1,4 +1,4 @@
-//! Base config, detection result, and the ANYBUILD_*/SHIPIT_* env overlay.
+//! Base config and the ANYBUILD_*/SHIPIT_* environment overlay.
 //!
 //! Port of `providers/base.py`. Serialization must match pydantic's
 //! `model_dump(mode="json")`: every field present, `None` as null, enums
@@ -11,13 +11,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
 use crate::providers::procfile::Procfile;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct DetectResult {
-    pub name: &'static str,
-    /// Higher score wins when multiple providers match.
-    pub score: i32,
-}
 
 fn env_value(operation: &OperationContext, field: &str) -> Option<(String, String)> {
     let field = field.to_uppercase();

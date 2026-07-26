@@ -9,7 +9,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
-use crate::providers::base::{env_str, is_blank, BaseConfig, DetectResult, HasBase};
+use crate::providers::base::{env_str, is_blank, BaseConfig, HasBase};
 use crate::providers::staticfile::{
     self, compute_redirects_config, parse_simple_yaml, StaticFileConfig,
 };
@@ -157,17 +157,15 @@ pub fn load_config(
     Ok(config)
 }
 
-/// Port of `HugoProvider.detect`.
-pub fn detect(
-    path: &Path,
-    base: &BaseConfig,
-    _operation: &OperationContext,
-) -> Option<DetectResult> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetectionEvidence {
+    Strong,
+    Structural,
+}
+
+pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
     if exists(path, &["hugo.toml", "hugo.json", "hugo.yaml", "hugo.yml"]) {
-        return Some(DetectResult {
-            name: NAME,
-            score: 80,
-        });
+        return Some(DetectionEvidence::Strong);
     }
     if exists(
         path,
@@ -175,10 +173,7 @@ pub fn detect(
     ) && exists(path, &["content"])
         && (exists(path, &["static"]) || exists(path, &["themes"]))
     {
-        return Some(DetectResult {
-            name: NAME,
-            score: 40,
-        });
+        return Some(DetectionEvidence::Structural);
     }
     if base
         .commands
@@ -186,10 +181,17 @@ pub fn detect(
         .as_deref()
         .is_some_and(|build| build.starts_with("hugo "))
     {
-        return Some(DetectResult {
-            name: NAME,
-            score: 80,
-        });
+        return Some(DetectionEvidence::Strong);
     }
     None
+}
+
+pub fn detect_and_load(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<HugoConfig>> {
+    detection_evidence(path, base)
+        .map(|_| load_config(path, base.clone(), operation))
+        .transpose()
 }

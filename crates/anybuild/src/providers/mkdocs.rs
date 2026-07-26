@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::operation::OperationContext;
-use crate::providers::base::{env_str, BaseConfig, DetectResult, HasBase};
+use crate::providers::base::{env_str, BaseConfig, HasBase};
 use crate::providers::python::PythonConfig;
 use crate::providers::staticfile;
 
@@ -212,28 +212,22 @@ pub fn load_config(
     Ok(serde_json::from_value(Value::Object(merged))?)
 }
 
-/// Port of `MkdocsProvider.detect`.
-pub fn detect(
-    path: &Path,
-    base: &BaseConfig,
-    _operation: &OperationContext,
-) -> Option<DetectResult> {
+pub(crate) fn matches(path: &Path, base: &BaseConfig) -> bool {
     if exists(path, &["mkdocs.yml", "mkdocs.yaml"]) {
-        return Some(DetectResult {
-            name: NAME,
-            score: 85,
-        });
+        return true;
     }
-    if base
-        .commands
+    base.commands
         .build
         .as_deref()
         .is_some_and(|build| build.starts_with("mkdocs "))
-    {
-        return Some(DetectResult {
-            name: NAME,
-            score: 85,
-        });
-    }
-    None
+}
+
+pub fn detect_and_load(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<MkdocsConfig>> {
+    matches(path, base)
+        .then(|| load_config(path, base.clone(), operation))
+        .transpose()
 }

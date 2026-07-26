@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::operation::OperationContext;
-use crate::providers::base::{env_bool, env_str, BaseConfig, DetectResult, HasBase};
+use crate::providers::base::{env_bool, env_str, BaseConfig, HasBase};
 use crate::providers::install_context::{
     discover_js_install_context, read_json_object, yaml_scalar,
 };
@@ -727,11 +727,13 @@ fn has_static_remix_output(path: &Path, package_json: Option<&JsonMap>) -> bool 
         && start_command.contains("public")
 }
 
-pub fn detect(
-    path: &Path,
-    base: &BaseConfig,
-    _operation: &OperationContext,
-) -> Option<DetectResult> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetectionEvidence {
+    Strong,
+    Weak,
+}
+
+pub(crate) fn detection_evidence(path: &Path, base: &BaseConfig) -> Option<DetectionEvidence> {
     let package_json = node::parse_package_json(path);
     let found_deps =
         node::check_package_json_deps(package_json.as_ref(), &STATIC_DETECT_DEPENDENCIES);
@@ -745,13 +747,6 @@ pub fn detect(
         return None;
     }
 
-    let result = |score: i32| {
-        Some(DetectResult {
-            name: "node-static",
-            score,
-        })
-    };
-
     let mut has_package_manager_build_command = false;
     if let Some(build) = node::non_empty(&base.commands.build) {
         // Iterate over all generators and check if the build command
@@ -764,20 +759,20 @@ pub fn detect(
                 .build_static_command()
                 .expect("static frameworks have build commands");
             if build.contains(command) {
-                return result(60);
+                return Some(DetectionEvidence::Strong);
             }
         }
 
         let frameworks = NodeFramework::detect_from_command(build);
         if !frameworks.is_empty() && !frameworks.contains(&NodeFramework::Next) {
-            return result(60);
+            return Some(DetectionEvidence::Strong);
         }
 
         has_package_manager_build_command = node::is_package_manager_build_command(build);
     }
 
     if found_deps.contains("next") && has_next_static_export_config(path) {
-        return result(60);
+        return Some(DetectionEvidence::Strong);
     }
 
     for build_command in detect_script_commands(package_json.as_ref()) {
@@ -789,7 +784,7 @@ pub fn detect(
                 .build_static_command()
                 .expect("static frameworks have build commands");
             if build_command.contains(command) {
-                return result(60);
+                return Some(DetectionEvidence::Strong);
             }
         }
         let all_frameworks = NodeFramework::detect_from_command(build_command);
@@ -798,7 +793,7 @@ pub fn detect(
                 .iter()
                 .all(|framework| framework.is_pure_static())
         {
-            return result(60);
+            return Some(DetectionEvidence::Strong);
         }
     }
 
@@ -814,16 +809,26 @@ pub fn detect(
         .collect();
 
     if !pure_static_deps.is_empty() && static_deps.difference(&pure_static_deps).next().is_none() {
-        return result(60);
+        return Some(DetectionEvidence::Strong);
     }
 
     if !static_deps.is_empty() {
-        return result(20);
+        return Some(DetectionEvidence::Weak);
     }
     if has_package_manager_build_command {
-        return result(20);
+        return Some(DetectionEvidence::Weak);
     }
     None
+}
+
+pub fn detect_and_load(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<NodeStaticConfig>> {
+    detection_evidence(path, base)
+        .map(|_| load_config(path, base.clone(), operation))
+        .transpose()
 }
 
 // ---------------------------------------------------------------------------
@@ -899,8 +904,8 @@ mod tests {
     use super::*;
     use crate::providers::base::BaseConfig;
 
-    fn detect(path: &Path, base: &BaseConfig) -> Option<DetectResult> {
-        super::detect(path, base, &OperationContext::for_test())
+    fn detect(path: &Path, base: &BaseConfig) -> Option<i32> {
+        crate::providers::detection_score_for_test("node-static", path, base)
     }
 
     fn load_config(path: &Path, base: BaseConfig) -> Result<NodeStaticConfig> {
@@ -1118,7 +1123,7 @@ mod tests {
 
             let detect_result = detect(&path, &base).expect(example_name);
 
-            assert_eq!(detect_result.score, 60, "{example_name}");
+            assert_eq!(detect_result, 60, "{example_name}");
             assert_eq!(
                 crate::providers::load_provider_for_test(&path, &base, None).unwrap(),
                 "node-static",
@@ -1148,7 +1153,7 @@ mod tests {
 
         let detect_result = detect(&path, &base).expect("detects");
 
-        assert_eq!(detect_result.score, 60);
+        assert_eq!(detect_result, 60);
     }
 
     #[test]
@@ -1162,12 +1167,11 @@ mod tests {
         base.commands.build = Some("next build".to_owned());
 
         let detect_result = detect(tmp.path(), &base).expect("detects");
-        let node_result =
-            crate::providers::node::detect(tmp.path(), &base, &OperationContext::for_test())
-                .expect("node detects");
+        let node_result = crate::providers::detection_score_for_test("node", tmp.path(), &base)
+            .expect("node detects");
 
-        assert_eq!(detect_result.score, 20);
-        assert!(node_result.score < detect_result.score);
+        assert_eq!(detect_result, 20);
+        assert!(node_result < detect_result);
         assert_eq!(
             crate::providers::load_provider_for_test(tmp.path(), &base, None).unwrap(),
             "node-static"
@@ -1186,7 +1190,7 @@ mod tests {
 
         let detect_result = detect(tmp.path(), &base).expect("detects");
 
-        assert_eq!(detect_result.score, 60);
+        assert_eq!(detect_result, 60);
         assert_eq!(
             crate::providers::load_provider_for_test(tmp.path(), &base, None).unwrap(),
             "node-static"

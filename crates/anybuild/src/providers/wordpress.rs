@@ -11,7 +11,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
-use crate::providers::base::{env_enum, env_str, is_blank, BaseConfig, DetectResult, HasBase};
+use crate::providers::base::{env_enum, env_str, is_blank, BaseConfig, HasBase};
 use crate::providers::php::{self, PhpConfig};
 
 pub const NAME: &str = "wordpress";
@@ -106,36 +106,41 @@ pub fn load_config(
     Ok(config)
 }
 
-/// Port of `WordPressProvider.detect`.
-pub fn detect(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetectionEvidence {
+    Site,
+    Extension,
+}
+
+pub(crate) fn detection_evidence(
     path: &Path,
-    _base: &BaseConfig,
     operation: &OperationContext,
-) -> Option<DetectResult> {
+) -> Option<DetectionEvidence> {
     if path.join("wp-content").exists()
         && path.join("index.php").exists()
         && path.join("wp-load.php").exists()
     {
-        return Some(DetectResult {
-            name: NAME,
-            score: 80,
-        });
+        return Some(DetectionEvidence::Site);
     }
 
     // Python truthiness: an empty ANYBUILD_WP_VERSION does not force detection.
     if env_str(operation, "wp_version").is_some_and(|v| !v.is_empty()) {
-        return Some(DetectResult {
-            name: NAME,
-            score: 80,
-        });
+        return Some(DetectionEvidence::Site);
     }
     if detect_extension(path).is_some() {
-        return Some(DetectResult {
-            name: NAME,
-            score: 75,
-        });
+        return Some(DetectionEvidence::Extension);
     }
     None
+}
+
+pub fn detect_and_load(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<WordPressConfig>> {
+    detection_evidence(path, operation)
+        .map(|_| load_config(path, base.clone(), operation))
+        .transpose()
 }
 
 /// Port of `WordPressProvider.detect_extension`.

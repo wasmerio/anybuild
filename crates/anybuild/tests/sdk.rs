@@ -51,6 +51,46 @@ fn generate_and_plan_return_structured_data() {
 }
 
 #[test]
+fn provider_detection_includes_provider_specific_details() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project.path().join("package.json"),
+        r#"{"scripts":{"build":"next build","start":"next start"},"dependencies":{"next":"15.0.0"}}"#,
+    )
+    .unwrap();
+    std::fs::write(project.path().join("package-lock.json"), "{}").unwrap();
+
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let captured = Arc::clone(&events);
+    Anybuild::new(project.path())
+        .with_event_handler(move |event: &Event| captured.lock().unwrap().push(event.clone()))
+        .plan(PlanOptions::default())
+        .unwrap();
+
+    let events = events.lock().unwrap();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, Event::ProviderDetected { .. }))
+            .count(),
+        1
+    );
+    let Event::ProviderDetected { provider, details } = &events[0] else {
+        panic!("expected provider detection event, got {:?}", events[0]);
+    };
+    assert_eq!(provider, "node");
+    assert!(details
+        .iter()
+        .any(|detail| detail.label == "Framework" && detail.value == "Next.js"));
+    assert!(details
+        .iter()
+        .any(|detail| detail.label == "Package manager" && detail.value == "npm"));
+    assert!(details
+        .iter()
+        .any(|detail| detail.label == "Node version" && detail.value == "24"));
+}
+
+#[test]
 fn nitro_projects_build_and_start_with_the_node_server_preset() {
     let project = tempfile::tempdir().unwrap();
     std::fs::write(

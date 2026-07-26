@@ -437,9 +437,6 @@ impl Anybuild {
         std::fs::write(&output, &content)?;
         let path = output.canonicalize().unwrap_or(output);
         let config = crate::providers::exclude_defaults_json(&provider_config);
-        context.emit(Event::ProviderDetected {
-            provider: provider.to_owned(),
-        });
         context.emit(Event::FileWritten {
             kind: "anybuild",
             path: path.clone(),

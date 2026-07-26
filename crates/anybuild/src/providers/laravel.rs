@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::operation::OperationContext;
-use crate::providers::base::{BaseConfig, DetectResult, HasBase};
+use crate::providers::base::{BaseConfig, HasBase};
 use crate::providers::node::NodeConfigFields;
 use crate::providers::php;
 
@@ -106,17 +106,16 @@ pub fn load_config(
     Ok(serde_json::from_value(Value::Object(merged)).expect("laravel config deserializes"))
 }
 
-/// Port of `LaravelProvider.detect`.
-pub fn detect(
+pub(crate) fn matches(path: &Path) -> bool {
+    path.join("artisan").exists() && path.join("composer.json").exists()
+}
+
+pub fn detect_and_load(
     path: &Path,
-    _base: &BaseConfig,
-    _operation: &OperationContext,
-) -> Option<DetectResult> {
-    if path.join("artisan").exists() && path.join("composer.json").exists() {
-        return Some(DetectResult {
-            name: NAME,
-            score: 95,
-        });
-    }
-    None
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<Option<LaravelConfig>> {
+    matches(path)
+        .then(|| load_config(path, base.clone(), operation))
+        .transpose()
 }

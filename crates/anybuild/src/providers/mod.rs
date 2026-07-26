@@ -1,14 +1,14 @@
 //! Project detection and provider configuration.
 //!
 //! Provider registry and generation dispatch.
-//! Each provider module exposes `detect(path, base)` and
-//! `load_config(path, base)`; the registry order matches Python's
-//! (more specific providers first, ties broken by order).
+//! Each provider module exposes `detect_and_load(path, base)`; selection
+//! scores live here and registry order breaks ties.
 
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
 
+use crate::event::ProviderDetail;
 use crate::operation::OperationContext;
 
 pub mod base;
@@ -27,23 +27,37 @@ pub mod staticfile;
 pub mod wordpress;
 pub mod workspace;
 
-pub use base::{BaseConfig, DetectResult, HasBase};
+pub use base::{BaseConfig, HasBase};
 
-type DetectFn = fn(&Path, &BaseConfig, &OperationContext) -> Option<DetectResult>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProviderKind {
+    Laravel,
+    Hugo,
+    Mkdocs,
+    Python,
+    Wordpress,
+    Php,
+    NodeStatic,
+    Node,
+    Jekyll,
+    Go,
+    StaticFile,
+}
 
-/// Order matters: more specific providers first (mirror of registry.py).
-pub const REGISTRY: &[(&str, DetectFn)] = &[
-    ("laravel", laravel::detect),
-    ("hugo", hugo::detect),
-    ("mkdocs", mkdocs::detect),
-    ("python", python::detect),
-    ("wordpress", wordpress::detect),
-    ("php", php::detect),
-    ("node-static", node_static::detect),
-    ("node", node::detect),
-    ("jekyll", jekyll::detect),
-    ("go", go::detect),
-    ("staticfile", staticfile::detect),
+/// Order resolves equal scores and remains compatible with the original
+/// provider registry.
+const REGISTRY: &[ProviderKind] = &[
+    ProviderKind::Laravel,
+    ProviderKind::Hugo,
+    ProviderKind::Mkdocs,
+    ProviderKind::Python,
+    ProviderKind::Wordpress,
+    ProviderKind::Php,
+    ProviderKind::NodeStatic,
+    ProviderKind::Node,
+    ProviderKind::Jekyll,
+    ProviderKind::Go,
+    ProviderKind::StaticFile,
 ];
 
 /// Every provider's loaded config.
@@ -113,6 +127,90 @@ impl ProviderConfig {
         each_config!(self, config => config.base_mut())
     }
 
+    pub(crate) fn detection_details(&self) -> Vec<ProviderDetail> {
+        let fields: &[(&str, &str)] = match self.provider_name() {
+            "node" => &[
+                ("Framework", "framework"),
+                ("Package manager", "package_manager"),
+                ("Node version", "node_version"),
+            ],
+            "node-static" => &[
+                ("Framework", "framework"),
+                ("Package manager", "package_manager"),
+                ("Output directory", "static_dir"),
+            ],
+            "python" => &[
+                ("Framework", "framework"),
+                ("Server", "server"),
+                ("Python version", "python_version"),
+            ],
+            "php" => &[("Framework", "framework"), ("PHP version", "php_version")],
+            "wordpress" => &[
+                ("Extension", "wp_extension_kind"),
+                ("WordPress version", "wp_version"),
+                ("PHP version", "php_version"),
+            ],
+            "laravel" => &[
+                ("Package manager", "package_manager"),
+                ("PHP version", "php_version"),
+            ],
+            "go" => &[
+                ("Go version", "go_version"),
+                ("Entrypoint", "go_build_file"),
+            ],
+            "staticfile" => &[
+                ("Output directory", "static_dir"),
+                ("SWS version", "sws_version"),
+            ],
+            "hugo" => &[
+                ("Hugo version", "hugo_version"),
+                ("Output directory", "static_dir"),
+            ],
+            "jekyll" => &[
+                ("Jekyll version", "jekyll_version"),
+                ("Ruby version", "ruby_version"),
+                ("Output directory", "static_dir"),
+            ],
+            "mkdocs" => &[
+                ("MkDocs version", "mkdocs_version"),
+                ("Python version", "python_version"),
+                ("Output directory", "static_dir"),
+            ],
+            _ => &[],
+        };
+        let config = self.to_json();
+        let mut details: Vec<_> = fields
+            .iter()
+            .filter_map(|(label, field)| {
+                let value = config
+                    .get(field)?
+                    .as_str()
+                    .filter(|value| !value.is_empty())?;
+                Some(ProviderDetail {
+                    label: (*label).to_owned(),
+                    value: display_detail(label, value),
+                })
+            })
+            .collect();
+        if self.provider_name() == "php"
+            && config.get("use_composer").and_then(|value| value.as_bool()) == Some(true)
+        {
+            let index = usize::from(
+                config
+                    .get("framework")
+                    .is_some_and(|value| !value.is_null()),
+            );
+            details.insert(
+                index,
+                ProviderDetail {
+                    label: "Package manager".to_owned(),
+                    value: "Composer".to_owned(),
+                },
+            );
+        }
+        details
+    }
+
     /// Set `cross_platform` when the provider supports it (python only).
     #[cfg(test)]
     pub fn set_cross_platform(&mut self, value: &str) -> bool {
@@ -127,43 +225,277 @@ impl ProviderConfig {
     }
 }
 
-/// Port of `generator.detect_provider`: highest score wins, ties broken
-/// by registry order.
-pub fn detect_provider(
-    path: &Path,
-    base: &BaseConfig,
-    operation: &OperationContext,
-) -> Result<&'static str> {
-    let mut matches: Vec<(usize, &'static str, DetectResult)> = Vec::new();
-    for (index, (name, detect)) in REGISTRY.iter().enumerate() {
-        if let Some(result) = detect(path, base, operation) {
-            matches.push((index, name, result));
-        }
+fn display_detail(label: &str, value: &str) -> String {
+    if matches!(label, "Framework" | "Server" | "Extension") {
+        display_config_value(value)
+    } else {
+        value.to_owned()
     }
-    matches.sort_by(|a, b| b.2.score.cmp(&a.2.score).then(a.0.cmp(&b.0)));
-    matches
-        .first()
-        .map(|(_, name, _)| *name)
-        .ok_or_else(|| anyhow!("Anybuild could not detect a provider for this project"))
 }
 
-/// Port of `generator.load_provider`.
-pub fn load_provider(
+fn display_config_value(value: &str) -> String {
+    match value {
+        "next" => "Next.js".to_owned(),
+        "create-react-app" => "Create React App".to_owned(),
+        "docusaurus-old" | "docusaurus" => "Docusaurus".to_owned(),
+        "fastapi" => "FastAPI".to_owned(),
+        "python-fasthtml" => "FastHTML".to_owned(),
+        "mkdocs" => "MkDocs".to_owned(),
+        "mcp" => "MCP".to_owned(),
+        "node" => "Node.js".to_owned(),
+        "npm" => "npm".to_owned(),
+        "pnpm" => "pnpm".to_owned(),
+        "umijs" => "UmiJS".to_owned(),
+        "vitepress" => "VitePress".to_owned(),
+        "vuepress" => "VuePress".to_owned(),
+        "sveltekit" => "SvelteKit".to_owned(),
+        "solidstart" => "SolidStart".to_owned(),
+        "tanstack-start" => "TanStack Start".to_owned(),
+        "react-router" => "React Router".to_owned(),
+        "nuxt" | "nuxt3" => "Nuxt".to_owned(),
+        "wordpress" => "WordPress".to_owned(),
+        value if value.contains(['-', '_']) => value
+            .split(['-', '_'])
+            .filter(|part| !part.is_empty())
+            .map(capitalize)
+            .collect::<Vec<_>>()
+            .join(" "),
+        value => capitalize(value),
+    }
+}
+
+fn capitalize(value: &str) -> String {
+    let mut chars = value.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+        .unwrap_or_default()
+}
+
+impl ProviderKind {
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Laravel => laravel::NAME,
+            Self::Hugo => hugo::NAME,
+            Self::Mkdocs => mkdocs::NAME,
+            Self::Python => "python",
+            Self::Wordpress => wordpress::NAME,
+            Self::Php => php::NAME,
+            Self::NodeStatic => "node-static",
+            Self::Node => "node",
+            Self::Jekyll => jekyll::NAME,
+            Self::Go => go::NAME,
+            Self::StaticFile => staticfile::NAME,
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        REGISTRY
+            .iter()
+            .copied()
+            .find(|kind| kind.name().eq_ignore_ascii_case(name))
+    }
+
+    fn detection_score(
+        self,
+        path: &Path,
+        base: &BaseConfig,
+        operation: &OperationContext,
+    ) -> Option<i32> {
+        Some(match self {
+            Self::Laravel if laravel::matches(path) => 95,
+            Self::Hugo => match hugo::detection_evidence(path, base)? {
+                hugo::DetectionEvidence::Strong => 80,
+                hugo::DetectionEvidence::Structural => 40,
+            },
+            Self::Mkdocs if mkdocs::matches(path, base) => 85,
+            Self::Python => match python::detection_evidence(path, base)? {
+                python::DetectionEvidence::DjangoDependencies => 70,
+                python::DetectionEvidence::Dependencies => 50,
+                python::DetectionEvidence::Command => 80,
+                python::DetectionEvidence::Entrypoint => 10,
+            },
+            Self::Wordpress => match wordpress::detection_evidence(path, operation)? {
+                wordpress::DetectionEvidence::Site => 80,
+                wordpress::DetectionEvidence::Extension => 75,
+            },
+            Self::Php => match php::detection_evidence(path, base)? {
+                php::DetectionEvidence::DrupalWeb => 70,
+                php::DetectionEvidence::Framework => 65,
+                php::DetectionEvidence::ComposerEntrypoint => 60,
+                php::DetectionEvidence::Entrypoint => 10,
+                php::DetectionEvidence::StartCommand => 70,
+                php::DetectionEvidence::InstallCommand => 30,
+            },
+            Self::NodeStatic => match node_static::detection_evidence(path, base)? {
+                node_static::DetectionEvidence::Strong => 60,
+                node_static::DetectionEvidence::Weak => 20,
+            },
+            Self::Node => match node::detection_evidence(path, base)? {
+                node::DetectionEvidence::StartCommand => 35,
+                node::DetectionEvidence::PackageWithStart => 30,
+                node::DetectionEvidence::Package => 10,
+                node::DetectionEvidence::FrameworkWithStart => 45,
+                node::DetectionEvidence::Framework => 10,
+                node::DetectionEvidence::Entrypoint => 30,
+            },
+            Self::Jekyll => match jekyll::detection_evidence(path, base)? {
+                jekyll::DetectionEvidence::Strong => 85,
+                jekyll::DetectionEvidence::Structural => 40,
+            },
+            Self::Go if go::matches(path) => 80,
+            Self::StaticFile => match staticfile::detection_evidence(path, base, operation)? {
+                staticfile::DetectionEvidence::Staticfile => 50,
+                staticfile::DetectionEvidence::Html
+                | staticfile::DetectionEvidence::UnbuiltNodeSite => 15,
+                staticfile::DetectionEvidence::Fallback => 10,
+                staticfile::DetectionEvidence::StartCommand => 70,
+            },
+            _ => return None,
+        })
+    }
+
+    fn detect_and_load(
+        self,
+        path: &Path,
+        base: &BaseConfig,
+        operation: &OperationContext,
+    ) -> Result<Option<ProviderConfig>> {
+        Ok(match self {
+            Self::Laravel => {
+                laravel::detect_and_load(path, base, operation)?.map(ProviderConfig::Laravel)
+            }
+            Self::Hugo => hugo::detect_and_load(path, base, operation)?.map(ProviderConfig::Hugo),
+            Self::Mkdocs => {
+                mkdocs::detect_and_load(path, base, operation)?.map(ProviderConfig::Mkdocs)
+            }
+            Self::Python => {
+                python::detect_and_load(path, base, operation)?.map(ProviderConfig::Python)
+            }
+            Self::Wordpress => {
+                wordpress::detect_and_load(path, base, operation)?.map(ProviderConfig::Wordpress)
+            }
+            Self::Php => php::detect_and_load(path, base, operation)?.map(ProviderConfig::Php),
+            Self::NodeStatic => {
+                node_static::detect_and_load(path, base, operation)?.map(ProviderConfig::NodeStatic)
+            }
+            Self::Node => node::detect_and_load(path, base, operation)?.map(ProviderConfig::Node),
+            Self::Jekyll => {
+                jekyll::detect_and_load(path, base, operation)?.map(ProviderConfig::Jekyll)
+            }
+            Self::Go => go::detect_and_load(path, base, operation)?.map(ProviderConfig::Go),
+            Self::StaticFile => {
+                staticfile::detect_and_load(path, base, operation)?.map(ProviderConfig::StaticFile)
+            }
+        })
+    }
+
+    fn load(
+        self,
+        path: &Path,
+        base: &BaseConfig,
+        operation: &OperationContext,
+    ) -> Result<ProviderConfig> {
+        Ok(match self {
+            Self::Python => {
+                ProviderConfig::Python(python::load_config(path, base.clone(), operation)?)
+            }
+            Self::Node => ProviderConfig::Node(node::load_config(path, base.clone(), operation)?),
+            Self::NodeStatic => {
+                ProviderConfig::NodeStatic(node_static::load_config(path, base.clone(), operation)?)
+            }
+            Self::Php => ProviderConfig::Php(php::load_config(path, base.clone(), operation)?),
+            Self::Wordpress => {
+                ProviderConfig::Wordpress(wordpress::load_config(path, base.clone(), operation)?)
+            }
+            Self::Laravel => {
+                ProviderConfig::Laravel(laravel::load_config(path, base.clone(), operation)?)
+            }
+            Self::Go => ProviderConfig::Go(go::load_config(path, base.clone(), operation)?),
+            Self::StaticFile => {
+                ProviderConfig::StaticFile(staticfile::load_config(path, base.clone(), operation)?)
+            }
+            Self::Hugo => ProviderConfig::Hugo(hugo::load_config(path, base.clone(), operation)?),
+            Self::Jekyll => {
+                ProviderConfig::Jekyll(jekyll::load_config(path, base.clone(), operation)?)
+            }
+            Self::Mkdocs => {
+                ProviderConfig::Mkdocs(mkdocs::load_config(path, base.clone(), operation)?)
+            }
+        })
+    }
+}
+
+struct Candidate {
+    kind: ProviderKind,
+    registry_index: usize,
+    score: i32,
+    result: Result<ProviderConfig>,
+    events: crate::operation::CapturedEvents,
+}
+
+pub(crate) fn select_provider(
     path: &Path,
     base: &BaseConfig,
     use_provider: Option<&str>,
     operation: &OperationContext,
-) -> Result<&'static str> {
-    if let Some(wanted) = use_provider {
-        let wanted = wanted.to_lowercase();
-        if let Some((name, _)) = REGISTRY
-            .iter()
-            .find(|(name, _)| name.to_lowercase() == wanted)
-        {
-            return Ok(name);
-        }
+) -> Result<(ProviderKind, ProviderConfig)> {
+    if let Some(kind) = use_provider.and_then(ProviderKind::from_name) {
+        let config = finish_config(path, kind.load(path, base, operation)?);
+        return Ok((kind, config));
     }
-    detect_provider(path, base, operation)
+
+    let mut candidates = Vec::new();
+    for (registry_index, kind) in REGISTRY.iter().copied().enumerate() {
+        let (candidate_operation, events) = operation.capture_events();
+        let Some(result) = kind
+            .detect_and_load(path, base, &candidate_operation)
+            .transpose()
+        else {
+            continue;
+        };
+        candidates.push(Candidate {
+            kind,
+            registry_index,
+            score: 0,
+            result,
+            events,
+        });
+    }
+    for candidate in &mut candidates {
+        candidate.score = candidate
+            .kind
+            .detection_score(path, base, operation)
+            .ok_or_else(|| {
+                anyhow!(
+                    "{} returned a config without matching its detection evidence",
+                    candidate.kind.name()
+                )
+            })?;
+    }
+    candidates.sort_by(|a, b| {
+        b.score
+            .cmp(&a.score)
+            .then(a.registry_index.cmp(&b.registry_index))
+    });
+    let selected = candidates
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("Anybuild could not detect a provider for this project"))?;
+    selected.events.replay_into(operation);
+    let config = finish_config(path, selected.result?);
+    Ok((selected.kind, config))
+}
+
+fn finish_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
+    if base::is_blank(&config.base().name) {
+        config.base_mut().name = Some(
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        );
+    }
+    config
 }
 
 /// The declared field defaults for a provider config (pydantic's notion
@@ -265,48 +597,14 @@ pub fn merge_config_json(
     config_from_json(name, merged)
 }
 
-/// Port of `generator.load_provider_config` (without the --config JSON
-/// merge, which lives with the CLI).
-pub fn load_provider_config(
-    name: &str,
-    path: &Path,
-    base: BaseConfig,
-    operation: &OperationContext,
-) -> Result<ProviderConfig> {
-    let mut config = match name {
-        "python" => ProviderConfig::Python(python::load_config(path, base, operation)?),
-        "node" => ProviderConfig::Node(node::load_config(path, base, operation)?),
-        "node-static" => {
-            ProviderConfig::NodeStatic(node_static::load_config(path, base, operation)?)
-        }
-        "php" => ProviderConfig::Php(php::load_config(path, base, operation)?),
-        "wordpress" => ProviderConfig::Wordpress(wordpress::load_config(path, base, operation)?),
-        "laravel" => ProviderConfig::Laravel(laravel::load_config(path, base, operation)?),
-        "go" => ProviderConfig::Go(go::load_config(path, base, operation)?),
-        "staticfile" => ProviderConfig::StaticFile(staticfile::load_config(path, base, operation)?),
-        "hugo" => ProviderConfig::Hugo(hugo::load_config(path, base, operation)?),
-        "jekyll" => ProviderConfig::Jekyll(jekyll::load_config(path, base, operation)?),
-        "mkdocs" => ProviderConfig::Mkdocs(mkdocs::load_config(path, base, operation)?),
-        other => return Err(anyhow!("unknown provider {other:?}")),
-    };
-    // Python: `if not provider_config.name:` — "" falls back like None.
-    if base::is_blank(&config.base().name) {
-        let dir_name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        config.base_mut().name = Some(dir_name);
-    }
-    Ok(config)
-}
-
 #[cfg(test)]
 pub(crate) fn load_provider_for_test(
     path: &Path,
     base: &BaseConfig,
     use_provider: Option<&str>,
 ) -> Result<&'static str> {
-    load_provider(path, base, use_provider, &OperationContext::for_test())
+    select_provider(path, base, use_provider, &OperationContext::for_test())
+        .map(|(kind, _)| kind.name())
 }
 
 #[cfg(test)]
@@ -315,7 +613,145 @@ pub(crate) fn load_provider_config_for_test(
     path: &Path,
     base: BaseConfig,
 ) -> Result<ProviderConfig> {
-    load_provider_config(name, path, base, &OperationContext::for_test())
+    let kind = ProviderKind::from_name(name).ok_or_else(|| anyhow!("unknown provider {name:?}"))?;
+    kind.load(path, &base, &OperationContext::for_test())
+        .map(|config| finish_config(path, config))
+}
+
+#[cfg(test)]
+pub(crate) fn detection_score_for_test(name: &str, path: &Path, base: &BaseConfig) -> Option<i32> {
+    ProviderKind::from_name(name)?.detection_score(path, base, &OperationContext::for_test())
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use std::sync::{Arc, Mutex};
+
+    use indexmap::IndexMap;
+
+    use super::*;
+    use crate::event::{DiagnosticLevel, Event, ProcessIo, Reporter};
+
+    fn operation(
+        environment: IndexMap<String, String>,
+    ) -> (OperationContext, Arc<Mutex<Vec<Event>>>) {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let captured = Arc::clone(&events);
+        let operation = OperationContext::new(
+            environment,
+            false,
+            ProcessIo::Inherit,
+            Reporter::new(move |event: &Event| {
+                captured.lock().unwrap().push(event.clone());
+            }),
+        );
+        (operation, events)
+    }
+
+    #[test]
+    fn losing_candidate_diagnostics_are_discarded() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(
+            project.path().join("package.json"),
+            r#"{"scripts":{"build":"vite build"},"dependencies":{"vite":"7.0.0"}}"#,
+        )
+        .unwrap();
+        let (operation, events) = operation(IndexMap::new());
+
+        let (kind, _) =
+            select_provider(project.path(), &BaseConfig::default(), None, &operation).unwrap();
+
+        assert_eq!(kind, ProviderKind::NodeStatic);
+        assert!(
+            !events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| matches!(event, Event::Diagnostic { .. })),
+            "the losing Node provider must not emit missing-start warnings"
+        );
+    }
+
+    #[test]
+    fn lower_scoring_candidate_errors_are_ignored() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join("hugo.toml"), "baseURL = '/'\n").unwrap();
+        std::fs::create_dir(project.path().join("content")).unwrap();
+        std::fs::create_dir(project.path().join("static")).unwrap();
+        std::fs::write(project.path().join("index.php"), "<?php").unwrap();
+        let (operation, _) = operation(IndexMap::from([(
+            "ANYBUILD_PHP_ARCHITECTURE".to_owned(),
+            "invalid".to_owned(),
+        )]));
+
+        let (kind, _) =
+            select_provider(project.path(), &BaseConfig::default(), None, &operation).unwrap();
+
+        assert_eq!(kind, ProviderKind::Hugo);
+    }
+
+    #[test]
+    fn selected_candidate_errors_are_returned() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join("index.php"), "<?php").unwrap();
+        let (operation, _) = operation(IndexMap::from([(
+            "ANYBUILD_PHP_ARCHITECTURE".to_owned(),
+            "invalid".to_owned(),
+        )]));
+
+        let error =
+            select_provider(project.path(), &BaseConfig::default(), None, &operation).unwrap_err();
+
+        assert!(error.to_string().contains("ANYBUILD_PHP_ARCHITECTURE"));
+    }
+
+    #[test]
+    fn explicit_provider_bypasses_other_candidates() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join("index.php"), "<?php").unwrap();
+        std::fs::write(project.path().join("index.html"), "<h1>Static</h1>").unwrap();
+        let (operation, _) = operation(IndexMap::from([(
+            "ANYBUILD_PHP_ARCHITECTURE".to_owned(),
+            "invalid".to_owned(),
+        )]));
+
+        let (kind, _) = select_provider(
+            project.path(),
+            &BaseConfig::default(),
+            Some("staticfile"),
+            &operation,
+        )
+        .unwrap();
+
+        assert_eq!(kind, ProviderKind::StaticFile);
+    }
+
+    #[test]
+    fn selected_candidate_diagnostics_are_replayed_once() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join("package.json"), "{}").unwrap();
+        let (operation, events) = operation(IndexMap::new());
+
+        let (kind, _) =
+            select_provider(project.path(), &BaseConfig::default(), None, &operation).unwrap();
+
+        assert_eq!(kind, ProviderKind::Node);
+        let warning_count = events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| {
+                matches!(
+                    event,
+                    Event::Diagnostic {
+                        level: DiagnosticLevel::Warning,
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(warning_count, 2);
+    }
 }
 
 #[cfg(test)]

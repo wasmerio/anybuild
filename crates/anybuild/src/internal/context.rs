@@ -10,9 +10,7 @@ use crate::build::local::LocalBuildBackend;
 use crate::build::BuildBackend;
 use crate::plan::layout::{MountLayout, WasmerServeLayout};
 use crate::plan::Serve;
-use crate::providers::{
-    base::BaseConfig, load_provider, load_provider_config, workspace, ProviderConfig,
-};
+use crate::providers::{base::BaseConfig, select_provider, workspace, ProviderConfig};
 use crate::run::local::LocalRunner;
 use crate::run::wasmer::WasmerRunner;
 use crate::run::Runner;
@@ -197,18 +195,19 @@ pub fn load_project_config(
     operation: &OperationContext,
 ) -> Result<(&'static str, ProviderConfig)> {
     let base = base_config_for(&paths.app_path, overrides, operation)?;
-    let provider = load_provider(
+    let (provider, mut config) = select_provider(
         &paths.app_path,
         &base,
         overrides.use_provider.as_deref(),
         operation,
     )?;
-    let mut config = load_provider_config(provider, &paths.app_path, base, operation)?;
+    let provider = provider.name();
     if let Some(patch) = &overrides.config {
         config = crate::providers::merge_config_json(provider, &config, patch)?;
     }
     workspace::apply_subdir_provider_config(&mut config, paths.subdir.as_deref());
     workspace::apply_subdir_workspace_config(&paths.workspace_root, &mut config);
+    operation.provider_detected(provider, config.detection_details());
     Ok((provider, config))
 }
 
