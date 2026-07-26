@@ -2,6 +2,25 @@
 //! (the counterpart of test_cli_after_deploy.py's typer-runner tests
 //! that assert on process output).
 
+fn fake_wasmer(dir: &std::path::Path) -> std::path::PathBuf {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = dir.join("fake-wasmer");
+        std::fs::write(&path, "#!/bin/sh\necho 'wasmer 7.2.1'\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    #[cfg(windows)]
+    {
+        let path = dir.join("fake-wasmer.cmd");
+        std::fs::write(&path, "@echo off\r\necho wasmer 7.2.1\r\n").unwrap();
+        path
+    }
+}
+
 #[test]
 fn version_is_plain_text() {
     for option in ["--version", "-v"] {
@@ -296,11 +315,13 @@ serve(
 "#,
     )
     .unwrap();
+    let fake_wasmer = fake_wasmer(wasmer_tmp.path());
 
     let hidden_wasmer_files = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
         .arg("build")
         .arg(wasmer_tmp.path())
-        .args(["--wasmer", "--skip-prepare"])
+        .args(["--wasmer", "--skip-prepare", "--wasmer-bin"])
+        .arg(&fake_wasmer)
         .output()
         .unwrap();
     let hidden_stderr = String::from_utf8_lossy(&hidden_wasmer_files.stderr);
@@ -319,7 +340,13 @@ serve(
     let shown_wasmer_files = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
         .arg("build")
         .arg(wasmer_tmp.path())
-        .args(["--wasmer", "--skip-prepare", "--show-wasmer-files"])
+        .args([
+            "--wasmer",
+            "--skip-prepare",
+            "--show-wasmer-files",
+            "--wasmer-bin",
+        ])
+        .arg(&fake_wasmer)
         .output()
         .unwrap();
     let shown_stderr = String::from_utf8_lossy(&shown_wasmer_files.stderr);
