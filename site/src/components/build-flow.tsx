@@ -5,7 +5,7 @@ import { Globe2, Monitor } from "lucide-react";
 type FlowNode = {
   name: string;
   slug?: string;
-  icon?: "local" | "static";
+  icon?: "local" | "static" | "wasmer";
 };
 
 type Flow = {
@@ -33,13 +33,15 @@ const providers: FlowNode[] = [
 const targets: FlowNode[] = [
   { name: "Local preview", icon: "local" },
   { name: "Cloudflare", slug: "cloudflare" },
-  { name: "Wasmer", slug: "wasmer" },
+  { name: "Wasmer", icon: "wasmer" },
   { name: "Vercel", slug: "vercel" },
   { name: "Fly.io", slug: "flydotio" },
 ];
 
 const devicon = (name: string, variant = "original") =>
   `https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/${name}/${name}-${variant}.svg`;
+
+const wasmerIcon = "/wasmer-icon.svg";
 
 const frameworkIcons = {
   hugo: devicon("hugo"),
@@ -67,7 +69,7 @@ const artifacts = {
   },
   wasmer: {
     label: "Wasmer package",
-    icon: "https://cdn.simpleicons.org/wasmer",
+    icon: wasmerIcon,
     color: "#654FF0",
   },
   docker: {
@@ -262,6 +264,16 @@ function FlowIcon({ node }: { node: FlowNode }) {
   }
   if (node.icon === "static") {
     return <Globe2 className="h-5 w-5 text-[#F7F9FC]" aria-hidden="true" />;
+  }
+  if (node.icon === "wasmer") {
+    return (
+      <img
+        src={wasmerIcon}
+        alt=""
+        aria-hidden="true"
+        className="h-5 w-5 brightness-0 invert opacity-90"
+      />
+    );
   }
 
   return (
@@ -552,6 +564,8 @@ export function BuildFlow({ logo }: { logo: ReactNode }) {
             <span>{provider.name}</span>
           </div>
         ))}
+
+        <div className="build-flow__aura" aria-hidden="true" />
 
         <div data-flow-center className="build-flow__center">
           <div className="build-flow__center-logo">{logo}</div>

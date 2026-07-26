@@ -25,7 +25,7 @@ const demos: Array<{
   },
   {
     id: "hugo-deploy",
-    label: "Deploy a Hugo site to Wasmer",
+    label: "Deploy Mkdocs documentation to Wasmer",
     cast: "/deploy-wasmer.cast",
     liveTimestamp: 24.406,
     terminalTitle: "anybuild — mkdocs",

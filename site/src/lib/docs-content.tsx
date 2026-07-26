@@ -256,13 +256,18 @@ const howItWorks: DocPage = {
       content: (
         <OrderedList>
           <li>Resolve the workspace root and optional application subdirectory.</li>
-          <li>Read command hints from a Procfile and CLI overrides.</li>
-          <li>Score every provider and select the highest-scoring match.</li>
-          <li>Load typed provider configuration and apply environment and JSON overrides.</li>
-          <li>Generate or load the editable Starlark definition.</li>
+          <li>
+            Generate Anybuild file.
+            <BulletList>
+              <li>Read command hints from a Procfile and CLI overrides.</li>
+              <li>Score every provider and select the highest-scoring match.</li>
+              <li>Load typed provider configuration and apply environment and JSON overrides.</li>
+            </BulletList>
+          </li>
+          <li>Load the Anybuild Starlark definition file.</li>
           <li>Evaluate the definition into a Serve plan.</li>
-          <li>Execute build steps with the local or Docker backend.</li>
-          <li>Prepare and run the result locally or with Wasmer.</li>
+          <li>Execute build steps with a Builder backend (Local or Docker).</li>
+          <li>Prepare and run a Runner backend (Local or Wasmer).</li>
         </OrderedList>
       ),
     },

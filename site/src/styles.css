@@ -451,6 +451,65 @@
   right: 2rem;
 }
 
+.build-flow__aura {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  width: 330px;
+  height: 270px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.build-flow__aura::before {
+  position: absolute;
+  inset: -8%;
+  animation: build-flow-bits-drift 14s ease-in-out infinite alternate;
+  background:
+    radial-gradient(circle, rgba(139, 119, 255, 0.58) 0 1px, transparent 1.4px) 0 0 / 16px 16px,
+    radial-gradient(circle, rgba(65, 143, 255, 0.34) 0 0.8px, transparent 1.3px) 8px 8px / 16px 16px;
+  content: "";
+  -webkit-mask-image: radial-gradient(
+    ellipse,
+    #000 0 24%,
+    rgba(0, 0, 0, 0.72) 42%,
+    transparent 74%
+  );
+  mask-image: radial-gradient(ellipse, #000 0 24%, rgba(0, 0, 0, 0.72) 42%, transparent 74%);
+  opacity: 0.46;
+}
+
+.build-flow__aura::after {
+  position: absolute;
+  inset: 16%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse,
+    rgba(103, 82, 230, 0.12),
+    rgba(61, 105, 214, 0.04) 46%,
+    transparent 72%
+  );
+  content: "";
+  filter: blur(18px);
+}
+
+@keyframes build-flow-bits-drift {
+  from {
+    background-position:
+      0 0,
+      8px 8px;
+    opacity: 0.38;
+  }
+
+  to {
+    background-position:
+      4px -3px,
+      12px 5px;
+    opacity: 0.5;
+  }
+}
+
 .build-flow__center {
   position: absolute;
   z-index: 3;
@@ -515,6 +574,11 @@
     right: 0.75rem;
   }
 
+  .build-flow__aura {
+    width: 190px;
+    height: 170px;
+  }
+
   .build-flow__center {
     width: 96px;
     height: 118px;
@@ -554,6 +618,11 @@
   .build-flow__center-logo svg {
     width: 2.75rem;
     height: 2.75rem;
+  }
+
+  .build-flow__aura {
+    width: 150px;
+    height: 140px;
   }
 }
 
@@ -1692,6 +1761,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .build-flow__aura::before {
+    animation: none;
+  }
+
   .use-demo__browser {
     transition: opacity 100ms linear;
   }
