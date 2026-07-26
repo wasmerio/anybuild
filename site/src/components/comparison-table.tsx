@@ -1,4 +1,4 @@
-import { Check, X } from "lucide-react";
+import { Check, CircleHelp, X } from "lucide-react";
 
 type AnswerValue =
   | boolean
@@ -11,6 +11,7 @@ type AnswerValue =
 
 const capabilities: Array<{
   area: string;
+  description: string;
   anybuild: AnswerValue;
   railpack: AnswerValue;
   devbox: AnswerValue;
@@ -18,6 +19,8 @@ const capabilities: Array<{
 }> = [
   {
     area: "Adapt the build to different artifacts",
+    description:
+      "Builds can target different artifact formats and runtimes without changing the application.",
     anybuild: true,
     railpack: false,
     devbox: false,
@@ -25,6 +28,8 @@ const capabilities: Array<{
   },
   {
     area: "Uses your existing dependencies",
+    description:
+      "Uses dependencies already declared by the project instead of requiring a separate package definition.",
     anybuild: "when-indicated",
     railpack: true,
     devbox: true,
@@ -32,6 +37,8 @@ const capabilities: Array<{
   },
   {
     area: "Deploy to multiple providers",
+    description:
+      "The same build workflow can deploy an application across more than one hosting provider.",
     anybuild: true,
     railpack: false,
     devbox: false,
@@ -39,6 +46,8 @@ const capabilities: Array<{
   },
   {
     area: "Programmable build",
+    description:
+      "Build behavior can be expressed as code instead of being limited to fixed configuration.",
     anybuild: "via-starlark",
     railpack: false,
     devbox: false,
@@ -46,6 +55,8 @@ const capabilities: Array<{
   },
   {
     area: "Optimal deployment size",
+    description:
+      "Deployment artifacts contain only the files and dependencies required to run the application.",
     anybuild: true,
     railpack: false,
     devbox: false,
@@ -53,6 +64,8 @@ const capabilities: Array<{
   },
   {
     area: "Run migrations and jobs",
+    description:
+      "Supports one-off commands such as database migrations, release tasks, and background jobs.",
     anybuild: true,
     railpack: false,
     devbox: true,
@@ -60,6 +73,8 @@ const capabilities: Array<{
   },
   {
     area: "Supports build cache",
+    description:
+      "Reuses unchanged dependencies and build outputs to make subsequent builds faster.",
     anybuild: true,
     railpack: true,
     devbox: true,
@@ -67,6 +82,8 @@ const capabilities: Array<{
   },
   {
     area: "Frameworks supported",
+    description:
+      "The number of frameworks, providers, templates, or official buildpacks supported by each tool.",
     anybuild: { count: "64", label: "64 frameworks supported" },
     railpack: { count: "12 / 24", label: "12 Railpack and 24 Nixpacks providers" },
     devbox: { count: "38+", label: "38 or more published Devbox templates" },
@@ -108,7 +125,9 @@ function Answer({ value }: { value: AnswerValue }) {
       aria-label={label}
       title={label}
     >
-      {isSupported ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+      <span className="comparison__answer-icon" aria-hidden="true">
+        {isSupported ? <Check /> : <X />}
+      </span>
       {qualifier ? <small>{qualifier}</small> : null}
     </span>
   );
@@ -144,7 +163,31 @@ export function ComparisonTable() {
           <tbody>
             {capabilities.map((capability) => (
               <tr key={capability.area}>
-                <th scope="row">{capability.area}</th>
+                <th scope="row">
+                  <span className="comparison__capability">
+                    <span>{capability.area}</span>
+                    <span className="comparison__tooltip">
+                      <button
+                        type="button"
+                        aria-label={`About ${capability.area}`}
+                        aria-describedby={`comparison-tooltip-${capability.area
+                          .toLowerCase()
+                          .replaceAll(" ", "-")}`}
+                      >
+                        <CircleHelp aria-hidden="true" />
+                      </button>
+                      <span
+                        id={`comparison-tooltip-${capability.area
+                          .toLowerCase()
+                          .replaceAll(" ", "-")}`}
+                        className="comparison__tooltip-content"
+                        role="tooltip"
+                      >
+                        {capability.description}
+                      </span>
+                    </span>
+                  </span>
+                </th>
                 {products.map((product) => (
                   <td
                     key={product.key}

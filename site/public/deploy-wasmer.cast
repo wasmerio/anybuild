@@ -1,11 +1,6 @@
-{"version":3,"term":{"cols":80,"rows":20,"type":"xterm-ghostty","version":"ghostty 1.3.1","theme":{"fg":"#ffffff","bg":"#282c34","palette":"#1d1f21:#cc6666:#b5bd68:#f0c674:#81a2be:#b294bb:#8abeb7:#c5c8c6:#666666:#d54e53:#b9ca4a:#e7c547:#7aa6da:#c397d8:#70c0b1:#eaeaea"}},"timestamp":1785051530,"env":{"SHELL":"/bin/zsh"}}
-[0.616, "o", "\u001b[1m\u001b[7m%\u001b[27m\u001b[1m\u001b[0m                                                                               \r \r"]
-[0.001, "o", "\u001b]2;syrusakbary@BigMac:~/Development/anybuild\u0007\u001b]1;..ment/anybuild\u0007"]
-[0.001, "o", "\u001b]7;file://BigMac.local/Users/syrusakbary/Development/anybuild\u001b\\"]
-[0.001, "o", "\r\u001b[0m\u001b[27m\u001b[24m\u001b[J\u001b[01;32m➜  \u001b[36manybuild\u001b[00m \u001b[K"]
-[0.000, "o", "\u001b[?1h\u001b="]
-[0.000, "o", "\u001b[?2004h"]
-[0.055, "o", "\r\r\u001b[0m\u001b[27m\u001b[24m\u001b[J\u001b[01;32m➜  \u001b[36manybuild\u001b[00m \u001b[01;34mgit:(\u001b[31manybuild\u001b[34m) \u001b[33m✗\u001b[00m \u001b[K"]
+{"version":3,"term":{"cols":80,"rows":20,"type":"xterm-ghostty","version":"ghostty 1.3.1","theme":{"fg":"#ffffff","bg":"#050912","palette":"#1d1f21:#cc6666:#b5bd68:#f0c674:#81a2be:#b294bb:#8abeb7:#c5c8c6:#666666:#d54e53:#b9ca4a:#e7c547:#7aa6da:#c397d8:#70c0b1:#eaeaea"}},"timestamp":1785051530,"env":{"SHELL":"/bin/zsh"}}
+[0.000, "o", "\u001b[?1h\u001b=\u001b[?2004h"]
+[0.055, "o", "\r\r\u001b[0m\u001b[27m\u001b[24m\u001b[J\u001b[01;32m➜\u001b[00m \u001b[K"]
 [0.309, "o", "a"]
 [0.150, "o", "\ban"]
 [0.188, "o", "y"]
@@ -349,6 +344,7 @@
 [0.036, "o", "\r\u001b[2K\u001b[1;32m✔\u001b[0m \u001b[1mSuccessfully pushed release to namespace syrusakbary on the registry\u001b[0m          "]
 [0.090, "o", "\r\nDeploying app \u001b[1mmkdocs\u001b[0m (\u001b[1msyrusakbary\u001b[0m) to Wasmer Edge...\r\n\r\n"]
 [5.074, "o", "\u001b[1m\u001b[32m✔\u001b[0m\u001b[1m App mkdocs (syrusakbary) deployed successfully.\u001b[0m\r\n\r\nLive:    \u001b[1;4;34mhttps://mkdocs.wasmer.app\u001b[0m\r\nManage:  https://wasmer.io/apps/syrusakbary/mkdocs\r\n\r\nWaiting for new deployment to become available...\r\n(You can safely stop waiting now with CTRL-C)\r\n"]
+[0.000, "m", "site-live"]
 [2.002, "o", "."]
 [0.149, "o", "\r\n\u001b[1;33m𖥔\u001b[0m Deployment complete\r\n"]
 [0.003, "o", "Published Wasmer application\r\n"]

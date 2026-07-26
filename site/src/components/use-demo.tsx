@@ -4,13 +4,33 @@ import "asciinema-player/dist/bundle/asciinema-player.css";
 
 const liveMarker = "site-live";
 const liveDelayMs = 400;
-const liveTimestamp = 20.641;
 
 type DemoId = "nextjs-preview" | "hugo-deploy";
 
-const demos: Array<{ id: DemoId; label: string }> = [
-  { id: "nextjs-preview", label: "Preview Next.js locally with Wasmer" },
-  { id: "hugo-deploy", label: "Deploy a Hugo site to Wasmer" },
+const demos: Array<{
+  id: DemoId;
+  label: string;
+  cast: string;
+  liveTimestamp: number;
+  terminalTitle: string;
+  previewUrl: string;
+}> = [
+  {
+    id: "nextjs-preview",
+    label: "Preview Next.js locally with Wasmer",
+    cast: "/demo.cast",
+    liveTimestamp: 20.641,
+    terminalTitle: "anybuild — node-next",
+    previewUrl: "http://127.0.0.1:8080",
+  },
+  {
+    id: "hugo-deploy",
+    label: "Deploy a Hugo site to Wasmer",
+    cast: "/deploy-wasmer.cast",
+    liveTimestamp: 24.406,
+    terminalTitle: "anybuild — mkdocs",
+    previewUrl: "https://mkdocs.wasmer.app",
+  },
 ];
 
 export function UseDemo() {
@@ -20,6 +40,7 @@ export function UseDemo() {
   const [shouldPlay, setShouldPlay] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0);
+  const selectedDemoConfig = demos.find((demo) => demo.id === selectedDemo) ?? demos[0];
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -54,7 +75,7 @@ export function UseDemo() {
     void import("asciinema-player").then(({ create }) => {
       if (disposed) return;
 
-      player = create("/demo.cast", container, {
+      player = create(selectedDemoConfig.cast, container, {
         autoPlay: true,
         preload: true,
         loop: false,
@@ -76,7 +97,10 @@ export function UseDemo() {
         setPlaybackProgress(
           duration === undefined || duration <= 0 ? 0 : Math.min(1, Math.max(0, time / duration)),
         );
-        setIsLive(time >= liveTimestamp && (duration === undefined || time < duration - 0.1));
+        setIsLive(
+          time >= selectedDemoConfig.liveTimestamp &&
+            (duration === undefined || time < duration - 0.1),
+        );
       };
 
       player.addEventListener("marker", ({ label }) => {
@@ -102,7 +126,7 @@ export function UseDemo() {
       if (liveTimer !== undefined) window.clearTimeout(liveTimer);
       player?.dispose();
     };
-  }, [selectedDemo, shouldPlay]);
+  }, [selectedDemo, selectedDemoConfig, shouldPlay]);
 
   return (
     <section ref={sectionRef} id="use" className="mt-24 scroll-mt-12 text-center">
@@ -151,7 +175,7 @@ export function UseDemo() {
                 <i />
                 <i />
               </span>
-              <span>anybuild — node-next</span>
+              <span>{selectedDemoConfig.terminalTitle}</span>
               <span className="use-demo__terminal-spacer" />
             </div>
             <div
@@ -160,7 +184,7 @@ export function UseDemo() {
               aria-label={
                 selectedDemo === "nextjs-preview"
                   ? "Anybuild previewing a Next.js project locally with Wasmer"
-                  : "Anybuild deploying a Hugo site to Wasmer"
+                  : "Anybuild deploying an MkDocs site to Wasmer"
               }
             />
           </div>
@@ -178,7 +202,7 @@ export function UseDemo() {
                 </span>
                 <div className="use-demo__address">
                   <span aria-hidden="true">⌁</span>
-                  127.0.0.1:8080
+                  {selectedDemoConfig.previewUrl}
                 </div>
                 <span className="use-demo__live">
                   <i />
@@ -186,7 +210,15 @@ export function UseDemo() {
                 </span>
               </div>
               <div className="use-demo__page">
-                <h3>Hello from Next.js on Anybuild</h3>
+                {selectedDemo === "hugo-deploy" ? (
+                  <iframe
+                    src={selectedDemoConfig.previewUrl}
+                    title="Deployed MkDocs site on Wasmer"
+                    loading="lazy"
+                  />
+                ) : (
+                  <h3>Hello from Next.js on Anybuild</h3>
+                )}
               </div>
             </div>
           </div>

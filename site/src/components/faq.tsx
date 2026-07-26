@@ -44,17 +44,6 @@ anybuild . --provider node --regenerate --start`}</code>
     ),
   },
   {
-    question: "What happens to Shipit projects?",
-    answer: (
-      <p>
-        When no modern equivalent exists, legacy <code>Shipit</code> definitions and{" "}
-        <code>.shipit</code> state are renamed automatically. <code>SHIPIT_*</code> environment
-        variables remain a fallback, and the installed package retains a <code>shipit</code> binary
-        alias.
-      </p>
-    ),
-  },
-  {
     question: "Can Anybuild be used without the CLI?",
     answer: (
       <p>
