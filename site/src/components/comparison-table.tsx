@@ -35,6 +35,15 @@ const capabilities: Array<{
     buildpacks: false,
   },
   {
+    area: "Can build with your local tools",
+    description:
+      "Runs builds directly with the toolchains already available on the developer's machine, without requiring a container.",
+    anybuild: true,
+    railpack: false,
+    devbox: false,
+    buildpacks: false,
+  },
+  {
     area: "Programmable build",
     description:
       "Build behavior can be expressed as code instead of being limited to fixed configuration.",
@@ -53,7 +62,7 @@ const capabilities: Array<{
     buildpacks: false,
   },
   {
-    area: "Run migrations and jobs",
+    area: "Supports migrations and jobs",
     description:
       "Supports one-off commands such as database migrations, release tasks, and background jobs.",
     anybuild: true,

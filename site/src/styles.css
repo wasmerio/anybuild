@@ -1276,12 +1276,11 @@
 
 .comparison__shell {
   margin-top: 2.25rem;
-  overflow-x: auto;
+  overflow-x: clip;
+  overflow-y: visible;
   border: 1px solid rgba(42, 53, 80, 0.82);
   border-radius: 22px;
   background: rgba(8, 13, 25, 0.94);
-  scrollbar-color: #34415f transparent;
-  scrollbar-width: thin;
 }
 
 .comparison table {
@@ -1325,10 +1324,15 @@
 
 .comparison thead th:first-child {
   z-index: 3;
+  border-top-left-radius: 21px;
   color: #70798d;
   font-size: 0.65rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.comparison thead th:last-child {
+  border-top-right-radius: 21px;
 }
 
 .comparison tbody th {
@@ -1500,6 +1504,24 @@
 .comparison tbody tr:last-child th,
 .comparison tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.comparison tbody tr:last-child th:first-child {
+  border-bottom-left-radius: 21px;
+}
+
+.comparison tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 21px;
+}
+
+@media (max-width: 940px) {
+  .comparison__shell {
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    scrollbar-color: #34415f transparent;
+    scrollbar-width: thin;
+  }
 }
 
 .faq {
