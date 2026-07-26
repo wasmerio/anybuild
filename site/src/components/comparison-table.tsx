@@ -36,9 +36,9 @@ const capabilities: Array<{
     buildpacks: true,
   },
   {
-    area: "Deploy to multiple providers",
+    area: "Can deploy to Edge providers",
     description:
-      "The same build workflow can deploy an application across more than one hosting provider.",
+      "Deploys non-Docker artifacts directly to Edge providers without requiring a container image.",
     anybuild: true,
     railpack: false,
     devbox: false,
@@ -78,7 +78,7 @@ const capabilities: Array<{
     anybuild: true,
     railpack: true,
     devbox: true,
-    buildpacks: true,
+    buildpacks: false,
   },
   {
     area: "Frameworks supported",

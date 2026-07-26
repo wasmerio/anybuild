@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowRight, Copy, Download, ExternalLink, Github } from "lucide-react";
+import { ArrowRight, Check, Copy, Download, ExternalLink, Github } from "lucide-react";
 import { BuildFlow } from "@/components/build-flow";
 import { ComparisonTable } from "@/components/comparison-table";
 import { Faq } from "@/components/faq";
@@ -47,12 +47,47 @@ function BrandIcon({ className = "h-7 w-7" }: { className?: string }) {
   );
 }
 
+async function copyText(text: string) {
+  const clipboardWrite =
+    navigator.clipboard?.writeText && window.isSecureContext
+      ? navigator.clipboard
+          .writeText(text)
+          .then(() => true)
+          .catch(() => false)
+      : Promise.resolve(false);
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.inset = "0 auto auto -9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    if (document.execCommand("copy")) return true;
+  } catch {
+    // The Clipboard API request above remains available as a fallback.
+  } finally {
+    textarea.remove();
+  }
+
+  return clipboardWrite;
+}
+
 function Index() {
   const [installMethod, setInstallMethod] = useState<"shell" | "cargo">("shell");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const installCommand =
     installMethod === "shell"
       ? "curl -fsSL https://anybuild.run/install | sh"
       : "cargo install anybuild-cli";
+
+  const copyInstallCommand = async () => {
+    const didCopy = await copyText(installCommand);
+    setCopyState(didCopy ? "copied" : "error");
+    window.setTimeout(() => setCopyState("idle"), 1800);
+  };
 
   return (
     <div className="relative min-h-screen bg-[#070B17] text-[#F7F9FC]">
@@ -181,7 +216,10 @@ function Index() {
               <button
                 type="button"
                 aria-pressed={installMethod === "shell"}
-                onClick={() => setInstallMethod("shell")}
+                onClick={() => {
+                  setInstallMethod("shell");
+                  setCopyState("idle");
+                }}
                 className={`px-6 py-3.5 transition-colors ${
                   installMethod === "shell"
                     ? "bg-[#11192C] text-white"
@@ -193,7 +231,10 @@ function Index() {
               <button
                 type="button"
                 aria-pressed={installMethod === "cargo"}
-                onClick={() => setInstallMethod("cargo")}
+                onClick={() => {
+                  setInstallMethod("cargo");
+                  setCopyState("idle");
+                }}
                 className={`border-l border-[#2A3550] px-6 py-3.5 transition-colors ${
                   installMethod === "cargo"
                     ? "bg-[#11192C] text-white"
@@ -210,11 +251,34 @@ function Index() {
               </code>
               <button
                 type="button"
-                aria-label="Copy install command"
-                onClick={() => navigator.clipboard.writeText(installCommand)}
-                className="shrink-0 rounded-[9px] border border-[#34415E] p-3 text-[#AEB7C8] transition-colors hover:border-[#526180] hover:bg-white/5 hover:text-white"
+                aria-label={
+                  copyState === "copied"
+                    ? "Install command copied"
+                    : copyState === "error"
+                      ? "Copy failed; try again"
+                      : "Copy install command"
+                }
+                title={
+                  copyState === "copied"
+                    ? "Copied"
+                    : copyState === "error"
+                      ? "Copy failed"
+                      : "Copy install command"
+                }
+                onClick={() => void copyInstallCommand()}
+                className={`shrink-0 cursor-pointer rounded-[9px] border p-3 transition-colors ${
+                  copyState === "copied"
+                    ? "border-[#50D297]/40 bg-[#50D297]/10 text-[#62D79B]"
+                    : copyState === "error"
+                      ? "border-[#F66C5B]/40 bg-[#F66C5B]/10 text-[#F48A7D]"
+                      : "border-[#34415E] text-[#AEB7C8] hover:border-[#526180] hover:bg-white/5 hover:text-white"
+                }`}
               >
-                <Copy className="h-5 w-5" />
+                {copyState === "copied" ? (
+                  <Check className="h-5 w-5" />
+                ) : (
+                  <Copy className="h-5 w-5" />
+                )}
               </button>
             </div>
           </div>
