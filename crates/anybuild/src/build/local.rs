@@ -16,7 +16,7 @@ use crate::plan::{Mount, Step};
 
 use crate::build::BuildBackend;
 
-use crate::build::report::{build_step, console_print, rule};
+use crate::build::report::{build_started, build_step};
 
 /// Port of `utils.py::download_file`.
 pub fn download_file(url: &str, path: &Path) -> Result<()> {
@@ -386,7 +386,8 @@ impl BuildBackend for LocalBuildBackend {
         mounts: &[Mount],
         steps: &[Step],
     ) -> Result<()> {
-        console_print(&self.operation, "\nBuilding... 🚀");
+        build_started(&self.operation);
+        let started_at = std::time::Instant::now();
         let base_path = self.local_path.clone();
         let _ = std::fs::remove_dir_all(&base_path);
         std::fs::create_dir_all(&base_path)?;
@@ -396,7 +397,6 @@ impl BuildBackend for LocalBuildBackend {
         }
         let mut env = env.clone();
         for step in steps {
-            rule(&self.operation);
             self.execute_step(step, &mut env)?;
         }
 
@@ -405,8 +405,13 @@ impl BuildBackend for LocalBuildBackend {
         }
         self.runtime_path = env.get("PATH").cloned();
 
-        rule(&self.operation);
-        console_print(&self.operation, "Build complete ✅");
+        crate::build::report::success(
+            &self.operation,
+            format!(
+                "Build complete in {:.2}s",
+                started_at.elapsed().as_secs_f64()
+            ),
+        );
         Ok(())
     }
 

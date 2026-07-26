@@ -120,6 +120,7 @@ fn print_banner() {
     eprintln!("╭{}╮", "─".repeat(width));
     eprintln!("│ {content} │");
     eprintln!("╰{}╯", "─".repeat(width));
+    eprintln!();
 }
 
 fn main() {
@@ -251,5 +252,17 @@ mod tests {
             args.selection.volume_specs,
             ["uploads:/app/uploads", "cache:/app/cache"]
         );
+    }
+
+    #[test]
+    fn auto_accepts_detailed_build_steps() {
+        let args = parse_auto(&["auto", "proj", "--show-detailed-steps"]);
+        assert!(args.build.show_detailed_steps);
+    }
+
+    #[test]
+    fn auto_accepts_wasmer_file_output() {
+        let args = parse_auto(&["auto", "proj", "--show-wasmer-files"]);
+        assert!(args.build.show_wasmer_files);
     }
 }

@@ -38,10 +38,7 @@ pub fn run(shared: SharedProjectArgs, out: Option<PathBuf>, check: bool) -> Resu
             }
         }
     }
-    let generated = client.generate(GenerateOptions { output: out })?;
-    if generated.config != serde_json::json!({}) {
-        eprintln!("{}", serde_json::to_string_pretty(&generated.config)?);
-    }
+    client.generate(GenerateOptions { output: out })?;
     Ok(())
 }
 

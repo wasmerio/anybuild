@@ -117,7 +117,7 @@ impl ConfigResolutionOptions {
         }
 
         self.operation
-            .provider_detected(provider, config.detection_details());
+            .provider_declared(provider, config.detection_details());
         Ok(ResolvedConfig {
             persisted: PersistedConfig {
                 provider: provider.to_owned(),

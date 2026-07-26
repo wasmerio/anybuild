@@ -384,11 +384,16 @@ impl BuildBackend for DockerBuildBackend {
             &self.docker_ignore_path,
             "\n.anybuild\nAnybuild\n.shipit\nShipit\n",
         )?;
-        crate::build::report::console_print(&self.operation, "\nBuilding Docker file");
+        crate::build::report::build_started(&self.operation);
+        let started_at = std::time::Instant::now();
         self.build_dockerfile(name, &docker_file_contents)?;
-        // rich Rule(characters="-") stand-in.
-        crate::build::report::console_print(&self.operation, &"-".repeat(80));
-        crate::build::report::console_print(&self.operation, "Build complete ✅");
+        crate::build::report::success(
+            &self.operation,
+            format!(
+                "Build complete in {:.2}s",
+                started_at.elapsed().as_secs_f64()
+            ),
+        );
         Ok(())
     }
 

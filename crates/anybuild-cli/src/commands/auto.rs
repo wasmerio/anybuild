@@ -5,7 +5,7 @@ use anybuild::{
 use anyhow::{bail, Result};
 
 use crate::args::{DeployTargetArgs, RunSelectionArgs};
-use crate::commands::{build, client, execution};
+use crate::commands::{build, client_with_render_options, execution, RenderOptions};
 use crate::SharedProjectArgs;
 
 #[derive(clap::Args, Debug, Clone, Default)]
@@ -111,7 +111,15 @@ pub fn run(args: AutoArgs) -> Result<()> {
     } else {
         GenerationPolicy::IfMissing
     };
-    client(&shared, args.build.serve_port)?.auto(AutoOptions {
+    client_with_render_options(
+        &shared,
+        args.build.serve_port,
+        RenderOptions {
+            show_detailed_steps: args.build.show_detailed_steps,
+            show_wasmer_files: args.build.show_wasmer_files,
+        },
+    )?
+    .auto(AutoOptions {
         generation,
         build: build_options,
         run,

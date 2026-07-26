@@ -3,7 +3,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use indexmap::IndexMap;
 
-use crate::event::{Event, ProcessIo, ProcessStream, ProviderDetail, Reporter};
+use crate::event::{
+    BuildPlanPackage, BuildPlanStep, DeployScript, Event, ProcessIo, ProcessStream, ProviderDetail,
+    Reporter, WasmerPackageMapping,
+};
 
 #[derive(Clone)]
 pub(crate) struct OperationContext {
@@ -84,13 +87,29 @@ impl OperationContext {
     }
 
     pub fn provider_detected(&self, provider: &str, details: Vec<ProviderDetail>) {
+        self.report_provider(provider, details, true);
+    }
+
+    pub fn provider_declared(&self, provider: &str, details: Vec<ProviderDetail>) {
+        self.report_provider(provider, details, false);
+    }
+
+    fn report_provider(&self, provider: &str, details: Vec<ProviderDetail>, detected: bool) {
         if self.reported_provider.set(provider.to_owned()).is_err() {
             return;
         }
-        self.emit(Event::ProviderDetected {
-            provider: provider.to_owned(),
-            details,
-        });
+        let event = if detected {
+            Event::ProviderDetected {
+                provider: provider.to_owned(),
+                details,
+            }
+        } else {
+            Event::ProviderDeclared {
+                provider: provider.to_owned(),
+                details,
+            }
+        };
+        self.emit(event);
     }
 
     pub fn environment_var(&self, name: &str) -> Option<String> {
@@ -146,8 +165,84 @@ impl OperationContext {
                     })
                     .collect(),
             },
+            Event::ProviderDeclared { provider, details } => Event::ProviderDeclared {
+                provider,
+                details: details
+                    .into_iter()
+                    .map(|detail| ProviderDetail {
+                        label: detail.label,
+                        value: self.redact(detail.value),
+                    })
+                    .collect(),
+            },
+            Event::AnybuildGenerating {
+                path,
+                provider,
+                config,
+            } => Event::AnybuildGenerating {
+                path,
+                provider,
+                config: self.redact_json(config),
+            },
+            Event::BuildPlan {
+                packages,
+                steps,
+                prepare_steps,
+                deploy_scripts,
+            } => Event::BuildPlan {
+                packages: packages
+                    .into_iter()
+                    .map(|package| BuildPlanPackage {
+                        name: self.redact(package.name),
+                        version: package.version.map(|version| self.redact(version)),
+                        architecture: package
+                            .architecture
+                            .map(|architecture| self.redact(architecture)),
+                        phase: package.phase,
+                    })
+                    .collect(),
+                steps: steps
+                    .into_iter()
+                    .map(|step| self.redact_build_plan_step(step))
+                    .collect(),
+                prepare_steps: prepare_steps
+                    .into_iter()
+                    .map(|step| self.redact_build_plan_step(step))
+                    .collect(),
+                deploy_scripts: deploy_scripts
+                    .into_iter()
+                    .map(|script| DeployScript {
+                        name: self.redact(script.name),
+                        command: self.redact(script.command),
+                    })
+                    .collect(),
+            },
             Event::BuildStep { description } => Event::BuildStep {
                 description: self.redact(description),
+            },
+            Event::SectionStarted { title } => Event::SectionStarted {
+                title: self.redact(title),
+            },
+            Event::WasmerPackageMappings { mappings } => Event::WasmerPackageMappings {
+                mappings: mappings
+                    .into_iter()
+                    .map(|mapping| WasmerPackageMapping {
+                        source: self.redact(mapping.source),
+                        target: self.redact(mapping.target),
+                    })
+                    .collect(),
+            },
+            Event::Success { message } => Event::Success {
+                message: self.redact(message),
+            },
+            Event::WasmerFileContent {
+                filename,
+                content,
+                language,
+            } => Event::WasmerFileContent {
+                filename,
+                content: self.redact(content),
+                language,
             },
             Event::CommandStarted { name, command } => Event::CommandStarted {
                 name,
@@ -173,6 +268,56 @@ impl OperationContext {
             text = text.replace(secret, "[REDACTED]");
         }
         text
+    }
+
+    fn redact_json(&self, value: serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::String(value) => serde_json::Value::String(self.redact(value)),
+            serde_json::Value::Array(values) => serde_json::Value::Array(
+                values
+                    .into_iter()
+                    .map(|value| self.redact_json(value))
+                    .collect(),
+            ),
+            serde_json::Value::Object(values) => serde_json::Value::Object(
+                values
+                    .into_iter()
+                    .map(|(key, value)| (key, self.redact_json(value)))
+                    .collect(),
+            ),
+            value => value,
+        }
+    }
+
+    fn redact_build_plan_step(&self, step: BuildPlanStep) -> BuildPlanStep {
+        match step {
+            BuildPlanStep::Run { command, group } => BuildPlanStep::Run {
+                command: self.redact(command),
+                group: group.map(|group| self.redact(group)),
+            },
+            BuildPlanStep::Copy {
+                source,
+                target,
+                base,
+            } => BuildPlanStep::Copy {
+                source: self.redact(source),
+                target: self.redact(target),
+                base: self.redact(base),
+            },
+            BuildPlanStep::Environment { variables } => BuildPlanStep::Environment {
+                variables: variables
+                    .into_iter()
+                    .map(|variable| self.redact(variable))
+                    .collect(),
+            },
+            BuildPlanStep::Path { path } => BuildPlanStep::Path {
+                path: self.redact(path),
+            },
+            BuildPlanStep::WriteFile { path } => BuildPlanStep::WriteFile {
+                path: self.redact(path),
+            },
+            step => step,
+        }
     }
 
     #[cfg(test)]

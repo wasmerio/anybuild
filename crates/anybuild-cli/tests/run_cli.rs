@@ -68,7 +68,21 @@ fn generate_check_reports_drift_without_rewriting() {
         .args(["--provider", "staticfile"])
         .output()
         .unwrap();
-    assert!(generated.status.success());
+    let generated_stderr = String::from_utf8_lossy(&generated.stderr);
+    assert!(generated.status.success(), "{generated_stderr}");
+    assert!(
+        generated_stderr.contains("  Generated Anybuild at"),
+        "{generated_stderr}"
+    );
+    assert!(
+        !generated_stderr.contains("Generating Anybuild"),
+        "{generated_stderr}"
+    );
+    assert!(
+        !generated_stderr.contains("  Config:"),
+        "{generated_stderr}"
+    );
+    assert_eq!(generated_stderr.matches("Generated Anybuild at").count(), 1);
     let before = std::fs::read_to_string(tmp.path().join("Anybuild")).unwrap();
 
     let current = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
@@ -100,7 +114,31 @@ fn generate_check_reports_drift_without_rewriting() {
 }
 
 #[test]
-fn plan_reports_the_detected_provider_and_its_details() {
+fn new_anybuild_output_flows_from_detection_to_generation_to_packages() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("auto")
+        .arg(tmp.path())
+        .args(["--provider", "staticfile", "--skip-prepare"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+
+    let detected = stderr.find("  Detected static site provider").unwrap();
+    let generated = stderr.find("\n\n  Generated Anybuild at ").unwrap();
+    let packages = stderr.find("\n\n  Packages\n").unwrap();
+    assert!(detected < generated);
+    assert!(generated < packages);
+    assert_eq!(stderr.matches("Generated Anybuild at").count(), 1);
+    assert!(!stderr.contains("Generating Anybuild"));
+    assert!(!stderr.contains("  Config:"));
+}
+
+#[test]
+fn plan_reports_the_declared_provider_and_its_details() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(
         tmp.path().join("package.json"),
@@ -122,10 +160,179 @@ fn plan_reports_the_detected_provider_and_its_details() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stderr}");
-    assert!(stderr.contains("Detected Node.js provider"), "{stderr}");
-    assert!(stderr.contains("  Framework: Next.js"), "{stderr}");
-    assert!(stderr.contains("  Package manager: npm"), "{stderr}");
-    assert!(stderr.contains("  Node version: 24"), "{stderr}");
+    assert!(
+        stderr.contains("  Using Node.js provider declared in Anybuild"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("Detected Node.js provider"), "{stderr}");
+    assert!(stderr.contains("    Framework: Next.js"), "{stderr}");
+    assert!(stderr.contains("    Package manager: npm"), "{stderr}");
+    assert!(stderr.contains("    Node version: 24"), "{stderr}");
+}
+
+#[test]
+fn build_prints_the_complete_plan_summary() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("index.html"), "<h1>test</h1>\n").unwrap();
+    std::fs::write(
+        tmp.path().join("Anybuild"),
+        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_config")
+config = staticfile_config()
+serve(
+    name = "summary",
+    provider = config.provider,
+    build = [
+        use(dep("node", version = "24"), dep("npm")),
+        env(CI = "true"),
+        run("true", group = "install"),
+        run("true", group = "build"),
+        run("true"),
+        copy("index.html"),
+    ],
+    deps = [dep("node", version = "24"), dep("static-web-server", version = "2.38.0")],
+    commands = {"start": "true", "after_deploy": "true"},
+    prepare = [run("true")],
+)
+"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("build")
+        .arg(tmp.path())
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("╰─────────────────╯\n\n  Using static site provider declared in Anybuild"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("\n\n  Packages\n"), "{stderr}");
+    assert!(stderr.contains("  Packages\n  ──────────"), "{stderr}");
+    assert!(
+        stderr.contains("npm                │  -       │  only build"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("static-web-server  │  2.38.0  │  only deploy"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("  Build Steps\n  ───────────"), "{stderr}");
+    assert!(!stderr.contains("  ▸ environment"), "{stderr}");
+    assert!(stderr.contains("  ▸ install\n    $ true"), "{stderr}");
+    assert!(stderr.contains("  ▸ build\n    $ true"), "{stderr}");
+    assert!(!stderr.contains("  ▸ copy"), "{stderr}");
+    assert!(
+        stderr.contains("  Prepare\n  ──────────\n    $ true"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("  Deploy scripts\n  ──────────────"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("  ▸ start\n    $ true"), "{stderr}");
+    assert!(stderr.contains("  ▸ after_deploy\n    $ true"), "{stderr}");
+    assert!(
+        stderr.contains("  Starting Build...\n  ─────────────────"),
+        "{stderr}"
+    );
+    assert!(
+        regex::Regex::new(r"\n  │ Build complete in \d+\.\d{2}s │\n")
+            .unwrap()
+            .is_match(&stderr),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("Created prepare.sh script"), "{stderr}");
+    assert!(stderr.contains("\n  Preparing\n  ──────────\n"), "{stderr}");
+    assert!(
+        stderr.contains("\n  Copy to index.html from index.html"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains(&"-".repeat(80)), "{stderr}");
+
+    let detailed = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("build")
+        .arg(tmp.path())
+        .arg("--show-detailed-steps")
+        .output()
+        .unwrap();
+    let detailed_stderr = String::from_utf8_lossy(&detailed.stderr);
+    assert!(detailed.status.success(), "{detailed_stderr}");
+    assert!(
+        detailed_stderr.contains("  ▸ copy\n    index.html → index.html"),
+        "{detailed_stderr}"
+    );
+    assert!(
+        detailed_stderr.contains("  ▸ environment\n    CI"),
+        "{detailed_stderr}"
+    );
+
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("run")
+        .arg(tmp.path())
+        .arg("--start")
+        .output()
+        .unwrap();
+    let run_stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(run.status.success(), "{run_stderr}");
+    assert!(
+        run_stderr.contains("  Run start command\n  ─────────────────"),
+        "{run_stderr}"
+    );
+
+    let wasmer_tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        wasmer_tmp.path().join("Anybuild"),
+        r#"load("//anybuild/tools:staticfile.bzl", "staticfile_config")
+config = staticfile_config()
+serve(
+    name = "wasmer-files",
+    provider = config.provider,
+    build = [],
+    deps = [dep("static-web-server", version = "2.38.0")],
+    commands = {"start": "static-web-server"},
+)
+"#,
+    )
+    .unwrap();
+
+    let hidden_wasmer_files = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("build")
+        .arg(wasmer_tmp.path())
+        .args(["--wasmer", "--skip-prepare"])
+        .output()
+        .unwrap();
+    let hidden_stderr = String::from_utf8_lossy(&hidden_wasmer_files.stderr);
+    assert!(hidden_wasmer_files.status.success(), "{hidden_stderr}");
+    assert!(
+        !hidden_stderr.contains("Created wasmer.toml manifest"),
+        "{hidden_stderr}"
+    );
+    assert!(
+        !hidden_stderr.contains("Created app.yaml manifest"),
+        "{hidden_stderr}"
+    );
+    assert!(!hidden_stderr.contains("[package]"), "{hidden_stderr}");
+    assert!(!hidden_stderr.contains('✅'), "{hidden_stderr}");
+
+    let shown_wasmer_files = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("build")
+        .arg(wasmer_tmp.path())
+        .args(["--wasmer", "--skip-prepare", "--show-wasmer-files"])
+        .output()
+        .unwrap();
+    let shown_stderr = String::from_utf8_lossy(&shown_wasmer_files.stderr);
+    assert!(shown_wasmer_files.status.success(), "{shown_stderr}");
+    assert!(
+        shown_stderr.contains("  │ Created wasmer.toml manifest │"),
+        "{shown_stderr}"
+    );
+    assert!(
+        shown_stderr.contains("  │ Created app.yaml manifest │"),
+        "{shown_stderr}"
+    );
+    assert!(shown_stderr.contains("[package]"), "{shown_stderr}");
 }
 
 #[test]

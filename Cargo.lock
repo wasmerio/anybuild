@@ -157,6 +157,7 @@ dependencies = [
  "syntect",
  "tempfile",
  "two-face",
+ "unicode-width",
  "ureq",
 ]
 

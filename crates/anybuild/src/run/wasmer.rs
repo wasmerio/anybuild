@@ -21,6 +21,7 @@ use toml_edit::{value, Array, ArrayOfTables, DocumentMut, Item, Table};
 
 use crate::build::BuildBackend;
 use crate::common::volumes::load_volume_mappings;
+use crate::event::{Event, WasmerPackageMapping};
 use crate::operation::OperationContext;
 use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
 use crate::providers::ProviderConfig;
@@ -414,7 +415,7 @@ pub(crate) fn provider_config_patch(config: &ProviderConfig) -> JsonValue {
     JsonValue::Object(patch)
 }
 
-use crate::build::report::{console_print, print_syntax_panel};
+use crate::build::report::{console_print, section_started};
 
 #[cfg(test)]
 #[derive(Debug, Clone)]
@@ -560,11 +561,6 @@ impl WasmerRunner {
             .collect::<Vec<_>>()
             .join("\n");
         let content = format!("#!/bin/bash\n\n{body}");
-        console_print(
-            &self.operation,
-            "\nCreated prepare.sh script to run before packaging ✅",
-        );
-        print_syntax_panel(&self.operation, &content, "bash");
 
         let script_path = prepare_dir.join("prepare.sh");
         std::fs::write(&script_path, &content)?;
@@ -620,11 +616,12 @@ impl WasmerRunner {
         }
 
         if !deps.is_empty() {
-            console_print(&self.operation, "Mapping dependencies to Wasmer packages:");
+            section_started(&self.operation, "Wasmer Deployment");
         }
         let mut dependencies = Table::new();
         dependencies.decor_mut().set_prefix("\n");
         let mut dependency_names: Vec<String> = Vec::new();
+        let mut package_mappings = Vec::new();
         for dep in &deps {
             let Some(item) = mapper().get(dep.name.as_str()) else {
                 bail!("Dependency {} not found in Wasmer", dep.name);
@@ -647,10 +644,18 @@ impl WasmerRunner {
             let Some(mapped_dependency) = mapped_dependencies.get(version.as_str()) else {
                 bail!("Dependency {}@{} not found in Wasmer", dep.name, version);
             };
-            console_print(
-                &self.operation,
-                &format!("* {}@{} mapped to {}", dep.name, version, mapped_dependency),
-            );
+            let source = dep
+                .version
+                .as_deref()
+                .filter(|version| !version.is_empty())
+                .map_or_else(
+                    || dep.name.clone(),
+                    |version| format!("{}@{version}", dep.name),
+                );
+            package_mappings.push(WasmerPackageMapping {
+                source,
+                target: (*mapped_dependency).to_owned(),
+            });
             let (package_name, package_version) = mapped_dependency
                 .split_once('@')
                 .ok_or_else(|| anyhow!("invalid mapped dependency {mapped_dependency}"))?;
@@ -668,6 +673,11 @@ impl WasmerRunner {
                     (format!("{package_name}:{script}"), item.env),
                 );
             }
+        }
+        if !package_mappings.is_empty() {
+            self.operation.emit(Event::WasmerPackageMappings {
+                mappings: package_mappings,
+            });
         }
         doc.insert("dependencies", Item::Table(dependencies));
 
@@ -832,8 +842,11 @@ impl WasmerRunner {
             "[command.\"annotations.wasi\"]",
             "[command.annotations.wasi]",
         );
-        console_print(&self.operation, "\nCreated wasmer.toml manifest ✅");
-        print_syntax_panel(&self.operation, manifest.trim(), "toml");
+        self.operation.emit(Event::WasmerFileContent {
+            filename: "wasmer.toml".to_owned(),
+            content: manifest.trim().to_owned(),
+            language: "toml".to_owned(),
+        });
         std::fs::write(self.wasmer_dir_path.join("wasmer.toml"), &manifest)?;
 
         // ---- app.yaml ----
@@ -1009,8 +1022,11 @@ impl WasmerRunner {
 
         let app_yaml = dump_yaml_sorted(&YamlValue::Mapping(yaml_config))?;
 
-        console_print(&self.operation, "\nCreated app.yaml manifest ✅");
-        print_syntax_panel(&self.operation, app_yaml.trim(), "yaml");
+        self.operation.emit(Event::WasmerFileContent {
+            filename: "app.yaml".to_owned(),
+            content: app_yaml.trim().to_owned(),
+            language: "yaml".to_owned(),
+        });
         std::fs::write(self.wasmer_dir_path.join("app.yaml"), &app_yaml)?;
         Ok(())
     }
@@ -1405,7 +1421,10 @@ fn dump_yaml_sorted(value: &YamlValue) -> Result<String> {
 mod tests {
     //! Port of `tests/test_wasmer_annotations.py`.
 
+    use std::sync::{Arc, Mutex};
+
     use super::*;
+    use crate::event::{ProcessIo, Reporter};
     use crate::plan::{Mount, Volume};
     use crate::providers::node::NodeConfig;
     use crate::providers::python::{PythonConfig, PythonFramework};
@@ -1454,6 +1473,33 @@ mod tests {
             None,
             OperationContext::for_test(),
         )
+    }
+
+    fn make_runner_with_events(root: &Path) -> (WasmerRunner, Arc<Mutex<Vec<Event>>>) {
+        let src_dir = root.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let captured = Arc::clone(&events);
+        let operation = OperationContext::new(
+            IndexMap::new(),
+            false,
+            ProcessIo::Inherit,
+            Reporter::new(move |event: &Event| {
+                captured.lock().unwrap().push(event.clone());
+            }),
+        );
+        let runner = WasmerRunner::new(
+            Rc::new(RefCell::new(DummyBuildBackend {
+                root: root.to_path_buf(),
+            })),
+            src_dir,
+            None,
+            None,
+            Some("wasmer".to_owned()),
+            None,
+            operation,
+        );
+        (runner, events)
     }
 
     fn package(name: &str, version: Option<&str>, architecture: Option<&str>) -> Package {
@@ -1532,6 +1578,79 @@ mod tests {
         assert_eq!(ANYBUILD_CONFIG_ANNOTATION, "anybuild.sh/config");
         assert_eq!(ANYBUILD_PROVIDER_ANNOTATION, "anybuild.sh/provider");
         assert_eq!(ANYBUILD_VERSION_ANNOTATION, "anybuild.sh/version");
+    }
+
+    #[test]
+    fn test_wasmer_deployment_events_are_emitted_in_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (runner, events) = make_runner_with_events(tmp.path());
+        let mut serve = serve(
+            "static",
+            "staticfile",
+            vec![package("static-web-server", None, None)],
+            None,
+            &[("start", "static-web-server")],
+        );
+        serve.prepare = Some(vec![RunStep {
+            command: "true".to_owned(),
+            inputs: None,
+            outputs: None,
+            group: None,
+        }]);
+
+        runner.build_prepare(&serve).unwrap();
+        runner.build_serve(&serve).unwrap();
+
+        let events = events.lock().unwrap();
+        let deployment = events
+            .iter()
+            .position(
+                |event| matches!(event, Event::SectionStarted { title } if title == "Wasmer Deployment"),
+            )
+            .unwrap();
+        let mapping = events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event,
+                    Event::WasmerPackageMappings { mappings }
+                        if mappings == &[
+                            WasmerPackageMapping {
+                                source: "static-web-server".to_owned(),
+                                target: "wasmer/static-web-server@=1.1.0".to_owned(),
+                            },
+                            WasmerPackageMapping {
+                                source: "bash".to_owned(),
+                                target: "wasmer/bash@=1.0.25".to_owned(),
+                            },
+                        ]
+                )
+            })
+            .unwrap();
+        let wasmer_content = events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event,
+                    Event::WasmerFileContent { filename, .. }
+                        if filename == "wasmer.toml"
+                )
+            })
+            .unwrap();
+        let app_content = events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event,
+                    Event::WasmerFileContent { filename, .. }
+                        if filename == "app.yaml"
+                )
+            })
+            .unwrap();
+
+        assert!(deployment < mapping);
+        assert!(mapping < wasmer_content);
+        assert!(wasmer_content < app_content);
     }
 
     #[test]

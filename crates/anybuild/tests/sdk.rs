@@ -35,6 +35,7 @@ fn generate_and_plan_return_structured_data() {
         events.as_slice(),
         [
             Event::ProviderDetected { .. },
+            Event::AnybuildGenerating { .. },
             Event::FileWritten {
                 kind: "anybuild",
                 ..
@@ -42,13 +43,23 @@ fn generate_and_plan_return_structured_data() {
         ]
     ));
 
+    let plan_events = Arc::new(Mutex::new(Vec::new()));
+    let captured = Arc::clone(&plan_events);
     let plan = Anybuild::new(project.path())
         .with_provider("staticfile")
+        .with_event_handler(move |event: &Event| captured.lock().unwrap().push(event.clone()))
         .plan(PlanOptions::default())
         .unwrap();
     assert_eq!(plan.provider, "staticfile");
     assert_eq!(plan.serve.provider, "staticfile");
     assert!(plan.serve.commands["start"].contains("static-web-server"));
+    let plan_events = plan_events.lock().unwrap();
+    assert!(plan_events
+        .iter()
+        .any(|event| matches!(event, Event::ProviderDeclared { provider, .. } if provider == "staticfile")));
+    assert!(!plan_events
+        .iter()
+        .any(|event| matches!(event, Event::ProviderDetected { .. })));
 }
 
 #[test]

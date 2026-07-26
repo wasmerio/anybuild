@@ -4,7 +4,7 @@ use anybuild::BuildOptions;
 use anyhow::Result;
 
 use crate::args::{ProjectArgs, WasmerConnArgs};
-use crate::commands::{client, execution};
+use crate::commands::{client_with_render_options, execution, RenderOptions};
 use crate::SharedProjectArgs;
 
 #[derive(clap::Args, Debug, Clone, Default)]
@@ -43,6 +43,12 @@ pub struct BuildArgs {
     pub provider: Option<String>,
     #[arg(long)]
     pub config: Option<String>,
+    /// Include copy and working-directory operations in the build summary.
+    #[arg(long)]
+    pub show_detailed_steps: bool,
+    /// Show the generated wasmer.toml and app.yaml contents.
+    #[arg(long)]
+    pub show_wasmer_files: bool,
 }
 
 impl BuildArgs {
@@ -71,7 +77,15 @@ pub fn run(args: BuildArgs) -> Result<()> {
         args.docker_client,
         args.docker_opts,
     );
-    client(&shared, args.serve_port)?.build(BuildOptions {
+    client_with_render_options(
+        &shared,
+        args.serve_port,
+        RenderOptions {
+            show_detailed_steps: args.show_detailed_steps,
+            show_wasmer_files: args.show_wasmer_files,
+        },
+    )?
+    .build(BuildOptions {
         anybuild_path: args.anybuild_path,
         build_environment,
         runtime_environment,

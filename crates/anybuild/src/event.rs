@@ -17,6 +17,60 @@ pub struct ProviderDetail {
     pub value: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PackagePhase {
+    Build,
+    Deploy,
+    Both,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BuildPlanPackage {
+    pub name: String,
+    pub version: Option<String>,
+    pub architecture: Option<String>,
+    pub phase: PackagePhase,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum BuildPlanStep {
+    Run {
+        command: String,
+        group: Option<String>,
+    },
+    Copy {
+        source: String,
+        target: String,
+        base: String,
+    },
+    Environment {
+        variables: Vec<String>,
+    },
+    Path {
+        path: String,
+    },
+    Workdir {
+        path: PathBuf,
+    },
+    WriteFile {
+        path: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DeployScript {
+    pub name: String,
+    pub command: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WasmerPackageMapping {
+    pub source: String,
+    pub target: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -33,10 +87,40 @@ pub enum Event {
         provider: String,
         details: Vec<ProviderDetail>,
     },
+    ProviderDeclared {
+        provider: String,
+        details: Vec<ProviderDetail>,
+    },
+    AnybuildGenerating {
+        path: PathBuf,
+        provider: String,
+        config: serde_json::Value,
+    },
+    BuildPlan {
+        packages: Vec<BuildPlanPackage>,
+        steps: Vec<BuildPlanStep>,
+        prepare_steps: Vec<BuildPlanStep>,
+        deploy_scripts: Vec<DeployScript>,
+    },
     FileWritten {
         kind: &'static str,
         path: PathBuf,
     },
+    SectionStarted {
+        title: String,
+    },
+    WasmerPackageMappings {
+        mappings: Vec<WasmerPackageMapping>,
+    },
+    Success {
+        message: String,
+    },
+    WasmerFileContent {
+        filename: String,
+        content: String,
+        language: String,
+    },
+    BuildStarted,
     BuildStep {
         description: String,
     },

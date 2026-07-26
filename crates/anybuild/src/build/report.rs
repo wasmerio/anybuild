@@ -16,8 +16,20 @@ pub fn build_step(operation: &OperationContext, description: impl Into<String>) 
     });
 }
 
-pub fn rule(operation: &OperationContext) {
-    console_print(operation, &"-".repeat(80));
+pub fn build_started(operation: &OperationContext) {
+    operation.emit(Event::BuildStarted);
+}
+
+pub fn section_started(operation: &OperationContext, title: impl Into<String>) {
+    operation.emit(Event::SectionStarted {
+        title: title.into(),
+    });
+}
+
+pub fn success(operation: &OperationContext, message: impl Into<String>) {
+    operation.emit(Event::Success {
+        message: message.into(),
+    });
 }
 
 pub fn print_panel(operation: &OperationContext, content: &str) {

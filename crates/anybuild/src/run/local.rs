@@ -66,11 +66,6 @@ impl LocalRunner {
             commands.push(step.command.clone());
         }
         let content = format!("#!/bin/bash\n{}", commands.join("\n"));
-        console_print(
-            &self.operation,
-            "\nCreated prepare.sh script to run before packaging ✅",
-        );
-        print_panel(&self.operation, &content);
         std::fs::write(&self.prepare_bash_script, &content)?;
         set_executable(&self.prepare_bash_script)?;
         Ok(())

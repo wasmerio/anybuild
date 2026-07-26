@@ -24,6 +24,7 @@ serde.workspace = true
 serde_json.workspace = true
 syntect = { workspace = true, optional = true }
 two-face = { workspace = true, optional = true }
+unicode-width.workspace = true
 
 [dev-dependencies]
 libc = "0.2"

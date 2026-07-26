@@ -9,7 +9,10 @@ use crate::plan::{Serve, Service, Step};
 
 use crate::error::{Error, ErrorKind, Result};
 pub use crate::event::ProcessIo;
-use crate::event::{DiagnosticLevel, Event, EventHandler, Reporter};
+use crate::event::{
+    BuildPlanPackage, BuildPlanStep, DeployScript, DiagnosticLevel, Event, EventHandler,
+    PackagePhase, Reporter,
+};
 use crate::internal::context::{
     resolve_environment, resolve_project_context, resolve_project_context_for_check,
     EnvironmentOptions, ProjectContext,
@@ -475,6 +478,11 @@ impl Anybuild {
             provider_config.config_schema(),
             &config,
         )?;
+        context.emit(Event::AnybuildGenerating {
+            path: output.clone(),
+            provider: provider.to_owned(),
+            config: config.clone(),
+        });
         if let Some(parent) = output.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -630,6 +638,11 @@ impl Anybuild {
             let build_steps = context
                 .runner
                 .prepare_build_steps(context.serve.build.clone());
+            operation.emit(build_plan_event(
+                &build_steps,
+                &context.serve,
+                !options.skip_prepare,
+            ));
             let env = build_process_env(&self.effective_env());
             context.build_backend.borrow_mut().build(
                 &context.serve.name,
@@ -650,6 +663,9 @@ impl Anybuild {
                     .as_ref()
                     .is_some_and(|steps| !steps.is_empty())
             {
+                operation.emit(Event::SectionStarted {
+                    title: "Preparing".to_owned(),
+                });
                 context
                     .runner
                     .prepare(&env, context.serve.prepare.as_deref().unwrap_or_default())?;
@@ -962,6 +978,106 @@ fn project_plan(context: &ProjectContext) -> ProjectPlan {
         config: crate::providers::exclude_defaults_json(&config),
         services: context.serve.services.clone().unwrap_or_default(),
         serve: context.serve.clone(),
+    }
+}
+
+fn build_plan_event(build: &[Step], serve: &Serve, include_prepare: bool) -> Event {
+    type PackageKey = (String, Option<String>, Option<String>);
+    let mut packages: IndexMap<PackageKey, (bool, bool)> = IndexMap::new();
+    let mut mark_package = |package: &crate::plan::Package, build: bool, deploy: bool| {
+        let key = (
+            package.name.clone(),
+            package.version.clone(),
+            package.architecture.clone(),
+        );
+        let phases = packages.entry(key).or_insert((false, false));
+        phases.0 |= build;
+        phases.1 |= deploy;
+    };
+
+    for step in build {
+        if let Step::Use(step) = step {
+            for package in &step.dependencies {
+                mark_package(package, true, false);
+            }
+        }
+    }
+    for package in &serve.deps {
+        mark_package(package, false, true);
+    }
+
+    let packages = packages
+        .into_iter()
+        .map(
+            |((name, version, architecture), (build, deploy))| BuildPlanPackage {
+                name,
+                version,
+                architecture,
+                phase: match (build, deploy) {
+                    (true, true) => PackagePhase::Both,
+                    (true, false) => PackagePhase::Build,
+                    (false, true) => PackagePhase::Deploy,
+                    (false, false) => unreachable!("a package belongs to at least one phase"),
+                },
+            },
+        )
+        .collect();
+
+    let steps = build
+        .iter()
+        .filter_map(|step| match step {
+            Step::Use(_) => None,
+            Step::Run(step) => Some(BuildPlanStep::Run {
+                command: step.command.clone(),
+                group: step.group.clone(),
+            }),
+            Step::Copy(step) => Some(BuildPlanStep::Copy {
+                source: step.source.clone(),
+                target: step.target.clone(),
+                base: step.base.clone(),
+            }),
+            Step::Env(step) => Some(BuildPlanStep::Environment {
+                variables: step.variables.keys().cloned().collect(),
+            }),
+            Step::Path(step) => Some(BuildPlanStep::Path {
+                path: step.path.clone(),
+            }),
+            Step::Workdir(step) => Some(BuildPlanStep::Workdir {
+                path: step.path.clone(),
+            }),
+            Step::WriteFile(step) => Some(BuildPlanStep::WriteFile {
+                path: step.path.clone(),
+            }),
+        })
+        .collect();
+    let deploy_scripts = serve
+        .commands
+        .iter()
+        .map(|(name, command)| DeployScript {
+            name: name.clone(),
+            command: command.clone(),
+        })
+        .collect();
+    let prepare_steps = if include_prepare {
+        serve
+            .prepare
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|step| BuildPlanStep::Run {
+                command: step.command.clone(),
+                group: step.group.clone(),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    Event::BuildPlan {
+        packages,
+        steps,
+        prepare_steps,
+        deploy_scripts,
     }
 }
 

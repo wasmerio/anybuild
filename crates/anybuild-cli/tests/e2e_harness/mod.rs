@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, ensure, Context, Result};
 use regex::Regex;
 
-pub const BUILD_PHRASE: &str = "Build complete ✅";
+pub const BUILD_PHRASE: &str = "Build complete in ";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BuildMode {
