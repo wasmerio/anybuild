@@ -140,6 +140,12 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up Bun
+        if: ${{ matrix.suite == 'node' }}
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
       - name: Install MySQL client + hugo
         # hugo builds run the local binary even in wasmer mode.
         run: |
@@ -170,6 +176,10 @@ jobs:
           wasmer --version
           docker --version
           ./anybuild-bin/anybuild generate --help > /dev/null
+
+      - name: Verify Bun
+        if: ${{ matrix.suite == 'node' }}
+        run: bun --version
 
       - name: Run e2e tests (Rust binary)
         env:
