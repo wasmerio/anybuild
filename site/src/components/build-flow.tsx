@@ -415,8 +415,8 @@ export function BuildFlow({ logo }: { logo: ReactNode }) {
       context.save();
       context.font = '500 12px "Inter", ui-sans-serif, system-ui, sans-serif';
       const width = context.measureText(label).width + 18;
-      const x = point.x - width / 2;
-      const y = point.y + 19;
+      const x = point.x + 14;
+      const y = point.y - 12.5;
 
       context.globalAlpha = alpha;
       roundedRect(context, x, y, width, 25, 8);
@@ -425,7 +425,7 @@ export function BuildFlow({ logo }: { logo: ReactNode }) {
       context.fillStyle = color;
       context.textAlign = "center";
       context.textBaseline = "middle";
-      context.fillText(label, point.x, y + 12.5);
+      context.fillText(label, x + width / 2, point.y);
       context.restore();
     };
 
