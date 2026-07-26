@@ -149,6 +149,11 @@ fn sorted_entries(path: &Path) -> Vec<String> {
 impl DetectableConfig for GoConfig {
     type Evidence = ();
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("Go version", "go_version"),
+        ("Entrypoint", "go_build_file"),
+    ];
+
     fn detection_evidence(
         path: &Path,
         _base: &BaseConfig,

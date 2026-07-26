@@ -116,6 +116,12 @@ pub(crate) enum DetectionEvidence {
 impl DetectableConfig for WordPressConfig {
     type Evidence = DetectionEvidence;
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("Extension", "wp_extension_kind"),
+        ("WordPress version", "wp_version"),
+        ("PHP version", "php_version"),
+    ];
+
     fn detection_evidence(
         path: &Path,
         _base: &BaseConfig,

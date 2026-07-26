@@ -7,6 +7,7 @@
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
+use serde::Serialize;
 
 use crate::event::ProviderDetail;
 use crate::operation::OperationContext;
@@ -29,8 +30,10 @@ pub mod workspace;
 
 pub use base::{BaseConfig, HasBase};
 
-pub(crate) trait DetectableConfig: HasBase + Sized {
+pub(crate) trait DetectableConfig: HasBase + Serialize + Sized {
     type Evidence: Copy;
+
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[];
 
     fn detection_evidence(
         path: &Path,
@@ -48,6 +51,10 @@ pub(crate) trait DetectableConfig: HasBase + Sized {
         Self::detection_evidence(path, base, operation)
             .map(|_| Self::load(path, base.clone(), operation))
             .transpose()
+    }
+
+    fn detection_details(&self) -> Vec<ProviderDetail> {
+        detection_details_from_fields(self, Self::DETECTION_DETAILS)
     }
 }
 
@@ -150,87 +157,7 @@ impl ProviderConfig {
     }
 
     pub(crate) fn detection_details(&self) -> Vec<ProviderDetail> {
-        let fields: &[(&str, &str)] = match self.provider_name() {
-            "node" => &[
-                ("Framework", "framework"),
-                ("Package manager", "package_manager"),
-                ("Node version", "node_version"),
-            ],
-            "node-static" => &[
-                ("Framework", "framework"),
-                ("Package manager", "package_manager"),
-                ("Output directory", "static_dir"),
-            ],
-            "python" => &[
-                ("Framework", "framework"),
-                ("Server", "server"),
-                ("Python version", "python_version"),
-            ],
-            "php" => &[("Framework", "framework"), ("PHP version", "php_version")],
-            "wordpress" => &[
-                ("Extension", "wp_extension_kind"),
-                ("WordPress version", "wp_version"),
-                ("PHP version", "php_version"),
-            ],
-            "laravel" => &[
-                ("Package manager", "package_manager"),
-                ("PHP version", "php_version"),
-            ],
-            "go" => &[
-                ("Go version", "go_version"),
-                ("Entrypoint", "go_build_file"),
-            ],
-            "staticfile" => &[
-                ("Output directory", "static_dir"),
-                ("SWS version", "sws_version"),
-            ],
-            "hugo" => &[
-                ("Hugo version", "hugo_version"),
-                ("Output directory", "static_dir"),
-            ],
-            "jekyll" => &[
-                ("Jekyll version", "jekyll_version"),
-                ("Ruby version", "ruby_version"),
-                ("Output directory", "static_dir"),
-            ],
-            "mkdocs" => &[
-                ("MkDocs version", "mkdocs_version"),
-                ("Python version", "python_version"),
-                ("Output directory", "static_dir"),
-            ],
-            _ => &[],
-        };
-        let config = self.to_json();
-        let mut details: Vec<_> = fields
-            .iter()
-            .filter_map(|(label, field)| {
-                let value = config
-                    .get(field)?
-                    .as_str()
-                    .filter(|value| !value.is_empty())?;
-                Some(ProviderDetail {
-                    label: (*label).to_owned(),
-                    value: display_detail(label, value),
-                })
-            })
-            .collect();
-        if self.provider_name() == "php"
-            && config.get("use_composer").and_then(|value| value.as_bool()) == Some(true)
-        {
-            let index = usize::from(
-                config
-                    .get("framework")
-                    .is_some_and(|value| !value.is_null()),
-            );
-            details.insert(
-                index,
-                ProviderDetail {
-                    label: "Package manager".to_owned(),
-                    value: "Composer".to_owned(),
-                },
-            );
-        }
-        details
+        each_config!(self, config => config.detection_details())
     }
 
     /// Set `cross_platform` when the provider supports it (python only).
@@ -245,6 +172,26 @@ impl ProviderConfig {
             _ => false,
         }
     }
+}
+
+pub(crate) fn detection_details_from_fields<T: Serialize>(
+    config: &T,
+    fields: &[(&str, &str)],
+) -> Vec<ProviderDetail> {
+    let config = serde_json::to_value(config).expect("config serializes");
+    fields
+        .iter()
+        .filter_map(|(label, field)| {
+            let value = config
+                .get(field)?
+                .as_str()
+                .filter(|value| !value.is_empty())?;
+            Some(ProviderDetail {
+                label: (*label).to_owned(),
+                value: display_detail(label, value),
+            })
+        })
+        .collect()
 }
 
 fn display_detail(label: &str, value: &str) -> String {

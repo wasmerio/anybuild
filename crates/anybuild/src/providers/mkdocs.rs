@@ -216,6 +216,12 @@ pub fn load_config(
 impl DetectableConfig for MkdocsConfig {
     type Evidence = ();
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("MkDocs version", "mkdocs_version"),
+        ("Python version", "python_version"),
+        ("Output directory", "static_dir"),
+    ];
+
     fn detection_evidence(
         path: &Path,
         base: &BaseConfig,

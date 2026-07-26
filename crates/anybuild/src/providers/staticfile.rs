@@ -175,6 +175,11 @@ pub(crate) enum DetectionEvidence {
 impl DetectableConfig for StaticFileConfig {
     type Evidence = DetectionEvidence;
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("Output directory", "static_dir"),
+        ("SWS version", "sws_version"),
+    ];
+
     fn detection_evidence(
         path: &Path,
         base: &BaseConfig,

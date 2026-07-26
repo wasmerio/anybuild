@@ -110,6 +110,11 @@ pub fn load_config(
 impl DetectableConfig for LaravelConfig {
     type Evidence = ();
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("Package manager", "package_manager"),
+        ("PHP version", "php_version"),
+    ];
+
     fn detection_evidence(
         path: &Path,
         _base: &BaseConfig,

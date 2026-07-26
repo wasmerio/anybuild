@@ -11,9 +11,10 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::event::ProviderDetail;
 use crate::operation::OperationContext;
 use crate::providers::base::{env_bool, env_enum, env_int, env_str, BaseConfig, HasBase};
-use crate::providers::DetectableConfig;
+use crate::providers::{detection_details_from_fields, DetectableConfig};
 
 pub const NAME: &str = "php";
 
@@ -259,6 +260,9 @@ pub(crate) enum DetectionEvidence {
 impl DetectableConfig for PhpConfig {
     type Evidence = DetectionEvidence;
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] =
+        &[("Framework", "framework"), ("PHP version", "php_version")];
+
     fn detection_evidence(
         path: &Path,
         base: &BaseConfig,
@@ -312,6 +316,20 @@ impl DetectableConfig for PhpConfig {
 
     fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
         load_config(path, base, operation)
+    }
+
+    fn detection_details(&self) -> Vec<ProviderDetail> {
+        let mut details = detection_details_from_fields(self, Self::DETECTION_DETAILS);
+        if self.use_composer {
+            details.insert(
+                usize::from(self.framework.is_some()),
+                ProviderDetail {
+                    label: "Package manager".to_owned(),
+                    value: "Composer".to_owned(),
+                },
+            );
+        }
+        details
     }
 }
 

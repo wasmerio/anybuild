@@ -167,6 +167,11 @@ pub(crate) enum DetectionEvidence {
 impl DetectableConfig for HugoConfig {
     type Evidence = DetectionEvidence;
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("Hugo version", "hugo_version"),
+        ("Output directory", "static_dir"),
+    ];
+
     fn detection_evidence(
         path: &Path,
         base: &BaseConfig,

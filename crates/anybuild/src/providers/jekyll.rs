@@ -102,6 +102,12 @@ pub(crate) enum DetectionEvidence {
 impl DetectableConfig for JekyllConfig {
     type Evidence = DetectionEvidence;
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("Jekyll version", "jekyll_version"),
+        ("Ruby version", "ruby_version"),
+        ("Output directory", "static_dir"),
+    ];
+
     fn detection_evidence(
         path: &Path,
         base: &BaseConfig,

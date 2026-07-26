@@ -737,6 +737,12 @@ pub(crate) enum DetectionEvidence {
 impl DetectableConfig for NodeStaticConfig {
     type Evidence = DetectionEvidence;
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("Framework", "framework"),
+        ("Package manager", "package_manager"),
+        ("Output directory", "static_dir"),
+    ];
+
     fn detection_evidence(
         path: &Path,
         base: &BaseConfig,

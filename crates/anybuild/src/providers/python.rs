@@ -289,6 +289,12 @@ pub(crate) enum DetectionEvidence {
 impl DetectableConfig for PythonConfig {
     type Evidence = DetectionEvidence;
 
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("Framework", "framework"),
+        ("Server", "server"),
+        ("Python version", "python_version"),
+    ];
+
     fn detection_evidence(
         path: &Path,
         base: &BaseConfig,
