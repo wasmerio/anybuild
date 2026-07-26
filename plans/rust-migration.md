@@ -121,7 +121,7 @@ unit tests translate one-to-one. The config layer:
 - Local runner: prepare + start, `$PORT` env.
 - Wasmer runner is the largest single port (~830 lines): wasmer.toml
   generation (via `toml_edit`, the Rust tomlkit — preserves user
-  edits), app.yaml handling (`serde_yaml`), the `anybuild.sh/*`
+  edits), app.yaml handling (`serde_yaml`), the `anybuild.run/*`
   annotations, capabilities/services, deploy via the `wasmer` CLI
   subprocess. Two invariants to carry over verbatim:
   - `prepare_config` split: the python trio (cross_platform, extra

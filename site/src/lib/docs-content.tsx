@@ -59,7 +59,7 @@ const gettingStarted: DocPage = {
       content: (
         <>
           <Paragraph>Install the released CLI with the shell installer or Cargo.</Paragraph>
-          <CodeBlock>{`curl -fsSL https://anybuild.sh/install | sh`}</CodeBlock>
+          <CodeBlock>{`curl -fsSL https://anybuild.run/install | sh`}</CodeBlock>
           <CodeBlock>{`cargo install anybuild-cli`}</CodeBlock>
           <Paragraph>
             Confirm the binary is available with <InlineCode>anybuild --version</InlineCode>.
@@ -129,7 +129,7 @@ const installation: DocPage = {
       content: (
         <>
           <Paragraph>On macOS or Linux, use the Anybuild installer.</Paragraph>
-          <CodeBlock>{`curl -fsSL https://anybuild.sh/install | sh`}</CodeBlock>
+          <CodeBlock>{`curl -fsSL https://anybuild.run/install | sh`}</CodeBlock>
         </>
       ),
     },

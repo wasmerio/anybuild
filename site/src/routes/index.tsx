@@ -49,7 +49,7 @@ function Index() {
   const [installMethod, setInstallMethod] = useState<"shell" | "cargo">("shell");
   const installCommand =
     installMethod === "shell"
-      ? "curl -fsSL https://anybuild.sh/install | sh"
+      ? "curl -fsSL https://anybuild.run/install | sh"
       : "cargo install anybuild-cli";
 
   return (

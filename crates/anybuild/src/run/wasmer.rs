@@ -28,9 +28,9 @@ use crate::providers::ProviderConfig;
 
 use crate::run::{HostMount, Runner};
 
-pub const ANYBUILD_CONFIG_ANNOTATION: &str = "anybuild.sh/config";
-pub const ANYBUILD_PROVIDER_ANNOTATION: &str = "anybuild.sh/provider";
-pub const ANYBUILD_VERSION_ANNOTATION: &str = "anybuild.sh/version";
+pub const ANYBUILD_CONFIG_ANNOTATION: &str = "anybuild.run/config";
+pub const ANYBUILD_PROVIDER_ANNOTATION: &str = "anybuild.run/provider";
+pub const ANYBUILD_VERSION_ANNOTATION: &str = "anybuild.run/version";
 pub const WASMER_APP_KIND_ANNOTATION: &str = "wasmer.io/app-kind";
 pub const WASMER_VERSION_ANNOTATION: &str = "wasmer.io/version";
 pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
@@ -435,7 +435,7 @@ pub struct WasmerRunner {
     pub wasmer_token: Option<String>,
     pub bin: String,
     /// Snapshot of the plan-visible config after Wasmer overrides. Feeds
-    /// `anybuild.sh/config` annotations.
+    /// `anybuild.run/config` annotations.
     pub provider_config: Option<JsonValue>,
     operation: OperationContext,
     #[cfg(test)]
@@ -1575,9 +1575,9 @@ mod tests {
 
     #[test]
     fn test_anybuild_annotations_use_public_domain() {
-        assert_eq!(ANYBUILD_CONFIG_ANNOTATION, "anybuild.sh/config");
-        assert_eq!(ANYBUILD_PROVIDER_ANNOTATION, "anybuild.sh/provider");
-        assert_eq!(ANYBUILD_VERSION_ANNOTATION, "anybuild.sh/version");
+        assert_eq!(ANYBUILD_CONFIG_ANNOTATION, "anybuild.run/config");
+        assert_eq!(ANYBUILD_PROVIDER_ANNOTATION, "anybuild.run/provider");
+        assert_eq!(ANYBUILD_VERSION_ANNOTATION, "anybuild.run/version");
     }
 
     #[test]
