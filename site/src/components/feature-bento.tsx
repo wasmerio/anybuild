@@ -1,9 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
 import {
+  ArrowRight,
   Check,
-  Cloud,
   Container,
-  Monitor,
   Package,
   Search,
   Terminal,
@@ -139,42 +138,70 @@ function FrameworkVisual() {
   );
 }
 
-function DeploymentVisual({ logo }: { logo: ReactNode }) {
-  const targets = [
-    { name: "Local", icon: Monitor },
-    { name: "Worker", icon: Cloud },
-    { name: "Wasmer", icon: Package },
-    { name: "Container", icon: Container },
+function OptimizationVisual() {
+  const files = [
+    { name: "Dev dependencies", size: "620 MB" },
+    { name: "Source maps", size: "340 MB" },
+    { name: "Tests & fixtures", size: "216 MB" },
   ];
 
   return (
-    <div className="feature-deploy" aria-hidden="true">
-      <div className="feature-deploy__grid" />
-      <div className="feature-deploy__source">
-        {logo}
-        <span>Anybuild</span>
-      </div>
-      <div className="feature-deploy__trunk">
-        <i />
-      </div>
-      <div className="feature-deploy__targets">
-        {targets.map(({ name, icon: Icon }, index) => (
-          <div
-            key={name}
-            className="feature-deploy__target"
-            style={{ "--target-index": index } as CSSProperties}
-          >
-            <Icon />
-            <span>{name}</span>
+    <div className="feature-optimize" aria-hidden="true">
+      <div className="feature-optimize__grid" />
+
+      <div className="feature-optimize__package feature-optimize__package--source">
+        <div className="feature-optimize__header">
+          <Package />
+          <span>App bundle</span>
+          <small>1.2 GB</small>
+        </div>
+        <div className="feature-optimize__files">
+          {files.map(({ name, size }, index) => (
+            <div
+              key={name}
+              className="feature-optimize__file"
+              style={{ "--file-index": index } as CSSProperties}
+            >
+              <span>{name}</span>
+              <small>{size}</small>
+            </div>
+          ))}
+          <div className="feature-optimize__file feature-optimize__file--required">
             <Check />
+            <span>Runtime files</span>
+            <small>24 MB</small>
           </div>
-        ))}
+        </div>
+      </div>
+
+      <div className="feature-optimize__process">
+        <WandSparkles />
+        <ArrowRight />
+      </div>
+
+      <div className="feature-optimize__package feature-optimize__package--output">
+        <div className="feature-optimize__header">
+          <Container />
+          <span>Runtime only</span>
+          <small>24 MB</small>
+        </div>
+        <div className="feature-optimize__meter">
+          <span />
+        </div>
+        <div className="feature-optimize__result">
+          <strong>50×</strong>
+          <span>smaller container</span>
+        </div>
+        <div className="feature-optimize__ready">
+          <Check />
+          Ready to deploy
+        </div>
       </div>
     </div>
   );
 }
 
-export function FeatureBento({ logo }: { logo: ReactNode }) {
+export function FeatureBento() {
   return (
     <section className="feature-bento" aria-labelledby="feature-highlights-heading">
       <div className="feature-bento__intro">
@@ -212,9 +239,10 @@ export function FeatureBento({ logo }: { logo: ReactNode }) {
       </article>
 
       <article className="feature-bento__card feature-bento__card--wide">
-        <DeploymentVisual logo={logo} />
-        <FeatureCopy title="Deploy anywhere">
-          Turn one project into a local build, Worker, Wasmer package, or container.
+        <OptimizationVisual />
+        <FeatureCopy title="Optimal deployments">
+          Anybuild only includes the files and dependencies that are strictly required to run your
+          app. This results in up to 50× smaller deployed containers.
         </FeatureCopy>
       </article>
     </section>

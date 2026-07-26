@@ -175,84 +175,6 @@ const installation: DocPage = {
   ],
 };
 
-const faq: DocPage = {
-  slug: "faq",
-  title: "Frequently Asked Questions",
-  description: "Short answers about Anybuild's detection, environments, compatibility, and scope.",
-  sections: [
-    {
-      id: "docker-required",
-      title: "Does Anybuild require Docker?",
-      content: (
-        <Paragraph>
-          No. Local building and local preview are the defaults. Docker is optional and only
-          selected with <InlineCode>--docker</InlineCode> or{" "}
-          <InlineCode>--docker-client</InlineCode>.
-        </Paragraph>
-      ),
-    },
-    {
-      id: "docker-runtime",
-      title: "Does --docker run the application in a container?",
-      content: (
-        <Paragraph>
-          No. Docker is a build backend: it executes build steps in an isolated container and
-          exports artifacts into <InlineCode>.anybuild</InlineCode>. Runtime selection is separate;
-          use the local runner or add <InlineCode>--wasmer</InlineCode>.
-        </Paragraph>
-      ),
-    },
-    {
-      id: "wrong-provider",
-      title: "What if detection chooses the wrong provider?",
-      content: (
-        <>
-          <Paragraph>
-            Force a registered provider, inspect the plan, and regenerate the project definition.
-          </Paragraph>
-          <CodeBlock>{`anybuild plan . --provider node
-anybuild . --provider node --regenerate --start`}</CodeBlock>
-        </>
-      ),
-    },
-    {
-      id: "deployment-scope",
-      title: "Which platforms can Anybuild deploy to directly?",
-      content: (
-        <Paragraph>
-          The current Rust implementation publishes directly to Wasmer or writes Wasmer deployment
-          configuration. Other platforms can integrate the CLI or SDK and consume the generated plan
-          and artifacts, but Anybuild does not currently expose generic Cloudflare, Fly.io, or
-          OCI-image deployment commands.
-        </Paragraph>
-      ),
-    },
-    {
-      id: "shipit-compatibility",
-      title: "What happens to Shipit projects?",
-      content: (
-        <Paragraph>
-          When no modern equivalent exists, legacy <InlineCode>Shipit</InlineCode> definitions and{" "}
-          <InlineCode>.shipit</InlineCode> state are renamed automatically.{" "}
-          <InlineCode>SHIPIT_*</InlineCode> environment variables remain a fallback, and the
-          installed package retains a <InlineCode>shipit</InlineCode> binary alias.
-        </Paragraph>
-      ),
-    },
-    {
-      id: "sdk",
-      title: "Can Anybuild be used without the CLI?",
-      content: (
-        <Paragraph>
-          Yes. The <InlineCode>anybuild</InlineCode> Rust crate exposes the same synchronous
-          generate, plan, build, run, deploy, and auto operations with structured options, outcomes,
-          errors, and events.
-        </Paragraph>
-      ),
-    },
-  ],
-};
-
 const help: DocPage = {
   slug: "help",
   title: "Help and Troubleshooting",
@@ -1996,7 +1918,6 @@ export const docsNav: DocsNavGroup[] = [
     title: "Start here",
     items: [
       { title: "Getting Started", slug: "" },
-      { title: "FAQ", slug: "faq" },
       { title: "Installation", slug: "installation" },
       { title: "Help", slug: "help" },
       { title: "How Anybuild Works", slug: "how-it-works" },
@@ -2066,7 +1987,6 @@ export const docsNav: DocsNavGroup[] = [
 
 export const docsPages: DocPage[] = [
   gettingStarted,
-  faq,
   installation,
   help,
   howItWorks,

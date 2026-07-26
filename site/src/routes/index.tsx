@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowRight, Copy, Download, ExternalLink, Github } from "lucide-react";
 import { BuildFlow } from "@/components/build-flow";
+import { ComparisonTable } from "@/components/comparison-table";
+import { Faq } from "@/components/faq";
 import { FeatureBento } from "@/components/feature-bento";
 import { UseDemo } from "@/components/use-demo";
 
@@ -220,7 +222,11 @@ function Index() {
 
         <UseDemo />
 
-        <FeatureBento logo={<BrandIcon className="h-7 w-7" />} />
+        <FeatureBento />
+
+        <ComparisonTable />
+
+        <Faq />
       </main>
 
       <footer className="relative z-10 border-t border-[#22304D]/70">

@@ -1,4 +1,4 @@
-{"version":3,"term":{"cols":80,"rows":20,"type":"xterm-ghostty","version":"ghostty 1.3.1","theme":{"fg":"#ffffff","bg":"#282c34","palette":"#1d1f21:#cc6666:#b5bd68:#f0c674:#81a2be:#b294bb:#8abeb7:#c5c8c6:#666666:#d54e53:#b9ca4a:#e7c547:#7aa6da:#c397d8:#70c0b1:#eaeaea"}},"timestamp":1785038603,"env":{"SHELL":"/bin/zsh"}}
+{"version":3,"term":{"cols":80,"rows":20,"type":"xterm-ghostty","version":"ghostty 1.3.1","theme":{"fg":"#ffffff","bg":"#050912","palette":"#1d1f21:#cc6666:#b5bd68:#f0c674:#81a2be:#b294bb:#8abeb7:#c5c8c6:#666666:#d54e53:#b9ca4a:#e7c547:#7aa6da:#c397d8:#70c0b1:#eaeaea"}},"timestamp":1785038603,"env":{"SHELL":"/bin/zsh"}}
 [0.000, "o", "\u001b[?1h\u001b=\u001b[?2004h"]
 [0.055, "o", "\r\r\u001b[0m\u001b[27m\u001b[24m\u001b[J\u001b[01;32m➜\u001b[00m \u001b[K"]
 [0.189, "o", "a"]
@@ -150,6 +150,7 @@
 [0.045, "o", "\r\u001b[2K⠁ Compiling start                                                               \r\u001b[2K"]
 [0.344, "o", "Serving /app\r\n"]
 [0.000, "o", "Listening on http://127.0.0.1:8080\r\n"]
+[0.000, "m", "site-live"]
 [0.002, "o", "\r\n"]
 [5.000, "o", "\u001b[?2004l\r\r\n"]
 [0.005, "x", "130"]
