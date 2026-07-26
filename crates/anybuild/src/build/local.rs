@@ -18,6 +18,39 @@ use crate::build::BuildBackend;
 
 use crate::build::report::{build_started, build_step};
 
+fn shorten_local_build_paths(description: &str, build_path: &Path) -> String {
+    let build_path = build_path.to_string_lossy();
+    if build_path.is_empty() {
+        return description.to_owned();
+    }
+
+    let mut output = String::with_capacity(description.len());
+    let mut remainder = description;
+    while let Some(index) = remainder.find(build_path.as_ref()) {
+        output.push_str(&remainder[..index]);
+        let after_path = &remainder[index + build_path.len()..];
+        if let Some(after_separator) = after_path
+            .strip_prefix('/')
+            .or_else(|| after_path.strip_prefix('\\'))
+        {
+            output.push('/');
+            remainder = after_separator;
+        } else if after_path.is_empty()
+            || after_path.starts_with([
+                ' ', '\t', '\n', '\r', '\'', '"', ';', ':', '|', '&', ')', ']', '}', ',',
+            ])
+        {
+            output.push('/');
+            remainder = after_path;
+        } else {
+            output.push_str(build_path.as_ref());
+            remainder = after_path;
+        }
+    }
+    output.push_str(remainder);
+    output
+}
+
 /// Port of `utils.py::download_file`.
 pub fn download_file(url: &str, path: &Path) -> Result<()> {
     let response = ureq::get(url)
@@ -136,32 +169,16 @@ fn which(program: &str, search_paths: &[PathBuf]) -> Option<PathBuf> {
     None
 }
 
-/// Python `repr()` of a string (single-quoted).
-fn py_str_repr(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push('\'');
-    for ch in text.chars() {
-        match ch {
-            '\\' => out.push_str("\\\\"),
-            '\'' => out.push_str("\\'"),
-            '\n' => out.push_str("\\n"),
-            '\t' => out.push_str("\\t"),
-            '\r' => out.push_str("\\r"),
-            other => out.push(other),
-        }
-    }
-    out.push('\'');
-    out
-}
-
-/// Python `repr()` of a `Dict[str, str]`.
-fn py_dict_repr(map: &IndexMap<String, String>) -> String {
-    let body = map
+fn display_environment_variables(variables: &IndexMap<String, String>) -> String {
+    variables
         .iter()
-        .map(|(k, v)| format!("{}: {}", py_str_repr(k), py_str_repr(v)))
+        .map(|(name, value)| {
+            let value = serde_json::to_string(value)
+                .expect("serializing an environment variable value cannot fail");
+            format!("{name}={value}")
+        })
         .collect::<Vec<_>>()
-        .join(", ");
-    format!("{{{body}}}")
+        .join(" ")
 }
 
 /// Port of `builders/local.py::LocalBuildBackend`.
@@ -206,6 +223,14 @@ impl LocalBuildBackend {
         }
     }
 
+    fn report_build_step(&self, description: impl Into<String>) {
+        let description = description.into();
+        build_step(
+            &self.operation,
+            shorten_local_build_paths(&description, &self.build_path),
+        );
+    }
+
     fn execute_step(&mut self, step: &Step, env: &mut IndexMap<String, String>) -> Result<()> {
         let build_path = self.workdir.clone();
         match step {
@@ -216,13 +241,10 @@ impl LocalBuildBackend {
                     .map(|dep| dep.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                build_step(&self.operation, format!("Using dependencies: {deps}"));
+                self.report_build_step(format!("Using dependencies: {deps}"));
             }
             Step::Workdir(step) => {
-                build_step(
-                    &self.operation,
-                    format!("Working in {}", step.path.display()),
-                );
+                self.report_build_step(format!("Working in {}", step.path.display()));
                 self.workdir = step.path.clone();
                 std::fs::create_dir_all(&step.path)?;
             }
@@ -233,10 +255,11 @@ impl LocalBuildBackend {
                     for input in inputs {
                         let source = pythonic_join(&self.src_dir, input);
                         let target = pythonic_join(&build_path, input);
-                        build_step(
-                            &self.operation,
-                            format!("Copying {} to {}", input, target.display()),
-                        );
+                        self.report_build_step(format!(
+                            "Copying {} to {}",
+                            input,
+                            target.display()
+                        ));
                         if let Some(parent) = target.parent() {
                             std::fs::create_dir_all(parent)?;
                         }
@@ -250,7 +273,7 @@ impl LocalBuildBackend {
                     let all_inputs = inputs.join(", ");
                     extra = format!(" # using {all_inputs}");
                 }
-                build_step(&self.operation, format!("$ {}{}", step.command, extra));
+                self.report_build_step(format!("$ {}{}", step.command, extra));
                 let command_line = &step.command;
                 let parts = shell_words::split(command_line)
                     .map_err(|e| anyhow!("Failed to parse command {command_line:?}: {e}"))?;
@@ -309,10 +332,10 @@ impl LocalBuildBackend {
                 ignore_matches.push("Anybuild".to_owned());
 
                 if step.is_download() {
-                    build_step(
-                        &self.operation,
-                        format!("Download from {} to {}", step.source, step.target),
-                    );
+                    self.report_build_step(format!(
+                        "Download from {} to {}",
+                        step.source, step.target
+                    ));
                     download_file(&step.source, &pythonic_join(&build_path, &step.target))?;
                 } else {
                     let base = match step.base.as_str() {
@@ -320,13 +343,10 @@ impl LocalBuildBackend {
                         "assets" => &self.assets_path,
                         other => bail!("Unknown base: {other}"),
                     };
-                    build_step(
-                        &self.operation,
-                        format!(
-                            "Copy to {} from {}{}",
-                            step.target, step.source, ignore_extra
-                        ),
-                    );
+                    self.report_build_step(format!(
+                        "Copy to {} from {}{}",
+                        step.target, step.source, ignore_extra
+                    ));
                     let source = pythonic_join(base, &step.source);
                     let target = pythonic_join(&build_path, &step.target);
                     if normalize_absolute(&source)? == normalize_absolute(&target)? {
@@ -346,19 +366,16 @@ impl LocalBuildBackend {
                 }
             }
             Step::Env(step) => {
-                build_step(
-                    &self.operation,
-                    format!(
-                        "Setting environment variables: EnvStep(variables={})",
-                        py_dict_repr(&step.variables)
-                    ),
-                );
+                self.report_build_step(format!(
+                    "Setting environment variables: {}",
+                    display_environment_variables(&step.variables)
+                ));
                 for (key, value) in &step.variables {
                     env.insert(key.clone(), value.clone());
                 }
             }
             Step::Path(step) => {
-                build_step(&self.operation, format!("Add {} to PATH", step.path));
+                self.report_build_step(format!("Add {} to PATH", step.path));
                 let old = env.get("PATH").cloned().unwrap_or_default();
                 env.insert("PATH".to_owned(), format!("{}:{}", step.path, old));
             }
@@ -367,7 +384,7 @@ impl LocalBuildBackend {
                 if !target.is_absolute() {
                     target = build_path.join(&target);
                 }
-                build_step(&self.operation, format!("Write file {}", target.display()));
+                self.report_build_step(format!("Write file {}", target.display()));
                 if let Some(parent) = target.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
@@ -522,13 +539,58 @@ mod tests {
     }
 
     #[test]
-    fn py_dict_repr_matches_python() {
+    fn environment_variables_are_displayed_as_assignments() {
         let mut map = IndexMap::new();
         map.insert("NODE_ENV".to_owned(), "production".to_owned());
-        map.insert("X".to_owned(), "it's".to_owned());
+        map.insert("MESSAGE".to_owned(), "say \"hello\"\nnow".to_owned());
         assert_eq!(
-            py_dict_repr(&map),
-            "{'NODE_ENV': 'production', 'X': 'it\\'s'}"
+            display_environment_variables(&map),
+            r#"NODE_ENV="production" MESSAGE="say \"hello\"\nnow""#
+        );
+    }
+
+    #[test]
+    fn local_build_progress_uses_virtual_absolute_paths() {
+        let root = Path::new("/Users/example/project/.anybuild/local/build");
+
+        assert_eq!(
+            shorten_local_build_paths(
+                "$ mkdir -p /Users/example/project/.anybuild/local/build/opt/assets",
+                root,
+            ),
+            "$ mkdir -p /opt/assets"
+        );
+        assert_eq!(
+            shorten_local_build_paths(
+                "Copy to /Users/example/project/.anybuild/local/build/opt/assets/optimize-node-modules.sh from node/optimize-node-modules.sh",
+                root,
+            ),
+            "Copy to /opt/assets/optimize-node-modules.sh from node/optimize-node-modules.sh"
+        );
+        assert_eq!(
+            shorten_local_build_paths(
+                "$ bash /Users/example/project/.anybuild/local/build/opt/assets/optimize-node-modules.sh node_modules",
+                root,
+            ),
+            "$ bash /opt/assets/optimize-node-modules.sh node_modules"
+        );
+        assert_eq!(
+            shorten_local_build_paths(
+                "$ cp -R . /Users/example/project/.anybuild/local/build/app",
+                root,
+            ),
+            "$ cp -R . /app"
+        );
+        assert_eq!(
+            shorten_local_build_paths("$ cd /Users/example/project/.anybuild/local/build", root,),
+            "$ cd /"
+        );
+        assert_eq!(
+            shorten_local_build_paths(
+                "$ touch /Users/example/project/.anybuild/local/build-cache",
+                root,
+            ),
+            "$ touch /Users/example/project/.anybuild/local/build-cache"
         );
     }
 }
