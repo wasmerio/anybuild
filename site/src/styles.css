@@ -124,11 +124,11 @@
   background: linear-gradient(90deg, #7758ff, #4b7fff);
   content: "";
   opacity: 0;
-  transform: scaleX(0.35);
+  transform: scaleX(0);
   transform-origin: left;
   transition:
     opacity 180ms ease,
-    transform 240ms ease;
+    transform 60ms linear;
 }
 
 .use-demo__option:hover {
@@ -149,7 +149,7 @@
 
 .use-demo__option--selected::after {
   opacity: 1;
-  transform: scaleX(1);
+  transform: scaleX(var(--demo-progress, 0));
 }
 
 .use-demo__option-number {
@@ -255,8 +255,10 @@
     pointer-events: none;
   }
 
-  .use-demo__player:hover .ap-control-bar,
-  .use-demo__player:focus-within .ap-control-bar {
+  .use-demo__player:hover .ap-wrapper .ap-control-bar,
+  .use-demo__player:focus-within .ap-wrapper .ap-control-bar,
+  .use-demo__player:hover .ap-wrapper.ap-hud .ap-control-bar,
+  .use-demo__player:focus-within .ap-wrapper.ap-hud .ap-control-bar {
     opacity: 1;
     pointer-events: auto;
   }

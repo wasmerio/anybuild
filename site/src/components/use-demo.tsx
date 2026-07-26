@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Player } from "asciinema-player";
 import "asciinema-player/dist/bundle/asciinema-player.css";
 
@@ -19,6 +19,7 @@ export function UseDemo() {
   const [selectedDemo, setSelectedDemo] = useState<DemoId>("nextjs-preview");
   const [shouldPlay, setShouldPlay] = useState(false);
   const [isLive, setIsLive] = useState(false);
+  const [playbackProgress, setPlaybackProgress] = useState(0);
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -43,6 +44,7 @@ export function UseDemo() {
     if (!container || !shouldPlay) return;
 
     setIsLive(false);
+    setPlaybackProgress(0);
 
     let disposed = false;
     let player: Player | undefined;
@@ -55,7 +57,7 @@ export function UseDemo() {
       player = create("/demo.cast", container, {
         autoPlay: true,
         preload: true,
-        loop: true,
+        loop: false,
         cols: 80,
         rows: 22,
         fit: "width",
@@ -71,6 +73,9 @@ export function UseDemo() {
 
         const duration = player.getDuration();
         const time = player.getCurrentTime();
+        setPlaybackProgress(
+          duration === undefined || duration <= 0 ? 0 : Math.min(1, Math.max(0, time / duration)),
+        );
         setIsLive(time >= liveTimestamp && (duration === undefined || time < duration - 0.1));
       };
 
@@ -83,8 +88,12 @@ export function UseDemo() {
       player.addEventListener("ended", () => {
         if (liveTimer !== undefined) window.clearTimeout(liveTimer);
         setIsLive(false);
+        setPlaybackProgress(0);
+        setSelectedDemo((currentDemo) =>
+          currentDemo === "nextjs-preview" ? "hugo-deploy" : "nextjs-preview",
+        );
       });
-      syncInterval = window.setInterval(syncPreview, 200);
+      syncInterval = window.setInterval(syncPreview, 50);
     });
 
     return () => {
@@ -115,6 +124,11 @@ export function UseDemo() {
                 aria-controls="anybuild-demo-panel"
                 aria-selected={isSelected}
                 className={`use-demo__option ${isSelected ? "use-demo__option--selected" : ""}`}
+                style={
+                  isSelected
+                    ? ({ "--demo-progress": playbackProgress } as CSSProperties)
+                    : undefined
+                }
                 onClick={() => setSelectedDemo(demo.id)}
               >
                 <span className="use-demo__option-number">0{index + 1}</span>
