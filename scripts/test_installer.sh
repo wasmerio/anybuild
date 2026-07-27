@@ -108,16 +108,21 @@ run_installer() {
   local machine=$3
   shift 3
 
-  env \
-    HOME="$home" \
-    PATH="$fake_bin:$PATH" \
-    SHELL="${TEST_SHELL:-/bin/zsh}" \
-    FAKE_UNAME_S="$system" \
-    FAKE_UNAME_M="$machine" \
-    FAKE_CURL_LOG="$test_root/curl.log" \
-    FAKE_DOWNLOAD_DIR="$downloads" \
-    "$@" \
-    sh "$installer"
+  local -a environment=(
+    "HOME=$home"
+    "PATH=$fake_bin:$PATH"
+    "FAKE_UNAME_S=$system"
+    "FAKE_UNAME_M=$machine"
+    "FAKE_CURL_LOG=$test_root/curl.log"
+    "FAKE_DOWNLOAD_DIR=$downloads"
+  )
+  if [ "${TEST_UNSET_SHELL:-0}" = "1" ]; then
+    env -u SHELL "${environment[@]}" "$@" \
+      sh -c "unset SHELL; . \"\$1\"" sh "$installer"
+  else
+    env "${environment[@]}" "SHELL=${TEST_SHELL:-/bin/zsh}" \
+      "$@" sh "$installer"
+  fi
 }
 
 sh -n "$installer"
@@ -183,6 +188,15 @@ TEST_SHELL=/usr/bin/fish run_installer "$home" Linux x86_64 >/dev/null
 assert_file_contains "$home/.config/fish/conf.d/anybuild.fish" \
   "$fish_path_line"
 unset TEST_SHELL
+
+home="$test_root/unset-shell"
+mkdir -p "$home"
+TEST_UNSET_SHELL=1 run_installer "$home" Linux x86_64 \
+  >"$test_root/unset-shell.out"
+[ "$("$home/.anybuild/bin/anybuild" --version)" = "0.25.0" ] ||
+  fail "installer failed when SHELL was unset"
+assert_file_contains "$test_root/unset-shell.out" \
+  "Could not identify your shell"
 
 home="$test_root/custom-install"
 custom_install="$home/custom bin"

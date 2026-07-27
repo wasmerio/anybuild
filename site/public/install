@@ -87,7 +87,6 @@ EOF
     return
   fi
 
-  shell_name=${SHELL##*/}
   case "$shell_name" in
     zsh)
       append_source_line "$HOME/.zshrc"
@@ -121,6 +120,8 @@ EOF
 
 [ -n "${HOME:-}" ] || fail "HOME must be set"
 
+shell_name=${SHELL:-}
+shell_name=${shell_name##*/}
 system=$(uname -s)
 machine=$(uname -m)
 
@@ -232,7 +233,7 @@ say "Installed Anybuild $downloaded_version to $install_dir/$PROGRAM"
 case ":$PATH:" in
   *":$install_dir:"*) ;;
   *)
-    if [ "${SHELL##*/}" = "fish" ]; then
+    if [ "$shell_name" = "fish" ]; then
       say "Open a new shell to use Anybuild."
     else
       say "Run this now to update your current shell:"

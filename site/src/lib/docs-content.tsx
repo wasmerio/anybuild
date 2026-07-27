@@ -635,9 +635,14 @@ anybuild . --docker --wasmer --start`}</CodeBlock>
       title: "Publish to Wasmer",
       content: (
         <>
-          <CodeBlock>{`anybuild . --wasmer-deploy \\
-  --wasmer-app-owner YOUR_OWNER \\
-  --wasmer-app-name YOUR_APP`}</CodeBlock>
+          <CodeBlock>{`anybuild . --wasmer-deploy`}</CodeBlock>
+          <Paragraph>
+            Wasmer uses the publication identity in{" "}
+            <InlineCode>app.yaml</InlineCode>, or prompts for any missing values in an interactive
+            terminal. To skip the prompts, pass both{" "}
+            <InlineCode>--wasmer-app-owner</InlineCode> and{" "}
+            <InlineCode>--wasmer-app-name</InlineCode>.
+          </Paragraph>
           <Paragraph>
             To let another system perform the final publication, write deployment configuration
             instead.

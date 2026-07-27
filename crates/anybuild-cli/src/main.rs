@@ -218,6 +218,16 @@ mod tests {
         }
     }
 
+    fn parse_deploy(args: &[&str]) -> crate::commands::deploy::DeployArgs {
+        use clap::Parser;
+        let mut argv = vec!["anybuild"];
+        argv.extend_from_slice(args);
+        match super::Cli::try_parse_from(argv).expect("parses").command {
+            super::Command::Deploy(args) => args,
+            _ => panic!("expected the deploy command"),
+        }
+    }
+
     #[test]
     fn auto_passes_after_deploy_to_run() {
         let args = parse_auto(&["auto", "proj", "--start", "--after-deploy"]);
@@ -264,5 +274,21 @@ mod tests {
     fn auto_accepts_wasmer_file_output() {
         let args = parse_auto(&["auto", "proj", "--show-wasmer-files"]);
         assert!(args.build.show_wasmer_files);
+    }
+
+    #[test]
+    fn auto_accepts_wasmer_deploy_without_app_identity() {
+        let args = parse_auto(&["auto", "proj", "--wasmer-deploy"]);
+        assert!(args.wasmer_deploy);
+        assert_eq!(args.deploy_target.wasmer_app_owner, None);
+        assert_eq!(args.deploy_target.wasmer_app_name, None);
+    }
+
+    #[test]
+    fn deploy_accepts_wasmer_deploy_without_app_identity() {
+        let args = parse_deploy(&["deploy", "proj", "--wasmer-deploy"]);
+        assert!(args.wasmer_deploy);
+        assert_eq!(args.target.wasmer_app_owner, None);
+        assert_eq!(args.target.wasmer_app_name, None);
     }
 }
