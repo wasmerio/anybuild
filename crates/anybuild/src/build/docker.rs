@@ -325,6 +325,16 @@ impl DockerBuildBackend {
                                 "RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n",
                             );
                             continue;
+                        } else if dependency.name == "bash" {
+                            // Not a mise tool: bash comes from the Debian base image, and
+                            // DOCKERFILE_HEADER makes it the shell for every RUN below, so the
+                            // generated Dockerfile already depends on it being present.
+                            if let Some(version) = dependency.version.as_deref() {
+                                bail!(
+                                    "docker builder cannot honor a pinned bash version ({version}): bash is provided by the base image, not by mise"
+                                );
+                            }
+                            continue;
                         }
 
                         let package_name =
@@ -559,6 +569,53 @@ mod tests {
             "RUN mkdir -p /etc && echo '{motd_b64}' | base64 -d > /etc/motd\n"
         )));
         assert!(contents.ends_with("\nFROM scratch\nCOPY --from=build /app /app\n"));
+    }
+
+    #[test]
+    fn test_dockerfile_skips_base_image_bash() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backend = backend(tmp.path());
+        let mut env = IndexMap::new();
+
+        let contents = backend
+            .dockerfile_contents(
+                &mut env,
+                &[],
+                &[Step::Use(UseStep {
+                    dependencies: vec![
+                        Package {
+                            name: "node".to_owned(),
+                            version: Some("24".to_owned()),
+                            architecture: None,
+                        },
+                        Package {
+                            name: "bash".to_owned(),
+                            version: None,
+                            architecture: None,
+                        },
+                    ],
+                })],
+            )
+            .unwrap();
+
+        assert!(contents.contains("RUN mise use --global \"node@24\"\n"));
+        assert!(!contents.contains("mise use --global \"bash\""));
+
+        let pinned = backend.dockerfile_contents(
+            &mut env,
+            &[],
+            &[Step::Use(UseStep {
+                dependencies: vec![Package {
+                    name: "bash".to_owned(),
+                    version: Some("5.2".to_owned()),
+                    architecture: None,
+                }],
+            })],
+        );
+        assert!(pinned
+            .unwrap_err()
+            .to_string()
+            .contains("pinned bash version (5.2)"));
     }
 
     #[test]
