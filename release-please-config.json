@@ -3,19 +3,44 @@
   "bootstrap-sha": "cae84f77e7d582aa16636f469efbc23b09f06e9b",
   "include-component-in-tag": false,
   "plugins": [
-    "cargo-workspace"
+    {
+      "type": "cargo-workspace",
+      "merge": false
+    },
+    {
+      "type": "linked-versions",
+      "groupName": "anybuild",
+      "components": [
+        "v"
+      ]
+    }
   ],
   "packages": {
     ".": {
+      "component": "v",
       "draft": true,
+      "include-component-in-tag": true,
+      "include-v-in-tag": false,
       "release-type": "rust",
-      "package-name": "anybuild-cli",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "Cargo.toml"
-        }
-      ]
+      "tag-separator": ""
+    },
+    "crates/anybuild": {
+      "component": "v",
+      "include-component-in-tag": true,
+      "include-v-in-tag": false,
+      "release-type": "rust",
+      "skip-changelog": true,
+      "skip-github-release": true,
+      "tag-separator": ""
+    },
+    "crates/anybuild-cli": {
+      "component": "v",
+      "include-component-in-tag": true,
+      "include-v-in-tag": false,
+      "release-type": "rust",
+      "skip-changelog": true,
+      "skip-github-release": true,
+      "tag-separator": ""
     }
   }
 }

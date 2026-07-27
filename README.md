@@ -233,11 +233,19 @@ a `!` or `BREAKING CHANGE` footer for a major release. The release PR updates
 the Rust workspace versions, dependency references, lockfile, manifest, and
 changelog.
 
+The internal `anybuild-workspace` package coordinates the single workspace
+version and is never published. The two public crate manifests use explicit
+versions because Release Please requires literal `[package].version` values.
+
 Merging the release PR creates a draft `vX.Y.Z` GitHub release. Native GitHub
 runners build macOS Intel and ARM64, static Linux x86-64 and ARM64, and Windows
 x86-64 archives. The workflow smoke-tests each binary, generates and verifies
 `SHA256SUMS`, uploads all assets, and only then publishes the release. It does
 not publish either crate to crates.io.
+
+Normal CI runs that same five-target release build matrix on every pull request
+and push to `main`. It smoke-tests each binary and uploads temporary workflow
+artifacts, catching target-specific failures before a release is prepared.
 
 If an artifact build fails, the release remains a draft. Rerun the Release
 Artifacts workflow manually with that draft tag after fixing the failure.

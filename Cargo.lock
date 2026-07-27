@@ -162,6 +162,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "anybuild-workspace"
+version = "0.23.0"
+
+[[package]]
 name = "anyhow"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"

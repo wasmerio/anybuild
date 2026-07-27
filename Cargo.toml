@@ -1,18 +1,26 @@
+[package]
+# Release Please needs a concrete root package to coordinate one workspace
+# release.
+name = "anybuild-workspace"
+version = "0.23.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+
 [workspace]
 members = [
     "crates/anybuild",
     "crates/anybuild-cli",
 ]
+default-members = ["crates/anybuild-cli"]
 resolver = "2"
 
 [workspace.package]
-version = "0.23.0"  # x-release-please-version
 edition = "2021"
 license = "MIT"
 
 [workspace.dependencies]
 anyhow = "1"
-anybuild = { path = "crates/anybuild", version = "0.23.0" }  # x-release-please-version
 indexmap = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
