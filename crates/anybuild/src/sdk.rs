@@ -471,12 +471,14 @@ impl Anybuild {
         let (provider, provider_config) =
             crate::internal::context::load_project_config(&paths, &self.overrides, context)?;
         let config = provider_config.persisted_json();
+        let runtime_dependencies = provider_config.runtime_dependencies();
         let content = generate_anybuild(
             provider,
             provider_config.base().name.as_deref(),
             paths.subdir.as_deref(),
             provider_config.config_schema(),
             &config,
+            &runtime_dependencies,
         )?;
         context.emit(Event::AnybuildGenerating {
             path: output.clone(),

@@ -90,6 +90,7 @@ pub fn generate_anybuild_loader(
     name: Option<&str>,
     schema: u32,
     config: &serde_json::Value,
+    runtime_dependencies: &[String],
 ) -> String {
     let (config_module, config_function) = entrypoint.config;
     let (build_module, build_function) = entrypoint.build;
@@ -123,6 +124,14 @@ pub fn generate_anybuild_loader(
     }
     out.extend(serialize_config(config_function, schema, config));
     out.push(String::new());
+    if !runtime_dependencies.is_empty() {
+        out.push("runtime_dependencies = [".to_owned());
+        for dependency in runtime_dependencies {
+            out.push(format!("    {},", runtime_dependency_literal(dependency)));
+        }
+        out.push("]".to_owned());
+        out.push(String::new());
+    }
     out.push(format!("build = {build_function}(config)"));
     out.push(String::new());
     let mut serve_args: Vec<String> = vec!["config".to_owned(), "build".to_owned()];
@@ -134,9 +143,27 @@ pub fn generate_anybuild_loader(
             serde_json::to_string(name).expect("string serializes")
         ));
     }
+    if !runtime_dependencies.is_empty() {
+        serve_args.push("extra_deps = runtime_dependencies".to_owned());
+    }
     out.push(format!("{serve_function}({})", serve_args.join(", ")));
     out.push(String::new());
     out.join("\n")
+}
+
+fn runtime_dependency_literal(spec: &str) -> String {
+    let (name, version) = match spec.rsplit_once('@') {
+        Some((name, version)) if !name.is_empty() && !version.is_empty() => (name, Some(version)),
+        _ => (spec, None),
+    };
+    let name = serde_json::to_string(name).expect("dependency name serializes");
+    match version {
+        Some(version) => format!(
+            "dep({name}, {})",
+            serde_json::to_string(version).expect("dependency version serializes")
+        ),
+        None => format!("dep({name})"),
+    }
 }
 
 /// Port of `generate_anybuild`: entrypoint lookup + the baked name.
@@ -146,6 +173,7 @@ pub fn generate_anybuild(
     subdir: Option<&str>,
     schema: u32,
     config: &serde_json::Value,
+    runtime_dependencies: &[String],
 ) -> Result<String> {
     let ep = entrypoint(provider)?;
     Ok(generate_anybuild_loader(
@@ -154,6 +182,7 @@ pub fn generate_anybuild(
         config_name,
         schema,
         config,
+        runtime_dependencies,
     ))
 }
 
@@ -222,14 +251,47 @@ mod tests {
             "items": ["one", false],
             "mapping": {"answer": 42},
         });
-        let generated = generate_anybuild("node", Some("app"), None, 1, &config).unwrap();
+        let generated = generate_anybuild("node", Some("app"), None, 1, &config, &[]).unwrap();
         assert!(generated.contains("    enabled = True,\n"));
         assert!(generated.contains("    missing = None,\n"));
         assert!(generated.contains("    items = [\n        \"one\",\n        False,\n    ],\n"));
         assert!(generated.contains("    mapping = {\n        \"answer\": 42,\n    },\n"));
         assert_eq!(
             generated,
-            generate_anybuild("node", Some("app"), None, 1, &config).unwrap()
+            generate_anybuild("node", Some("app"), None, 1, &config, &[]).unwrap()
+        );
+    }
+
+    #[test]
+    fn runtime_dependencies_are_rendered_as_editable_dep_calls() {
+        let generated = generate_anybuild(
+            "python",
+            Some("app"),
+            None,
+            1,
+            &serde_json::json!({}),
+            &["ffmpeg".to_owned(), "pandoc@3.6".to_owned()],
+        )
+        .unwrap();
+
+        assert!(generated.contains(
+            "runtime_dependencies = [\n    dep(\"ffmpeg\"),\n    dep(\"pandoc\", \"3.6\"),\n]\n"
+        ));
+        assert!(generated.contains("build = python_build(config)\n"));
+        assert!(generated.contains(
+            "python_serve(config, build, name = \"app\", extra_deps = runtime_dependencies)\n"
+        ));
+    }
+
+    #[test]
+    fn scoped_runtime_dependency_without_version_is_not_split() {
+        assert_eq!(
+            runtime_dependency_literal("@scope/package"),
+            "dep(\"@scope/package\")"
+        );
+        assert_eq!(
+            runtime_dependency_literal("@scope/package@1.2"),
+            "dep(\"@scope/package\", \"1.2\")"
         );
     }
 }

@@ -63,8 +63,6 @@ fn default_python_config() -> PythonConfig {
         ("python_extra_dependencies", Value::Array(Vec::new())),
         ("asgi_application", Value::Null),
         ("wsgi_application", Value::Null),
-        ("python_uses_ffmpeg", Value::Bool(false)),
-        ("python_uses_pandoc", Value::Bool(false)),
         ("python_install_requires_all_files", Value::Bool(false)),
         ("python_main_file", Value::Null),
         ("python_version", Value::String("3.13".to_owned())),
@@ -72,8 +70,6 @@ fn default_python_config() -> PythonConfig {
         ("python_precompile", Value::Bool(true)),
         ("python_cross_platform", Value::Null),
         ("python_extra_index_url", Value::Null),
-        ("pandoc_version", Value::Null),
-        ("ffmpeg_version", Value::Null),
         ("python_install_inputs", Value::Null),
         ("python_mcp_self_running", Value::Bool(false)),
     ] {

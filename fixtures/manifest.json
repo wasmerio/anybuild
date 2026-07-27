@@ -91,8 +91,6 @@
     ],
     "asgi_application": null,
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": null,
     "python_version": "3.13",
@@ -100,8 +98,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [],
     "python_mcp_self_running": false,
     "static_convert_redirects": true,
@@ -136,8 +132,6 @@
     ],
     "asgi_application": null,
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": null,
     "python_version": "3.13",
@@ -145,8 +139,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [],
     "python_mcp_self_running": false,
     "static_convert_redirects": true,
@@ -178,8 +170,6 @@
     "python_extra_dependencies": [],
     "asgi_application": null,
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": null,
     "python_version": "3.13",
@@ -187,8 +177,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -223,8 +211,6 @@
     "python_extra_dependencies": [],
     "asgi_application": null,
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": null,
     "python_version": "3.13",
@@ -232,8 +218,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2577,8 +2561,6 @@
     ],
     "asgi_application": null,
     "wsgi_application": "mysite.wsgi:application",
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": null,
     "python_version": "3.13",
@@ -2586,8 +2568,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -2621,8 +2601,6 @@
     ],
     "asgi_application": null,
     "wsgi_application": "mysite.wsgi:application",
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": null,
     "python_version": "3.13",
@@ -2630,8 +2608,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -2662,8 +2638,6 @@
     "python_extra_dependencies": [],
     "asgi_application": "src.main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "src/main.py",
     "python_version": "3.13",
@@ -2671,8 +2645,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -2704,8 +2676,6 @@
     "python_extra_dependencies": [],
     "asgi_application": "src.main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "src/main.py",
     "python_version": "3.13",
@@ -2713,8 +2683,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -2745,8 +2713,6 @@
     "python_extra_dependencies": [],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -2754,8 +2720,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2785,8 +2749,6 @@
     "python_extra_dependencies": [],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -2794,8 +2756,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2806,7 +2766,7 @@
    "name": "python-ffmpeg",
    "workspace": "examples/python-ffmpeg",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn main:app --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"fastapi\",\n    python_server = \"uvicorn\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    asgi_application = \"main:app\",\n    python_uses_ffmpeg = True,\n    python_main_file = \"main.py\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nbuild = python_build(config)\n\npython_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn main:app --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"fastapi\",\n    python_server = \"uvicorn\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    asgi_application = \"main:app\",\n    python_main_file = \"main.py\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nruntime_dependencies = [\n    dep(\"ffmpeg\"),\n]\n\nbuild = python_build(config)\n\npython_serve(config, build, extra_deps = runtime_dependencies)\n",
    "config": {
     "name": "python-ffmpeg",
     "port": 8080,
@@ -2826,8 +2786,6 @@
     ],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": true,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -2835,8 +2793,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2848,7 +2804,7 @@
    "name": "python-ffmpeg__cross",
    "workspace": "examples/python-ffmpeg",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn main:app --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"fastapi\",\n    python_server = \"uvicorn\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    asgi_application = \"main:app\",\n    python_uses_ffmpeg = True,\n    python_main_file = \"main.py\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nbuild = python_build(config)\n\npython_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn main:app --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"fastapi\",\n    python_server = \"uvicorn\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    asgi_application = \"main:app\",\n    python_main_file = \"main.py\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nruntime_dependencies = [\n    dep(\"ffmpeg\"),\n]\n\nbuild = python_build(config)\n\npython_serve(config, build, extra_deps = runtime_dependencies)\n",
    "config": {
     "name": "python-ffmpeg",
     "port": 8080,
@@ -2868,8 +2824,6 @@
     ],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": true,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -2877,8 +2831,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2909,8 +2861,6 @@
     ],
     "asgi_application": null,
     "wsgi_application": "main:app",
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -2918,8 +2868,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2951,8 +2899,6 @@
     ],
     "asgi_application": null,
     "wsgi_application": "main:app",
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -2960,8 +2906,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2992,8 +2936,6 @@
     ],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -3001,8 +2943,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -3036,8 +2976,6 @@
     ],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -3045,8 +2983,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -3079,8 +3015,6 @@
     ],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -3088,8 +3022,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3121,8 +3053,6 @@
     ],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -3130,8 +3060,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3142,7 +3070,7 @@
    "name": "python-pandoc",
    "workspace": "examples/python-pandoc",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn main:app --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"fastapi\",\n    python_server = \"uvicorn\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    asgi_application = \"main:app\",\n    python_uses_pandoc = True,\n    python_main_file = \"main.py\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nbuild = python_build(config)\n\npython_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn main:app --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"fastapi\",\n    python_server = \"uvicorn\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    asgi_application = \"main:app\",\n    python_main_file = \"main.py\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nruntime_dependencies = [\n    dep(\"pandoc\"),\n]\n\nbuild = python_build(config)\n\npython_serve(config, build, extra_deps = runtime_dependencies)\n",
    "config": {
     "name": "python-pandoc",
     "port": 8080,
@@ -3162,8 +3090,6 @@
     ],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": true,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -3171,8 +3097,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3184,7 +3108,7 @@
    "name": "python-pandoc__cross",
    "workspace": "examples/python-pandoc",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn main:app --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"fastapi\",\n    python_server = \"uvicorn\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    asgi_application = \"main:app\",\n    python_uses_pandoc = True,\n    python_main_file = \"main.py\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nbuild = python_build(config)\n\npython_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn main:app --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"fastapi\",\n    python_server = \"uvicorn\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    asgi_application = \"main:app\",\n    python_main_file = \"main.py\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nruntime_dependencies = [\n    dep(\"pandoc\"),\n]\n\nbuild = python_build(config)\n\npython_serve(config, build, extra_deps = runtime_dependencies)\n",
    "config": {
     "name": "python-pandoc",
     "port": 8080,
@@ -3204,8 +3128,6 @@
     ],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": true,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -3213,8 +3135,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3243,8 +3163,6 @@
     "python_extra_dependencies": [],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -3252,8 +3170,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3283,8 +3199,6 @@
     "python_extra_dependencies": [],
     "asgi_application": "main:app",
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -3292,8 +3206,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3322,8 +3234,6 @@
     "python_extra_dependencies": [],
     "asgi_application": null,
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": null,
     "python_version": "3.13",
@@ -3331,8 +3241,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [],
     "python_mcp_self_running": false
    },
@@ -3360,8 +3268,6 @@
     "python_extra_dependencies": [],
     "asgi_application": null,
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": null,
     "python_version": "3.13",
@@ -3369,8 +3275,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [],
     "python_mcp_self_running": false
    }
@@ -3397,8 +3301,6 @@
     "python_extra_dependencies": [],
     "asgi_application": null,
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "streamlit_app.py",
     "python_version": "3.13",
@@ -3406,8 +3308,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3437,8 +3337,6 @@
     "python_extra_dependencies": [],
     "asgi_application": null,
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "streamlit_app.py",
     "python_version": "3.13",
@@ -3446,8 +3344,6 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3563,8 +3459,6 @@
     "python_extra_dependencies": [],
     "asgi_application": null,
     "wsgi_application": null,
-    "python_uses_ffmpeg": false,
-    "python_uses_pandoc": false,
     "python_install_requires_all_files": false,
     "python_main_file": "main.py",
     "python_version": "3.13",
@@ -3572,8 +3466,6 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
-    "pandoc_version": null,
-    "ffmpeg_version": null,
     "python_install_inputs": [
      "requirements.txt"
     ],

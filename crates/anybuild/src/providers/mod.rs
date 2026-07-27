@@ -55,6 +55,14 @@ pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Si
 
     fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self>;
 
+    fn copy_transient_fields_from(&mut self, source: &Self) {
+        self.base_mut().runtime_dependencies = source.base().runtime_dependencies.clone();
+    }
+
+    fn runtime_dependencies(&self) -> Vec<String> {
+        self.base().runtime_dependencies.clone()
+    }
+
     fn detect(
         path: &Path,
         base: &BaseConfig,
@@ -104,7 +112,9 @@ pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Si
             return Err(anyhow!("Config must be a dictionary"));
         }
         merge_json_value(&mut merged, patch);
-        Self::from_json(merged)
+        let mut config = Self::from_json(merged)?;
+        config.copy_transient_fields_from(self);
+        Ok(config)
     }
 
     fn apply_workspace_config(&mut self, _workspace_root: &Path) {}
@@ -208,6 +218,21 @@ macro_rules! provider_registry {
             pub(crate) fn persisted_json(&self) -> serde_json::Value {
                 match self {
                     $(Self::$variant(config) => config.persisted_json()),+
+                }
+            }
+
+            pub(crate) fn runtime_dependencies(&self) -> Vec<String> {
+                match self {
+                    $(Self::$variant(config) => config.runtime_dependencies()),+
+                }
+            }
+
+            pub(crate) fn copy_transient_fields_from(&mut self, source: &Self) {
+                match (self, source) {
+                    $((Self::$variant(target), Self::$variant(source)) => {
+                        target.copy_transient_fields_from(source);
+                    },)+
+                    _ => {}
                 }
             }
 
@@ -614,12 +639,13 @@ pub(crate) fn apply_environment(
         *current = parse_environment_value(&name, &raw, current)?;
         applied = Some((name, raw));
     }
-    config_from_json(provider, serde_json::Value::Object(fields.clone())).map_err(|error| {
-        match applied {
+    let mut updated = config_from_json(provider, serde_json::Value::Object(fields.clone()))
+        .map_err(|error| match applied {
             Some((name, raw)) => anyhow!("Invalid value for {name}: {raw:?}: {error}"),
             None => error,
-        }
-    })
+        })?;
+    updated.copy_transient_fields_from(&config);
+    Ok(updated)
 }
 
 fn parse_environment_value(

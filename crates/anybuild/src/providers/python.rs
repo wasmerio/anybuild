@@ -135,10 +135,6 @@ pub struct PythonConfig {
     pub asgi_application: Option<String>,
     #[serde(rename = "wsgi_application")]
     pub wsgi_application: Option<String>,
-    #[serde(rename = "python_uses_ffmpeg")]
-    pub uses_ffmpeg: bool,
-    #[serde(rename = "python_uses_pandoc")]
-    pub uses_pandoc: bool,
     #[serde(rename = "python_install_requires_all_files")]
     pub install_requires_all_files: bool,
     #[serde(rename = "python_main_file")]
@@ -150,8 +146,6 @@ pub struct PythonConfig {
     #[serde(rename = "python_cross_platform")]
     pub cross_platform: Option<String>,
     pub python_extra_index_url: Option<String>,
-    pub pandoc_version: Option<String>,
-    pub ffmpeg_version: Option<String>,
     /// Derived install inputs for the Starlark provider (None => all files).
     #[serde(rename = "python_install_inputs")]
     pub install_inputs: Option<Vec<String>>,
@@ -174,8 +168,6 @@ impl Default for PythonConfig {
             extra_dependencies: BTreeSet::new(),
             asgi_application: None,
             wsgi_application: None,
-            uses_ffmpeg: false,
-            uses_pandoc: false,
             install_requires_all_files: false,
             main_file: None,
             python_version: Some("3.13".to_owned()),
@@ -183,8 +175,6 @@ impl Default for PythonConfig {
             precompile_python: true,
             cross_platform: None,
             python_extra_index_url: None,
-            pandoc_version: None,
-            ffmpeg_version: None,
             install_inputs: None,
             mcp_self_running: false,
         }
@@ -226,8 +216,6 @@ impl PythonConfig {
                 .unwrap_or_default(),
             asgi_application: env_str(operation, "asgi_application"),
             wsgi_application: env_str(operation, "wsgi_application"),
-            uses_ffmpeg: env_bool(operation, "python_uses_ffmpeg")?.unwrap_or(false),
-            uses_pandoc: env_bool(operation, "python_uses_pandoc")?.unwrap_or(false),
             install_requires_all_files: env_bool(operation, "python_install_requires_all_files")?
                 .unwrap_or(false),
             main_file: env_str(operation, "python_main_file"),
@@ -237,8 +225,6 @@ impl PythonConfig {
             precompile_python: env_bool(operation, "python_precompile")?.unwrap_or(true),
             cross_platform: env_str(operation, "python_cross_platform"),
             python_extra_index_url: env_str(operation, "python_extra_index_url"),
-            pandoc_version: env_str(operation, "pandoc_version"),
-            ffmpeg_version: env_str(operation, "ffmpeg_version"),
             install_inputs: env_json(operation, "python_install_inputs")?,
             mcp_self_running: env_bool(operation, "python_mcp_self_running")?.unwrap_or(false),
         })
@@ -406,10 +392,10 @@ pub fn load_config_with_deps(
     }
 
     if found_deps.contains("ffmpeg") {
-        config.uses_ffmpeg = true;
+        config.base.runtime_dependencies.push("ffmpeg".to_owned());
     }
     if found_deps.contains("pandoc") {
-        config.uses_pandoc = true;
+        config.base.runtime_dependencies.push("pandoc".to_owned());
     }
 
     if config.framework.is_none() {

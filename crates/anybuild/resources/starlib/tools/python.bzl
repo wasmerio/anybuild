@@ -22,14 +22,9 @@ def python_toolchain(config):
         uv = dep("uv", config.uv_version),
     )
 
-def python_runtime_deps(config, toolchain):
+def python_runtime_deps(toolchain):
     """Packages the serve environment needs."""
-    deps = [toolchain.python]
-    if config.python_uses_pandoc:
-        deps.append(dep("pandoc", config.pandoc_version))
-    if config.python_uses_ffmpeg:
-        deps.append(dep("ffmpeg", config.ffmpeg_version))
-    return deps
+    return [toolchain.python]
 
 def _stage_steps(config, source):
     """Enter the build context (and the app subdirectory when present)."""
@@ -105,7 +100,12 @@ def _cross_wheel_steps(config, venv, local_venv):
         run("rm cross-requirements.txt"),
     ]
 
-def python_build(config, source = None, app = None, venv = None, serving = True):
+def python_build(
+        config,
+        source = None,
+        app = None,
+        venv = None,
+        serving = True):
     """Install dependencies with uv and stage the app sources.
 
     The default is the full serving build: app/venv mounts, cross-platform
@@ -149,7 +149,7 @@ def python_build(config, source = None, app = None, venv = None, serving = True)
 
     return build(
         steps = steps,
-        serve_deps = python_runtime_deps(config, tc),
+        serve_deps = python_runtime_deps(tc),
         python = tc.python,
         uv = tc.uv,
         app = app,

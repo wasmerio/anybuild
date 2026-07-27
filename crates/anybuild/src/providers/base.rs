@@ -130,6 +130,13 @@ pub struct BaseConfig {
     /// Subdirectory of the workspace the app lives in (set by the CLI
     /// after load; recorded in the generated Anybuild file).
     pub app_subdir: Option<String>,
+    /// Native packages required by the built application at runtime.
+    ///
+    /// Providers contribute simple `name` or `name@version` specs during
+    /// detection. This derived field is rendered into the generated
+    /// Anybuild file rather than persisted as provider configuration.
+    #[serde(skip)]
+    pub runtime_dependencies: Vec<String>,
 }
 
 impl Default for BaseConfig {
@@ -139,6 +146,7 @@ impl Default for BaseConfig {
             port: Some(8080),
             commands: CustomCommands::default(),
             app_subdir: None,
+            runtime_dependencies: Vec::new(),
         }
     }
 }

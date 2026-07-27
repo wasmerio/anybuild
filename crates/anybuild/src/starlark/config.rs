@@ -155,7 +155,9 @@ fn apply_command_overrides(
     if let Some(value) = overrides.serve_port {
         object.insert("port".to_owned(), Json::Number(value.into()));
     }
-    crate::providers::config_from_json(config.provider_name(), json)
+    let mut updated = crate::providers::config_from_json(config.provider_name(), json)?;
+    updated.copy_transient_fields_from(&config);
+    Ok(updated)
 }
 
 fn validate_patch(target: &Json, patch: &Json, prefix: &str) -> anyhow::Result<()> {

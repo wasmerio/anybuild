@@ -678,11 +678,7 @@ def python_serve(
     if in_subdir:
         build.append(run("cp -R . {}".format(app.path)))
 
-    runtime_deps = [tc.python]
-    if config.uses_pandoc:
-        runtime_deps.append(dep("pandoc", config.pandoc_version))
-    if config.uses_ffmpeg:
-        runtime_deps.append(dep("ffmpeg", config.ffmpeg_version))
+    runtime_deps = [tc.python] + (runtime_dependencies or [])
 
     return app_serve(
         config,
