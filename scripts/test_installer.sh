@@ -118,7 +118,7 @@ run_installer() {
   )
   if [ "${TEST_UNSET_SHELL:-0}" = "1" ]; then
     env -u SHELL "${environment[@]}" "$@" \
-      sh -c 'unset SHELL; . "$1"' sh "$installer"
+      sh -c "unset SHELL; . \"\$1\"" sh "$installer"
   else
     env "${environment[@]}" "SHELL=${TEST_SHELL:-/bin/zsh}" \
       "$@" sh "$installer"
