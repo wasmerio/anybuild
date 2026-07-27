@@ -1,11 +1,11 @@
 {
-  "name": "shipit-node-pnpm-workspace-subdir-example",
+  "name": "anybuild-node-pnpm-workspace-subdir-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.2.2",
   "scripts": {
-    "build": "pnpm --filter @shipit-example/dashboard build",
-    "start": "pnpm --filter @shipit-example/dashboard start"
+    "build": "pnpm --filter @anybuild-example/dashboard build",
+    "start": "pnpm --filter @anybuild-example/dashboard start"
   }
 }

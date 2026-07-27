@@ -1,0 +1,87 @@
+"""Static sites served with static-web-server.
+
+The base of the static-site family: builders (hugo, mkdocs, ...) produce
+their own build struct that fills the `static_app` mount and reuse
+staticfile_serve() for the serve wiring.
+
+Static-family build structs carry two extra fields:
+
+  static_app     the mount holding the site to serve
+  static_config  mount holding the static-web-server config, or None
+"""
+
+load("//anybuild:serve.bzl", "build", "serve")
+
+def staticfile_config(schema = 1, **kwargs):
+    return config(provider = "staticfile", schema = schema, **kwargs)
+
+# static-web-server reads its config from this file inside the static_config
+# mount; it carries the redirect rules rendered from the project's
+# _redirects file (config.static_redirects_config).
+SWS_CONFIG_FILE = "sws.toml"
+
+def sws_config_mount(config):
+    """The mount for the static-web-server config, or None when unneeded."""
+    return mount("static_config") if config.static_redirects_config else None
+
+def sws_config_step(config, static_config):
+    """Write the rendered static-web-server config into its mount."""
+    sws_config_path = "{}/{}".format(static_config.path, SWS_CONFIG_FILE)
+    return write(sws_config_path, config.static_redirects_config)
+
+def staticfile_build(config, static_app = None):
+    """Copy the static site into the static_app mount."""
+    static_app = static_app or mount("static_app")
+    static_config = sws_config_mount(config)
+
+    source = config.static_dir or "."
+    if config.app_subdir:
+        if config.static_dir:
+            source = "{}/{}".format(config.app_subdir, config.static_dir)
+        else:
+            source = config.app_subdir
+
+    steps = [
+        workdir(static_app.path),
+        copy(source, ".", ignore = [".git"]),
+    ]
+    if static_config != None:
+        steps.append(sws_config_step(config, static_config))
+
+    return build(
+        steps = steps,
+        mounts = [static_app] + ([static_config] if static_config != None else []),
+        static_app = static_app,
+        static_config = static_config,
+    )
+
+def staticfile_serve(config, build, name = None, provider = None, **overrides):
+    """Serve a build's static_app mount with static-web-server.
+
+    Works with any static-family build struct (staticfile, hugo, jekyll,
+    mkdocs, node-static). The provider label identifies the deployment;
+    generated files pass it explicitly when it differs from "staticfile".
+    """
+    sws = dep("static-web-server", config.sws_version)
+    static_app = build.static_app
+    static_config = build.static_config
+
+    if static_config != None:
+        sws_config_path = "{}/{}".format(static_config.serve_path, SWS_CONFIG_FILE)
+        start = "static-web-server --root={} --log-level=info --config-file={} --port={}".format(
+            static_app.serve_path, sws_config_path, config.port,
+        )
+    else:
+        start = "static-web-server --root={} --log-level=info --port={}".format(
+            static_app.serve_path, config.port,
+        )
+
+    return serve(
+        config,
+        build,
+        provider = provider,
+        name = name,
+        serve_deps = [sws],
+        commands = {"start": start},
+        **overrides
+    )

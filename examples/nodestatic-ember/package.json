@@ -1,10 +1,10 @@
 {
-  "name": "shipit-nodestatic-ember-example",
+  "name": "anybuild-nodestatic-ember-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "SHIPIT_EXAMPLE_TITLE='Ember Example' SHIPIT_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'ember build --environment=production' >/dev/null"
+    "build": "ANYBUILD_EXAMPLE_TITLE='Ember Example' ANYBUILD_EXAMPLE_OUTPUT=dist node scripts/build-static.mjs && echo 'ember build --environment=production' >/dev/null"
   },
   "devDependencies": {
     "ember-cli": "5.1.0",

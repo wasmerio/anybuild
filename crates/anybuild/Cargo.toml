@@ -1,0 +1,37 @@
+[package]
+name = "anybuild"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rust SDK for detecting, building, running, and deploying projects"
+repository = "https://github.com/wasmerio/anybuild"
+homepage = "https://github.com/wasmerio/anybuild"
+readme = "../../README.md"
+keywords = ["build", "deployment", "starlark", "wasmer"]
+categories = ["development-tools", "api-bindings"]
+
+[dependencies]
+anyhow.workspace = true
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+dotenvy = "0.15"
+tempfile = "3"
+allocative.workspace = true
+base64 = "0.22"
+globset = "0.4"
+path-clean = "1"
+regex = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+shell-words = "1"
+shlex = "1"
+starlark.workspace = true
+toml = "0.8"
+toml_edit = "0.22"
+ureq = "2"
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"

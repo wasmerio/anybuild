@@ -1,6 +1,6 @@
 export default {
-  name: 'shipitSanityExample',
-  title: 'Shipit Sanity Example',
+  name: 'anybuildSanityExample',
+  title: 'Anybuild Sanity Example',
   projectId: 'example',
   dataset: 'production',
 };

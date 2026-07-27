@@ -1,6 +1,6 @@
 <?php
 /**
- * Main template for the Shipit example theme.
+ * Main template for the Anybuild example theme.
  */
 ?><!doctype html>
 <html <?php language_attributes(); ?>>
@@ -12,7 +12,7 @@
 <body <?php body_class(); ?>>
   <?php wp_body_open(); ?>
   <main>
-    <h1>Shipit WordPress theme active</h1>
+    <h1>Anybuild WordPress theme active</h1>
     <p>This page is rendered by the example theme.</p>
   </main>
   <?php wp_footer(); ?>

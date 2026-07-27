@@ -1,0 +1,48 @@
+"""Laravel: php + composer build with a node asset build folded in."""
+
+load("//anybuild/tools:node.bzl", "node_build_step", "node_install_steps", "node_toolchain")
+load("//anybuild/tools:php.bzl", "php_build", "php_serve")
+
+def laravel_config(schema = 1, **kwargs):
+    return config(provider = "laravel", schema = schema, **kwargs)
+
+def laravel_build(config, app = None, assets = None):
+    """php_build with the node install/build hooked into its phases."""
+    node_tc = node_toolchain(config, serving = False)
+    return php_build(
+        config,
+        app = app,
+        assets = assets,
+        extra_use_deps = node_tc.build_deps,
+        after_install = node_install_steps(config),
+        after_build = node_build_step(config, serving = False, static = True),
+        extra_ignore = ["node_modules"],
+    )
+
+def laravel_prepare(config, app):
+    return [
+        workdir(app.serve_path),
+        run("mkdir -p storage/framework/{sessions,views,cache,testing} storage/logs bootstrap/cache"),
+        run("php artisan config:cache"),
+        run("php artisan event:cache"),
+        run("php artisan route:cache"),
+        run("php artisan view:cache"),
+    ]
+
+def laravel_commands(config):
+    return {
+        "start": "php -S localhost:{} -t public".format(config.port),
+        "after_deploy": "php artisan migrate",
+    }
+
+def laravel_serve(config, build, name = None, provider = None, **overrides):
+    """php serve with Laravel's artisan commands and cache-warming prepare."""
+    return php_serve(
+        config,
+        build,
+        name = name,
+        provider = provider,
+        commands = laravel_commands(config),
+        prepare = laravel_prepare(config, build.app),
+        **overrides
+    )

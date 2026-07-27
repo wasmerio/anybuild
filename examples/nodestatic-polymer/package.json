@@ -1,10 +1,10 @@
 {
-  "name": "shipit-nodestatic-polymer-example",
+  "name": "anybuild-nodestatic-polymer-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "SHIPIT_EXAMPLE_TITLE='Polymer Example' SHIPIT_EXAMPLE_OUTPUT=build/default node scripts/build-static.mjs && echo 'polymer build' >/dev/null"
+    "build": "ANYBUILD_EXAMPLE_TITLE='Polymer Example' ANYBUILD_EXAMPLE_OUTPUT=build/default node scripts/build-static.mjs && echo 'polymer build' >/dev/null"
   },
   "dependencies": {
     "@polymer/polymer": "3.0.0"

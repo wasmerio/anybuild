@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="270 195 320 285">
+  <defs>
+    <linearGradient id="anybuild-favicon-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4b7fff" />
+      <stop offset="52%" stop-color="#6348f3" />
+      <stop offset="100%" stop-color="#7758ff" />
+    </linearGradient>
+  </defs>
+  <g fill="url(#anybuild-favicon-gradient)">
+    <path d="M409 209 397 221 281 427 275 442 278 456 286 465 297 469 321 469 333 464 343 453 422 311 432 307 517 456 525 464 538 469 561 469 573 464 582 451 582 437 461 220 439 204 427 203Z" />
+    <path d="M401 406 396 412 394 419 394 452 396 459 401 465 406 468 410 469 448 469 454 467 461 461 464 454 464 417 462 412 457 406 449 402 410 402 404 404Z" />
+  </g>
+</svg>

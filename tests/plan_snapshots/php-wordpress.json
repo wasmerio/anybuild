@@ -104,7 +104,7 @@
  "volumes": [
   {
    "name": "wp-content",
-   "path": "<SHIPIT_DIR>/volumes/wp-content",
+   "path": "<ANYBUILD_DIR>/volumes/wp-content",
    "serve_path": "app/wp-content"
   }
  ]

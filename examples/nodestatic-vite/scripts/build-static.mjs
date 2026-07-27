@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-const output = process.env.SHIPIT_EXAMPLE_OUTPUT || 'dist';
-const title = process.env.SHIPIT_EXAMPLE_TITLE || 'Static Example';
+const output = process.env.ANYBUILD_EXAMPLE_OUTPUT || 'dist';
+const title = process.env.ANYBUILD_EXAMPLE_TITLE || 'Static Example';
 const html = `<!doctype html>
 <html>
 <head><meta charset="utf-8"><title>${title}</title></head>

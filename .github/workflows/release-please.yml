@@ -19,12 +19,6 @@ concurrency:
 jobs:
   release_please:
     name: Release Please
-    # Disabled during the Rust transition: the release-please config is
-    # still Python-typed (release-type: python, bumps uv.lock and
-    # src/shipit/version.py) and a created release triggers the PyPI
-    # publish below. Re-enable after converting the config to the Rust
-    # workspace (release-type: rust + a Rust distribution path).
-    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -35,14 +29,3 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repo-url: ${{ github.repository }}
-
-      - name: Trigger PyPI publish
-        if: ${{ steps.release.outputs.release_created == 'true' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ steps.release.outputs.tag_name }}
-        run: |
-          gh workflow run pypi-publish.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref "$TAG_NAME" \
-            -f tag_name="$TAG_NAME"

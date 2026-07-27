@@ -1,5 +1,5 @@
 {
-  "name": "shipit-nodestatic-hexo-example",
+  "name": "anybuild-nodestatic-hexo-example",
   "private": true,
   "scripts": {
     "generate": "hexo generate"

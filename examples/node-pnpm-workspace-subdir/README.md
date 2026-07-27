@@ -7,7 +7,6 @@ package depends on `clsx`.
 Run it from the repository root with:
 
 ```sh
-uv run shipit examples/node-pnpm-workspace-subdir --subdir=apps/dashboard \
+anybuild examples/node-pnpm-workspace-subdir --subdir=apps/dashboard \
   --wasmer --start --regenerate
 ```
-

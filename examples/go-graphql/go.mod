@@ -1,4 +1,4 @@
-module github.com/wasmerio/shipit/examples/go-graphql
+module github.com/wasmerio/anybuild/examples/go-graphql
 
 go 1.25.5
 

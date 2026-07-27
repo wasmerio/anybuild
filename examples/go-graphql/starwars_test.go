@@ -10,7 +10,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/introspection"
-	"github.com/wasmerio/shipit/examples/go-graphql/generated"
+	"github.com/wasmerio/anybuild/examples/go-graphql/generated"
 )
 
 func TestStarwars(t *testing.T) {

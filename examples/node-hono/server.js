@@ -6,7 +6,7 @@ const port = Number(process.env.PORT || 8080);
 const host = "0.0.0.0";
 
 app.get("/", (context) => {
-  return context.text("Hello from Hono on Shipit");
+  return context.text("Hello from Hono on Anybuild");
 });
 
 serve(

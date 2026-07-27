@@ -2,7 +2,7 @@
 # Regenerate the committed fixture gates from the current implementation.
 #
 # Order matters: manifest configs first (detection/config), then the
-# generated Shipit texts (examples/ goldens + manifest `shipit` fields),
+# generated Anybuild texts (examples/ goldens + manifest `anybuild` fields),
 # then the plan snapshots (which evaluate the freshly-updated manifest).
 #
 # Review the resulting diff like any golden change. If you add or remove
@@ -11,23 +11,23 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export SHIPIT_UPDATE_FIXTURES=1
+export ANYBUILD_UPDATE_FIXTURES=1
 
 echo "==> configs (fixtures/manifest.json)"
-cargo test -p shipit-providers --test config_differential -- --nocapture
+cargo test -p anybuild config_differential::configs_match_python -- --nocapture
 
-echo "==> generated Shipit texts (examples/*/Shipit + manifest)"
-cargo test -p shipit-cli --test goldens -- --nocapture
+echo "==> generated Anybuild texts (examples/*/Anybuild + manifest)"
+cargo test -p anybuild-cli --test goldens -- --nocapture
 
 echo "==> plan snapshots (tests/plan_snapshots/)"
-cargo test -p shipit-starlark --test snapshots -- --nocapture
+cargo test -p anybuild starlark_snapshots::plan_snapshots_match -- --nocapture
 
-unset SHIPIT_UPDATE_FIXTURES
+unset ANYBUILD_UPDATE_FIXTURES
 
 echo "==> verifying gates against the regenerated fixtures"
-cargo test -p shipit-providers --test config_differential
-cargo test -p shipit-cli --test goldens
-cargo test -p shipit-starlark --test snapshots
+cargo test -p anybuild config_differential::configs_match_python
+cargo test -p anybuild-cli --test goldens
+cargo test -p anybuild starlark_snapshots::plan_snapshots_match
 
 echo
 echo "Done. Review with: git diff fixtures/ tests/plan_snapshots/ examples/"

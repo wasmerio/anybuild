@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Shipit Next.js Example",
-  description: "A Next.js runtime app built by Shipit",
+  title: "Anybuild Next.js Example",
+  description: "A Next.js runtime app built by Anybuild",
 };
 
 export default function RootLayout({ children }) {

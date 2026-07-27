@@ -1,5 +1,5 @@
 {
-  "name": "shipit-nodestatic-vitepress-example",
+  "name": "anybuild-nodestatic-vitepress-example",
   "private": true,
   "scripts": {
     "docs:build": "vitepress build docs"

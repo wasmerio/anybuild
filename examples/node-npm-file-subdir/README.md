@@ -7,6 +7,6 @@ imports a local package from `../../packages/ui`.
 Run it from the repository root with:
 
 ```sh
-uv run shipit examples/node-npm-file-subdir --subdir=apps/dashboard \
+anybuild examples/node-npm-file-subdir --subdir=apps/dashboard \
   --wasmer --start --regenerate
 ```

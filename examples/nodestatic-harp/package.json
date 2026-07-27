@@ -1,5 +1,5 @@
 {
-  "name": "shipit-nodestatic-harp-example",
+  "name": "anybuild-nodestatic-harp-example",
   "private": true,
   "scripts": {
     "build": "harp src www"

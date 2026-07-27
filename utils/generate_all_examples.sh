@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run `uv run shipit generate` for each directory under examples/
+# Run the Rust CLI's `generate` command for each directory under examples/
 # Continues on errors and prints a summary at the end.
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -11,7 +11,7 @@ shopt -s nullglob
 for d in "$ROOT_DIR"/examples/*; do
   [ -d "$d" ] || continue
   echo "=== Generating for $d ==="
-  if ! uv run shipit generate "$d"; then
+  if ! cargo run --quiet -- generate "$d"; then
     echo "--- Generation failed for $d" >&2
     failures+=("$d")
   fi
@@ -27,4 +27,3 @@ if [ ${#failures[@]} -gt 0 ]; then
 else
   echo "All generations succeeded."
 fi
-
