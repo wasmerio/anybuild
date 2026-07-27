@@ -302,7 +302,9 @@ impl DockerBuildBackend {
                 }
                 Step::Use(step) => {
                     for dependency in &step.dependencies {
-                        if dependency.name == "pie" {
+                        if dependency.name == "bash" {
+                            continue;
+                        } else if dependency.name == "pie" {
                             docker_file_contents.push_str(
                                 "RUN apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n",
                             );
@@ -489,6 +491,11 @@ mod tests {
                         version: None,
                         architecture: None,
                     },
+                    Package {
+                        name: "bash".to_owned(),
+                        version: None,
+                        architecture: None,
+                    },
                 ],
             }),
             Step::Env(EnvStep {
@@ -539,6 +546,7 @@ mod tests {
             "RUN curl -L --output /usr/bin/composer https://github.com/composer/composer/releases/download/2.9.2/composer.phar && chmod +x /usr/bin/composer\n"
         ));
         assert!(contents.contains("RUN mise use --global \"node\"\n"));
+        assert!(!contents.contains("RUN mise use --global \"bash\"\n"));
         assert!(contents.contains("ENV FOO=bar\n"));
         assert!(contents.contains("ENV PATH=/custom/bin:$PATH\n"));
         assert_eq!(env.get("FOO"), Some(&"bar".to_owned()));
