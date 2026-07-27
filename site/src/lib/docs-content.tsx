@@ -29,6 +29,19 @@ export type DocsNavGroup = {
   items: Array<{ title: string; slug: string }>;
 };
 
+function frameworkLink(name: string, href: string): ReactNode {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="nofollow noreferrer"
+      className="font-medium text-[#9C8BFF] underline decoration-[#7758FF]/35 underline-offset-4 transition-colors hover:text-[#C9C1FF]"
+    >
+      {name}
+    </a>
+  );
+}
+
 const gettingStarted: DocPage = {
   slug: "",
   title: "Getting Started",
@@ -453,12 +466,12 @@ const additionalPackages: DocPage = {
       content: (
         <>
           <Paragraph>
-            Providers that expose <InlineCode>extra_dependencies</InlineCode> accept a JSON array
-            through the corresponding environment variable. Its meaning is provider-specific: Python
-            adds Python packages with uv, while Node.js exposes additional Anybuild packages to
-            build steps.
+            Providers expose separate dependency fields to avoid collisions when their
+            configurations are composed. <InlineCode>python_extra_dependencies</InlineCode> adds
+            Python packages with uv, while <InlineCode>node_extra_dependencies</InlineCode> exposes
+            additional Anybuild packages to Node.js build steps.
           </Paragraph>
-          <CodeBlock>{`ANYBUILD_EXTRA_DEPENDENCIES='["orjson"]' anybuild . --provider python --start`}</CodeBlock>
+          <CodeBlock>{`ANYBUILD_PYTHON_EXTRA_DEPENDENCIES='["orjson"]' anybuild . --provider python --start`}</CodeBlock>
         </>
       ),
     },
@@ -476,7 +489,7 @@ const additionalPackages: DocPage = {
 
 config = node_config(
     schema = 1,
-    server = "node",
+    node_server = "node",
     node_version = "24",
 )
 
@@ -525,7 +538,7 @@ const customSteps: DocPage = {
 
 config = node_config(
     schema = 1,
-    server = "node",
+    node_server = "node",
     node_version = "24",
 )
 
@@ -713,7 +726,7 @@ const anybuildFile: DocPage = {
 config = python_config(
     schema = 1,
     commands = {"start": "python main.py"},
-    main_file = "main.py",
+    python_main_file = "main.py",
     python_version = "3.13",
     uv_version = "0.8.15",
 )
@@ -1170,43 +1183,91 @@ const nodeStaticProvider: DocPage = {
             headers={["Framework", "Config value", "Default static_dir"]}
             codeColumns={[1, 2]}
             rows={[
-              ["Angular", "angular", "dist"],
-              ["Assemble", "assemble", "dist"],
-              ["Astro", "astro", "dist"],
-              ["Brunch", "brunch", "public"],
-              ["Create React App", "create-react-app", "build"],
-              ["Docusaurus", "docusaurus", "build"],
-              ["Docusaurus (legacy)", "docusaurus-old", "build"],
-              ["Eleventy", "eleventy", "_site"],
-              ["Ember", "ember", "dist"],
-              ["Gatsby", "gatsby", "public"],
-              ["Harp", "harp", "www"],
-              ["Hexo", "hexo", "public"],
-              ["Ionic Angular", "ionic-angular", "www"],
-              ["Ionic React", "ionic-react", "dist"],
-              ["Metalsmith", "metalsmith", "build"],
-              ["Next.js static export", "next", "out"],
-              ["Nuxt 2", "nuxt", "dist"],
-              ["Nuxt 3", "nuxt3", ".output/public"],
-              ["Parcel", "parcel", "dist"],
-              ["Polymer", "polymer", "build/default"],
-              ["Preact", "preact", "build"],
-              ["Remix", "remix", "build/client"],
-              ["Remix v1 / remix-ssg", "remix-old", "build/client"],
-              ["Remix v2 with Vite", "remix-v2", "build/client"],
-              ["Remix v2 classic", "remix-v2-classic", "public"],
-              ["Sanity", "sanity", "dist"],
-              ["Sanity v3", "sanity-v3", "dist"],
-              ["Storybook", "storybook", "storybook-static"],
-              ["Stencil", "stencil", "www"],
-              ["Svelte", "svelte", "build"],
-              ["SvelteKit", "sveltekit", "build"],
-              ["TanStack Start", "tanstack-start", "dist/client"],
-              ["UmiJS", "umijs", "dist"],
-              ["Vite", "vite", "dist"],
-              ["VitePress", "vitepress", "docs/.vitepress/dist"],
-              ["Vue CLI", "vue", "dist"],
-              ["VuePress", "vuepress", "docs/.vuepress/dist"],
+              [frameworkLink("Angular", "https://angular.dev/"), "angular", "dist"],
+              [frameworkLink("Assemble", "https://assemble.io/"), "assemble", "dist"],
+              [frameworkLink("Astro", "https://astro.build/"), "astro", "dist"],
+              [frameworkLink("Brunch", "https://brunch.io/"), "brunch", "public"],
+              [
+                frameworkLink("Create React App", "https://create-react-app.dev/"),
+                "create-react-app",
+                "build",
+              ],
+              [frameworkLink("Docusaurus", "https://docusaurus.io/"), "docusaurus", "build"],
+              [
+                frameworkLink("Docusaurus (legacy)", "https://v1.docusaurus.io/"),
+                "docusaurus-old",
+                "build",
+              ],
+              [frameworkLink("Eleventy", "https://www.11ty.dev/"), "eleventy", "_site"],
+              [frameworkLink("Ember", "https://emberjs.com/"), "ember", "dist"],
+              [frameworkLink("Gatsby", "https://www.gatsbyjs.com/"), "gatsby", "public"],
+              [frameworkLink("Harp", "https://harpjs.com/"), "harp", "www"],
+              [frameworkLink("Hexo", "https://hexo.io/"), "hexo", "public"],
+              [
+                frameworkLink("Ionic Angular", "https://ionicframework.com/docs/angular/overview"),
+                "ionic-angular",
+                "www",
+              ],
+              [
+                frameworkLink("Ionic React", "https://ionicframework.com/docs/react"),
+                "ionic-react",
+                "dist",
+              ],
+              [frameworkLink("Metalsmith", "https://metalsmith.io/"), "metalsmith", "build"],
+              [frameworkLink("Next.js static export", "https://nextjs.org/"), "next", "out"],
+              [frameworkLink("Nuxt 2", "https://v2.nuxt.com/"), "nuxt", "dist"],
+              [frameworkLink("Nuxt 3", "https://nuxt.com/"), "nuxt3", ".output/public"],
+              [frameworkLink("Parcel", "https://parceljs.org/"), "parcel", "dist"],
+              [
+                frameworkLink("Polymer", "https://polymer-library.polymer-project.org/"),
+                "polymer",
+                "build/default",
+              ],
+              [frameworkLink("Preact", "https://preactjs.com/"), "preact", "build"],
+              [frameworkLink("Remix", "https://remix.run/"), "remix", "build/client"],
+              [
+                frameworkLink("Remix v1 / remix-ssg", "https://v1.remix.run/"),
+                "remix-old",
+                "build/client",
+              ],
+              [
+                frameworkLink("Remix v2 with Vite", "https://remix.run/"),
+                "remix-v2",
+                "build/client",
+              ],
+              [
+                frameworkLink("Remix v2 classic", "https://remix.run/"),
+                "remix-v2-classic",
+                "public",
+              ],
+              [frameworkLink("Sanity", "https://www.sanity.io/"), "sanity", "dist"],
+              [frameworkLink("Sanity v3", "https://www.sanity.io/"), "sanity-v3", "dist"],
+              [
+                frameworkLink("Storybook", "https://storybook.js.org/"),
+                "storybook",
+                "storybook-static",
+              ],
+              [frameworkLink("Stencil", "https://stenciljs.com/"), "stencil", "www"],
+              [frameworkLink("Svelte", "https://svelte.dev/"), "svelte", "build"],
+              [frameworkLink("SvelteKit", "https://svelte.dev/docs/kit"), "sveltekit", "build"],
+              [
+                frameworkLink("TanStack Start", "https://tanstack.com/start/latest"),
+                "tanstack-start",
+                "dist/client",
+              ],
+              [frameworkLink("UmiJS", "https://umijs.org/"), "umijs", "dist"],
+              [frameworkLink("Vite", "https://vite.dev/"), "vite", "dist"],
+              [
+                frameworkLink("VitePress", "https://vitepress.dev/"),
+                "vitepress",
+                "docs/.vitepress/dist",
+              ],
+              [frameworkLink("Vue CLI", "https://cli.vuejs.org/"), "vue", "dist"],
+              [
+                frameworkLink("VuePress", "https://vuepress.vuejs.org/"),
+                "vuepress",
+                "docs/.vuepress/dist",
+              ],
             ]}
           />
           <Callout title="Some outputs are project-aware">
@@ -1251,10 +1312,10 @@ config = nodestatic_config(
     schema = 1,
     sws_version = "2.38.0",
     static_dir = "dist",
-    package_manager = "npm",
-    framework = "vite",
-    server = "node",
-    build_command = "npm run build",
+    node_package_manager = "npm",
+    node_framework = "vite",
+    node_server = "node",
+    node_build_command = "npm run build",
     node_version = "24",
 )
 
@@ -1445,7 +1506,7 @@ load("//anybuild/tools:staticfile.bzl", "staticfile_serve")
 
 config = mkdocs_config(
     schema = 1,
-    extra_dependencies = ["mkdocs"],
+    python_extra_dependencies = ["mkdocs"],
     python_version = "3.13",
     uv_version = "0.8.15",
     sws_version = "2.38.0",
@@ -1492,29 +1553,49 @@ const nodeProvider: DocPage = {
             headers={["Framework", "Config value", "Primary detection"]}
             codeColumns={[1]}
             rows={[
-              ["Next.js", "next", "next"],
-              ["Astro", "astro", "astro"],
-              ["Hydrogen", "hydrogen", "@shopify/hydrogen or @shopify/remix-oxygen"],
+              [frameworkLink("Next.js", "https://nextjs.org/"), "next", "next"],
+              [frameworkLink("Astro", "https://astro.build/"), "astro", "astro"],
               [
-                "React Router",
+                frameworkLink("Hydrogen", "https://hydrogen.shopify.dev/"),
+                "hydrogen",
+                "@shopify/hydrogen or @shopify/remix-oxygen",
+              ],
+              [
+                frameworkLink("React Router", "https://reactrouter.com/"),
                 "react-router",
                 "@react-router/dev, @react-router/node, or @react-router/serve",
               ],
-              ["Remix", "remix", "@remix-run development or runtime packages"],
-              ["SvelteKit", "sveltekit", "@sveltejs/kit"],
-              ["SolidStart", "solidstart", "@solidjs/start or solid-start"],
               [
-                "TanStack Start",
+                frameworkLink("Remix", "https://remix.run/"),
+                "remix",
+                "@remix-run development or runtime packages",
+              ],
+              [
+                frameworkLink("SvelteKit", "https://svelte.dev/docs/kit"),
+                "sveltekit",
+                "@sveltejs/kit",
+              ],
+              [
+                frameworkLink("SolidStart", "https://start.solidjs.com/"),
+                "solidstart",
+                "@solidjs/start or solid-start",
+              ],
+              [
+                frameworkLink("TanStack Start", "https://tanstack.com/start/latest"),
                 "tanstack-start",
                 "@tanstack/react-start or @tanstack/solid-start",
               ],
-              ["NestJS", "nestjs", "@nestjs core or platform packages"],
-              ["XMCP", "xmcp", "xmcp"],
-              ["Mastra", "mastra", "mastra or @mastra/core"],
+              [
+                frameworkLink("NestJS", "https://nestjs.com/"),
+                "nestjs",
+                "@nestjs core or platform packages",
+              ],
+              [frameworkLink("XMCP", "https://xmcp.dev/"), "xmcp", "xmcp"],
+              [frameworkLink("Mastra", "https://mastra.ai/"), "mastra", "mastra or @mastra/core"],
             ]}
           />
           <Paragraph>
-            Set <InlineCode>ANYBUILD_FRAMEWORK</InlineCode> to the config value when automatic
+            Set <InlineCode>ANYBUILD_NODE_FRAMEWORK</InlineCode> to the config value when automatic
             detection is not sufficient.
           </Paragraph>
         </>
@@ -1561,17 +1642,23 @@ const nodeProvider: DocPage = {
           headers={["Variable", "Purpose", "Example value"]}
           rows={[
             ["ANYBUILD_NODE_VERSION", "Node.js package version; current default is 24.", "24"],
-            ["ANYBUILD_PACKAGE_MANAGER", "Force npm, pnpm, yarn, or bun.", "pnpm"],
-            ["ANYBUILD_FRAMEWORK", "Force the detected application framework.", "next"],
-            ["ANYBUILD_SERVER", "Force the Node.js runtime server or adapter.", "node"],
-            ["ANYBUILD_BUILD_COMMAND", "Override the detected build command.", "npm run build"],
+            ["ANYBUILD_NODE_PACKAGE_MANAGER", "Force npm, pnpm, yarn, or bun.", "pnpm"],
+            ["ANYBUILD_NODE_FRAMEWORK", "Force the detected application framework.", "next"],
+            ["ANYBUILD_NODE_SERVER", "Force the Node.js runtime server or adapter.", "node"],
+            [
+              "ANYBUILD_NODE_BUILD_COMMAND",
+              "Override the detected build command.",
+              "npm run build",
+            ],
+            ["ANYBUILD_EDGEJS_ENABLE", "Use EdgeJS for compatible deployments.", "true"],
+            ["ANYBUILD_EDGEJS_PRECOMPILE", "Precompile JavaScript modules for EdgeJS.", "true"],
             [
               "ANYBUILD_OPTIMIZE_NODE_DEPENDENCIES",
               "Enable dependency tracing for supported framework outputs.",
               "true",
             ],
             [
-              "ANYBUILD_REMOVE_NATIVE_BINARIES",
+              "ANYBUILD_NODE_REMOVE_NATIVE_BINARIES",
               "Remove executable native binaries from Edge-targeted dependencies.",
               "false",
             ],
@@ -1613,16 +1700,46 @@ const pythonProvider: DocPage = {
             headers={["Framework", "Config value", "Primary detection", "Default runner"]}
             codeColumns={[1]}
             rows={[
-              ["Django", "django", "django dependency with manage.py", "Uvicorn"],
-              ["Streamlit", "streamlit", "streamlit dependency", "Streamlit CLI"],
-              ["FastAPI", "fastapi", "fastapi dependency", "Uvicorn"],
-              ["Flask", "flask", "flask dependency", "Uvicorn"],
-              ["FastHTML", "python-fasthtml", "python-fasthtml dependency", "Uvicorn"],
-              ["MCP", "mcp", "mcp or mcp[cli] dependency", "MCP CLI or the application itself"],
+              [
+                frameworkLink("Django", "https://www.djangoproject.com/"),
+                "django",
+                "django dependency with manage.py",
+                "Uvicorn",
+              ],
+              [
+                frameworkLink("Streamlit", "https://streamlit.io/"),
+                "streamlit",
+                "streamlit dependency",
+                "Streamlit CLI",
+              ],
+              [
+                frameworkLink("FastAPI", "https://fastapi.tiangolo.com/"),
+                "fastapi",
+                "fastapi dependency",
+                "Uvicorn",
+              ],
+              [
+                frameworkLink("Flask", "https://flask.palletsprojects.com/"),
+                "flask",
+                "flask dependency",
+                "Uvicorn",
+              ],
+              [
+                frameworkLink("FastHTML", "https://fastht.ml/"),
+                "python-fasthtml",
+                "python-fasthtml dependency",
+                "Uvicorn",
+              ],
+              [
+                frameworkLink("MCP", "https://modelcontextprotocol.io/"),
+                "mcp",
+                "mcp or mcp[cli] dependency",
+                "MCP CLI or the application itself",
+              ],
             ]}
           />
           <Paragraph>
-            Set <InlineCode>ANYBUILD_FRAMEWORK</InlineCode> to the config value to override
+            Set <InlineCode>ANYBUILD_PYTHON_FRAMEWORK</InlineCode> to the config value to override
             automatic detection.
           </Paragraph>
         </>
@@ -1647,8 +1764,8 @@ const pythonProvider: DocPage = {
             ]}
           />
           <Paragraph>
-            Set <InlineCode>ANYBUILD_SERVER</InlineCode> to the config value to override automatic
-            detection.
+            Set <InlineCode>ANYBUILD_PYTHON_SERVER</InlineCode> to the config value to override
+            automatic detection.
           </Paragraph>
         </>
       ),
@@ -1672,12 +1789,16 @@ const pythonProvider: DocPage = {
           headers={["Variable", "Purpose", "Example value"]}
           rows={[
             ["ANYBUILD_PYTHON_VERSION", "Python package version; current default is 3.13.", "3.13"],
-            ["ANYBUILD_FRAMEWORK", "Force a supported framework.", "fastapi"],
-            ["ANYBUILD_SERVER", "Force a supported application server.", "uvicorn"],
+            ["ANYBUILD_PYTHON_FRAMEWORK", "Force a supported framework.", "fastapi"],
+            ["ANYBUILD_PYTHON_SERVER", "Force a supported application server.", "uvicorn"],
             ["ANYBUILD_ASGI_APPLICATION", "Set the ASGI import path.", "main:app"],
             ["ANYBUILD_WSGI_APPLICATION", "Set the WSGI import path.", "app:app"],
-            ["ANYBUILD_PRECOMPILE_PYTHON", "Control bytecode precompilation.", "true"],
-            ["ANYBUILD_EXTRA_DEPENDENCIES", "JSON array of additional packages.", '["orjson"]'],
+            ["ANYBUILD_PYTHON_PRECOMPILE", "Control bytecode precompilation.", "true"],
+            [
+              "ANYBUILD_PYTHON_EXTRA_DEPENDENCIES",
+              "JSON array of additional packages.",
+              '["orjson"]',
+            ],
           ]}
         />
       ),
@@ -1720,13 +1841,13 @@ const phpProvider: DocPage = {
           rows={[
             ["ANYBUILD_PHP_VERSION", "Select the PHP package version.", "8.3.29"],
             ["ANYBUILD_PHP_ARCHITECTURE", "Select the 64-bit or 32-bit PHP package.", "64-bit"],
-            ["ANYBUILD_USE_COMPOSER", "Control Composer installation.", "true"],
+            ["ANYBUILD_COMPOSER_ENABLE", "Control Composer installation.", "true"],
             [
               "ANYBUILD_COMPOSER_BUILD_SCRIPT",
               "Select the Composer build script to run.",
               "post-update-cmd",
             ],
-            ["ANYBUILD_PUBLIC_DIR", "Override the document root.", "public"],
+            ["ANYBUILD_PHP_PUBLIC_DIR", "Override the document root.", "public"],
             ["ANYBUILD_PHPIX", "Use the phpix runtime path.", "true"],
             ["ANYBUILD_PHPIX_WORKER_THREADS", "Set the phpix worker-thread count.", "4"],
           ]}
@@ -1741,9 +1862,9 @@ const phpProvider: DocPage = {
 
 config = php_config(
     schema = 1,
-    use_composer = True,
+    composer_enable = True,
     php_version = "8.3.29",
-    public_dir = "public",
+    php_public_dir = "public",
 )
 
 build = php_build(config)
@@ -1786,9 +1907,11 @@ const laravelProvider: DocPage = {
         <Paragraph>
           Laravel inherits all configuration from the{" "}
           <DocLink href="/docs/providers/php">PHP provider configuration</DocLink>, plus the package
-          manager, dependency, asset-build, and Node.js version options from the{" "}
-          <DocLink href="/docs/providers/node">Node.js provider configuration</DocLink>. Composer is
-          always enabled, and Node.js runtime framework and server options do not apply.
+          manager, framework, server, dependency, asset-build, and Node.js version options from the{" "}
+          <DocLink href="/docs/providers/node">Node.js provider configuration</DocLink>. The
+          provider-prefixed fields coexist, so <InlineCode>php_framework</InlineCode> and{" "}
+          <InlineCode>node_framework</InlineCode> can be configured independently. Composer is
+          always enabled.
         </Paragraph>
       ),
     },
@@ -1800,14 +1923,15 @@ const laravelProvider: DocPage = {
 
 config = laravel_config(
     schema = 1,
-    package_manager = "npm",
-    framework = "laravel",
-    build_command = "npm run build",
+    node_package_manager = "npm",
+    node_server = "node",
+    node_build_command = "npm run build",
     node_version = "24",
-    use_composer = True,
+    php_framework = "laravel",
+    composer_enable = True,
     composer_build_script = "post-update-cmd",
     php_version = "8.3.29",
-    public_dir = "public",
+    php_public_dir = "public",
 )
 
 build = laravel_build(config)
@@ -1943,7 +2067,7 @@ const goProvider: DocPage = {
               "The Go server entry file to compile.",
               "cmd/server/main.go",
             ],
-            ["ANYBUILD_SERVE_BINARY", "The output binary name to run.", "server"],
+            ["ANYBUILD_GO_SERVE_BINARY", "The output binary name to run.", "server"],
           ]}
         />
       ),
