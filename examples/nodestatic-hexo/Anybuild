@@ -10,6 +10,7 @@ config = nodestatic_config(
     static_dir = "public",
     package_manager = "npm",
     framework = "hexo",
+    server = "node",
     build_command = "npm run generate",
     node_version = "24",
 )

@@ -873,6 +873,7 @@ mod config_inheritance_tests {
         "precompile_edgejs",
         "package_manager",
         "framework",
+        "server",
         "extra_dependencies",
         "build_command",
         "node_version",

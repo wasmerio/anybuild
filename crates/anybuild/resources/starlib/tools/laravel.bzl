@@ -15,7 +15,7 @@ def laravel_build(config, app = None, assets = None):
         assets = assets,
         extra_use_deps = node_tc.build_deps,
         after_install = node_install_steps(config),
-        after_build = node_build_step(config, serving = False),
+        after_build = node_build_step(config, serving = False, static = True),
         extra_ignore = ["node_modules"],
     )
 

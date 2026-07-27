@@ -10,6 +10,7 @@ config = nodestatic_config(
     static_dir = "build",
     package_manager = "npm",
     framework = "docusaurus-old",
+    server = "node",
     build_command = "npm run build",
     node_version = "24",
 )

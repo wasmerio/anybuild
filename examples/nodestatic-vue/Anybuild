@@ -10,6 +10,7 @@ config = nodestatic_config(
     static_dir = "dist",
     package_manager = "npm",
     framework = "vue",
+    server = "node",
     build_command = "npm run build",
     node_version = "24",
 )

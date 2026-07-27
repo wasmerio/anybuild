@@ -2,7 +2,7 @@
 //!
 //! `LaravelConfig(PhpConfig, NodeConfig)`: the config is the php config
 //! (with `use_composer` forced on) merged with the node config (minus its
-//! `framework`) and the base config, exactly as Python's
+//! `framework` and `server`) and the base config, exactly as Python's
 //! `config.model_dump() | node_config_data | base_config.model_dump()`.
 //! The shared Node fields are flattened from `NodeConfigFields`; loading
 //! still uses the Python-compatible JSON merge to preserve precedence.
@@ -97,6 +97,7 @@ pub fn load_config(
     let mut node_data =
         to_object(serde_json::to_value(&node_config).expect("node config serializes"));
     node_data.remove("framework");
+    node_data.remove("server");
     merged.extend(node_data);
     merged.extend(to_object(
         serde_json::to_value(&base).expect("base config serializes"),

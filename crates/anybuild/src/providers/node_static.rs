@@ -150,7 +150,7 @@ static STATIC_FRAMEWORK_DEPENDENCIES: LazyLock<Vec<&'static str>> = LazyLock::ne
         .iter()
         .chain(STATIC_DEPENDENCIES.iter())
         .copied()
-        .chain(["@remix-run/vite"])
+        .chain(["@remix-run/vite", "@tanstack/react-start"])
         .collect()
 });
 
@@ -211,9 +211,13 @@ pub fn load_config(
     let package_json = node::parse_package_json(path);
     let found_deps =
         node::check_package_json_deps(package_json.as_ref(), &STATIC_FRAMEWORK_DEPENDENCIES);
+    let node_deps = node::check_package_json_deps(package_json.as_ref(), node::NODE_DEPENDENCIES);
 
     if config.framework.is_none() {
         config.framework = detect_static_framework(path, package_json.as_ref(), &found_deps);
+    }
+    if config.server.is_none() {
+        config.server = Some(node::detect_server(&node_deps));
     }
 
     if node::non_empty(&config.build_command).is_none() {
@@ -426,6 +430,9 @@ fn detect_static_framework(
             return Some(NodeFramework::RemixV2);
         }
         return Some(NodeFramework::RemixV2Classic);
+    }
+    if found_deps.contains("@tanstack/react-start") {
+        return Some(NodeFramework::TanstackStart);
     }
     if found_deps.contains("vite") {
         return Some(NodeFramework::Vite);
@@ -740,15 +747,16 @@ impl Provider for NodeStaticConfig {
     const NAME: &'static str = "node-static";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Framework", "framework"),
+        ("Server", "server"),
         ("Package manager", "package_manager"),
         ("Output directory", "static_dir"),
     ];
 
     fn format_detection_detail(field: &str, value: &str) -> String {
-        if field == "framework" {
-            node::display_framework(value)
-        } else {
-            value.to_owned()
+        match field {
+            "framework" => node::display_framework(value),
+            "server" => node::display_server(value),
+            _ => value.to_owned(),
         }
     }
 
@@ -1357,6 +1365,31 @@ mod tests {
     }
 
     #[test]
+    fn test_tanstack_start_can_be_forced_static() {
+        let tmp = tempfile::tempdir().unwrap();
+        let package_json = serde_json::json!({
+            "scripts": {
+                "build": "vite build",
+                "start": "node .output/server/index.mjs",
+            },
+            "dependencies": {
+                "@tanstack/react-start": "^1.0.0",
+                "vite": "^5.0.0",
+            },
+        });
+        write(
+            &tmp.path().join("package.json"),
+            &format!("{package_json}\n"),
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
+
+        assert_eq!(config.framework, Some(NodeFramework::TanstackStart));
+        assert_eq!(config.static_dir.as_deref(), Some("dist/client"));
+        assert_eq!(config.build_command.as_deref(), Some("npm run build"));
+    }
+
+    #[test]
     fn test_hydrogen_config_is_not_node_static() {
         let tmp = tempfile::tempdir().unwrap();
         write(
@@ -1470,6 +1503,6 @@ mod tests {
     fn test_node_framework_static_capability_is_explicit() {
         assert!(NodeFramework::Next.can_be_static());
         assert!(NodeFramework::Eleventy.can_be_static());
-        assert!(!NodeFramework::Express.can_be_static());
+        assert!(!NodeFramework::Nestjs.can_be_static());
     }
 }

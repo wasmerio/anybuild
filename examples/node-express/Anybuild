@@ -9,7 +9,7 @@ config = node_config(
         "start": "node server.js",
     },
     package_manager = "npm",
-    framework = "express",
+    server = "express",
     node_version = "24",
 )
 

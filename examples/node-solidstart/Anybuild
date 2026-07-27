@@ -10,6 +10,7 @@ config = node_config(
     },
     package_manager = "npm",
     framework = "solidstart",
+    server = "node",
     node_version = "24",
 )
 

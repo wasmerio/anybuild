@@ -10,6 +10,7 @@ config = node_config(
     },
     package_manager = "npm",
     framework = "next",
+    server = "node",
     build_command = "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
     node_version = "24",
 )

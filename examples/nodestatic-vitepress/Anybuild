@@ -10,6 +10,7 @@ config = nodestatic_config(
     static_dir = "docs/.vitepress/dist",
     package_manager = "npm",
     framework = "vitepress",
+    server = "node",
     build_command = "npm run docs:build",
     node_version = "24",
 )

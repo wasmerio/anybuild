@@ -7,12 +7,15 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
-  nitro: {
-    preset: "node-server",
-  },
+  nitro: false,
   tanstackStart: {
+    prerender: {
+      enabled: true,
+      crawlLinks: true,
+      failOnError: true,
+    },
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
+    // The build uses it only while prerendering the static pages.
     server: { entry: "server" },
   },
 });

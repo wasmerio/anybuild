@@ -500,7 +500,7 @@ fn missing_go_entrypoint_is_reported_without_panicking() {
 }
 
 #[test]
-fn runtime_node_framework_is_rejected_by_node_static_without_panicking() {
+fn non_static_node_framework_is_rejected_without_panicking() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(
         tmp.path().join("package.json"),
@@ -518,7 +518,7 @@ fn runtime_node_framework_is_rejected_by_node_static_without_panicking() {
         .arg("plan")
         .arg(tmp.path())
         .args(["--provider", "node-static"])
-        .env("ANYBUILD_FRAMEWORK", "express")
+        .env("ANYBUILD_FRAMEWORK", "nestjs")
         .output()
         .unwrap();
 

@@ -10,6 +10,7 @@ config = node_config(
     },
     package_manager = "npm",
     framework = "nestjs",
+    server = "express",
     node_version = "24",
 )
 

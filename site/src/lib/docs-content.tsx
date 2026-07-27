@@ -991,9 +991,10 @@ const nodeProvider: DocPage = {
       title: "Detection",
       content: (
         <Paragraph>
-          The Node provider recognizes Node start/install commands, package.json, known framework
-          dependencies, and common JavaScript server entry files. Static-capable projects are
-          evaluated by the higher-priority node-static provider first.
+          The Node provider recognizes Node start/install commands, package.json, application
+          framework dependencies, runtime server dependencies, and common JavaScript server entry
+          files. Static-capable projects are evaluated by the higher-priority node-static provider
+          first.
         </Paragraph>
       ),
     },
@@ -1018,6 +1019,10 @@ const nodeProvider: DocPage = {
             considers package.json scripts, its main field, and common files such as server.js,
             app.js, index.js, src/server.js, and src/index.js.
           </Paragraph>
+          <Paragraph>
+            Framework and server are detected independently. For example, a project can use
+            TanStack Start as its framework and Nitro as its server, or NestJS with Express.
+          </Paragraph>
           <Callout title="Nitro projects">
             When Nitro is detected, Anybuild sets <InlineCode>NITRO_PRESET=node-server</InlineCode>{" "}
             for the build and starts <InlineCode>node .output/server/index.mjs</InlineCode>. Nitro
@@ -1035,6 +1040,8 @@ const nodeProvider: DocPage = {
           rows={[
             ["ANYBUILD_NODE_VERSION", "Node.js package version; current default is 24."],
             ["ANYBUILD_PACKAGE_MANAGER", "Force npm, pnpm, yarn, or bun."],
+            ["ANYBUILD_FRAMEWORK", "Force the detected application framework."],
+            ["ANYBUILD_SERVER", "Force the Node.js runtime server or adapter."],
             ["ANYBUILD_BUILD_COMMAND", "Override the detected build command."],
             [
               "ANYBUILD_OPTIMIZE_NODE_DEPENDENCIES",

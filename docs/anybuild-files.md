@@ -129,7 +129,7 @@ sets — common fields `name`, `port`, and `app_subdir` live on the base):
 | Provider   | Fields                                                        |
 | ---------- | ------------------------------------------------------------- |
 | python     | `python_version`, `server`, `framework`, `extra_dependencies`, `precompile_python`, `database` |
-| node       | `node_version`, `package_manager`, `build_command`, `optimize_node_dependencies` |
+| node       | `node_version`, `package_manager`, `framework`, `server`, `build_command`, `optimize_node_dependencies` |
 | php        | `php_version`, `phpix`, `use_composer`, `composer_build_script`, `public_dir` |
 | wordpress  | php fields plus `wp_version`, `wp_locale`, `wp_cli_version`    |
 | staticfile | `static_dir`, `sws_version`, `convert_redirects`               |

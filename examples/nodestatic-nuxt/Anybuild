@@ -10,6 +10,7 @@ config = nodestatic_config(
     static_dir = ".output/public",
     package_manager = "npm",
     framework = "nuxt3",
+    server = "node",
     build_command = "npm run generate",
     node_version = "24",
 )

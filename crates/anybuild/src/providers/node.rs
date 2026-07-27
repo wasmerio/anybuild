@@ -172,28 +172,14 @@ pub enum NodeFramework {
     RemixV2Classic,
     #[serde(rename = "react-router")]
     ReactRouter,
-    #[serde(rename = "nitro")]
-    Nitro,
     #[serde(rename = "solidstart")]
     Solidstart,
     #[serde(rename = "tanstack-start")]
     TanstackStart,
     #[serde(rename = "hydrogen")]
     Hydrogen,
-    #[serde(rename = "hono")]
-    Hono,
-    #[serde(rename = "express")]
-    Express,
-    #[serde(rename = "h3")]
-    H3,
-    #[serde(rename = "koa")]
-    Koa,
     #[serde(rename = "nestjs")]
     Nestjs,
-    #[serde(rename = "elysia")]
-    Elysia,
-    #[serde(rename = "fastify")]
-    Fastify,
     #[serde(rename = "xmcp")]
     Xmcp,
     #[serde(rename = "mastra")]
@@ -208,7 +194,7 @@ pub enum NodeFramework {
 
 impl NodeFramework {
     /// Python enum definition order (`for framework in NodeFramework`).
-    pub const ALL: [NodeFramework; 50] = [
+    pub const ALL: [NodeFramework; 43] = [
         NodeFramework::Angular,
         NodeFramework::Next,
         NodeFramework::Astro,
@@ -243,17 +229,10 @@ impl NodeFramework {
         NodeFramework::RemixV2,
         NodeFramework::RemixV2Classic,
         NodeFramework::ReactRouter,
-        NodeFramework::Nitro,
         NodeFramework::Solidstart,
         NodeFramework::TanstackStart,
         NodeFramework::Hydrogen,
-        NodeFramework::Hono,
-        NodeFramework::Express,
-        NodeFramework::H3,
-        NodeFramework::Koa,
         NodeFramework::Nestjs,
-        NodeFramework::Elysia,
-        NodeFramework::Fastify,
         NodeFramework::Xmcp,
         NodeFramework::Mastra,
         NodeFramework::Sanity,
@@ -297,6 +276,7 @@ impl NodeFramework {
                 | NodeFramework::RemixOld
                 | NodeFramework::RemixV2
                 | NodeFramework::RemixV2Classic
+                | NodeFramework::TanstackStart
                 | NodeFramework::Sanity
                 | NodeFramework::SanityV3
                 | NodeFramework::Storybook
@@ -360,6 +340,7 @@ impl NodeFramework {
             NodeFramework::Remix => "build/client",
             NodeFramework::RemixV2 => "build/client",
             NodeFramework::RemixV2Classic => "public",
+            NodeFramework::TanstackStart => "dist/client",
             NodeFramework::Assemble => "dist",
             NodeFramework::Harp => "www",
             NodeFramework::Parcel => "dist",
@@ -463,6 +444,7 @@ impl NodeFramework {
             NodeFramework::NuxtV3 => "nuxi generate",
             NodeFramework::NuxtOld => "nuxt generate",
             NodeFramework::Remix => "remix build",
+            NodeFramework::TanstackStart => "vite build",
             NodeFramework::Sanity => "sanity build",
             NodeFramework::SanityV3 => "sanity build",
             NodeFramework::Storybook => "storybook build",
@@ -486,11 +468,40 @@ impl NodeFramework {
     }
 
     pub fn start_command(self) -> Option<&'static str> {
-        match self {
-            NodeFramework::Next => Some("node server.mjs"),
-            NodeFramework::Nitro => Some("node .output/server/index.mjs"),
-            _ => None,
-        }
+        (self == NodeFramework::Next).then_some("node server.mjs")
+    }
+
+    fn from_value(value: &str) -> Option<Self> {
+        serde_json::from_value(Value::String(value.to_owned())).ok()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NodeServer
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NodeServer {
+    #[serde(rename = "node")]
+    Node,
+    #[serde(rename = "express")]
+    Express,
+    #[serde(rename = "nitro")]
+    Nitro,
+    #[serde(rename = "hono")]
+    Hono,
+    #[serde(rename = "h3")]
+    H3,
+    #[serde(rename = "koa")]
+    Koa,
+    #[serde(rename = "elysia")]
+    Elysia,
+    #[serde(rename = "fastify")]
+    Fastify,
+}
+
+impl NodeServer {
+    pub fn start_command(self) -> Option<&'static str> {
+        (self == NodeServer::Nitro).then_some("node .output/server/index.mjs")
     }
 
     fn from_value(value: &str) -> Option<Self> {
@@ -512,6 +523,7 @@ pub struct NodeConfigFields<F = NodeFramework> {
     pub precompile_edgejs: Option<bool>,
     pub package_manager: Option<PackageManager>,
     pub framework: Option<F>,
+    pub server: Option<NodeServer>,
     pub extra_dependencies: BTreeSet<String>,
     pub build_command: Option<String>,
     pub node_version: Option<String>,
@@ -536,6 +548,7 @@ impl<F> Default for NodeConfigFields<F> {
             precompile_edgejs: None,
             package_manager: None,
             framework: None,
+            server: None,
             extra_dependencies: BTreeSet::new(),
             build_command: None,
             node_version: Some("24".to_owned()),
@@ -568,6 +581,12 @@ impl NodeConfigFields<NodeFramework> {
                 "framework",
                 "a supported Node framework",
                 NodeFramework::from_value,
+            )?,
+            server: env_enum(
+                operation,
+                "server",
+                "a supported Node server",
+                NodeServer::from_value,
             )?,
             extra_dependencies: env_json(operation, "extra_dependencies")?.unwrap_or_default(),
             build_command: env_str(operation, "build_command"),
@@ -638,7 +657,7 @@ pub(crate) fn non_empty(value: &Option<String>) -> Option<&str> {
 // ---------------------------------------------------------------------------
 // Detection
 
-pub(crate) const FRAMEWORK_DEPENDENCIES: &[&str] = &[
+pub(crate) const NODE_DEPENDENCIES: &[&str] = &[
     "next",
     "astro",
     "@react-router/dev",
@@ -782,15 +801,16 @@ impl Provider for NodeConfig {
     const NAME: &'static str = "node";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
         ("Framework", "framework"),
+        ("Server", "server"),
         ("Package manager", "package_manager"),
         ("Node version", "node_version"),
     ];
 
     fn format_detection_detail(field: &str, value: &str) -> String {
-        if field == "framework" {
-            display_framework(value)
-        } else {
-            value.to_owned()
+        match field {
+            "framework" => display_framework(value),
+            "server" => display_server(value),
+            _ => value.to_owned(),
         }
     }
 
@@ -830,8 +850,10 @@ impl Provider for NodeConfig {
             }
         }
 
-        let found_deps = check_package_json_deps(package_json.as_ref(), FRAMEWORK_DEPENDENCIES);
-        if detect_framework(package_json.as_ref(), &found_deps, Some(path)).is_some() {
+        let found_deps = check_package_json_deps(package_json.as_ref(), NODE_DEPENDENCIES);
+        if detect_framework(package_json.as_ref(), &found_deps, Some(path)).is_some()
+            || detect_server(&found_deps) != NodeServer::Node
+        {
             return Some(if has_package_start {
                 DetectionEvidence::FrameworkWithStart
             } else {
@@ -872,6 +894,13 @@ pub(crate) fn display_framework(value: &str) -> String {
         "tanstack-start" => "TanStack Start".to_owned(),
         "react-router" => "React Router".to_owned(),
         "nuxt" | "nuxt3" => "Nuxt".to_owned(),
+        value => humanize(value),
+    }
+}
+
+pub(crate) fn display_server(value: &str) -> String {
+    match value {
+        "node" => "Node.js".to_owned(),
         value => humanize(value),
     }
 }
@@ -1075,9 +1104,6 @@ pub(crate) fn detect_framework(
     if found_deps.contains("@sveltejs/kit") {
         return Some(NodeFramework::Sveltekit);
     }
-    if any(&["nitropack", "nitro"]) {
-        return Some(NodeFramework::Nitro);
-    }
     if any(&["@solidjs/start", "solid-start"]) {
         return Some(NodeFramework::Solidstart);
     }
@@ -1091,24 +1117,6 @@ pub(crate) fn detect_framework(
         "@nestjs/platform-fastify",
     ]) {
         return Some(NodeFramework::Nestjs);
-    }
-    if any(&["hono", "@hono/node-server"]) {
-        return Some(NodeFramework::Hono);
-    }
-    if found_deps.contains("express") {
-        return Some(NodeFramework::Express);
-    }
-    if found_deps.contains("h3") {
-        return Some(NodeFramework::H3);
-    }
-    if found_deps.contains("koa") {
-        return Some(NodeFramework::Koa);
-    }
-    if any(&["elysia", "@elysia/node"]) {
-        return Some(NodeFramework::Elysia);
-    }
-    if found_deps.contains("fastify") {
-        return Some(NodeFramework::Fastify);
     }
     if found_deps.contains("xmcp") {
         return Some(NodeFramework::Xmcp);
@@ -1124,6 +1132,39 @@ pub(crate) fn detect_framework(
     }
 
     None
+}
+
+pub(crate) fn detect_server(found_deps: &BTreeSet<&'static str>) -> NodeServer {
+    let any = |deps: &[&str]| deps.iter().any(|dep| found_deps.contains(dep));
+
+    if any(&["nitropack", "nitro"]) {
+        return NodeServer::Nitro;
+    }
+    if found_deps.contains("@nestjs/platform-fastify") {
+        return NodeServer::Fastify;
+    }
+    if found_deps.contains("@nestjs/platform-express") {
+        return NodeServer::Express;
+    }
+    if any(&["hono", "@hono/node-server"]) {
+        return NodeServer::Hono;
+    }
+    if found_deps.contains("express") {
+        return NodeServer::Express;
+    }
+    if found_deps.contains("h3") {
+        return NodeServer::H3;
+    }
+    if found_deps.contains("koa") {
+        return NodeServer::Koa;
+    }
+    if any(&["elysia", "@elysia/node"]) {
+        return NodeServer::Elysia;
+    }
+    if found_deps.contains("fastify") {
+        return NodeServer::Fastify;
+    }
+    NodeServer::Node
 }
 
 // ---------------------------------------------------------------------------
@@ -1466,9 +1507,12 @@ pub fn load_config(
         config.install_requires_all_files = true;
     }
 
-    let found_deps = check_package_json_deps(package_json.as_ref(), FRAMEWORK_DEPENDENCIES);
+    let found_deps = check_package_json_deps(package_json.as_ref(), NODE_DEPENDENCIES);
     if config.framework.is_none() {
         config.framework = detect_framework(package_json.as_ref(), &found_deps, Some(path));
+    }
+    if config.server.is_none() {
+        config.server = Some(detect_server(&found_deps));
     }
 
     if non_empty(&config.build_command).is_none() {
@@ -1484,13 +1528,18 @@ pub fn load_config(
 
     // infer_start=True in the Python default path.
     if non_empty(&config.base.commands.start).is_none() {
-        if config.framework == Some(NodeFramework::Nitro) {
+        if config.server == Some(NodeServer::Nitro) {
             config.base.commands.start =
                 infer_start_command(path, package_json.as_ref(), false, operation)?;
         }
         if non_empty(&config.base.commands.start).is_none() {
             if let Some(framework) = config.framework {
                 config.base.commands.start = framework.start_command().map(str::to_owned);
+            }
+        }
+        if non_empty(&config.base.commands.start).is_none() {
+            if let Some(server) = config.server {
+                config.base.commands.start = server.start_command().map(str::to_owned);
             }
         }
         if non_empty(&config.base.commands.start).is_none() {
@@ -1684,22 +1733,42 @@ mod tests {
 
     #[test]
     fn test_node_provider_detects_node_runtime_examples() {
-        for (example_name, framework) in [
-            ("node-fastify", NodeFramework::Fastify),
-            ("node-hono", NodeFramework::Hono),
-            ("node-express", NodeFramework::Express),
-            ("node-koa", NodeFramework::Koa),
-            ("node-h3", NodeFramework::H3),
-            ("node-elysia", NodeFramework::Elysia),
-            ("node-nestjs", NodeFramework::Nestjs),
-            ("node-nitro", NodeFramework::Nitro),
-            ("node-hydrogen", NodeFramework::Hydrogen),
-            ("node-react-router", NodeFramework::ReactRouter),
-            ("node-remix", NodeFramework::Remix),
-            ("node-solidstart", NodeFramework::Solidstart),
-            ("node-tanstack-start", NodeFramework::TanstackStart),
-            ("node-xmcp", NodeFramework::Xmcp),
-            ("node-mastra", NodeFramework::Mastra),
+        for (example_name, framework, server) in [
+            ("node-fastify", None, NodeServer::Fastify),
+            ("node-hono", None, NodeServer::Hono),
+            ("node-express", None, NodeServer::Express),
+            ("node-koa", None, NodeServer::Koa),
+            ("node-h3", None, NodeServer::H3),
+            ("node-elysia", None, NodeServer::Elysia),
+            (
+                "node-nestjs",
+                Some(NodeFramework::Nestjs),
+                NodeServer::Express,
+            ),
+            ("node-nitro", None, NodeServer::Nitro),
+            (
+                "node-hydrogen",
+                Some(NodeFramework::Hydrogen),
+                NodeServer::Node,
+            ),
+            (
+                "node-react-router",
+                Some(NodeFramework::ReactRouter),
+                NodeServer::Node,
+            ),
+            ("node-remix", Some(NodeFramework::Remix), NodeServer::Node),
+            (
+                "node-solidstart",
+                Some(NodeFramework::Solidstart),
+                NodeServer::Node,
+            ),
+            (
+                "node-tanstack-start",
+                Some(NodeFramework::TanstackStart),
+                NodeServer::Node,
+            ),
+            ("node-xmcp", Some(NodeFramework::Xmcp), NodeServer::Node),
+            ("node-mastra", Some(NodeFramework::Mastra), NodeServer::Node),
         ] {
             let path = example(example_name);
 
@@ -1710,7 +1779,8 @@ mod tests {
                 "{example_name}"
             );
             let config = load_config(&path, BaseConfig::default());
-            assert_eq!(config.framework, Some(framework), "{example_name}");
+            assert_eq!(config.framework, framework, "{example_name}");
+            assert_eq!(config.server, Some(server), "{example_name}");
             assert_eq!(
                 config.base.commands.start.as_deref(),
                 Some("node server.js"),
@@ -1726,6 +1796,30 @@ mod tests {
         assert_eq!(
             crate::providers::load_provider_for_test(&path, &BaseConfig::default(), None).unwrap(),
             "node"
+        );
+    }
+
+    #[test]
+    fn test_framework_and_server_are_detected_independently() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            r#"{
+  "dependencies": {
+    "@tanstack/react-start": "^1.0.0",
+    "nitro": "^3.0.0"
+  }
+}
+"#,
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.framework, Some(NodeFramework::TanstackStart));
+        assert_eq!(config.server, Some(NodeServer::Nitro));
+        assert_eq!(
+            config.base.commands.start.as_deref(),
+            Some("node .output/server/index.mjs")
         );
     }
 
@@ -1757,7 +1851,8 @@ mod tests {
             "node"
         );
         let config = load_config(&path, BaseConfig::default());
-        assert_eq!(config.framework, Some(NodeFramework::Elysia));
+        assert_eq!(config.framework, None);
+        assert_eq!(config.server, Some(NodeServer::Elysia));
         assert_eq!(
             config.base.commands.start.as_deref(),
             Some("node server.js")
@@ -1957,7 +2052,8 @@ mod tests {
 
         let config = load_config(tmp.path(), BaseConfig::default());
 
-        assert_eq!(config.framework, Some(NodeFramework::Nitro));
+        assert_eq!(config.framework, None);
+        assert_eq!(config.server, Some(NodeServer::Nitro));
         assert_eq!(
             config.base.commands.start.as_deref(),
             Some("node .output/server/index.mjs")

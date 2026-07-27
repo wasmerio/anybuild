@@ -40,8 +40,10 @@ _DLX_PREFIXES = {
 }
 
 # Frameworks whose node_modules can be shrunk further after the build.
-_OPTIMIZE_DEPS_PATHS = {
+_FRAMEWORK_OPTIMIZE_DEPS_PATHS = {
     "astro": ["dist"],
+}
+_SERVER_OPTIMIZE_DEPS_PATHS = {
     "nitro": [".output/server"],
 }
 OPTIMIZE_DEPS_VERSION = "0.1.2"
@@ -142,12 +144,13 @@ def node_copy_step(config):
             ignore.append(lockfile)
     return copy(".", ignore = ignore)
 
-def node_build_step(config, outputs = ["."], serving = True):
+def node_build_step(config, outputs = ["."], serving = True, static = False):
     if not config.build_command:
         return []
     steps = []
-    if config.framework == "nitro":
-        steps.append(env(NITRO_PRESET = "node-server"))
+    if config.server == "nitro":
+        static_nitro = static and config.framework != "tanstack-start"
+        steps.append(env(NITRO_PRESET = "static" if static_nitro else "node-server"))
     if serving:
         steps.append(run(config.build_command, outputs = outputs, group = "build"))
     else:
@@ -161,7 +164,12 @@ def node_optimize_steps(config, assets = None, include_prune = True, serving = T
     steps = []
     if include_prune:
         steps.append(run(_PRUNE_COMMANDS[config.package_manager], group = "prune"))
-    optimize_paths = _OPTIMIZE_DEPS_PATHS.get(config.framework, []) if config.build_command else []
+    optimize_paths = []
+    if config.build_command:
+        optimize_paths = _FRAMEWORK_OPTIMIZE_DEPS_PATHS.get(
+            config.framework,
+            _SERVER_OPTIMIZE_DEPS_PATHS.get(config.server, []),
+        )
     if optimize_paths and config.optimize_node_dependencies:
         steps.append(run(_DLX_PREFIXES[config.package_manager] + "optimize-deps@{} {} --replace".format(OPTIMIZE_DEPS_VERSION, ", ".join(optimize_paths))))
     if serving and config.remove_native_binaries:

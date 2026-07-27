@@ -9,7 +9,8 @@ config = node_config(
         "start": "node .output/server/index.mjs",
     },
     package_manager = "bun",
-    framework = "nitro",
+    framework = "tanstack-start",
+    server = "nitro",
     build_command = "bun run build",
     node_version = "24",
 )

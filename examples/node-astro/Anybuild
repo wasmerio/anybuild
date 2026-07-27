@@ -10,6 +10,7 @@ config = node_config(
     },
     package_manager = "npm",
     framework = "astro",
+    server = "node",
     build_command = "npm run build",
     node_version = "24",
 )

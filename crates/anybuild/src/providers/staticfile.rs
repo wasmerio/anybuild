@@ -267,7 +267,7 @@ fn is_unbuilt_node_static_site(
 
     let found_runtime_deps = crate::providers::node::check_package_json_deps(
         Some(&package_json),
-        crate::providers::node::FRAMEWORK_DEPENDENCIES,
+        crate::providers::node::NODE_DEPENDENCIES,
     );
     if crate::providers::node::detect_framework(
         Some(&package_json),
@@ -275,6 +275,8 @@ fn is_unbuilt_node_static_site(
         Some(path),
     )
     .is_some()
+        || crate::providers::node::detect_server(&found_runtime_deps)
+            != crate::providers::node::NodeServer::Node
     {
         return false;
     }
