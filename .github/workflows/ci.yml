@@ -17,3 +17,34 @@ jobs:
   test_and_e2e:
     name: Test + E2E
     uses: ./.github/workflows/reusable-test-e2e.yml
+
+  site:
+    name: Site + installer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Validate installer
+        run: |
+          shellcheck site/public/install
+          shellcheck scripts/test_installer.sh
+          scripts/test_installer.sh
+
+      - name: Install site dependencies
+        working-directory: site
+        run: bun install --frozen-lockfile
+
+      - name: Build site
+        working-directory: site
+        run: bun run build
+
+      - name: Verify deployed installer asset
+        run: cmp site/public/install site/dist/client/install

@@ -74,7 +74,9 @@ const gettingStarted: DocPage = {
         <>
           <Paragraph>Install the released CLI with the shell installer or Cargo.</Paragraph>
           <CodeBlock>{`curl -fsSL https://anybuild.run/install | sh`}</CodeBlock>
-          <CodeBlock>{`cargo install anybuild-cli`}</CodeBlock>
+          <CodeBlock>
+            {`cargo install --git https://github.com/wasmerio/anybuild anybuild-cli`}
+          </CodeBlock>
           <Paragraph>
             Confirm the binary is available with <InlineCode>anybuild --version</InlineCode>.
           </Paragraph>
@@ -143,6 +145,10 @@ const installation: DocPage = {
         <>
           <Paragraph>On macOS or Linux, use the Anybuild installer.</Paragraph>
           <CodeBlock>{`curl -fsSL https://anybuild.run/install | sh`}</CodeBlock>
+          <Paragraph>
+            Set <InlineCode>ANYBUILD_VERSION</InlineCode> to install a specific release, or{" "}
+            <InlineCode>ANYBUILD_INSTALL_DIR</InlineCode> to choose another binary directory.
+          </Paragraph>
         </>
       ),
     },
@@ -151,8 +157,12 @@ const installation: DocPage = {
       title: "Cargo",
       content: (
         <>
-          <Paragraph>The published Cargo package is named anybuild-cli.</Paragraph>
-          <CodeBlock>{`cargo install anybuild-cli`}</CodeBlock>
+          <Paragraph>
+            Install the anybuild-cli package directly from the public repository.
+          </Paragraph>
+          <CodeBlock>
+            {`cargo install --git https://github.com/wasmerio/anybuild anybuild-cli`}
+          </CodeBlock>
           <Paragraph>
             The package installs the <InlineCode>anybuild</InlineCode> binary and retains the{" "}
             <InlineCode>shipit</InlineCode> binary alias for CLI compatibility.

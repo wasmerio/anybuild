@@ -1,0 +1,235 @@
+name: Release Artifacts
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        description: Draft GitHub release tag to build.
+        required: true
+        type: string
+      release_sha:
+        description: Exact release commit created by Release Please.
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing draft GitHub release tag to rebuild.
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-artifacts-${{ inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      checkout_ref: ${{ steps.release.outputs.checkout_ref }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Validate draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          release_json="$(gh release view "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,targetCommitish)"
+          if [ "$(jq -r '.isDraft' <<<"$release_json")" != "true" ]; then
+            echo "::error::$TAG_NAME is not a draft release"
+            exit 1
+          fi
+
+          checkout_ref="$RELEASE_SHA"
+          if [ -z "$checkout_ref" ]; then
+            checkout_ref="$(jq -r '.targetCommitish' <<<"$release_json")"
+          fi
+          version="${TAG_NAME#v}"
+          if [ -z "$version" ] || [ "$version" = "$TAG_NAME" ]; then
+            echo "::error::Expected a v-prefixed release tag, got $TAG_NAME"
+            exit 1
+          fi
+
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: resolve
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+            asset: anybuild-aarch64-apple-darwin.tar.gz
+            binary: anybuild
+            archive: tar
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+            asset: anybuild-x86_64-apple-darwin.tar.gz
+            binary: anybuild
+            archive: tar
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+            asset: anybuild-aarch64-unknown-linux-musl.tar.gz
+            binary: anybuild
+            archive: tar
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            asset: anybuild-x86_64-unknown-linux-musl.tar.gz
+            binary: anybuild
+            archive: tar
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
+            asset: anybuild-x86_64-pc-windows-msvc.zip
+            binary: anybuild.exe
+            archive: zip
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.checkout_ref }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: Install musl toolchain
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build and smoke test
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          BINARY_NAME: ${{ matrix.binary }}
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            export MACOSX_DEPLOYMENT_TARGET=12.0
+          fi
+
+          cargo build --locked --release \
+            -p anybuild-cli --bin anybuild --target "$TARGET"
+
+          binary="target/$TARGET/release/$BINARY_NAME"
+          actual_version="$("$binary" --version)"
+          if [ "$actual_version" != "$EXPECTED_VERSION" ]; then
+            echo "::error::Expected version $EXPECTED_VERSION, got $actual_version"
+            exit 1
+          fi
+
+          mkdir -p staging dist
+          cp "$binary" "staging/$BINARY_NAME"
+
+      - name: Package Unix archive
+        if: matrix.archive == 'tar'
+        shell: bash
+        env:
+          ASSET_NAME: ${{ matrix.asset }}
+        run: tar -C staging -czf "dist/$ASSET_NAME" anybuild
+
+      - name: Package Windows archive
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        env:
+          ASSET_NAME: ${{ matrix.asset }}
+        run: Compress-Archive -Path staging/anybuild.exe -DestinationPath "dist/$env:ASSET_NAME"
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish verified release
+    needs:
+      - resolve
+      - build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify assets and create checksums
+        working-directory: release-assets
+        run: |
+          assets=(
+            anybuild-aarch64-apple-darwin.tar.gz
+            anybuild-x86_64-apple-darwin.tar.gz
+            anybuild-aarch64-unknown-linux-musl.tar.gz
+            anybuild-x86_64-unknown-linux-musl.tar.gz
+            anybuild-x86_64-pc-windows-msvc.zip
+          )
+
+          for asset in "${assets[@]}"; do
+            test -s "$asset"
+          done
+
+          actual_count="$(find . -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          if [ "$actual_count" != "${#assets[@]}" ]; then
+            echo "::error::Expected ${#assets[@]} release assets, found $actual_count"
+            find . -maxdepth 1 -type f -print
+            exit 1
+          fi
+
+          sha256sum "${assets[@]}" > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Upload assets and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          visibility="$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility')"
+          if [ "$visibility" != "public" ]; then
+            echo "::error::Repository must be public before publishing $TAG_NAME"
+            exit 1
+          fi
+
+          is_draft="$(gh release view "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft --jq '.isDraft')"
+          if [ "$is_draft" != "true" ]; then
+            echo "::error::$TAG_NAME is no longer a draft release"
+            exit 1
+          fi
+
+          gh release upload "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber release-assets/*
+          gh release edit "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false --latest

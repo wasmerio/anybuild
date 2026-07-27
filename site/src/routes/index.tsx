@@ -81,7 +81,7 @@ function Index() {
   const installCommand =
     installMethod === "shell"
       ? "curl -fsSL https://anybuild.run/install | sh"
-      : "cargo install anybuild-cli";
+      : "cargo install --git https://github.com/wasmerio/anybuild anybuild-cli";
 
   const copyInstallCommand = async () => {
     const didCopy = await copyText(installCommand);
