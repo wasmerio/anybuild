@@ -6,6 +6,7 @@ import {
   DocLink,
   DocsTable,
   InlineCode,
+  InlineCodeSequence,
   OrderedList,
   Paragraph,
 } from "@/components/docs-primitives";
@@ -69,11 +70,11 @@ const gettingStarted: DocPage = {
     },
     {
       id: "choose-an-environment",
-      title: "Choose an environment",
+      title: "Choose a builder and deploy runner",
       content: (
         <>
           <DocsTable
-            headers={["Command", "Build environment", "Runtime"]}
+            headers={["Command", "Builder", "Deploy Runner"]}
             rows={[
               [<InlineCode>anybuild . --start</InlineCode>, "Local toolchain", "Local process"],
               [<InlineCode>anybuild . --docker --start</InlineCode>, "Docker", "Local process"],
@@ -81,10 +82,9 @@ const gettingStarted: DocPage = {
               [<InlineCode>anybuild . --docker --wasmer --start</InlineCode>, "Docker", "Wasmer"],
             ]}
           />
-          <Callout title="Build and runtime are independent">
-            <InlineCode>--docker</InlineCode> selects the build backend.{" "}
-            <InlineCode>--wasmer</InlineCode> selects the runtime and packaging runner. They can be
-            combined.
+          <Callout title="Builder and deploy runner are independent">
+            <InlineCode>--docker</InlineCode> selects the builder. <InlineCode>--wasmer</InlineCode>{" "}
+            selects the deploy runner. They can be combined.
           </Callout>
         </>
       ),
@@ -97,7 +97,7 @@ const gettingStarted: DocPage = {
           <BulletList>
             <li>
               <InlineCode>Anybuild</InlineCode> is the generated Starlark definition. It is yours to
-              edit.
+              edit and includes the detected typed provider configuration.
             </li>
             <li>
               <InlineCode>.anybuild/</InlineCode> contains build state, artifacts, volumes, and
@@ -157,11 +157,17 @@ const installation: DocPage = {
             ["Local builds", "The language and package-manager tools required by the project."],
             [
               <InlineCode>--docker</InlineCode>,
-              "Docker, Podman, Depot, or another compatible client selected with --docker-client.",
+              <>
+                Docker, Podman, Depot, or another compatible client selected with{" "}
+                <InlineCode>--docker-client</InlineCode>.
+              </>,
             ],
             [
               <InlineCode>--wasmer</InlineCode>,
-              "The Wasmer CLI on PATH, or a custom binary passed with --wasmer-bin.",
+              <>
+                The Wasmer CLI on PATH, or a custom binary passed with{" "}
+                <InlineCode>--wasmer-bin</InlineCode>.
+              </>,
             ],
           ]}
         />
@@ -261,10 +267,12 @@ const howItWorks: DocPage = {
             <BulletList>
               <li>Read command hints from a Procfile and CLI overrides.</li>
               <li>Score every provider and select the highest-scoring match.</li>
-              <li>Load typed provider configuration and apply environment and JSON overrides.</li>
+              <li>Detect typed provider configuration and write it into the generated file.</li>
             </BulletList>
           </li>
-          <li>Load the Anybuild Starlark definition file.</li>
+          <li>
+            Load the Anybuild Starlark definition and apply environment and JSON config overrides.
+          </li>
           <li>Evaluate the definition into a Serve plan.</li>
           <li>Execute build steps with a Builder backend (Local or Docker).</li>
           <li>Prepare and run a Runner backend (Local or Wasmer).</li>
@@ -372,8 +380,8 @@ const localDevelopment: DocPage = {
 
 const buildEnvironments: DocPage = {
   slug: "guides/build-environments",
-  title: "Build Environments",
-  description: "Choose where build steps execute and where the resulting application runs.",
+  title: "Builders and Deploy Runners",
+  description: "Choose the builder and deploy runner independently.",
   sections: [
     {
       id: "local",
@@ -398,7 +406,7 @@ const buildEnvironments: DocPage = {
             Anybuild state.
           </Paragraph>
           <Callout title="Docker is a build sandbox">
-            The Docker backend does not change the runtime by itself. Add{" "}
+            The Docker builder does not change the deploy runner by itself. Add{" "}
             <InlineCode>--wasmer</InlineCode> when the exported application should be packaged and
             run with Wasmer.
           </Callout>
@@ -407,7 +415,7 @@ const buildEnvironments: DocPage = {
     },
     {
       id: "wasmer",
-      title: "Wasmer runtime",
+      title: "Wasmer deploy runner",
       content: (
         <>
           <CodeBlock>{`anybuild . --wasmer --start\nanybuild . --docker --wasmer --start`}</CodeBlock>
@@ -464,7 +472,13 @@ const additionalPackages: DocPage = {
             steps. <InlineCode>extra_deps</InlineCode> adds packages needed by the running
             application. Declare both when a tool is required in both phases.
           </Paragraph>
-          <CodeBlock label="Anybuild">{`load("//anybuild/tools:node.bzl", "node_build", "node_serve")
+          <CodeBlock label="Anybuild">{`load("//anybuild/tools:node.bzl", "node_build", "node_config", "node_serve")
+
+config = node_config(
+    schema = 1,
+    server = "node",
+    node_version = "24",
+)
 
 build = node_build(config)
 
@@ -496,8 +510,9 @@ const customSteps: DocPage = {
         <>
           <CodeBlock>{`anybuild generate .`}</CodeBlock>
           <Paragraph>
-            The generated file calls a provider build function and passes its build struct into a
-            serve function. Keep that composition and add steps around it.
+            The generated file constructs the detected typed provider config, calls the provider
+            build function, and passes its build struct into a serve function. Keep that composition
+            and add steps around it.
           </Paragraph>
         </>
       ),
@@ -506,7 +521,13 @@ const customSteps: DocPage = {
       id: "before-and-after",
       title: "Run before or after the provider build",
       content: (
-        <CodeBlock label="Anybuild">{`load("//anybuild/tools:node.bzl", "node_build", "node_serve")
+        <CodeBlock label="Anybuild">{`load("//anybuild/tools:node.bzl", "node_build", "node_config", "node_serve")
+
+config = node_config(
+    schema = 1,
+    server = "node",
+    node_version = "24",
+)
 
 build = node_build(config)
 
@@ -686,37 +707,97 @@ const anybuildFile: DocPage = {
       id: "shape",
       title: "Basic shape",
       content: (
-        <CodeBlock label="Anybuild">{`load("//anybuild/tools:python.bzl", "python_build", "python_serve")
+        <>
+          <CodeBlock label="Anybuild">{`load("//anybuild/tools:python.bzl", "python_build", "python_config", "python_serve")
+
+config = python_config(
+    schema = 1,
+    commands = {"start": "python main.py"},
+    main_file = "main.py",
+    python_version = "3.13",
+    uv_version = "0.8.15",
+)
 
 build = python_build(config)
 
 python_serve(config, build, name = "my-app")`}</CodeBlock>
+          <Paragraph>
+            The generated config arguments record the detected project settings and pinned runtime
+            versions. Environment variables and <InlineCode>--config</InlineCode> JSON are applied
+            when the config is constructed.
+          </Paragraph>
+        </>
       ),
     },
     {
       id: "build-and-serve",
-      title: "Build and serve functions",
+      title: "Config, build, and serve functions",
       content: (
         <>
           <Paragraph>
-            Each provider exposes a build function that returns steps and runtime requirements, plus
-            a serve function that assembles the final command, environment, mounts, volumes, and
-            services.
+            Each provider exposes a typed config constructor, a build function that returns steps
+            and runtime requirements, and a serve function that assembles the final command,
+            environment, mounts, volumes, and services.
           </Paragraph>
           <DocsTable
-            headers={["Provider", "Build / serve"]}
+            headers={["Provider", "Config / build / serve"]}
             rows={[
-              ["python", "python_build / python_serve"],
-              ["node", "node_build / node_serve"],
-              ["go", "go_build / go_serve"],
-              ["php", "php_build / php_serve"],
-              ["laravel", "laravel_build / laravel_serve"],
-              ["wordpress", "wordpress_build / wordpress_serve"],
-              ["staticfile", "staticfile_build / staticfile_serve"],
-              ["hugo", "hugo_build / staticfile_serve"],
-              ["jekyll", "jekyll_build / staticfile_serve"],
-              ["mkdocs", "mkdocs_build / staticfile_serve"],
-              ["node-static", "nodestatic_build / staticfile_serve"],
+              [
+                <DocLink href="/docs/providers/python">Python</DocLink>,
+                <InlineCodeSequence values={["python_config", "python_build", "python_serve"]} />,
+              ],
+              [
+                <DocLink href="/docs/providers/node">Node.js</DocLink>,
+                <InlineCodeSequence values={["node_config", "node_build", "node_serve"]} />,
+              ],
+              [
+                <DocLink href="/docs/providers/go">Go</DocLink>,
+                <InlineCodeSequence values={["go_config", "go_build", "go_serve"]} />,
+              ],
+              [
+                <DocLink href="/docs/providers/php">PHP</DocLink>,
+                <InlineCodeSequence values={["php_config", "php_build", "php_serve"]} />,
+              ],
+              [
+                <DocLink href="/docs/providers/laravel">Laravel</DocLink>,
+                <InlineCodeSequence
+                  values={["laravel_config", "laravel_build", "laravel_serve"]}
+                />,
+              ],
+              [
+                <DocLink href="/docs/providers/wordpress">WordPress</DocLink>,
+                <InlineCodeSequence
+                  values={["wordpress_config", "wordpress_build", "wordpress_serve"]}
+                />,
+              ],
+              [
+                <DocLink href="/docs/providers/static-files">Static Files</DocLink>,
+                <InlineCodeSequence
+                  values={["staticfile_config", "staticfile_build", "staticfile_serve"]}
+                />,
+              ],
+              [
+                <DocLink href="/docs/providers/hugo">Hugo</DocLink>,
+                <InlineCodeSequence values={["hugo_config", "hugo_build", "staticfile_serve"]} />,
+              ],
+              [
+                <DocLink href="/docs/providers/jekyll">Jekyll</DocLink>,
+                <InlineCodeSequence
+                  values={["jekyll_config", "jekyll_build", "staticfile_serve"]}
+                />,
+              ],
+              [
+                <DocLink href="/docs/providers/mkdocs">MkDocs</DocLink>,
+                <InlineCodeSequence
+                  values={["mkdocs_config", "mkdocs_build", "staticfile_serve"]}
+                />,
+              ],
+              [
+                <DocLink href="/docs/providers/node-static">Node Static</DocLink>,
+                <InlineCodeSequence
+                  values={["nodestatic_config", "nodestatic_build", "staticfile_serve"]}
+                />,
+              ],
             ]}
           />
         </>
@@ -794,7 +875,9 @@ ANYBUILD_STATIC_DIR=dist anybuild . --start`}</CodeBlock>
           <OrderedList>
             <li>Environment declared by the evaluated Serve.</li>
             <li>Workspace root .env.</li>
-            <li>Workspace root .env.&lt;name&gt; when --env-name is set.</li>
+            <li>
+              Workspace root .env.&lt;name&gt; when <InlineCode>--env-name</InlineCode> is set.
+            </li>
             <li>Application subdirectory .env.</li>
             <li>Application subdirectory .env.&lt;name&gt;.</li>
           </OrderedList>
@@ -928,7 +1011,7 @@ const excludingFiles: DocPage = {
 const staticSites: DocPage = {
   slug: "providers/static-sites",
   title: "Static Sites",
-  description: "Static HTML, Hugo, Jekyll, MkDocs, and Node-based site generators.",
+  description: "An overview of the providers that produce and serve static output.",
   sections: [
     {
       id: "providers",
@@ -937,12 +1020,28 @@ const staticSites: DocPage = {
         <DocsTable
           headers={["Provider", "Primary detection", "Default output"]}
           rows={[
-            ["staticfile", "Staticfile, index.html, or public/index.html", "Configured root"],
-            ["hugo", "hugo.toml/json/yaml/yml or a Hugo content layout", "public"],
-            ["jekyll", "_config.yml or _config.yaml", "_site"],
-            ["mkdocs", "mkdocs.yml or mkdocs.yaml", "site"],
             [
-              "node-static",
+              <DocLink href="/docs/providers/static-files">Static Files</DocLink>,
+              "Staticfile, index.html, or public/index.html",
+              "Configured root",
+            ],
+            [
+              <DocLink href="/docs/providers/hugo">Hugo</DocLink>,
+              "hugo.toml/json/yaml/yml or a Hugo content layout",
+              "public",
+            ],
+            [
+              <DocLink href="/docs/providers/jekyll">Jekyll</DocLink>,
+              "_config.yml or _config.yaml",
+              "_site",
+            ],
+            [
+              <DocLink href="/docs/providers/mkdocs">MkDocs</DocLink>,
+              "mkdocs.yml or mkdocs.yaml",
+              "site",
+            ],
+            [
+              <DocLink href="/docs/providers/node-static">Node Static</DocLink>,
               "A recognized static framework, export configuration, or static build command",
               "Framework-specific",
             ],
@@ -981,6 +1080,386 @@ const staticSites: DocPage = {
   ],
 };
 
+const staticFilesProvider: DocPage = {
+  slug: "providers/static-files",
+  title: "Static Files",
+  description: "Serve an existing directory of HTML, CSS, JavaScript, and other static assets.",
+  sections: [
+    {
+      id: "detection",
+      title: "Detection",
+      content: (
+        <Paragraph>
+          The static-file provider recognizes a <InlineCode>Staticfile</InlineCode>, a root{" "}
+          <InlineCode>index.html</InlineCode>, or <InlineCode>public/index.html</InlineCode>. It can
+          also serve an explicitly selected directory without running a build step.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "configuration",
+      title: "Configuration",
+      content: (
+        <>
+          <DocsTable
+            headers={["Field", "Purpose", "Example value"]}
+            rows={[
+              ["static_dir", "Directory copied into the static application artifact.", "public"],
+              ["sws_version", "Version of static-web-server used by the deploy runner.", "2.38.0"],
+              [
+                "convert_redirects",
+                "Convert a _redirects file into static-web-server rules.",
+                "true",
+              ],
+            ]}
+          />
+          <CodeBlock label="Anybuild">{`load("//anybuild/tools:staticfile.bzl", "staticfile_build", "staticfile_config", "staticfile_serve")
+
+config = staticfile_config(
+    schema = 1,
+    sws_version = "2.38.0",
+    static_dir = "public",
+)
+
+build = staticfile_build(config)
+
+staticfile_serve(config, build, name = "site")`}</CodeBlock>
+        </>
+      ),
+    },
+    {
+      id: "redirects",
+      title: "Redirects",
+      content: (
+        <Paragraph>
+          When redirect conversion is enabled, Anybuild reads <InlineCode>_redirects</InlineCode>{" "}
+          from the configured root and generates the equivalent static-web-server configuration.
+        </Paragraph>
+      ),
+    },
+  ],
+};
+
+const nodeStaticProvider: DocPage = {
+  slug: "providers/node-static",
+  title: "Node Static",
+  description: "Build Node-based frameworks into static output and serve the exported files.",
+  sections: [
+    {
+      id: "detection",
+      title: "Detection",
+      content: (
+        <Paragraph>
+          Node Static recognizes framework dependencies, static export configuration, and known
+          build commands. It is scored before the Node.js provider when the project has static
+          output.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "supported-frameworks",
+      title: "Supported frameworks",
+      content: (
+        <>
+          <Paragraph>
+            The following defaults come from the detected framework.{" "}
+            <InlineCode>ANYBUILD_STATIC_DIR</InlineCode> or the generated{" "}
+            <InlineCode>static_dir</InlineCode> config can override any of them.
+          </Paragraph>
+          <DocsTable
+            headers={["Framework", "Config value", "Default static_dir"]}
+            codeColumns={[1, 2]}
+            rows={[
+              ["Angular", "angular", "dist"],
+              ["Assemble", "assemble", "dist"],
+              ["Astro", "astro", "dist"],
+              ["Brunch", "brunch", "public"],
+              ["Create React App", "create-react-app", "build"],
+              ["Docusaurus", "docusaurus", "build"],
+              ["Docusaurus (legacy)", "docusaurus-old", "build"],
+              ["Eleventy", "eleventy", "_site"],
+              ["Ember", "ember", "dist"],
+              ["Gatsby", "gatsby", "public"],
+              ["Harp", "harp", "www"],
+              ["Hexo", "hexo", "public"],
+              ["Ionic Angular", "ionic-angular", "www"],
+              ["Ionic React", "ionic-react", "dist"],
+              ["Metalsmith", "metalsmith", "build"],
+              ["Next.js static export", "next", "out"],
+              ["Nuxt 2", "nuxt", "dist"],
+              ["Nuxt 3", "nuxt3", ".output/public"],
+              ["Parcel", "parcel", "dist"],
+              ["Polymer", "polymer", "build/default"],
+              ["Preact", "preact", "build"],
+              ["Remix", "remix", "build/client"],
+              ["Remix v1 / remix-ssg", "remix-old", "build/client"],
+              ["Remix v2 with Vite", "remix-v2", "build/client"],
+              ["Remix v2 classic", "remix-v2-classic", "public"],
+              ["Sanity", "sanity", "dist"],
+              ["Sanity v3", "sanity-v3", "dist"],
+              ["Storybook", "storybook", "storybook-static"],
+              ["Stencil", "stencil", "www"],
+              ["Svelte", "svelte", "build"],
+              ["SvelteKit", "sveltekit", "build"],
+              ["TanStack Start", "tanstack-start", "dist/client"],
+              ["UmiJS", "umijs", "dist"],
+              ["Vite", "vite", "dist"],
+              ["VitePress", "vitepress", "docs/.vitepress/dist"],
+              ["Vue CLI", "vue", "dist"],
+              ["VuePress", "vuepress", "docs/.vuepress/dist"],
+            ]}
+          />
+          <Callout title="Some outputs are project-aware">
+            Angular and Ionic Angular can read the output path from{" "}
+            <InlineCode>angular.json</InlineCode>. VitePress and VuePress account for a custom docs
+            root, while Metalsmith, Assemble, and Harp can infer an output path from project
+            configuration or build commands.
+          </Callout>
+        </>
+      ),
+    },
+    {
+      id: "build",
+      title: "Build and output",
+      content: (
+        <Paragraph>
+          The provider selects the package manager, runs the detected build, generate, export, or
+          docs build script, and copies the framework-specific output directory into the shared
+          static artifact.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "configuration",
+      title: "Configuration",
+      content: (
+        <>
+          <Paragraph>
+            Node Static inherits the build configuration from the{" "}
+            <DocLink href="/docs/providers/node">Node.js provider configuration</DocLink> and the
+            output and serving configuration from the{" "}
+            <DocLink href="/docs/providers/static-files">
+              Static Files provider configuration
+            </DocLink>
+            . Any configuration field or environment variable documented on those pages can also be
+            set for Node Static.
+          </Paragraph>
+          <CodeBlock label="Anybuild">{`load("//anybuild/tools:node_static.bzl", "nodestatic_build", "nodestatic_config")
+load("//anybuild/tools:staticfile.bzl", "staticfile_serve")
+
+config = nodestatic_config(
+    schema = 1,
+    sws_version = "2.38.0",
+    static_dir = "dist",
+    package_manager = "npm",
+    framework = "vite",
+    server = "node",
+    build_command = "npm run build",
+    node_version = "24",
+)
+
+build = nodestatic_build(config)
+
+staticfile_serve(config, build, name = "site")`}</CodeBlock>
+        </>
+      ),
+    },
+  ],
+};
+
+const hugoProvider: DocPage = {
+  slug: "providers/hugo",
+  title: "Hugo",
+  description: "Build Hugo projects and serve their generated static output.",
+  sections: [
+    {
+      id: "detection",
+      title: "Detection",
+      content: (
+        <Paragraph>
+          Hugo is detected from <InlineCode>hugo.toml</InlineCode>,{" "}
+          <InlineCode>hugo.json</InlineCode>, <InlineCode>hugo.yaml</InlineCode>,{" "}
+          <InlineCode>hugo.yml</InlineCode>, or a Hugo content layout with a compatible config file.
+          An explicit Hugo build command is also recognized.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "output-and-version",
+      title: "Output and version",
+      content: (
+        <Paragraph>
+          The provider reads <InlineCode>publishDir</InlineCode> or{" "}
+          <InlineCode>destination</InlineCode> from the Hugo config and otherwise uses{" "}
+          <InlineCode>public</InlineCode>. The generated definition pins the detected Hugo version.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "configuration",
+      title: "Configuration",
+      content: (
+        <>
+          <Paragraph>
+            Hugo inherits all configuration from the{" "}
+            <DocLink href="/docs/providers/static-files">
+              Static Files provider configuration
+            </DocLink>
+            . In addition, it supports the following provider-specific option.
+          </Paragraph>
+          <DocsTable
+            headers={["Variable", "Purpose", "Example value"]}
+            rows={[
+              ["ANYBUILD_HUGO_VERSION", "Select the Hugo version used by the builder.", "0.153.2"],
+            ]}
+          />
+          <CodeBlock label="Anybuild">{`load("//anybuild/tools:hugo.bzl", "hugo_build", "hugo_config")
+load("//anybuild/tools:staticfile.bzl", "staticfile_serve")
+
+config = hugo_config(
+    schema = 1,
+    sws_version = "2.38.0",
+    hugo_version = "0.153.2",
+)
+
+build = hugo_build(config)
+
+staticfile_serve(config, build, name = "site")`}</CodeBlock>
+        </>
+      ),
+    },
+  ],
+};
+
+const jekyllProvider: DocPage = {
+  slug: "providers/jekyll",
+  title: "Jekyll",
+  description: "Build Jekyll projects with Ruby and serve the generated site.",
+  sections: [
+    {
+      id: "detection",
+      title: "Detection",
+      content: (
+        <Paragraph>
+          Jekyll is detected from <InlineCode>_config.yml</InlineCode> or{" "}
+          <InlineCode>_config.yaml</InlineCode>. A <InlineCode>Gemfile</InlineCode> strengthens the
+          match, and an explicit Jekyll build command is also recognized.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "output",
+      title: "Output directory",
+      content: (
+        <Paragraph>
+          Anybuild reads <InlineCode>destination</InlineCode> from the Jekyll config and defaults to{" "}
+          <InlineCode>_site</InlineCode>.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "configuration",
+      title: "Configuration",
+      content: (
+        <>
+          <Paragraph>
+            Jekyll inherits all configuration from the{" "}
+            <DocLink href="/docs/providers/static-files">
+              Static Files provider configuration
+            </DocLink>
+            . In addition, it supports the following provider-specific options.
+          </Paragraph>
+          <DocsTable
+            headers={["Variable", "Purpose", "Example value"]}
+            rows={[
+              ["ANYBUILD_RUBY_VERSION", "Select the Ruby version used by the builder.", "3.4.7"],
+              ["ANYBUILD_JEKYLL_VERSION", "Select the Jekyll version.", "4.3.0"],
+            ]}
+          />
+          <CodeBlock label="Anybuild">{`load("//anybuild/tools:jekyll.bzl", "jekyll_build", "jekyll_config")
+load("//anybuild/tools:staticfile.bzl", "staticfile_serve")
+
+config = jekyll_config(
+    schema = 1,
+    sws_version = "2.38.0",
+    ruby_version = "3.4.7",
+    jekyll_version = "4.3.0",
+)
+
+build = jekyll_build(config)
+
+staticfile_serve(config, build, name = "site")`}</CodeBlock>
+        </>
+      ),
+    },
+  ],
+};
+
+const mkdocsProvider: DocPage = {
+  slug: "providers/mkdocs",
+  title: "MkDocs",
+  description: "Build Python-based MkDocs documentation and serve the generated site.",
+  sections: [
+    {
+      id: "detection",
+      title: "Detection",
+      content: (
+        <Paragraph>
+          MkDocs is detected from <InlineCode>mkdocs.yml</InlineCode> or{" "}
+          <InlineCode>mkdocs.yaml</InlineCode>, or from an explicit MkDocs build command. Anybuild
+          also loads Python dependency information and adds MkDocs when the project does not already
+          declare it.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "python-and-output",
+      title: "Python and output",
+      content: (
+        <Paragraph>
+          The provider uses the Python builder and uv, writes the generated documentation to{" "}
+          <InlineCode>site</InlineCode> by default, and passes that artifact to the shared static
+          deploy runner.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "configuration",
+      title: "Configuration",
+      content: (
+        <>
+          <Paragraph>
+            MkDocs inherits all configuration from the{" "}
+            <DocLink href="/docs/providers/python">Python provider configuration</DocLink> and the{" "}
+            <DocLink href="/docs/providers/static-files">
+              Static Files provider configuration
+            </DocLink>
+            . In addition, it supports the following provider-specific option.
+          </Paragraph>
+          <DocsTable
+            headers={["Variable", "Purpose", "Example value"]}
+            rows={[["ANYBUILD_MKDOCS_VERSION", "Select the MkDocs version.", "1.6.1"]]}
+          />
+          <CodeBlock label="Anybuild">{`load("//anybuild/tools:mkdocs.bzl", "mkdocs_build", "mkdocs_config")
+load("//anybuild/tools:staticfile.bzl", "staticfile_serve")
+
+config = mkdocs_config(
+    schema = 1,
+    extra_dependencies = ["mkdocs"],
+    python_version = "3.13",
+    uv_version = "0.8.15",
+    sws_version = "2.38.0",
+)
+
+build = mkdocs_build(config)
+
+staticfile_serve(config, build, name = "site")`}</CodeBlock>
+        </>
+      ),
+    },
+  ],
+};
+
 const nodeProvider: DocPage = {
   slug: "providers/node",
   title: "Node.js",
@@ -996,6 +1475,49 @@ const nodeProvider: DocPage = {
           files. Static-capable projects are evaluated by the higher-priority node-static provider
           first.
         </Paragraph>
+      ),
+    },
+    {
+      id: "supported-frameworks",
+      title: "Supported frameworks",
+      content: (
+        <>
+          <Paragraph>
+            The Node.js provider recognizes the following application frameworks. Frameworks that
+            produce static output are selected by the{" "}
+            <DocLink href="/docs/providers/node-static">Node Static provider</DocLink> when the
+            project is configured for a static build.
+          </Paragraph>
+          <DocsTable
+            headers={["Framework", "Config value", "Primary detection"]}
+            codeColumns={[1]}
+            rows={[
+              ["Next.js", "next", "next"],
+              ["Astro", "astro", "astro"],
+              ["Hydrogen", "hydrogen", "@shopify/hydrogen or @shopify/remix-oxygen"],
+              [
+                "React Router",
+                "react-router",
+                "@react-router/dev, @react-router/node, or @react-router/serve",
+              ],
+              ["Remix", "remix", "@remix-run development or runtime packages"],
+              ["SvelteKit", "sveltekit", "@sveltejs/kit"],
+              ["SolidStart", "solidstart", "@solidjs/start or solid-start"],
+              [
+                "TanStack Start",
+                "tanstack-start",
+                "@tanstack/react-start or @tanstack/solid-start",
+              ],
+              ["NestJS", "nestjs", "@nestjs core or platform packages"],
+              ["XMCP", "xmcp", "xmcp"],
+              ["Mastra", "mastra", "mastra or @mastra/core"],
+            ]}
+          />
+          <Paragraph>
+            Set <InlineCode>ANYBUILD_FRAMEWORK</InlineCode> to the config value when automatic
+            detection is not sufficient.
+          </Paragraph>
+        </>
       ),
     },
     {
@@ -1020,8 +1542,8 @@ const nodeProvider: DocPage = {
             app.js, index.js, src/server.js, and src/index.js.
           </Paragraph>
           <Paragraph>
-            Framework and server are detected independently. For example, a project can use
-            TanStack Start as its framework and Nitro as its server, or NestJS with Express.
+            Framework and server are detected independently. For example, a project can use TanStack
+            Start as its framework and Nitro as its server, or NestJS with Express.
           </Paragraph>
           <Callout title="Nitro projects">
             When Nitro is detected, Anybuild sets <InlineCode>NITRO_PRESET=node-server</InlineCode>{" "}
@@ -1036,20 +1558,22 @@ const nodeProvider: DocPage = {
       title: "Common configuration",
       content: (
         <DocsTable
-          headers={["Variable", "Purpose"]}
+          headers={["Variable", "Purpose", "Example value"]}
           rows={[
-            ["ANYBUILD_NODE_VERSION", "Node.js package version; current default is 24."],
-            ["ANYBUILD_PACKAGE_MANAGER", "Force npm, pnpm, yarn, or bun."],
-            ["ANYBUILD_FRAMEWORK", "Force the detected application framework."],
-            ["ANYBUILD_SERVER", "Force the Node.js runtime server or adapter."],
-            ["ANYBUILD_BUILD_COMMAND", "Override the detected build command."],
+            ["ANYBUILD_NODE_VERSION", "Node.js package version; current default is 24.", "24"],
+            ["ANYBUILD_PACKAGE_MANAGER", "Force npm, pnpm, yarn, or bun.", "pnpm"],
+            ["ANYBUILD_FRAMEWORK", "Force the detected application framework.", "next"],
+            ["ANYBUILD_SERVER", "Force the Node.js runtime server or adapter.", "node"],
+            ["ANYBUILD_BUILD_COMMAND", "Override the detected build command.", "npm run build"],
             [
               "ANYBUILD_OPTIMIZE_NODE_DEPENDENCIES",
               "Enable dependency tracing for supported framework outputs.",
+              "true",
             ],
             [
               "ANYBUILD_REMOVE_NATIVE_BINARIES",
               "Remove executable native binaries from Edge-targeted dependencies.",
+              "false",
             ],
           ]}
         />
@@ -1068,21 +1592,65 @@ const pythonProvider: DocPage = {
       title: "Detection",
       content: (
         <Paragraph>
-          Python is detected from pyproject.toml, requirements.txt, manage.py, Python-oriented start
-          commands, or a discovered Python main file. MkDocs is evaluated first and receives its own
-          static-site provider.
+          Python is detected from <InlineCode>pyproject.toml</InlineCode>,{" "}
+          <InlineCode>requirements.txt</InlineCode>, <InlineCode>manage.py</InlineCode>,
+          Python-oriented start commands, or a discovered Python main file.{" "}
+          <DocLink href="/docs/providers/mkdocs">MkDocs</DocLink> is evaluated first and receives
+          its own static-site provider.
         </Paragraph>
       ),
     },
     {
-      id: "frameworks",
-      title: "Frameworks and servers",
+      id: "supported-frameworks",
+      title: "Supported frameworks",
       content: (
-        <Paragraph>
-          Dependency and source inspection can identify Django, FastAPI, Flask, Streamlit, MCP,
-          ASGI, and WSGI applications. Anybuild derives an application import and selects a
-          compatible server such as uvicorn, gunicorn, hypercorn, daphne, or the framework CLI.
-        </Paragraph>
+        <>
+          <Paragraph>
+            Framework and server are detected independently. Anybuild supports the following Python
+            frameworks and derives the appropriate ASGI or WSGI application import when applicable.
+          </Paragraph>
+          <DocsTable
+            headers={["Framework", "Config value", "Primary detection", "Default runner"]}
+            codeColumns={[1]}
+            rows={[
+              ["Django", "django", "django dependency with manage.py", "Uvicorn"],
+              ["Streamlit", "streamlit", "streamlit dependency", "Streamlit CLI"],
+              ["FastAPI", "fastapi", "fastapi dependency", "Uvicorn"],
+              ["Flask", "flask", "flask dependency", "Uvicorn"],
+              ["FastHTML", "python-fasthtml", "python-fasthtml dependency", "Uvicorn"],
+              ["MCP", "mcp", "mcp or mcp[cli] dependency", "MCP CLI or the application itself"],
+            ]}
+          />
+          <Paragraph>
+            Set <InlineCode>ANYBUILD_FRAMEWORK</InlineCode> to the config value to override
+            automatic detection.
+          </Paragraph>
+        </>
+      ),
+    },
+    {
+      id: "supported-servers",
+      title: "Supported servers",
+      content: (
+        <>
+          <Paragraph>
+            Anybuild recognizes these application servers from project dependencies. When no server
+            is declared, Django, FastAPI, Flask, and FastHTML default to Uvicorn.
+          </Paragraph>
+          <DocsTable
+            headers={["Server", "Config value", "Primary detection", "Application type"]}
+            codeColumns={[1]}
+            rows={[
+              ["Uvicorn", "uvicorn", "uvicorn dependency or framework default", "ASGI or WSGI"],
+              ["Hypercorn", "hypercorn", "hypercorn dependency", "ASGI"],
+              ["Daphne", "daphne", "daphne dependency", "ASGI"],
+            ]}
+          />
+          <Paragraph>
+            Set <InlineCode>ANYBUILD_SERVER</InlineCode> to the config value to override automatic
+            detection.
+          </Paragraph>
+        </>
       ),
     },
     {
@@ -1101,15 +1669,15 @@ const pythonProvider: DocPage = {
       title: "Common configuration",
       content: (
         <DocsTable
-          headers={["Variable", "Purpose"]}
+          headers={["Variable", "Purpose", "Example value"]}
           rows={[
-            ["ANYBUILD_PYTHON_VERSION", "Python package version; current default is 3.13."],
-            ["ANYBUILD_FRAMEWORK", "Force a supported framework."],
-            ["ANYBUILD_SERVER", "Force a supported application server."],
-            ["ANYBUILD_ASGI_APPLICATION", "Set the ASGI import path."],
-            ["ANYBUILD_WSGI_APPLICATION", "Set the WSGI import path."],
-            ["ANYBUILD_PRECOMPILE_PYTHON", "Control bytecode precompilation."],
-            ["ANYBUILD_EXTRA_DEPENDENCIES", "JSON array of additional packages."],
+            ["ANYBUILD_PYTHON_VERSION", "Python package version; current default is 3.13.", "3.13"],
+            ["ANYBUILD_FRAMEWORK", "Force a supported framework.", "fastapi"],
+            ["ANYBUILD_SERVER", "Force a supported application server.", "uvicorn"],
+            ["ANYBUILD_ASGI_APPLICATION", "Set the ASGI import path.", "main:app"],
+            ["ANYBUILD_WSGI_APPLICATION", "Set the WSGI import path.", "app:app"],
+            ["ANYBUILD_PRECOMPILE_PYTHON", "Control bytecode precompilation.", "true"],
+            ["ANYBUILD_EXTRA_DEPENDENCIES", "JSON array of additional packages.", '["orjson"]'],
           ]}
         />
       ),
@@ -1119,67 +1687,218 @@ const pythonProvider: DocPage = {
 
 const phpProvider: DocPage = {
   slug: "providers/php",
-  title: "PHP, Laravel, and WordPress",
-  description: "Composer-aware PHP builds with specialized Laravel and WordPress providers.",
+  title: "PHP",
+  description: "Composer-aware PHP builds with framework-specific document-root detection.",
   sections: [
     {
-      id: "selection",
-      title: "Provider selection",
+      id: "detection",
+      title: "Detection",
       content: (
         <Paragraph>
-          Laravel is selected from artisan plus composer.json. WordPress recognizes full sites,
-          plugin headers, theme headers, or an explicit WP version. Generic PHP recognizes composer
-          projects, PHP entry files, and Drupal, Moodle, or Symfony layouts.
+          The PHP provider recognizes Composer projects, PHP entry files, and Drupal, Moodle, or
+          Symfony layouts. Laravel and WordPress projects use their dedicated providers.
         </Paragraph>
       ),
     },
     {
-      id: "php",
-      title: "PHP",
+      id: "build",
+      title: "Build and document root",
       content: (
         <Paragraph>
-          The PHP provider discovers the public directory, Composer usage and build scripts, and
-          framework-specific document roots. Its current declared PHP default is 8.3.29.
-        </Paragraph>
-      ),
-    },
-    {
-      id: "laravel",
-      title: "Laravel",
-      content: (
-        <Paragraph>
-          Laravel composes the PHP provider with Node.js asset steps. Composer is enabled, Node
-          package-manager configuration is retained, and the generated Starlark definition combines
-          both build graphs before serving the PHP application.
-        </Paragraph>
-      ),
-    },
-    {
-      id: "wordpress",
-      title: "WordPress",
-      content: (
-        <Paragraph>
-          Full WordPress sites preserve their source layout. Standalone themes and plugins are
-          detected from header metadata, receive a WordPress core version when needed, and record
-          the activation target in provider configuration.
+          Anybuild discovers Composer usage and build scripts, then selects a framework-specific
+          document root such as <InlineCode>public</InlineCode>, <InlineCode>app</InlineCode>, or{" "}
+          <InlineCode>web</InlineCode>. The current default PHP version is 8.3.29.
         </Paragraph>
       ),
     },
     {
       id: "configuration",
-      title: "Common configuration",
+      title: "Configuration",
       content: (
         <DocsTable
-          headers={["Variable", "Purpose"]}
+          headers={["Variable", "Purpose", "Example value"]}
           rows={[
-            ["ANYBUILD_PHP_VERSION", "Select the PHP package version."],
-            ["ANYBUILD_USE_COMPOSER", "Control Composer installation."],
-            ["ANYBUILD_PUBLIC_DIR", "Override the document root."],
-            ["ANYBUILD_PHPIX", "Use the phpix runtime path."],
-            ["ANYBUILD_WP_VERSION", "Select or force WordPress detection."],
-            ["ANYBUILD_WP_LOCALE", "Set the WordPress locale."],
+            ["ANYBUILD_PHP_VERSION", "Select the PHP package version.", "8.3.29"],
+            ["ANYBUILD_PHP_ARCHITECTURE", "Select the 64-bit or 32-bit PHP package.", "64-bit"],
+            ["ANYBUILD_USE_COMPOSER", "Control Composer installation.", "true"],
+            [
+              "ANYBUILD_COMPOSER_BUILD_SCRIPT",
+              "Select the Composer build script to run.",
+              "post-update-cmd",
+            ],
+            ["ANYBUILD_PUBLIC_DIR", "Override the document root.", "public"],
+            ["ANYBUILD_PHPIX", "Use the phpix runtime path.", "true"],
+            ["ANYBUILD_PHPIX_WORKER_THREADS", "Set the phpix worker-thread count.", "4"],
           ]}
         />
+      ),
+    },
+    {
+      id: "definition",
+      title: "Generated definition",
+      content: (
+        <CodeBlock label="Anybuild">{`load("//anybuild/tools:php.bzl", "php_build", "php_config", "php_serve")
+
+config = php_config(
+    schema = 1,
+    use_composer = True,
+    php_version = "8.3.29",
+    public_dir = "public",
+)
+
+build = php_build(config)
+php_serve(config, build, name = "php-api")`}</CodeBlock>
+      ),
+    },
+  ],
+};
+
+const laravelProvider: DocPage = {
+  slug: "providers/laravel",
+  title: "Laravel",
+  description: "Build Laravel applications with Composer and Node.js asset steps.",
+  sections: [
+    {
+      id: "detection",
+      title: "Detection",
+      content: (
+        <Paragraph>
+          Laravel is selected when a project contains both <InlineCode>artisan</InlineCode> and{" "}
+          <InlineCode>composer.json</InlineCode>. Composer is enabled automatically.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "build",
+      title: "PHP and frontend assets",
+      content: (
+        <Paragraph>
+          The Laravel provider combines the PHP builder with Node.js asset steps. It preserves the
+          detected package manager, Node.js version, and frontend build command, then serves the
+          application from <InlineCode>public</InlineCode> by default.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "configuration",
+      title: "Configuration",
+      content: (
+        <Paragraph>
+          Laravel inherits all configuration from the{" "}
+          <DocLink href="/docs/providers/php">PHP provider configuration</DocLink>, plus the package
+          manager, dependency, asset-build, and Node.js version options from the{" "}
+          <DocLink href="/docs/providers/node">Node.js provider configuration</DocLink>. Composer is
+          always enabled, and Node.js runtime framework and server options do not apply.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "definition",
+      title: "Generated definition",
+      content: (
+        <CodeBlock label="Anybuild">{`load("//anybuild/tools:laravel.bzl", "laravel_build", "laravel_config", "laravel_serve")
+
+config = laravel_config(
+    schema = 1,
+    package_manager = "npm",
+    framework = "laravel",
+    build_command = "npm run build",
+    node_version = "24",
+    use_composer = True,
+    composer_build_script = "post-update-cmd",
+    php_version = "8.3.29",
+    public_dir = "public",
+)
+
+build = laravel_build(config)
+laravel_serve(config, build, name = "php-laravel-react")`}</CodeBlock>
+      ),
+    },
+  ],
+};
+
+const wordpressProvider: DocPage = {
+  slug: "providers/wordpress",
+  title: "WordPress",
+  description: "Build complete WordPress sites, standalone plugins, and standalone themes.",
+  sections: [
+    {
+      id: "detection",
+      title: "Detection",
+      content: (
+        <Paragraph>
+          Complete sites are detected from the standard WordPress source layout. Anybuild also
+          recognizes standalone plugins from their PHP headers and standalone themes from{" "}
+          <InlineCode>style.css</InlineCode> metadata and theme files. Setting{" "}
+          <InlineCode>ANYBUILD_WP_VERSION</InlineCode> explicitly also selects this provider.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "extensions",
+      title: "Plugins and themes",
+      content: (
+        <Paragraph>
+          Standalone themes and plugins are packaged with WordPress core, assigned a slug from their
+          metadata or directory, and configured with the correct activation target. Complete sites
+          preserve their existing source layout.
+        </Paragraph>
+      ),
+    },
+    {
+      id: "configuration",
+      title: "Configuration",
+      content: (
+        <>
+          <Paragraph>
+            WordPress inherits all configuration from the{" "}
+            <DocLink href="/docs/providers/php">PHP provider configuration</DocLink>. Any PHP
+            configuration field or environment variable can also be set for WordPress. The options
+            below are specific to WordPress.
+          </Paragraph>
+          <DocsTable
+            headers={["Variable", "Purpose", "Example value"]}
+            rows={[
+              [
+                "ANYBUILD_WP_VERSION",
+                "Select the WordPress version or force provider detection.",
+                "latest",
+              ],
+              ["ANYBUILD_WP_LOCALE", "Set the WordPress locale.", "en_US"],
+              ["ANYBUILD_WP_CLI_VERSION", "Select the WP-CLI version.", "2.12.0"],
+              [
+                "ANYBUILD_WP_EXTENSION_KIND",
+                "Set the extension type to plugin or theme.",
+                "plugin",
+              ],
+              [
+                "ANYBUILD_WP_EXTENSION_SLUG",
+                "Override the detected plugin or theme slug.",
+                "my-plugin",
+              ],
+              [
+                "ANYBUILD_WP_EXTENSION_ACTIVATE_TARGET",
+                "Override the extension activation target.",
+                "my-plugin/my-plugin.php",
+              ],
+            ]}
+          />
+        </>
+      ),
+    },
+    {
+      id: "definition",
+      title: "Generated definition",
+      content: (
+        <CodeBlock label="Anybuild">{`load("//anybuild/tools:wordpress.bzl", "wordpress_build", "wordpress_config", "wordpress_serve")
+
+config = wordpress_config(
+    schema = 1,
+    php_version = "8.3.29",
+)
+
+build = wordpress_build(config)
+wordpress_serve(config, build, name = "wordpress")`}</CodeBlock>
       ),
     },
   ],
@@ -1216,11 +1935,15 @@ const goProvider: DocPage = {
       title: "Configuration",
       content: (
         <DocsTable
-          headers={["Variable", "Purpose"]}
+          headers={["Variable", "Purpose", "Example value"]}
           rows={[
-            ["ANYBUILD_GO_VERSION", "Go package version; current default is 1.25.5."],
-            ["ANYBUILD_GO_BUILD_FILE", "The Go server entry file to compile."],
-            ["ANYBUILD_SERVE_BINARY", "The output binary name to run."],
+            ["ANYBUILD_GO_VERSION", "Go package version; current default is 1.25.5.", "1.25.5"],
+            [
+              "ANYBUILD_GO_BUILD_FILE",
+              "The Go server entry file to compile.",
+              "cmd/server/main.go",
+            ],
+            ["ANYBUILD_SERVE_BINARY", "The output binary name to run.", "server"],
           ]}
         />
       ),
@@ -1939,7 +2662,7 @@ export const docsNav: DocsNavGroup[] = [
     title: "Guides",
     items: [
       { title: "Developing Locally", slug: "guides/local-development" },
-      { title: "Build Environments", slug: "guides/build-environments" },
+      { title: "Builders and Deploy Runners", slug: "guides/build-environments" },
       { title: "Installing Additional Packages", slug: "guides/additional-packages" },
       { title: "Adding Build Steps", slug: "guides/custom-steps" },
       { title: "Running in Production", slug: "guides/production" },
@@ -1958,10 +2681,17 @@ export const docsNav: DocsNavGroup[] = [
   {
     title: "Providers",
     items: [
-      { title: "Static Sites", slug: "providers/static-sites" },
+      { title: "Static Sites Overview", slug: "providers/static-sites" },
+      { title: "Static Files", slug: "providers/static-files" },
+      { title: "Node Static", slug: "providers/node-static" },
+      { title: "Hugo", slug: "providers/hugo" },
+      { title: "Jekyll", slug: "providers/jekyll" },
+      { title: "MkDocs", slug: "providers/mkdocs" },
       { title: "Node.js", slug: "providers/node" },
       { title: "Python", slug: "providers/python" },
-      { title: "PHP and WordPress", slug: "providers/php" },
+      { title: "PHP", slug: "providers/php" },
+      { title: "Laravel", slug: "providers/laravel" },
+      { title: "WordPress", slug: "providers/wordpress" },
       { title: "Go", slug: "providers/go" },
     ],
   },
@@ -2013,9 +2743,16 @@ export const docsPages: DocPage[] = [
   commandsConfig,
   excludingFiles,
   staticSites,
+  staticFilesProvider,
+  nodeStaticProvider,
+  hugoProvider,
+  jekyllProvider,
+  mkdocsProvider,
   nodeProvider,
   pythonProvider,
   phpProvider,
+  laravelProvider,
+  wordpressProvider,
   goProvider,
   localDeploy,
   wasmerDeploy,
