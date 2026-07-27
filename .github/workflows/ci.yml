@@ -18,6 +18,12 @@ jobs:
     name: Test + E2E
     uses: ./.github/workflows/reusable-test-e2e.yml
 
+  release_binaries:
+    name: Release binary preflight
+    uses: ./.github/workflows/build-release-binaries.yml
+    permissions:
+      contents: read
+
   site:
     name: Site + installer
     runs-on: ubuntu-latest
