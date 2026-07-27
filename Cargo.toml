@@ -12,7 +12,7 @@ license = "MIT"
 
 [workspace.dependencies]
 anyhow = "1"
-anybuild = { path = "crates/anybuild", version = "0.23.0" }
+anybuild = { path = "crates/anybuild", version = "0.23.0" }  # x-release-please-version
 indexmap = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

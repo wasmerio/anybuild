@@ -8,10 +8,11 @@ It can run builds locally, inside Docker, or through Wasmer, and bundles a one-c
 
 ## Quick Start
 
-Install Anybuild from a source checkout with Cargo:
+Install the latest release on macOS or Linux:
 
 ```bash
-cargo install --path crates/anybuild-cli
+curl -fsSL https://anybuild.run/install | sh
+. "$HOME/.anybuild/env"
 anybuild .
 ```
 
@@ -227,6 +228,16 @@ Requirements:
   repository settings. Release Please uses the built-in `GITHUB_TOKEN`.
 
 On each push to `main`, Release Please opens or updates a release PR based on
-Conventional Commits. When that PR is merged, it creates a GitHub release with
-a `vX.Y.Z` tag. The release PR updates the Rust workspace version and
+Conventional Commits. Use `fix:` for a patch, `feat:` for a minor release, and
+a `!` or `BREAKING CHANGE` footer for a major release. The release PR updates
+the Rust workspace versions, dependency references, lockfile, manifest, and
 changelog.
+
+Merging the release PR creates a draft `vX.Y.Z` GitHub release. Native GitHub
+runners build macOS Intel and ARM64, static Linux x86-64 and ARM64, and Windows
+x86-64 archives. The workflow smoke-tests each binary, generates and verifies
+`SHA256SUMS`, uploads all assets, and only then publishes the release. It does
+not publish either crate to crates.io.
+
+If an artifact build fails, the release remains a draft. Rerun the Release
+Artifacts workflow manually with that draft tag after fixing the failure.

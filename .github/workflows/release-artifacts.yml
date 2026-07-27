@@ -1,0 +1,142 @@
+name: Release Artifacts
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        description: Draft GitHub release tag to build.
+        required: true
+        type: string
+      release_sha:
+        description: Exact release commit created by Release Please.
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing draft GitHub release tag to rebuild.
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-artifacts-${{ inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      checkout_ref: ${{ steps.release.outputs.checkout_ref }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Validate draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          release_json="$(gh release view "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,targetCommitish)"
+          if [ "$(jq -r '.isDraft' <<<"$release_json")" != "true" ]; then
+            echo "::error::$TAG_NAME is not a draft release"
+            exit 1
+          fi
+
+          checkout_ref="$RELEASE_SHA"
+          if [ -z "$checkout_ref" ]; then
+            checkout_ref="$(jq -r '.targetCommitish' <<<"$release_json")"
+          fi
+          version="${TAG_NAME#v}"
+          if [ -z "$version" ] || [ "$version" = "$TAG_NAME" ]; then
+            echo "::error::Expected a v-prefixed release tag, got $TAG_NAME"
+            exit 1
+          fi
+
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build release binaries
+    needs: resolve
+    uses: ./.github/workflows/build-release-binaries.yml
+    with:
+      checkout_ref: ${{ needs.resolve.outputs.checkout_ref }}
+      expected_version: ${{ needs.resolve.outputs.version }}
+    permissions:
+      contents: read
+
+  publish:
+    name: Publish verified release
+    needs:
+      - resolve
+      - build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify assets and create checksums
+        working-directory: release-assets
+        run: |
+          assets=(
+            anybuild-aarch64-apple-darwin.tar.gz
+            anybuild-x86_64-apple-darwin.tar.gz
+            anybuild-aarch64-unknown-linux-musl.tar.gz
+            anybuild-x86_64-unknown-linux-musl.tar.gz
+            anybuild-x86_64-pc-windows-msvc.zip
+          )
+
+          for asset in "${assets[@]}"; do
+            test -s "$asset"
+          done
+
+          actual_count="$(find . -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          if [ "$actual_count" != "${#assets[@]}" ]; then
+            echo "::error::Expected ${#assets[@]} release assets, found $actual_count"
+            find . -maxdepth 1 -type f -print
+            exit 1
+          fi
+
+          sha256sum "${assets[@]}" > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Upload assets and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          visibility="$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility')"
+          if [ "$visibility" != "public" ]; then
+            echo "::error::Repository must be public before publishing $TAG_NAME"
+            exit 1
+          fi
+
+          is_draft="$(gh release view "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft --jq '.isDraft')"
+          if [ "$is_draft" != "true" ]; then
+            echo "::error::$TAG_NAME is no longer a draft release"
+            exit 1
+          fi
+
+          gh release upload "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber release-assets/*
+          gh release edit "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false --latest

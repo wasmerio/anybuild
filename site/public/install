@@ -1,0 +1,242 @@
+#!/bin/sh
+
+set -eu
+
+REPOSITORY="wasmerio/anybuild"
+PROGRAM="anybuild"
+
+say() {
+  printf '%s\n' "$*"
+}
+
+fail() {
+  say "anybuild installer: $*" >&2
+  exit 1
+}
+
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+download() {
+  url=$1
+  destination=$2
+
+  case "$url" in
+    https://*) ;;
+    *) fail "refusing non-HTTPS download URL: $url" ;;
+  esac
+
+  if command_exists curl; then
+    curl --proto '=https' --tlsv1.2 -fLsS "$url" -o "$destination"
+  elif command_exists wget; then
+    wget --https-only -qO "$destination" "$url"
+  else
+    fail "curl or wget is required"
+  fi
+}
+
+sha256_file() {
+  if command_exists sha256sum; then
+    sha256sum "$1" | awk '{ print $1 }'
+  elif command_exists shasum; then
+    shasum -a 256 "$1" | awk '{ print $1 }'
+  else
+    fail "sha256sum or shasum is required to verify the download"
+  fi
+}
+
+shell_quote() {
+  escaped=$(printf '%s' "$1" | sed "s/'/'\\\\''/g")
+  printf "'%s'" "$escaped"
+}
+
+append_source_line() {
+  profile=$1
+  source_line=". \"\$HOME/.anybuild/env\""
+
+  if [ -f "$profile" ] && grep -Fqx "$source_line" "$profile"; then
+    return
+  fi
+
+  mkdir -p "$(dirname "$profile")"
+  if [ -s "$profile" ]; then
+    printf '\n' >> "$profile"
+  fi
+  printf '%s\n' "$source_line" >> "$profile"
+}
+
+write_path_files() {
+  env_file="$HOME/.anybuild/env"
+  quoted_install_dir=$(shell_quote "$install_dir")
+
+  mkdir -p "$HOME/.anybuild"
+  {
+    printf '%s\n' '#!/bin/sh'
+    printf 'ANYBUILD_BIN=%s\n' "$quoted_install_dir"
+    cat <<'EOF'
+case ":$PATH:" in
+  *":$ANYBUILD_BIN:"*) ;;
+  *) export PATH="$ANYBUILD_BIN:$PATH" ;;
+esac
+unset ANYBUILD_BIN
+EOF
+  } > "$env_file"
+
+  if [ "${ANYBUILD_NO_PATH_UPDATE:-0}" = "1" ]; then
+    return
+  fi
+
+  shell_name=${SHELL##*/}
+  case "$shell_name" in
+    zsh)
+      append_source_line "$HOME/.zshrc"
+      ;;
+    bash)
+      if [ "$system" = "Darwin" ]; then
+        append_source_line "$HOME/.bash_profile"
+      else
+        append_source_line "$HOME/.bashrc"
+      fi
+      ;;
+    sh | dash | ksh)
+      append_source_line "$HOME/.profile"
+      ;;
+    fish)
+      fish_config="$HOME/.config/fish/conf.d/anybuild.fish"
+      mkdir -p "$(dirname "$fish_config")"
+      if [ "$install_dir" = "$HOME/.anybuild/bin" ]; then
+        printf '%s\n' "fish_add_path -- \"\$HOME/.anybuild/bin\"" > "$fish_config"
+      else
+        escaped_fish_dir=$(printf '%s' "$install_dir" |
+          sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/\\$/g')
+        printf 'fish_add_path -- "%s"\n' "$escaped_fish_dir" > "$fish_config"
+      fi
+      ;;
+    *)
+      say "Could not identify your shell; add $install_dir to PATH."
+      ;;
+  esac
+}
+
+[ -n "${HOME:-}" ] || fail "HOME must be set"
+
+system=$(uname -s)
+machine=$(uname -m)
+
+case "$system" in
+  Darwin)
+    case "$machine" in
+      x86_64 | amd64) target="x86_64-apple-darwin" ;;
+      arm64 | aarch64) target="aarch64-apple-darwin" ;;
+      *) fail "unsupported macOS architecture: $machine" ;;
+    esac
+    ;;
+  Linux)
+    case "$machine" in
+      x86_64 | amd64) target="x86_64-unknown-linux-musl" ;;
+      arm64 | aarch64) target="aarch64-unknown-linux-musl" ;;
+      *) fail "unsupported Linux architecture: $machine" ;;
+    esac
+    ;;
+  *)
+    fail "unsupported operating system: $system"
+    ;;
+esac
+
+asset="$PROGRAM-$target.tar.gz"
+version=${ANYBUILD_VERSION:-}
+if [ -n "$version" ]; then
+  case "$version" in
+    v*) tag=$version ;;
+    *) tag="v$version" ;;
+  esac
+  expected_version=${tag#v}
+  case "$expected_version" in
+    "" | *[!0-9.]* | .* | *. | *..*)
+      fail "invalid version: $version"
+      ;;
+  esac
+  if ! printf '%s\n' "$expected_version" |
+    awk -F. 'NF == 3 { valid = 1 } END { exit !valid }'; then
+    fail "invalid version: $version"
+  fi
+  base_url="https://github.com/$REPOSITORY/releases/download/$tag"
+else
+  expected_version=
+  base_url="https://github.com/$REPOSITORY/releases/latest/download"
+fi
+
+install_dir=${ANYBUILD_INSTALL_DIR:-"$HOME/.anybuild/bin"}
+case "$install_dir" in
+  *'
+'*) fail "install directory cannot contain a newline" ;;
+  /*) ;;
+  *) fail "install directory must be an absolute path: $install_dir" ;;
+esac
+
+temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/anybuild-install.XXXXXX")
+temporary_binary=
+cleanup() {
+  rm -rf "$temporary_dir"
+  if [ -n "$temporary_binary" ]; then
+    rm -f "$temporary_binary"
+  fi
+}
+trap cleanup 0
+trap 'exit 1' HUP INT TERM
+
+archive="$temporary_dir/$asset"
+checksums="$temporary_dir/SHA256SUMS"
+
+say "Downloading Anybuild for $target..."
+download "$base_url/$asset" "$archive"
+download "$base_url/SHA256SUMS" "$checksums"
+
+expected_checksum=$(awk -v name="$asset" '$2 == name { print $1; exit }' "$checksums")
+case "$expected_checksum" in
+  "")
+    fail "missing checksum entry for $asset"
+    ;;
+  *[!0-9a-fA-F]*) fail "invalid checksum entry for $asset" ;;
+esac
+[ "${#expected_checksum}" -eq 64 ] ||
+  fail "invalid checksum entry for $asset"
+
+actual_checksum=$(sha256_file "$archive")
+if [ "$actual_checksum" != "$expected_checksum" ]; then
+  fail "checksum verification failed for $asset"
+fi
+
+tar -xzf "$archive" -C "$temporary_dir"
+downloaded_binary="$temporary_dir/$PROGRAM"
+[ -f "$downloaded_binary" ] || fail "release archive does not contain $PROGRAM"
+chmod 755 "$downloaded_binary"
+
+downloaded_version=$("$downloaded_binary" --version)
+[ -n "$downloaded_version" ] || fail "downloaded binary did not report a version"
+if [ -n "$expected_version" ] && [ "$downloaded_version" != "$expected_version" ]; then
+  fail "expected version $expected_version, downloaded $downloaded_version"
+fi
+
+mkdir -p "$install_dir"
+temporary_binary="$install_dir/.$PROGRAM.tmp.$$"
+cp "$downloaded_binary" "$temporary_binary"
+chmod 755 "$temporary_binary"
+mv -f "$temporary_binary" "$install_dir/$PROGRAM"
+temporary_binary=
+
+write_path_files
+
+say "Installed Anybuild $downloaded_version to $install_dir/$PROGRAM"
+case ":$PATH:" in
+  *":$install_dir:"*) ;;
+  *)
+    if [ "${SHELL##*/}" = "fish" ]; then
+      say "Open a new shell to use Anybuild."
+    else
+      say "Run this now to update your current shell:"
+      say "  . \"\$HOME/.anybuild/env\""
+    fi
+    ;;
+esac

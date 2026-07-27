@@ -14,13 +14,17 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   release_please:
     name: Release Please
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      release_sha: ${{ steps.release.outputs.sha }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
 
     steps:
       - name: Create or update release PR
@@ -29,3 +33,15 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repo-url: ${{ github.repository }}
+
+  release_artifacts:
+    name: Build release artifacts
+    needs: release_please
+    if: ${{ needs.release_please.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/release-artifacts.yml
+    with:
+      release_sha: ${{ needs.release_please.outputs.release_sha }}
+      tag_name: ${{ needs.release_please.outputs.tag_name }}
+    secrets: inherit
+    permissions:
+      contents: write
