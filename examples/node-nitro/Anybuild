@@ -8,8 +8,8 @@ config = node_config(
     commands = {
         "start": "node server.js",
     },
-    package_manager = "npm",
-    server = "nitro",
+    node_package_manager = "npm",
+    node_server = "nitro",
     node_version = "24",
 )
 

@@ -594,7 +594,7 @@ def python_env(config, app, site_packages):
     return env_vars
 
 def python_prepare(config, site_packages, app_serve_path):
-    if not config.precompile_python:
+    if not config.python_precompile:
         return []
     return [
         run('echo "Precompiling Python code..."'),

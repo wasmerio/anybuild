@@ -10,12 +10,12 @@ config = node_config(
     commands = {
         "start": "node dist/server/entry.mjs",
     },
-    package_manager = "npm",
-    framework = "astro",
-    server = "node",
-    build_command = "npm run build",
+    node_package_manager = "npm",
+    node_framework = "astro",
+    node_server = "node",
+    node_build_command = "npm run build",
     node_version = "24",
-    install_requires_all_files = True,
+    node_install_requires_all_files = True,
 )
 
 build = node_build(config)

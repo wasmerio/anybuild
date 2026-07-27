@@ -8,10 +8,10 @@ config = nodestatic_config(
     schema = 1,
     sws_version = "2.38.0",
     static_dir = "dist/angular-test",
-    package_manager = "npm",
-    framework = "angular",
-    server = "node",
-    build_command = "npm run build",
+    node_package_manager = "npm",
+    node_framework = "angular",
+    node_server = "node",
+    node_build_command = "npm run build",
     node_version = "24",
 )
 

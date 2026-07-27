@@ -24,9 +24,11 @@ pub struct MkdocsConfig {
     #[serde(flatten)]
     pub python: PythonConfig,
     // StaticFileConfig fields (python's flatten already carries the base).
+    #[serde(rename = "static_convert_redirects")]
     pub convert_redirects: bool,
     pub sws_version: Option<String>,
     pub static_dir: Option<String>,
+    #[serde(rename = "static_redirects_config")]
     pub redirects_config: Option<String>,
     pub mkdocs_version: Option<String>,
 }
@@ -54,26 +56,26 @@ fn default_python_config() -> PythonConfig {
         _ => Map::new(),
     };
     for (key, value) in [
-        ("framework", Value::Null),
-        ("server", Value::Null),
-        ("migration_strategy", Value::Null),
-        ("database", Value::Null),
-        ("extra_dependencies", Value::Array(Vec::new())),
+        ("python_framework", Value::Null),
+        ("python_server", Value::Null),
+        ("python_migration_strategy", Value::Null),
+        ("python_database", Value::Null),
+        ("python_extra_dependencies", Value::Array(Vec::new())),
         ("asgi_application", Value::Null),
         ("wsgi_application", Value::Null),
-        ("uses_ffmpeg", Value::Bool(false)),
-        ("uses_pandoc", Value::Bool(false)),
-        ("install_requires_all_files", Value::Bool(false)),
-        ("main_file", Value::Null),
+        ("python_uses_ffmpeg", Value::Bool(false)),
+        ("python_uses_pandoc", Value::Bool(false)),
+        ("python_install_requires_all_files", Value::Bool(false)),
+        ("python_main_file", Value::Null),
         ("python_version", Value::String("3.13".to_owned())),
         ("uv_version", Value::String("0.8.15".to_owned())),
-        ("precompile_python", Value::Bool(true)),
-        ("cross_platform", Value::Null),
+        ("python_precompile", Value::Bool(true)),
+        ("python_cross_platform", Value::Null),
         ("python_extra_index_url", Value::Null),
         ("pandoc_version", Value::Null),
         ("ffmpeg_version", Value::Null),
-        ("install_inputs", Value::Null),
-        ("mcp_self_running", Value::Bool(false)),
+        ("python_install_inputs", Value::Null),
+        ("python_mcp_self_running", Value::Bool(false)),
     ] {
         map.insert(key.to_owned(), value);
     }
@@ -184,7 +186,7 @@ pub fn load_config(
     // dep that is missing from the dependency files to extra_dependencies.
     if !python_deps_contain(path, "mkdocs") {
         let deps = merged
-            .entry("extra_dependencies".to_owned())
+            .entry("python_extra_dependencies".to_owned())
             .or_insert_with(|| Value::Array(Vec::new()));
         if let Value::Array(items) = deps {
             let dep = Value::String("mkdocs".to_owned());

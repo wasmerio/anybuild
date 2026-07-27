@@ -374,14 +374,17 @@ fn apply_runner_flips(provider: &str, config_json: &mut JsonValue) {
         map.insert("phpix".to_owned(), JsonValue::Bool(true));
     }
     if is_node_config(provider) {
-        map.insert("use_edgejs".to_owned(), JsonValue::Bool(true));
-        if map.get("precompile_edgejs").is_none_or(JsonValue::is_null) {
+        map.insert("edgejs_enable".to_owned(), JsonValue::Bool(true));
+        if map.get("edgejs_precompile").is_none_or(JsonValue::is_null) {
             // Nitro bundles can retain dependency sources that the recursive
             // EdgeJS precompiler cannot parse; loaded modules are still cached.
-            let is_nitro = map.get("framework").and_then(JsonValue::as_str) == Some("nitro");
-            map.insert("precompile_edgejs".to_owned(), JsonValue::Bool(!is_nitro));
+            let is_nitro = map.get("node_framework").and_then(JsonValue::as_str) == Some("nitro");
+            map.insert("edgejs_precompile".to_owned(), JsonValue::Bool(!is_nitro));
         }
-        map.insert("remove_native_binaries".to_owned(), JsonValue::Bool(true));
+        map.insert(
+            "node_remove_native_binaries".to_owned(),
+            JsonValue::Bool(true),
+        );
     }
 }
 
@@ -396,10 +399,10 @@ pub(crate) fn provider_config_patch(config: &ProviderConfig) -> JsonValue {
                 JsonValue::String("https://pythonindex.wasix.org/simple".to_owned()),
             );
             map.insert(
-                "cross_platform".to_owned(),
+                "python_cross_platform".to_owned(),
                 JsonValue::String("wasix_wasm32".to_owned()),
             );
-            map.insert("precompile_python".to_owned(), JsonValue::Bool(true));
+            map.insert("python_precompile".to_owned(), JsonValue::Bool(true));
         }
     }
     apply_runner_flips(provider, &mut effective);
@@ -1013,7 +1016,12 @@ impl WasmerRunner {
         let framework = self
             .provider_config
             .as_ref()
-            .and_then(|config| config.get("framework"))
+            .and_then(|config| {
+                config
+                    .get("node_framework")
+                    .or_else(|| config.get("python_framework"))
+                    .or_else(|| config.get("php_framework"))
+            })
             .and_then(JsonValue::as_str);
         if let Some(app_kind) = resolve_app_kind(&serve.provider, framework) {
             annotations.insert(yaml_str(WASMER_APP_KIND_ANNOTATION), yaml_str(&app_kind));
@@ -1718,9 +1726,12 @@ mod tests {
             .get(yaml_str(ANYBUILD_CONFIG_ANNOTATION))
             .and_then(YamlValue::as_mapping)
             .unwrap();
-        assert_eq!(config.get(yaml_str("framework")), Some(&yaml_str("django")));
         assert_eq!(
-            config.get(yaml_str("cross_platform")),
+            config.get(yaml_str("python_framework")),
+            Some(&yaml_str("django"))
+        );
+        assert_eq!(
+            config.get(yaml_str("python_cross_platform")),
             Some(&yaml_str("wasix_wasm32"))
         );
         assert_eq!(
@@ -1728,7 +1739,7 @@ mod tests {
             Some(&yaml_str("https://pythonindex.wasix.org/simple"))
         );
         assert!(!config.contains_key(yaml_str("python_version")));
-        assert!(!config.contains_key(yaml_str("precompile_python")));
+        assert!(!config.contains_key(yaml_str("python_precompile")));
     }
 
     #[test]
@@ -1742,7 +1753,7 @@ mod tests {
     #[test]
     fn test_config_annotation_matches_python_byte_for_byte() {
         // Golden captured from the compatibility fixture (PythonConfig with
-        // framework=django through prepare_config + serialize), dumped as
+        // python_framework=django through prepare_config + serialize), dumped as
         // sorted JSON. Pins exclude_none semantics and enum/default values.
         let tmp = tempfile::tempdir().unwrap();
         let mut runner = make_runner(tmp.path());
@@ -1758,7 +1769,7 @@ mod tests {
         let json = serde_json::to_string(&sorted).unwrap();
         assert_eq!(
             json,
-            "{\"cross_platform\":\"wasix_wasm32\",\"framework\":\"django\",\"python_extra_index_url\":\"https://pythonindex.wasix.org/simple\"}"
+            "{\"python_cross_platform\":\"wasix_wasm32\",\"python_extra_index_url\":\"https://pythonindex.wasix.org/simple\",\"python_framework\":\"django\"}"
         );
     }
 
@@ -1964,38 +1975,49 @@ mod tests {
         let config = runner.prepare_config(ProviderConfig::Node(NodeConfig::default()));
 
         let runner_json = runner.provider_config.as_ref().unwrap();
-        assert_eq!(runner_json["use_edgejs"], JsonValue::Bool(true));
-        assert_eq!(runner_json["precompile_edgejs"], JsonValue::Bool(true));
-        assert_eq!(runner_json["remove_native_binaries"], JsonValue::Bool(true));
+        assert_eq!(runner_json["edgejs_enable"], JsonValue::Bool(true));
+        assert_eq!(runner_json["edgejs_precompile"], JsonValue::Bool(true));
+        assert_eq!(
+            runner_json["node_remove_native_binaries"],
+            JsonValue::Bool(true)
+        );
         let plan_json = config.to_json();
-        assert_eq!(plan_json["use_edgejs"], JsonValue::Bool(true));
-        assert_eq!(plan_json["precompile_edgejs"], JsonValue::Bool(true));
-        assert_eq!(plan_json["remove_native_binaries"], JsonValue::Bool(true));
+        assert_eq!(plan_json["edgejs_enable"], JsonValue::Bool(true));
+        assert_eq!(plan_json["edgejs_precompile"], JsonValue::Bool(true));
+        assert_eq!(
+            plan_json["node_remove_native_binaries"],
+            JsonValue::Bool(true)
+        );
     }
 
     #[test]
     fn test_wasmer_prepare_config_preserves_node_precompile_override() {
-        // Exercised on the JSON flip directly so it does not depend on the
-        // sibling NodeConfig port exposing `precompile_edgejs` yet.
-        let mut runner_json = serde_json::json!({ "precompile_edgejs": false });
+        // Exercise the JSON flip directly to cover explicit and null values.
+        let mut runner_json = serde_json::json!({ "edgejs_precompile": false });
         apply_runner_flips("node", &mut runner_json);
-        assert_eq!(runner_json["use_edgejs"], JsonValue::Bool(true));
-        assert_eq!(runner_json["precompile_edgejs"], JsonValue::Bool(false));
-        assert_eq!(runner_json["remove_native_binaries"], JsonValue::Bool(true));
+        assert_eq!(runner_json["edgejs_enable"], JsonValue::Bool(true));
+        assert_eq!(runner_json["edgejs_precompile"], JsonValue::Bool(false));
+        assert_eq!(
+            runner_json["node_remove_native_binaries"],
+            JsonValue::Bool(true)
+        );
 
-        let mut null_json = serde_json::json!({ "precompile_edgejs": null });
+        let mut null_json = serde_json::json!({ "edgejs_precompile": null });
         apply_runner_flips("node", &mut null_json);
-        assert_eq!(null_json["precompile_edgejs"], JsonValue::Bool(true));
+        assert_eq!(null_json["edgejs_precompile"], JsonValue::Bool(true));
 
-        let mut nitro_json = serde_json::json!({ "framework": "nitro", "precompile_edgejs": null });
+        let mut nitro_json =
+            serde_json::json!({ "node_framework": "nitro", "edgejs_precompile": null });
         apply_runner_flips("node", &mut nitro_json);
-        assert_eq!(nitro_json["precompile_edgejs"], JsonValue::Bool(false));
+        assert_eq!(nitro_json["edgejs_precompile"], JsonValue::Bool(false));
 
-        let mut explicit_nitro_json =
-            serde_json::json!({ "framework": "nitro", "precompile_edgejs": true });
+        let mut explicit_nitro_json = serde_json::json!({
+            "node_framework": "nitro",
+            "edgejs_precompile": true
+        });
         apply_runner_flips("node", &mut explicit_nitro_json);
         assert_eq!(
-            explicit_nitro_json["precompile_edgejs"],
+            explicit_nitro_json["edgejs_precompile"],
             JsonValue::Bool(true)
         );
     }
@@ -2049,15 +2071,15 @@ mod tests {
             JsonValue::String("https://pythonindex.wasix.org/simple".to_owned())
         );
         assert_eq!(
-            plan_json["cross_platform"],
+            plan_json["python_cross_platform"],
             JsonValue::String("wasix_wasm32".to_owned())
         );
-        assert_eq!(plan_json["precompile_python"], JsonValue::Bool(true));
+        assert_eq!(plan_json["python_precompile"], JsonValue::Bool(true));
         // The runner copy carries the same trio (deep-copied after the
         // plan-visible mutation).
         let runner_json = runner.provider_config.as_ref().unwrap();
         assert_eq!(
-            runner_json["cross_platform"],
+            runner_json["python_cross_platform"],
             JsonValue::String("wasix_wasm32".to_owned())
         );
     }

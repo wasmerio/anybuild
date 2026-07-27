@@ -5,14 +5,14 @@ load("//anybuild/tools:laravel.bzl", "laravel_build", "laravel_config", "laravel
 
 config = laravel_config(
     schema = 1,
-    package_manager = "npm",
-    framework = "laravel",
-    build_command = "npm run build",
+    node_package_manager = "npm",
+    node_build_command = "npm run build",
     node_version = "24",
-    use_composer = True,
+    php_framework = "laravel",
+    composer_enable = True,
     composer_build_script = "post-update-cmd",
     php_version = "8.3.29",
-    public_dir = "public",
+    php_public_dir = "public",
 )
 
 build = laravel_build(config)

@@ -8,9 +8,9 @@ config = node_config(
     commands = {
         "start": "node server.js",
     },
-    package_manager = "npm",
-    framework = "hydrogen",
-    server = "node",
+    node_package_manager = "npm",
+    node_framework = "hydrogen",
+    node_server = "node",
     node_version = "24",
 )
 

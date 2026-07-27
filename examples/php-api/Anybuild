@@ -5,9 +5,9 @@ load("//anybuild/tools:php.bzl", "php_build", "php_config", "php_serve")
 
 config = php_config(
     schema = 1,
-    use_composer = True,
+    composer_enable = True,
     php_version = "8.3.29",
-    public_dir = "public",
+    php_public_dir = "public",
 )
 
 build = php_build(config)

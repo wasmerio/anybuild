@@ -8,10 +8,10 @@ config = nodestatic_config(
     schema = 1,
     sws_version = "2.38.0",
     static_dir = "dist/client",
-    package_manager = "bun",
-    framework = "tanstack-start",
-    server = "nitro",
-    build_command = "bun run build",
+    node_package_manager = "bun",
+    node_framework = "tanstack-start",
+    node_server = "nitro",
+    node_build_command = "bun run build",
     node_version = "24",
 )
 

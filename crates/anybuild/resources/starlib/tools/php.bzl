@@ -14,7 +14,7 @@ def php_config(schema = 1, **kwargs):
 def php_toolchain(config):
     return struct(
         php = dep("php", config.php_version, architecture = config.php_architecture),
-        composer = dep("composer") if config.use_composer else None,
+        composer = dep("composer") if config.composer_enable else None,
     )
 
 def php_use_deps(toolchain):
@@ -30,7 +30,7 @@ def php_runtime_deps(config, toolchain):
         deps.append(dep("phpix", config.php_version, architecture = config.php_architecture))
     else:
         deps.append(toolchain.php)
-    if config.use_composer:
+    if config.composer_enable:
         deps.append(dep("bash"))
     return deps
 
@@ -62,7 +62,7 @@ def php_build(
 
     steps = [use(*(php_use_deps(tc) + list(extra_use_deps)))] + list(build_pre) + [workdir(app.path)]
     steps += php_ini_steps(config, assets)
-    if config.use_composer:
+    if config.composer_enable:
         steps.append(env(COMPOSER_HOME = "/tmp", COMPOSER_FUND = "0", COMPOSER_ALLOW_SUPERUSER = "1"))
         steps.append(run(
             "composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction",
@@ -73,14 +73,14 @@ def php_build(
     steps += after_install
 
     ignore = [".git"] + list(extra_ignore)
-    if config.use_composer:
+    if config.composer_enable:
         ignore.append("vendor")
-    if config.framework == "symfony":
+    if config.php_framework == "symfony":
         ignore.append("var")
     steps.append(copy(".", ignore = ignore))
 
     # Composer scripts are skipped at install time, so run the build script after.
-    if config.use_composer and config.composer_build_script:
+    if config.composer_enable and config.composer_build_script:
         steps.append(run("composer run-script {}".format(config.composer_build_script), outputs = ["."], group = "build"))
     steps += after_build
 
@@ -98,8 +98,8 @@ def php_build(
 def php_commands(config, app):
     engine = "phpix" if config.phpix else "php"
     docroot = app.serve_path
-    if config.public_dir:
-        docroot = "{}/{}".format(app.serve_path, config.public_dir)
+    if config.php_public_dir:
+        docroot = "{}/{}".format(app.serve_path, config.php_public_dir)
     return {"start": "{} -S localhost:{} -t {}".format(engine, config.port, docroot)}
 
 def php_serve(config, build, name = None, provider = None, commands = None, **overrides):

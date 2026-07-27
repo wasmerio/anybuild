@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use regex::Regex;
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -512,43 +513,34 @@ impl NodeServer {
 // ---------------------------------------------------------------------------
 // NodeConfig
 
-/// Node-specific config fields shared by Node, Node Static, and Laravel.
-///
-/// `F` preserves Laravel's Python-compatible `Any` framework field while
-/// ordinary Node configs retain the typed `NodeFramework` enum.
+/// Node toolchain and build fields shared by Node, Node Static, and Laravel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct NodeConfigFields<F = NodeFramework> {
-    pub use_edgejs: Option<bool>,
-    pub precompile_edgejs: Option<bool>,
+pub struct NodeBuildConfigFields {
+    #[serde(rename = "node_package_manager")]
     pub package_manager: Option<PackageManager>,
-    pub framework: Option<F>,
-    pub server: Option<NodeServer>,
+    #[serde(rename = "node_extra_dependencies")]
     pub extra_dependencies: BTreeSet<String>,
+    #[serde(rename = "node_build_command")]
     pub build_command: Option<String>,
     pub node_version: Option<String>,
     pub npm_version: Option<String>,
     pub pnpm_version: Option<String>,
     pub yarn_version: Option<String>,
     pub bun_version: Option<String>,
-    pub optimize_node_dependencies: Option<bool>,
-    /// Optimize node_modules size further when targeting Edge by removing
-    /// executable native binaries that cannot run there anyway.
-    pub remove_native_binaries: Option<bool>,
+    #[serde(rename = "node_install_requires_all_files")]
     pub install_requires_all_files: bool,
     // Derived facts for the Starlark provider.
+    #[serde(rename = "node_install_inputs")]
     pub install_inputs: Option<Vec<String>>,
+    #[serde(rename = "node_package_name")]
     pub package_name: Option<String>,
 }
 
-impl<F> Default for NodeConfigFields<F> {
+impl Default for NodeBuildConfigFields {
     fn default() -> Self {
         Self {
-            use_edgejs: Some(false),
-            precompile_edgejs: None,
             package_manager: None,
-            framework: None,
-            server: None,
             extra_dependencies: BTreeSet::new(),
             build_command: None,
             node_version: Some("24".to_owned()),
@@ -556,8 +548,6 @@ impl<F> Default for NodeConfigFields<F> {
             pnpm_version: None,
             yarn_version: None,
             bun_version: None,
-            optimize_node_dependencies: Some(true),
-            remove_native_binaries: Some(false),
             install_requires_all_files: false,
             install_inputs: None,
             package_name: None,
@@ -565,43 +555,190 @@ impl<F> Default for NodeConfigFields<F> {
     }
 }
 
-impl NodeConfigFields<NodeFramework> {
+impl NodeBuildConfigFields {
     fn from_env(operation: &OperationContext) -> Result<Self> {
         Ok(Self {
-            use_edgejs: env_bool(operation, "use_edgejs")?.or(Some(false)),
-            precompile_edgejs: env_bool(operation, "precompile_edgejs")?,
             package_manager: env_enum(
                 operation,
-                "package_manager",
+                "node_package_manager",
                 "a supported package manager",
                 PackageManager::from_name,
             )?,
-            framework: env_enum(
-                operation,
-                "framework",
-                "a supported Node framework",
-                NodeFramework::from_value,
-            )?,
-            server: env_enum(
-                operation,
-                "server",
-                "a supported Node server",
-                NodeServer::from_value,
-            )?,
-            extra_dependencies: env_json(operation, "extra_dependencies")?.unwrap_or_default(),
-            build_command: env_str(operation, "build_command"),
+            extra_dependencies: env_json(operation, "node_extra_dependencies")?.unwrap_or_default(),
+            build_command: env_str(operation, "node_build_command"),
             node_version: env_str(operation, "node_version").or_else(|| Some("24".to_owned())),
             npm_version: env_str(operation, "npm_version"),
             pnpm_version: env_str(operation, "pnpm_version"),
             yarn_version: env_str(operation, "yarn_version"),
             bun_version: env_str(operation, "bun_version"),
+            install_requires_all_files: env_bool(operation, "node_install_requires_all_files")?
+                .unwrap_or(false),
+            install_inputs: env_json(operation, "node_install_inputs")?,
+            package_name: env_str(operation, "node_package_name"),
+        })
+    }
+}
+
+/// Load only the Node toolchain needed to compile assets for a composing
+/// provider. Runtime server detection and start-command inference do not
+/// apply when another provider serves the result.
+pub(crate) fn load_build_config(
+    path: &Path,
+    base: &BaseConfig,
+    operation: &OperationContext,
+) -> Result<NodeBuildConfigFields> {
+    let mut config = NodeBuildConfigFields::from_env(operation)?;
+    let package_manager = config
+        .package_manager
+        .unwrap_or_else(|| detect_package_manager(path));
+    config.package_manager = Some(package_manager);
+
+    let package_json = parse_package_json(path);
+    let install_context = discover_js_install_context(path);
+    if install_context.requires_all_files {
+        config.install_requires_all_files = true;
+    }
+
+    if non_empty(&config.build_command).is_none() {
+        let found_deps = check_package_json_deps(package_json.as_ref(), NODE_DEPENDENCIES);
+        let framework = detect_framework(package_json.as_ref(), &found_deps, Some(path));
+        config.build_command = get_build_command(
+            package_json.as_ref(),
+            package_manager,
+            framework,
+            non_empty(&base.commands.build)
+                .map(str::to_owned)
+                .as_deref(),
+        )?;
+    }
+
+    config.install_inputs = Some(install_context.inputs);
+    config.package_name = package_json_name(package_json.as_ref());
+    Ok(config)
+}
+
+/// Node application and deployment fields that do not apply when Node is
+/// only used as a build toolchain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NodeRuntimeConfigFields<F = NodeFramework> {
+    #[serde(rename = "edgejs_enable")]
+    pub use_edgejs: Option<bool>,
+    #[serde(rename = "edgejs_precompile")]
+    pub precompile_edgejs: Option<bool>,
+    #[serde(rename = "node_framework")]
+    pub framework: Option<F>,
+    #[serde(rename = "node_server")]
+    pub server: Option<NodeServer>,
+    pub optimize_node_dependencies: Option<bool>,
+    /// Optimize node_modules size further when targeting Edge by removing
+    /// executable native binaries that cannot run there anyway.
+    #[serde(rename = "node_remove_native_binaries")]
+    pub remove_native_binaries: Option<bool>,
+}
+
+impl<F> Default for NodeRuntimeConfigFields<F> {
+    fn default() -> Self {
+        Self {
+            use_edgejs: Some(false),
+            precompile_edgejs: None,
+            framework: None,
+            server: None,
+            optimize_node_dependencies: Some(true),
+            remove_native_binaries: Some(false),
+        }
+    }
+}
+
+impl NodeRuntimeConfigFields<NodeFramework> {
+    fn from_env(operation: &OperationContext) -> Result<Self> {
+        Ok(Self {
+            use_edgejs: env_bool(operation, "edgejs_enable")?.or(Some(false)),
+            precompile_edgejs: env_bool(operation, "edgejs_precompile")?,
+            framework: env_enum(
+                operation,
+                "node_framework",
+                "a supported Node framework",
+                NodeFramework::from_value,
+            )?,
+            server: env_enum(
+                operation,
+                "node_server",
+                "a supported Node server",
+                NodeServer::from_value,
+            )?,
             optimize_node_dependencies: env_bool(operation, "optimize_node_dependencies")?
                 .or(Some(true)),
-            remove_native_binaries: env_bool(operation, "remove_native_binaries")?.or(Some(false)),
-            install_requires_all_files: env_bool(operation, "install_requires_all_files")?
-                .unwrap_or(false),
-            install_inputs: env_json(operation, "install_inputs")?,
-            package_name: env_str(operation, "package_name"),
+            remove_native_binaries: env_bool(operation, "node_remove_native_binaries")?
+                .or(Some(false)),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct NodeConfigFields {
+    #[serde(flatten)]
+    pub build: NodeBuildConfigFields,
+    #[serde(flatten)]
+    pub runtime: NodeRuntimeConfigFields,
+}
+
+impl Serialize for NodeConfigFields {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(17))?;
+        map.serialize_entry("edgejs_enable", &self.runtime.use_edgejs)?;
+        map.serialize_entry("edgejs_precompile", &self.runtime.precompile_edgejs)?;
+        map.serialize_entry("node_package_manager", &self.build.package_manager)?;
+        map.serialize_entry("node_framework", &self.runtime.framework)?;
+        map.serialize_entry("node_server", &self.runtime.server)?;
+        map.serialize_entry("node_extra_dependencies", &self.build.extra_dependencies)?;
+        map.serialize_entry("node_build_command", &self.build.build_command)?;
+        map.serialize_entry("node_version", &self.build.node_version)?;
+        map.serialize_entry("npm_version", &self.build.npm_version)?;
+        map.serialize_entry("pnpm_version", &self.build.pnpm_version)?;
+        map.serialize_entry("yarn_version", &self.build.yarn_version)?;
+        map.serialize_entry("bun_version", &self.build.bun_version)?;
+        map.serialize_entry(
+            "optimize_node_dependencies",
+            &self.runtime.optimize_node_dependencies,
+        )?;
+        map.serialize_entry(
+            "node_remove_native_binaries",
+            &self.runtime.remove_native_binaries,
+        )?;
+        map.serialize_entry(
+            "node_install_requires_all_files",
+            &self.build.install_requires_all_files,
+        )?;
+        map.serialize_entry("node_install_inputs", &self.build.install_inputs)?;
+        map.serialize_entry("node_package_name", &self.build.package_name)?;
+        map.end()
+    }
+}
+
+impl std::ops::Deref for NodeConfigFields {
+    type Target = NodeBuildConfigFields;
+
+    fn deref(&self) -> &Self::Target {
+        &self.build
+    }
+}
+
+impl std::ops::DerefMut for NodeConfigFields {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.build
+    }
+}
+
+impl NodeConfigFields {
+    fn from_env(operation: &OperationContext) -> Result<Self> {
+        Ok(Self {
+            build: NodeBuildConfigFields::from_env(operation)?,
+            runtime: NodeRuntimeConfigFields::from_env(operation)?,
         })
     }
 }
@@ -800,16 +937,16 @@ impl Provider for NodeConfig {
 
     const NAME: &'static str = "node";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
-        ("Framework", "framework"),
-        ("Server", "server"),
-        ("Package manager", "package_manager"),
+        ("Framework", "node_framework"),
+        ("Server", "node_server"),
+        ("Package manager", "node_package_manager"),
         ("Node version", "node_version"),
     ];
 
     fn format_detection_detail(field: &str, value: &str) -> String {
         match field {
-            "framework" => display_framework(value),
-            "server" => display_server(value),
+            "node_framework" => display_framework(value),
+            "node_server" => display_server(value),
             _ => value.to_owned(),
         }
     }
@@ -818,8 +955,8 @@ impl Provider for NodeConfig {
         workspace::apply_node_workspace_config(
             workspace_root,
             self.base.app_subdir.as_deref(),
-            &mut self.node.package_manager,
-            &mut self.node.build_command,
+            &mut self.node.build.package_manager,
+            &mut self.node.build.build_command,
             &mut self.base.commands,
         );
     }
@@ -1508,18 +1645,18 @@ pub fn load_config(
     }
 
     let found_deps = check_package_json_deps(package_json.as_ref(), NODE_DEPENDENCIES);
-    if config.framework.is_none() {
-        config.framework = detect_framework(package_json.as_ref(), &found_deps, Some(path));
+    if config.runtime.framework.is_none() {
+        config.runtime.framework = detect_framework(package_json.as_ref(), &found_deps, Some(path));
     }
-    if config.server.is_none() {
-        config.server = Some(detect_server(&found_deps));
+    if config.runtime.server.is_none() {
+        config.runtime.server = Some(detect_server(&found_deps));
     }
 
     if non_empty(&config.build_command).is_none() {
         config.build_command = get_build_command(
             package_json.as_ref(),
             package_manager,
-            config.framework,
+            config.runtime.framework,
             non_empty(&config.base.commands.build)
                 .map(str::to_owned)
                 .as_deref(),
@@ -1528,17 +1665,17 @@ pub fn load_config(
 
     // infer_start=True in the Python default path.
     if non_empty(&config.base.commands.start).is_none() {
-        if config.server == Some(NodeServer::Nitro) {
+        if config.runtime.server == Some(NodeServer::Nitro) {
             config.base.commands.start =
                 infer_start_command(path, package_json.as_ref(), false, operation)?;
         }
         if non_empty(&config.base.commands.start).is_none() {
-            if let Some(framework) = config.framework {
+            if let Some(framework) = config.runtime.framework {
                 config.base.commands.start = framework.start_command().map(str::to_owned);
             }
         }
         if non_empty(&config.base.commands.start).is_none() {
-            if let Some(server) = config.server {
+            if let Some(server) = config.runtime.server {
                 config.base.commands.start = server.start_command().map(str::to_owned);
             }
         }
@@ -1548,7 +1685,7 @@ pub fn load_config(
         }
     }
 
-    if config.framework.is_some()
+    if config.runtime.framework.is_some()
         && non_empty(&config.base.commands.build).is_some()
         && non_empty(&config.build_command).is_some()
     {
@@ -1779,8 +1916,8 @@ mod tests {
                 "{example_name}"
             );
             let config = load_config(&path, BaseConfig::default());
-            assert_eq!(config.framework, framework, "{example_name}");
-            assert_eq!(config.server, Some(server), "{example_name}");
+            assert_eq!(config.runtime.framework, framework, "{example_name}");
+            assert_eq!(config.runtime.server, Some(server), "{example_name}");
             assert_eq!(
                 config.base.commands.start.as_deref(),
                 Some("node server.js"),
@@ -1815,8 +1952,8 @@ mod tests {
 
         let config = load_config(tmp.path(), BaseConfig::default());
 
-        assert_eq!(config.framework, Some(NodeFramework::TanstackStart));
-        assert_eq!(config.server, Some(NodeServer::Nitro));
+        assert_eq!(config.runtime.framework, Some(NodeFramework::TanstackStart));
+        assert_eq!(config.runtime.server, Some(NodeServer::Nitro));
         assert_eq!(
             config.base.commands.start.as_deref(),
             Some("node .output/server/index.mjs")
@@ -1839,7 +1976,7 @@ mod tests {
                 .unwrap(),
             "node"
         );
-        assert_eq!(config.framework, Some(NodeFramework::Hydrogen));
+        assert_eq!(config.runtime.framework, Some(NodeFramework::Hydrogen));
     }
 
     #[test]
@@ -1851,8 +1988,8 @@ mod tests {
             "node"
         );
         let config = load_config(&path, BaseConfig::default());
-        assert_eq!(config.framework, None);
-        assert_eq!(config.server, Some(NodeServer::Elysia));
+        assert_eq!(config.runtime.framework, None);
+        assert_eq!(config.runtime.server, Some(NodeServer::Elysia));
         assert_eq!(
             config.base.commands.start.as_deref(),
             Some("node server.js")
@@ -1874,7 +2011,7 @@ mod tests {
                 .unwrap(),
             "node"
         );
-        assert_eq!(config.framework, Some(NodeFramework::Next));
+        assert_eq!(config.runtime.framework, Some(NodeFramework::Next));
         assert_eq!(
             config.build_command.as_deref(),
             Some("npx -y next-bundle@1.0.0 --build-command 'npm run build'")
@@ -2052,8 +2189,8 @@ mod tests {
 
         let config = load_config(tmp.path(), BaseConfig::default());
 
-        assert_eq!(config.framework, None);
-        assert_eq!(config.server, Some(NodeServer::Nitro));
+        assert_eq!(config.runtime.framework, None);
+        assert_eq!(config.runtime.server, Some(NodeServer::Nitro));
         assert_eq!(
             config.base.commands.start.as_deref(),
             Some("node .output/server/index.mjs")
@@ -2119,7 +2256,7 @@ mod tests {
 
         let config = load_config(tmp.path(), BaseConfig::default());
 
-        assert_eq!(config.remove_native_binaries, Some(false));
+        assert_eq!(config.runtime.remove_native_binaries, Some(false));
     }
 
     /// Python's `test_node_prepare_steps_use_precompile_edgejs_flag`
@@ -2137,7 +2274,7 @@ mod tests {
 
         let config = load_config(tmp.path(), BaseConfig::default());
 
-        assert_eq!(config.precompile_edgejs, None);
+        assert_eq!(config.runtime.precompile_edgejs, None);
     }
 
     /// Python also asserts the evaluated plan's copy/env/install steps

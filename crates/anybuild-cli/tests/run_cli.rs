@@ -518,7 +518,7 @@ fn non_static_node_framework_is_rejected_without_panicking() {
         .arg("plan")
         .arg(tmp.path())
         .args(["--provider", "node-static"])
-        .env("ANYBUILD_FRAMEWORK", "nestjs")
+        .env("ANYBUILD_NODE_FRAMEWORK", "nestjs")
         .output()
         .unwrap();
 
@@ -538,9 +538,9 @@ fn malformed_typed_env_overrides_are_reported_as_errors() {
 
     for (field, value) in [
         ("PORT", "many"),
-        ("USE_EDGEJS", "enabled"),
-        ("FRAMEWORK", "not-a-framework"),
-        ("EXTRA_DEPENDENCIES", "not-json"),
+        ("EDGEJS_ENABLE", "enabled"),
+        ("NODE_FRAMEWORK", "not-a-framework"),
+        ("NODE_EXTRA_DEPENDENCIES", "not-json"),
     ] {
         let generated = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
             .arg("generate")

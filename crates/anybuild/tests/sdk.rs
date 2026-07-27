@@ -117,7 +117,7 @@ fn nitro_projects_build_and_start_with_the_node_server_preset() {
     let plan = sdk.plan(PlanOptions::default()).unwrap();
 
     assert_eq!(plan.provider, "node");
-    assert_eq!(plan.config["package_manager"], "bun");
+    assert_eq!(plan.config["node_package_manager"], "bun");
     assert_eq!(
         plan.serve.commands["start"],
         "node .output/server/index.mjs"

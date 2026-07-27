@@ -34,11 +34,13 @@ pub struct NodeStaticConfig {
     #[serde(flatten)]
     pub base: BaseConfig,
     // StaticFileConfig fields.
+    #[serde(rename = "static_convert_redirects")]
     pub convert_redirects: bool,
     pub sws_version: Option<String>,
     pub static_dir: Option<String>,
     /// Rendered sws.toml redirects (from a _redirects file), computed at
     /// load time so the Starlark provider stays filesystem-free.
+    #[serde(rename = "static_redirects_config")]
     pub redirects_config: Option<String>,
     #[serde(flatten)]
     pub node: NodeConfigFields,
@@ -65,10 +67,10 @@ impl NodeStaticConfig {
         let node = NodeConfig::from_env(base, operation)?;
         Ok(Self {
             base: node.base,
-            convert_redirects: env_bool(operation, "convert_redirects")?.unwrap_or(true),
+            convert_redirects: env_bool(operation, "static_convert_redirects")?.unwrap_or(true),
             sws_version: env_str(operation, "sws_version").or_else(|| Some("2.38.0".to_owned())),
             static_dir: env_str(operation, "static_dir"),
-            redirects_config: env_str(operation, "redirects_config"),
+            redirects_config: env_str(operation, "static_redirects_config"),
             node: node.node,
         })
     }
@@ -213,24 +215,25 @@ pub fn load_config(
         node::check_package_json_deps(package_json.as_ref(), &STATIC_FRAMEWORK_DEPENDENCIES);
     let node_deps = node::check_package_json_deps(package_json.as_ref(), node::NODE_DEPENDENCIES);
 
-    if config.framework.is_none() {
-        config.framework = detect_static_framework(path, package_json.as_ref(), &found_deps);
+    if config.runtime.framework.is_none() {
+        config.runtime.framework =
+            detect_static_framework(path, package_json.as_ref(), &found_deps);
     }
-    if config.server.is_none() {
-        config.server = Some(node::detect_server(&node_deps));
+    if config.runtime.server.is_none() {
+        config.runtime.server = Some(node::detect_server(&node_deps));
     }
 
     if node::non_empty(&config.build_command).is_none() {
         config.build_command = get_build_command(
             package_json.as_ref(),
             package_manager,
-            config.framework,
+            config.runtime.framework,
             None,
         );
     }
 
     if node::non_empty(&config.static_dir).is_none() {
-        config.static_dir = Some(match config.framework {
+        config.static_dir = Some(match config.runtime.framework {
             Some(framework) => get_static_dir(path, package_json.as_ref(), framework)?,
             None => "dist".to_owned(),
         });
@@ -264,10 +267,10 @@ struct StaticParts {
 
 fn load_static_parts(path: &Path, operation: &OperationContext) -> Result<StaticParts> {
     let mut parts = StaticParts {
-        convert_redirects: env_bool(operation, "convert_redirects")?.unwrap_or(true),
+        convert_redirects: env_bool(operation, "static_convert_redirects")?.unwrap_or(true),
         sws_version: env_str(operation, "sws_version").or_else(|| Some("2.38.0".to_owned())),
         static_dir: env_str(operation, "static_dir"),
-        redirects_config: env_str(operation, "redirects_config"),
+        redirects_config: env_str(operation, "static_redirects_config"),
     };
 
     // StaticFileProvider._load_static_config
@@ -746,16 +749,16 @@ impl Provider for NodeStaticConfig {
 
     const NAME: &'static str = "node-static";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
-        ("Framework", "framework"),
-        ("Server", "server"),
-        ("Package manager", "package_manager"),
+        ("Framework", "node_framework"),
+        ("Server", "node_server"),
+        ("Package manager", "node_package_manager"),
         ("Output directory", "static_dir"),
     ];
 
     fn format_detection_detail(field: &str, value: &str) -> String {
         match field {
-            "framework" => node::display_framework(value),
-            "server" => node::display_server(value),
+            "node_framework" => node::display_framework(value),
+            "node_server" => node::display_server(value),
             _ => value.to_owned(),
         }
     }
@@ -764,8 +767,8 @@ impl Provider for NodeStaticConfig {
         workspace::apply_node_workspace_config(
             workspace_root,
             self.base.app_subdir.as_deref(),
-            &mut self.node.package_manager,
-            &mut self.node.build_command,
+            &mut self.node.build.package_manager,
+            &mut self.node.build.build_command,
             &mut self.base.commands,
         );
     }
@@ -869,7 +872,7 @@ impl Provider for NodeStaticConfig {
     }
 
     fn validate(&self, _path: &Path) -> Result<()> {
-        if let Some(framework) = self.framework {
+        if let Some(framework) = self.runtime.framework {
             framework.get_static_output_dir().ok_or_else(|| {
                 anyhow!("framework {framework:?} does not have a static output directory")
             })?;
@@ -1178,7 +1181,7 @@ mod tests {
             );
 
             let config = load_config(&path, base).unwrap();
-            assert_eq!(config.framework, Some(framework), "{example_name}");
+            assert_eq!(config.runtime.framework, Some(framework), "{example_name}");
             assert_eq!(
                 config.static_dir.as_deref(),
                 Some(static_dir),
@@ -1263,7 +1266,7 @@ mod tests {
                 .unwrap(),
             "node-static"
         );
-        assert_eq!(config.framework, Some(NodeFramework::Next));
+        assert_eq!(config.runtime.framework, Some(NodeFramework::Next));
         assert_eq!(config.static_dir.as_deref(), Some("out"));
         assert_eq!(config.build_command.as_deref(), Some("npm run build"));
     }
@@ -1299,7 +1302,7 @@ mod tests {
                 .unwrap(),
             "node-static"
         );
-        assert_eq!(config.framework, Some(NodeFramework::NuxtV3));
+        assert_eq!(config.runtime.framework, Some(NodeFramework::NuxtV3));
         assert_eq!(config.static_dir.as_deref(), Some(".output/public"));
         assert_eq!(config.build_command.as_deref(), Some("npm run generate"));
     }
@@ -1321,7 +1324,10 @@ mod tests {
                 .unwrap(),
             "node-static"
         );
-        assert_eq!(config.framework, Some(NodeFramework::RemixV2Classic));
+        assert_eq!(
+            config.runtime.framework,
+            Some(NodeFramework::RemixV2Classic)
+        );
         assert_eq!(config.static_dir.as_deref(), Some("public"));
         assert_eq!(config.build_command.as_deref(), Some("npm run build"));
     }
@@ -1384,7 +1390,7 @@ mod tests {
 
         let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
 
-        assert_eq!(config.framework, Some(NodeFramework::TanstackStart));
+        assert_eq!(config.runtime.framework, Some(NodeFramework::TanstackStart));
         assert_eq!(config.static_dir.as_deref(), Some("dist/client"));
         assert_eq!(config.build_command.as_deref(), Some("npm run build"));
     }

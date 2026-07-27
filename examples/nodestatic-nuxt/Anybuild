@@ -8,10 +8,10 @@ config = nodestatic_config(
     schema = 1,
     sws_version = "2.38.0",
     static_dir = ".output/public",
-    package_manager = "npm",
-    framework = "nuxt3",
-    server = "node",
-    build_command = "npm run generate",
+    node_package_manager = "npm",
+    node_framework = "nuxt3",
+    node_server = "node",
+    node_build_command = "npm run generate",
     node_version = "24",
 )
 

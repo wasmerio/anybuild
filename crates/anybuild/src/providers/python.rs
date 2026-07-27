@@ -121,27 +121,42 @@ impl DatabaseType {
 pub struct PythonConfig {
     #[serde(flatten)]
     pub base: BaseConfig,
+    #[serde(rename = "python_framework")]
     pub framework: Option<PythonFramework>,
+    #[serde(rename = "python_server")]
     pub server: Option<PythonServer>,
+    #[serde(rename = "python_migration_strategy")]
     pub migration_strategy: Option<MigrationStrategy>,
+    #[serde(rename = "python_database")]
     pub database: Option<DatabaseType>,
+    #[serde(rename = "python_extra_dependencies")]
     pub extra_dependencies: BTreeSet<String>,
+    #[serde(rename = "asgi_application")]
     pub asgi_application: Option<String>,
+    #[serde(rename = "wsgi_application")]
     pub wsgi_application: Option<String>,
+    #[serde(rename = "python_uses_ffmpeg")]
     pub uses_ffmpeg: bool,
+    #[serde(rename = "python_uses_pandoc")]
     pub uses_pandoc: bool,
+    #[serde(rename = "python_install_requires_all_files")]
     pub install_requires_all_files: bool,
+    #[serde(rename = "python_main_file")]
     pub main_file: Option<String>,
     pub python_version: Option<String>,
     pub uv_version: Option<String>,
+    #[serde(rename = "python_precompile")]
     pub precompile_python: bool,
+    #[serde(rename = "python_cross_platform")]
     pub cross_platform: Option<String>,
     pub python_extra_index_url: Option<String>,
     pub pandoc_version: Option<String>,
     pub ffmpeg_version: Option<String>,
     /// Derived install inputs for the Starlark provider (None => all files).
+    #[serde(rename = "python_install_inputs")]
     pub install_inputs: Option<Vec<String>>,
     /// MCP main file starts its own server (mcp.run()/__main__ block).
+    #[serde(rename = "python_mcp_self_running")]
     pub mcp_self_running: bool,
 }
 
@@ -185,46 +200,47 @@ impl PythonConfig {
             base,
             framework: env_enum(
                 operation,
-                "framework",
+                "python_framework",
                 "a supported Python framework",
                 PythonFramework::parse,
             )?,
             server: env_enum(
                 operation,
-                "server",
+                "python_server",
                 "a supported Python server",
                 PythonServer::parse,
             )?,
             migration_strategy: env_enum(
                 operation,
-                "migration_strategy",
+                "python_migration_strategy",
                 "a supported migration strategy",
                 MigrationStrategy::parse,
             )?,
             database: env_enum(
                 operation,
-                "database",
+                "python_database",
                 "a supported database type",
                 DatabaseType::parse,
             )?,
-            extra_dependencies: env_json(operation, "extra_dependencies")?.unwrap_or_default(),
+            extra_dependencies: env_json(operation, "python_extra_dependencies")?
+                .unwrap_or_default(),
             asgi_application: env_str(operation, "asgi_application"),
             wsgi_application: env_str(operation, "wsgi_application"),
-            uses_ffmpeg: env_bool(operation, "uses_ffmpeg")?.unwrap_or(false),
-            uses_pandoc: env_bool(operation, "uses_pandoc")?.unwrap_or(false),
-            install_requires_all_files: env_bool(operation, "install_requires_all_files")?
+            uses_ffmpeg: env_bool(operation, "python_uses_ffmpeg")?.unwrap_or(false),
+            uses_pandoc: env_bool(operation, "python_uses_pandoc")?.unwrap_or(false),
+            install_requires_all_files: env_bool(operation, "python_install_requires_all_files")?
                 .unwrap_or(false),
-            main_file: env_str(operation, "main_file"),
+            main_file: env_str(operation, "python_main_file"),
             python_version: env_str(operation, "python_version")
                 .or_else(|| Some("3.13".to_owned())),
             uv_version: env_str(operation, "uv_version").or_else(|| Some("0.8.15".to_owned())),
-            precompile_python: env_bool(operation, "precompile_python")?.unwrap_or(true),
-            cross_platform: env_str(operation, "cross_platform"),
+            precompile_python: env_bool(operation, "python_precompile")?.unwrap_or(true),
+            cross_platform: env_str(operation, "python_cross_platform"),
             python_extra_index_url: env_str(operation, "python_extra_index_url"),
             pandoc_version: env_str(operation, "pandoc_version"),
             ffmpeg_version: env_str(operation, "ffmpeg_version"),
-            install_inputs: env_json(operation, "install_inputs")?,
-            mcp_self_running: env_bool(operation, "mcp_self_running")?.unwrap_or(false),
+            install_inputs: env_json(operation, "python_install_inputs")?,
+            mcp_self_running: env_bool(operation, "python_mcp_self_running")?.unwrap_or(false),
         })
     }
 }
@@ -291,18 +307,18 @@ impl Provider for PythonConfig {
 
     const NAME: &'static str = "python";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
-        ("Framework", "framework"),
-        ("Server", "server"),
+        ("Framework", "python_framework"),
+        ("Server", "python_server"),
         ("Python version", "python_version"),
     ];
 
     fn format_detection_detail(field: &str, value: &str) -> String {
         match field {
-            "framework" => PythonFramework::parse(value)
+            "python_framework" => PythonFramework::parse(value)
                 .map(PythonFramework::display_name)
                 .map(str::to_owned)
                 .unwrap_or_else(|| humanize(value)),
-            "server" => humanize(value),
+            "python_server" => humanize(value),
             _ => value.to_owned(),
         }
     }

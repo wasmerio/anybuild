@@ -17,17 +17,17 @@ def staticfile_config(schema = 1, **kwargs):
 
 # static-web-server reads its config from this file inside the static_config
 # mount; it carries the redirect rules rendered from the project's
-# _redirects file (config.redirects_config).
+# _redirects file (config.static_redirects_config).
 SWS_CONFIG_FILE = "sws.toml"
 
 def sws_config_mount(config):
     """The mount for the static-web-server config, or None when unneeded."""
-    return mount("static_config") if config.redirects_config else None
+    return mount("static_config") if config.static_redirects_config else None
 
 def sws_config_step(config, static_config):
     """Write the rendered static-web-server config into its mount."""
     sws_config_path = "{}/{}".format(static_config.path, SWS_CONFIG_FILE)
-    return write(sws_config_path, config.redirects_config)
+    return write(sws_config_path, config.static_redirects_config)
 
 def staticfile_build(config, static_app = None):
     """Copy the static site into the static_app mount."""

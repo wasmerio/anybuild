@@ -50,7 +50,7 @@ OPTIMIZE_DEPS_VERSION = "0.1.2"
 NODE_MODULES_OPTIMIZER_ASSET = "node/optimize-node-modules.sh"
 
 def _manager_version(config):
-    manager = config.package_manager
+    manager = config.node_package_manager
     if manager == "npm":
         return config.npm_version
     if manager == "pnpm":
@@ -72,13 +72,13 @@ def node_toolchain(config, serving = True):
     node = dep("node", config.node_version)
     has_package_json = file_exists("package.json")
     build_deps = []
-    if has_package_json or config.build_command:
+    if has_package_json or config.node_build_command:
         build_deps.append(node)
-    if config.package_manager and has_package_json:
-        build_deps.append(dep(config.package_manager, _manager_version(config)))
-        if serving and config.remove_native_binaries:
+    if config.node_package_manager and has_package_json:
+        build_deps.append(dep(config.node_package_manager, _manager_version(config)))
+        if serving and config.node_remove_native_binaries:
             build_deps.append(dep("bash"))
-    for extra in config.extra_dependencies:
+    for extra in config.node_extra_dependencies:
         build_deps.append(dep(extra))
     return struct(node = node, build_deps = build_deps)
 
@@ -96,7 +96,7 @@ def node_install_steps(config):
     """Lockfile staging, package-manager env, and the install run."""
     if not file_exists("package.json"):
         return []
-    manager = config.package_manager
+    manager = config.node_package_manager
     lockfile = _lockfile(manager)
     has_lockfile = lockfile != None
     install = _INSTALL_COMMANDS[manager]
@@ -104,7 +104,7 @@ def node_install_steps(config):
         install += " --no-save"
     if config.app_subdir and manager == "pnpm":
         install += " --no-frozen-lockfile"
-    all_files = config.install_requires_all_files
+    all_files = config.node_install_requires_all_files
 
     steps = []
     if config.app_subdir:
@@ -130,49 +130,55 @@ def node_install_steps(config):
     if config.app_subdir or all_files:
         steps.append(run(install, group = "install"))
     else:
-        steps.append(run(install, inputs = config.install_inputs, group = "install"))
+        steps.append(run(install, inputs = config.node_install_inputs, group = "install"))
     return steps
 
 def node_copy_step(config):
     """Copy the sources after install (skipped when install saw all files)."""
-    if config.app_subdir or config.install_requires_all_files:
+    if config.app_subdir or config.node_install_requires_all_files:
         return None
     ignore = ["node_modules", ".git"]
-    if config.package_manager:
-        lockfile = _lockfile(config.package_manager)
+    if config.node_package_manager:
+        lockfile = _lockfile(config.node_package_manager)
         if lockfile:
             ignore.append(lockfile)
     return copy(".", ignore = ignore)
 
-def node_build_step(config, outputs = ["."], serving = True, static = False):
-    if not config.build_command:
+def node_build_step(
+        config,
+        outputs = ["."],
+        serving = True,
+        static = False,
+        node_server = None,
+        node_framework = None):
+    if not config.node_build_command:
         return []
     steps = []
-    if config.server == "nitro":
-        static_nitro = static and config.framework != "tanstack-start"
+    if node_server == "nitro":
+        static_nitro = static and node_framework != "tanstack-start"
         steps.append(env(NITRO_PRESET = "static" if static_nitro else "node-server"))
     if serving:
-        steps.append(run(config.build_command, outputs = outputs, group = "build"))
+        steps.append(run(config.node_build_command, outputs = outputs, group = "build"))
     else:
-        steps.append(run(config.build_command, group = "build"))
+        steps.append(run(config.node_build_command, group = "build"))
     return steps
 
 def node_optimize_steps(config, assets = None, include_prune = True, serving = True):
     """Prune dev deps and shrink node_modules for the serve environment."""
-    if not file_exists("package.json") or not config.package_manager:
+    if not file_exists("package.json") or not config.node_package_manager:
         return []
     steps = []
     if include_prune:
-        steps.append(run(_PRUNE_COMMANDS[config.package_manager], group = "prune"))
+        steps.append(run(_PRUNE_COMMANDS[config.node_package_manager], group = "prune"))
     optimize_paths = []
-    if config.build_command:
+    if config.node_build_command:
         optimize_paths = _FRAMEWORK_OPTIMIZE_DEPS_PATHS.get(
-            config.framework,
-            _SERVER_OPTIMIZE_DEPS_PATHS.get(config.server, []),
+            config.node_framework,
+            _SERVER_OPTIMIZE_DEPS_PATHS.get(config.node_server, []),
         )
     if optimize_paths and config.optimize_node_dependencies:
-        steps.append(run(_DLX_PREFIXES[config.package_manager] + "optimize-deps@{} {} --replace".format(OPTIMIZE_DEPS_VERSION, ", ".join(optimize_paths))))
-    if serving and config.remove_native_binaries:
+        steps.append(run(_DLX_PREFIXES[config.node_package_manager] + "optimize-deps@{} {} --replace".format(OPTIMIZE_DEPS_VERSION, ", ".join(optimize_paths))))
+    if serving and config.node_remove_native_binaries:
         steps += [
             run("mkdir -p {}".format(assets.path), group = "optimize"),
             copy(NODE_MODULES_OPTIMIZER_ASSET, "{}/optimize-node-modules.sh".format(assets.path), base = "assets"),
@@ -182,13 +188,13 @@ def node_optimize_steps(config, assets = None, include_prune = True, serving = T
 
 def _export_steps(config, build_mount, app):
     """Move the built app from the build mount into the served app mount."""
-    if config.app_subdir and config.package_manager == "pnpm" and config.package_name:
+    if config.app_subdir and config.node_package_manager == "pnpm" and config.node_package_name:
         return [
             workdir(build_mount.path),
-            run("pnpm deploy --filter {} --prod --config.node-linker=hoisted {}".format(config.package_name, app.path)),
+            run("pnpm deploy --filter {} --prod --config.node-linker=hoisted {}".format(config.node_package_name, app.path)),
             workdir(app.path),
         ]
-    copy_source = ".next-bundle/*" if config.framework == "next" else "."
+    copy_source = ".next-bundle/*" if config.node_framework == "next" else "."
     copy_flags = "-RL" if config.app_subdir else "-R"
     return [run("cp {} {} {}".format(copy_flags, copy_source, app.path))]
 
@@ -197,10 +203,10 @@ def node_build(config, build_mount = None, app = None):
     tc = node_toolchain(config)
     build_mount = build_mount or mount("build")
     app = app or mount("app")
-    assets = mount("assets") if config.remove_native_binaries else None
+    assets = mount("assets") if config.node_remove_native_binaries else None
 
     uses_pnpm_deploy = (
-        config.app_subdir and config.package_manager == "pnpm" and config.package_name
+        config.app_subdir and config.node_package_manager == "pnpm" and config.node_package_name
     )
     export = _export_steps(config, build_mount, app)
     optimize = node_optimize_steps(
@@ -212,7 +218,11 @@ def node_build(config, build_mount = None, app = None):
     steps += node_stage_steps(config, build_mount)
     steps += node_install_steps(config)
     steps.append(node_copy_step(config))
-    steps += node_build_step(config)
+    steps += node_build_step(
+        config,
+        node_server = config.node_server,
+        node_framework = config.node_framework,
+    )
     steps += tail
 
     return build(
@@ -232,7 +242,7 @@ def node_serve(config, build, name = None, provider = None, prepare = None, **ov
     if config.commands.start:
         commands["start"] = config.commands.start
     if prepare == None:
-        if config.precompile_edgejs:
+        if config.edgejs_precompile:
             prepare = [run("edgejs --precompile {}".format(app.serve_path))]
         else:
             prepare = []

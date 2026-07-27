@@ -25,9 +25,9 @@ def python_toolchain(config):
 def python_runtime_deps(config, toolchain):
     """Packages the serve environment needs."""
     deps = [toolchain.python]
-    if config.uses_pandoc:
+    if config.python_uses_pandoc:
         deps.append(dep("pandoc", config.pandoc_version))
-    if config.uses_ffmpeg:
+    if config.python_uses_ffmpeg:
         deps.append(dep("ffmpeg", config.ffmpeg_version))
     return deps
 
@@ -43,11 +43,11 @@ def _stage_steps(config, source):
 
 def _install_steps(config, venv, local_venv):
     python_version = config.python_version
-    cross = config.cross_platform
-    extra = ", ".join(config.extra_dependencies)
-    all_files = config.install_requires_all_files
+    cross = config.python_cross_platform
+    extra = ", ".join(config.python_extra_dependencies)
+    all_files = config.python_install_requires_all_files
     in_subdir = config.app_subdir != None
-    inputs = None if (in_subdir or all_files) else config.install_inputs
+    inputs = None if (in_subdir or all_files) else config.python_install_inputs
 
     steps = []
     if file_exists("pyproject.toml"):
@@ -77,13 +77,13 @@ def _install_steps(config, venv, local_venv):
 
 def _cross_wheel_steps(config, venv, local_venv):
     """Cross-install site-packages for the serve platform (cross_platform only)."""
-    cross = config.cross_platform
+    cross = config.python_cross_platform
     if not cross:
         return []
     python_version = config.python_version
-    extra = ", ".join(config.extra_dependencies)
+    extra = ", ".join(config.python_extra_dependencies)
     index = config.python_extra_index_url
-    all_files = config.install_requires_all_files
+    all_files = config.python_install_requires_all_files
     in_subdir = config.app_subdir != None
     cross_packages = "{}/lib/python{}/site-packages".format(venv.path, python_version)
 
@@ -93,7 +93,7 @@ def _cross_wheel_steps(config, venv, local_venv):
             outputs = ["cross-requirements.txt"],
         )
     else:
-        inputs = None if (in_subdir or all_files) else config.install_inputs
+        inputs = None if (in_subdir or all_files) else config.python_install_inputs
         compile_step = run(
             "uv pip compile requirements.txt --python-version={} --universal --extra-index-url {} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt".format(python_version, index),
             inputs = inputs,
@@ -123,26 +123,26 @@ def python_build(config, source = None, app = None, venv = None, serving = True)
     else:
         source = source or mount("temp")
         venv = venv or local_venv  # the embeddable flavor targets the local venv
-    cross = config.cross_platform
+    cross = config.python_cross_platform
 
     steps = [use(tc.python, tc.uv)]
     steps += _stage_steps(config, source)
     steps += _install_steps(config, venv, local_venv)
     # Cross wheels only make sense when an install branch ran (pyproject,
     # requirements, or extra deps) — a bare script app has nothing to compile.
-    has_install = file_exists("pyproject.toml") or file_exists("requirements.txt") or len(config.extra_dependencies) > 0
+    has_install = file_exists("pyproject.toml") or file_exists("requirements.txt") or len(config.python_extra_dependencies) > 0
     if serving and has_install:
         steps += _cross_wheel_steps(config, venv, local_venv)
     steps += [
         path((local_venv.path if cross else venv.path) + "/bin"),
-        copy(".", ".", ignore = [".venv", ".git", "__pycache__"]) if not in_subdir and not config.install_requires_all_files else None,
+        copy(".", ".", ignore = [".venv", ".git", "__pycache__"]) if not in_subdir and not config.python_install_requires_all_files else None,
     ]
-    if config.framework == "mcp":
+    if config.python_framework == "mcp":
         steps += [
             run("mkdir -p {}/bin".format(venv.path)) if cross else None,
             run("cp {}/bin/mcp {}/bin/mcp".format(local_venv.path, venv.path)) if cross else None,
         ]
-    if config.framework == "django":
+    if config.python_framework == "django":
         steps.append(run("python manage.py collectstatic --noinput", group = "build"))
     if serving and in_subdir:
         steps.append(run("cp -R . {}".format(app.path)))
@@ -163,31 +163,31 @@ def python_commands(config):
     commands = {}
     if config.commands.start:
         commands["start"] = config.commands.start
-    if config.migration_strategy == "django":
+    if config.python_migration_strategy == "django":
         commands["after_deploy"] = "python manage.py migrate"
-    elif config.migration_strategy == "alembic":
+    elif config.python_migration_strategy == "alembic":
         commands["after_deploy"] = "alembic upgrade head"
     return commands
 
 def python_env(config, app, venv, site_packages):
     app_path = app.serve_path
-    if config.main_file and config.main_file.startswith("src/"):
+    if config.python_main_file and config.python_main_file.startswith("src/"):
         pythonpath = "{}:{}/src:{}".format(app_path, app_path, site_packages)
     else:
         pythonpath = "{}:{}".format(app_path, site_packages)
     env_vars = {"PYTHONPATH": pythonpath, "HOME": app_path}
-    if config.framework == "streamlit":
+    if config.python_framework == "streamlit":
         env_vars["STREAMLIT_SERVER_HEADLESS"] = "true"
-    elif config.framework == "mcp":
+    elif config.python_framework == "mcp":
         env_vars["FASTMCP_HOST"] = "0.0.0.0"
         env_vars["FASTMCP_PORT"] = str(config.port)
-        if not config.mcp_self_running:
+        if not config.python_mcp_self_running:
             env_vars["VIRTUAL_ENV"] = venv.serve_path
     return env_vars
 
 def python_prepare(config, site_packages, app_serve_path):
     """Precompile site-packages and the app for faster cold starts."""
-    if not config.precompile_python:
+    if not config.python_precompile:
         return []
     return [
         run("echo \"Precompiling Python code...\""),
@@ -197,9 +197,9 @@ def python_prepare(config, site_packages, app_serve_path):
     ]
 
 def python_services(config):
-    if config.database == "mysql":
+    if config.python_database == "mysql":
         return [service(name = "database", provider = "mysql")]
-    if config.database == "postgresql":
+    if config.python_database == "postgresql":
         return [service(name = "database", provider = "postgres")]
     return []
 

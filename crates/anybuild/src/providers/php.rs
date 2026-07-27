@@ -41,15 +41,19 @@ impl PhpFramework {
 pub struct PhpConfig {
     #[serde(flatten)]
     pub base: BaseConfig,
+    #[serde(rename = "php_framework")]
     pub framework: Option<PhpFramework>,
     pub phpix: bool,
+    #[serde(rename = "composer_enable")]
     pub use_composer: bool,
+    #[serde(rename = "composer_build_script")]
     pub composer_build_script: Option<String>,
     pub php_version: Option<String>,
     /// `"64-bit"` or `"32-bit"`.
     pub php_architecture: Option<String>,
     pub phpix_worker_threads: Option<i64>,
     /// Docroot subdirectory ("web", "public", "app") or None for the root.
+    #[serde(rename = "php_public_dir")]
     pub public_dir: Option<String>,
 }
 
@@ -86,12 +90,12 @@ impl PhpConfig {
             base,
             framework: env_enum(
                 operation,
-                "framework",
+                "php_framework",
                 "a supported PHP framework",
                 PhpFramework::from_value,
             )?,
             phpix: env_bool(operation, "phpix")?.unwrap_or(false),
-            use_composer: env_bool(operation, "use_composer")?.unwrap_or(false),
+            use_composer: env_bool(operation, "composer_enable")?.unwrap_or(false),
             composer_build_script: env_str(operation, "composer_build_script"),
             php_version: env_str(operation, "php_version").or_else(|| Some("8.3.29".to_owned())),
             php_architecture: env_enum(
@@ -101,7 +105,7 @@ impl PhpConfig {
                 |value| matches!(value, "64-bit" | "32-bit").then(|| value.to_owned()),
             )?,
             phpix_worker_threads: env_int(operation, "phpix_worker_threads")?.or(Some(4)),
-            public_dir: env_str(operation, "public_dir"),
+            public_dir: env_str(operation, "php_public_dir"),
         })
     }
 }
@@ -259,11 +263,13 @@ impl Provider for PhpConfig {
     type Evidence = DetectionEvidence;
 
     const NAME: &'static str = "php";
-    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] =
-        &[("Framework", "framework"), ("PHP version", "php_version")];
+    const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
+        ("Framework", "php_framework"),
+        ("PHP version", "php_version"),
+    ];
 
     fn format_detection_detail(field: &str, value: &str) -> String {
-        if field == "framework" {
+        if field == "php_framework" {
             humanize(value)
         } else {
             value.to_owned()

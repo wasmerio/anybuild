@@ -6,7 +6,7 @@ load("//anybuild/tools:staticfile.bzl", "staticfile_serve")
 
 config = mkdocs_config(
     schema = 1,
-    extra_dependencies = [
+    python_extra_dependencies = [
         "mkdocs",
     ],
     python_version = "3.13",

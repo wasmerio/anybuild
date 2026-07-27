@@ -60,7 +60,7 @@ def _wp_extension_steps(config, app, assets, wpcontent_base):
     """Build a plugin/theme project into the wp-content mount."""
     target = "{}/{}s/{}".format(wpcontent_base.path, config.wp_extension_kind, config.wp_extension_slug)
     ignore = [".git", ".source"]
-    if config.use_composer:
+    if config.composer_enable:
         ignore.append("vendor")
 
     steps = _wp_base_steps(config, app, assets)
@@ -69,7 +69,7 @@ def _wp_extension_steps(config, app, assets, wpcontent_base):
     steps += _wp_content_seed_steps(config, app, wpcontent_base)
     steps.append(copy(".", target, ignore = ignore))
 
-    if config.use_composer:
+    if config.composer_enable:
         steps += [
             workdir(target),
             env(COMPOSER_HOME = "/tmp", COMPOSER_FUND = "0", COMPOSER_ALLOW_SUPERUSER = "1"),
@@ -86,7 +86,7 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
 
     # WordPress always needs bash at serve time (setup-wp.sh); php_runtime_deps
     # already includes it when composer is used.
-    extra_serve_deps = [dep("bash")] if not config.use_composer else []
+    extra_serve_deps = [dep("bash")] if not config.composer_enable else []
 
     if config.wp_extension_kind != None:
         tc = php_toolchain(config)

@@ -8,10 +8,10 @@ config = node_config(
     commands = {
         "start": "node server.mjs",
     },
-    package_manager = "npm",
-    framework = "next",
-    server = "node",
-    build_command = "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
+    node_package_manager = "npm",
+    node_framework = "next",
+    node_server = "node",
+    node_build_command = "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
     node_version = "24",
 )
 

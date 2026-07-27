@@ -8,9 +8,9 @@ config = node_config(
     commands = {
         "start": "node server.js",
     },
-    package_manager = "npm",
-    framework = "react-router",
-    server = "node",
+    node_package_manager = "npm",
+    node_framework = "react-router",
+    node_server = "node",
     node_version = "24",
 )
 

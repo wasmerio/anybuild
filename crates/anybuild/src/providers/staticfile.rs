@@ -33,11 +33,13 @@ fn source_token_pattern() -> &'static Regex {
 pub struct StaticFileConfig {
     #[serde(flatten)]
     pub base: BaseConfig,
+    #[serde(rename = "static_convert_redirects")]
     pub convert_redirects: bool,
     pub sws_version: Option<String>,
     pub static_dir: Option<String>,
     /// Rendered sws.toml redirects (from a _redirects file), computed at
     /// load time so the Starlark provider stays filesystem-free.
+    #[serde(rename = "static_redirects_config")]
     pub redirects_config: Option<String>,
 }
 
@@ -68,10 +70,10 @@ impl StaticFileConfig {
     pub(crate) fn from_env(base: BaseConfig, operation: &OperationContext) -> Result<Self> {
         Ok(Self {
             base,
-            convert_redirects: env_bool(operation, "convert_redirects")?.unwrap_or(true),
+            convert_redirects: env_bool(operation, "static_convert_redirects")?.unwrap_or(true),
             sws_version: env_str(operation, "sws_version").or_else(|| Some("2.38.0".to_owned())),
             static_dir: env_str(operation, "static_dir"),
-            redirects_config: env_str(operation, "redirects_config"),
+            redirects_config: env_str(operation, "static_redirects_config"),
         })
     }
 }

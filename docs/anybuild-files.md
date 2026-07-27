@@ -17,7 +17,7 @@ config = python_config(
     commands = {
         "start": "python main.py",
     },
-    main_file = "main.py",
+    python_main_file = "main.py",
     python_version = "3.13",
     uv_version = "0.8.15",
 )
@@ -76,7 +76,7 @@ load("//anybuild/tools:node.bzl", "node_build", "node_config", "node_serve")
 config = node_config(
     schema = 1,
     commands = {"start": "node server.js"},
-    server = "node",
+    node_server = "node",
     node_version = "24",
 )
 
@@ -152,12 +152,12 @@ sets — common fields `name`, `port`, and `app_subdir` live on the base):
 
 | Provider   | Fields                                                        |
 | ---------- | ------------------------------------------------------------- |
-| python     | `python_version`, `server`, `framework`, `extra_dependencies`, `precompile_python`, `database` |
-| node       | `node_version`, `package_manager`, `framework`, `server`, `build_command`, `optimize_node_dependencies` |
-| php        | `php_version`, `phpix`, `use_composer`, `composer_build_script`, `public_dir` |
+| python     | `python_version`, `python_server`, `python_framework`, `asgi_application`, `wsgi_application`, `python_extra_dependencies`, `python_precompile`, `python_database` |
+| node       | `node_version`, `node_package_manager`, `node_framework`, `node_server`, `node_build_command`, `edgejs_enable`, `edgejs_precompile`, `optimize_node_dependencies` |
+| php        | `php_version`, `phpix`, `composer_enable`, `composer_build_script`, `php_public_dir` |
 | wordpress  | php fields plus `wp_version`, `wp_locale`, `wp_cli_version`    |
-| staticfile | `static_dir`, `sws_version`, `convert_redirects`               |
-| go         | `go_version`, `go_build_file`, `serve_binary`                  |
+| staticfile | `static_dir`, `sws_version`, `static_convert_redirects`               |
+| go         | `go_version`, `go_build_file`, `go_serve_binary`                  |
 
 ## `load()` labels
 

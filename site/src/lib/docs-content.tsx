@@ -1924,7 +1924,6 @@ const laravelProvider: DocPage = {
 config = laravel_config(
     schema = 1,
     node_package_manager = "npm",
-    node_server = "node",
     node_build_command = "npm run build",
     node_version = "24",
     php_framework = "laravel",

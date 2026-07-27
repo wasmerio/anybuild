@@ -8,8 +8,8 @@ config = node_config(
     commands = {
         "start": "node server.js",
     },
-    package_manager = "npm",
-    server = "hono",
+    node_package_manager = "npm",
+    node_server = "hono",
     node_version = "24",
 )
 

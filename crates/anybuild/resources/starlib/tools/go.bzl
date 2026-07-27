@@ -25,12 +25,12 @@ def go_build(config, app = None, temp = None):
 
     steps += [
         env(GOCACHE = "/tmp/.cache/go-build", GOPATH = build_dir),
-        run("go build -o {} {}".format(config.serve_binary, config.go_build_file), group = "build"),
+        run("go build -o {} {}".format(config.go_serve_binary, config.go_build_file), group = "build"),
     ]
     if in_subdir:
-        steps.append(run("cp {} {}/{}".format(config.serve_binary, app.path, config.serve_binary)))
+        steps.append(run("cp {} {}/{}".format(config.go_serve_binary, app.path, config.go_serve_binary)))
     else:
-        steps.append(run("cp {}/{} {}/{}".format(temp.path, config.serve_binary, app.path, config.serve_binary)))
+        steps.append(run("cp {}/{} {}/{}".format(temp.path, config.go_serve_binary, app.path, config.go_serve_binary)))
 
     return build(
         steps = steps,
@@ -48,6 +48,6 @@ def go_serve(config, build, name = None, provider = None, **overrides):
         provider = provider,
         name = name,
         cwd = app.serve_path,
-        commands = {"start": "{}/{}".format(app.serve_path, config.serve_binary)},
+        commands = {"start": "{}/{}".format(app.serve_path, config.go_serve_binary)},
         **overrides
     )

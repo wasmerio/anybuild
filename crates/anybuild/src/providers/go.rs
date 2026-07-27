@@ -20,6 +20,7 @@ pub struct GoConfig {
     pub base: BaseConfig,
     pub go_version: Option<String>,
     pub go_build_file: Option<String>,
+    #[serde(rename = "go_serve_binary")]
     pub serve_binary: Option<String>,
 }
 
@@ -57,7 +58,7 @@ pub fn load_config(
         base: BaseConfig::default(),
         go_version: env_str(operation, "go_version").or_else(|| Some("1.25.5".to_owned())),
         go_build_file: env_str(operation, "go_build_file"),
-        serve_binary: env_str(operation, "serve_binary"),
+        serve_binary: env_str(operation, "go_serve_binary"),
     };
     // Python: `if not config.go_build_file:` twice — "" gates discovery and
     // the missing-file error just like None.

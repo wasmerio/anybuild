@@ -8,10 +8,10 @@ config = nodestatic_config(
     schema = 1,
     sws_version = "2.38.0",
     static_dir = "public",
-    package_manager = "npm",
-    framework = "hexo",
-    server = "node",
-    build_command = "npm run generate",
+    node_package_manager = "npm",
+    node_framework = "hexo",
+    node_server = "node",
+    node_build_command = "npm run generate",
     node_version = "24",
 )
 

@@ -34,9 +34,10 @@ const SNAPSHOT_EXCLUDED_FIELDS: &[&str] = &[
     "name",
     "port",
     "app_subdir",
-    "install_inputs",
-    "redirects_config",
-    "package_name",
+    "node_install_inputs",
+    "python_install_inputs",
+    "static_redirects_config",
+    "node_package_name",
 ];
 
 pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Sized {
@@ -868,24 +869,45 @@ mod config_inheritance_tests {
     use super::*;
 
     const BASE_FIELDS: &[&str] = &["name", "port", "commands", "app_subdir"];
+    const NODE_BUILD_FIELDS: &[&str] = &[
+        "node_package_manager",
+        "node_extra_dependencies",
+        "node_build_command",
+        "node_version",
+        "npm_version",
+        "pnpm_version",
+        "yarn_version",
+        "bun_version",
+        "node_install_requires_all_files",
+        "node_install_inputs",
+        "node_package_name",
+    ];
+    const NODE_RUNTIME_FIELDS: &[&str] = &[
+        "edgejs_enable",
+        "edgejs_precompile",
+        "node_framework",
+        "node_server",
+        "optimize_node_dependencies",
+        "node_remove_native_binaries",
+    ];
     const NODE_FIELDS: &[&str] = &[
-        "use_edgejs",
-        "precompile_edgejs",
-        "package_manager",
-        "framework",
-        "server",
-        "extra_dependencies",
-        "build_command",
+        "edgejs_enable",
+        "edgejs_precompile",
+        "node_package_manager",
+        "node_framework",
+        "node_server",
+        "node_extra_dependencies",
+        "node_build_command",
         "node_version",
         "npm_version",
         "pnpm_version",
         "yarn_version",
         "bun_version",
         "optimize_node_dependencies",
-        "remove_native_binaries",
-        "install_requires_all_files",
-        "install_inputs",
-        "package_name",
+        "node_remove_native_binaries",
+        "node_install_requires_all_files",
+        "node_install_inputs",
+        "node_package_name",
     ];
 
     fn keys(value: &serde_json::Value) -> Vec<&str> {
@@ -912,25 +934,26 @@ mod config_inheritance_tests {
             .iter()
             .copied()
             .chain([
-                "convert_redirects",
+                "static_convert_redirects",
                 "sws_version",
                 "static_dir",
-                "redirects_config",
+                "static_redirects_config",
             ])
             .chain(NODE_FIELDS.iter().copied())
             .collect();
         let expected_laravel: Vec<&str> = BASE_FIELDS
             .iter()
             .copied()
-            .chain(NODE_FIELDS.iter().copied())
+            .chain(NODE_BUILD_FIELDS.iter().copied())
             .chain([
+                "php_framework",
                 "phpix",
-                "use_composer",
+                "composer_enable",
                 "composer_build_script",
                 "php_version",
                 "php_architecture",
                 "phpix_worker_threads",
-                "public_dir",
+                "php_public_dir",
             ])
             .collect();
 
@@ -947,6 +970,16 @@ mod config_inheritance_tests {
             let round_trip = config_from_json(name, json.clone()).unwrap().to_json();
             assert_eq!(keys(&round_trip), keys(&json));
             assert_eq!(round_trip, json);
+        }
+    }
+
+    #[test]
+    fn laravel_excludes_node_runtime_fields() {
+        let json = defaults_json("laravel").unwrap();
+        let fields = json.as_object().unwrap();
+
+        for field in NODE_RUNTIME_FIELDS {
+            assert!(!fields.contains_key(*field), "{field}");
         }
     }
 

@@ -10,10 +10,10 @@ config = node_config(
     commands = {
         "start": "node dist/server/entry.mjs",
     },
-    package_manager = "pnpm",
-    framework = "astro",
-    server = "node",
-    build_command = "pnpm run build",
+    node_package_manager = "pnpm",
+    node_framework = "astro",
+    node_server = "node",
+    node_build_command = "pnpm run build",
     node_version = "24",
 )
 

@@ -8,10 +8,10 @@ config = python_config(
     commands = {
         "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
     },
-    framework = "fastapi",
-    server = "uvicorn",
+    python_framework = "fastapi",
+    python_server = "uvicorn",
     asgi_application = "main:app",
-    main_file = "main.py",
+    python_main_file = "main.py",
     python_version = "3.13",
     uv_version = "0.8.15",
 )

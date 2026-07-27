@@ -100,7 +100,7 @@ config = python_config(
     commands = {
         "start": "python main.py",
     },
-    main_file = "main.py",
+    python_main_file = "main.py",
     python_version = "3.13",
     uv_version = "0.8.15",
 )

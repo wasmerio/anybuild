@@ -7,7 +7,7 @@ config = go_config(
     schema = 1,
     go_version = "1.25.5",
     go_build_file = "server/server.go",
-    serve_binary = "server_server",
+    go_serve_binary = "server_server",
 )
 
 build = go_build(config)

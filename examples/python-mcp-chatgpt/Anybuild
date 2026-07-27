@@ -8,15 +8,15 @@ config = python_config(
     commands = {
         "start": "python main.py",
     },
-    framework = "mcp",
-    extra_dependencies = [
+    python_framework = "mcp",
+    python_extra_dependencies = [
         "mcp[cli]",
     ],
     asgi_application = "main:app",
-    main_file = "main.py",
+    python_main_file = "main.py",
     python_version = "3.13",
     uv_version = "0.8.15",
-    mcp_self_running = True,
+    python_mcp_self_running = True,
 )
 
 build = python_build(config)

@@ -8,8 +8,8 @@ config = python_config(
     commands = {
         "start": "streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true",
     },
-    framework = "streamlit",
-    main_file = "streamlit_app.py",
+    python_framework = "streamlit",
+    python_main_file = "streamlit_app.py",
     python_version = "3.13",
     uv_version = "0.8.15",
 )

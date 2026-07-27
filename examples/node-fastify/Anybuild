@@ -8,8 +8,8 @@ config = node_config(
     commands = {
         "start": "node server.js",
     },
-    package_manager = "npm",
-    server = "fastify",
+    node_package_manager = "npm",
+    node_server = "fastify",
     node_version = "24",
 )
 

@@ -1,11 +1,8 @@
 //! Laravel provider implementation.
 //!
-//! `LaravelConfig(PhpConfig, NodeConfig)`: the config is the php config
-//! (with `use_composer` forced on) merged with the node config (minus its
-//! `framework` and `server`) and the base config, exactly as Python's
-//! `config.model_dump() | node_config_data | base_config.model_dump()`.
-//! The shared Node fields are flattened from `NodeConfigFields`; loading
-//! still uses the Python-compatible JSON merge to preserve precedence.
+//! Laravel combines PHP configuration with the Node build toolchain fields
+//! used to compile frontend assets. Node application/runtime fields are
+//! intentionally excluded because PHP serves the resulting application.
 
 use std::path::Path;
 
@@ -15,8 +12,8 @@ use serde_json::{Map, Value};
 
 use crate::operation::OperationContext;
 use crate::providers::base::{BaseConfig, HasBase};
-use crate::providers::node::NodeConfigFields;
-use crate::providers::php;
+use crate::providers::node::NodeBuildConfigFields;
+use crate::providers::php::{self, PhpFramework};
 use crate::providers::Provider;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,14 +21,17 @@ pub struct LaravelConfig {
     #[serde(flatten)]
     pub base: BaseConfig,
     #[serde(flatten)]
-    pub node: NodeConfigFields<Value>,
-    // Php-side fields (minus framework, which node's position holds).
+    pub node: NodeBuildConfigFields,
+    pub php_framework: Option<PhpFramework>,
     pub phpix: bool,
+    #[serde(rename = "composer_enable")]
     pub use_composer: bool,
+    #[serde(rename = "composer_build_script")]
     pub composer_build_script: Option<String>,
     pub php_version: Option<String>,
     pub php_architecture: Option<String>,
     pub phpix_worker_threads: Option<i64>,
+    #[serde(rename = "php_public_dir")]
     pub public_dir: Option<String>,
 }
 
@@ -39,7 +39,8 @@ impl Default for LaravelConfig {
     fn default() -> Self {
         Self {
             base: BaseConfig::default(),
-            node: NodeConfigFields::default(),
+            node: NodeBuildConfigFields::default(),
+            php_framework: None,
             phpix: false,
             use_composer: false,
             composer_build_script: None,
@@ -52,7 +53,7 @@ impl Default for LaravelConfig {
 }
 
 impl std::ops::Deref for LaravelConfig {
-    type Target = NodeConfigFields<Value>;
+    type Target = NodeBuildConfigFields;
 
     fn deref(&self) -> &Self::Target {
         &self.node
@@ -89,15 +90,11 @@ pub fn load_config(
 ) -> Result<LaravelConfig> {
     let mut php_config = php::load_config(path, base.clone(), operation)?;
     php_config.use_composer = true;
-    // Python passes infer_start=False, but the inferred commands are
-    // overwritten by the base config in the final merge anyway.
-    let node_config = crate::providers::node::load_config(path, base.clone(), operation)?;
+    let node_config = crate::providers::node::load_build_config(path, &base, operation)?;
 
     let mut merged = to_object(serde_json::to_value(&php_config).expect("php config serializes"));
-    let mut node_data =
-        to_object(serde_json::to_value(&node_config).expect("node config serializes"));
-    node_data.remove("framework");
-    node_data.remove("server");
+    let node_data =
+        to_object(serde_json::to_value(&node_config).expect("node build config serializes"));
     merged.extend(node_data);
     merged.extend(to_object(
         serde_json::to_value(&base).expect("base config serializes"),
@@ -111,7 +108,7 @@ impl Provider for LaravelConfig {
 
     const NAME: &'static str = "laravel";
     const DETECTION_DETAILS: &'static [(&'static str, &'static str)] = &[
-        ("Package manager", "package_manager"),
+        ("Package manager", "node_package_manager"),
         ("PHP version", "php_version"),
     ];
 
