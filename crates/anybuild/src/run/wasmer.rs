@@ -1149,6 +1149,8 @@ impl WasmerRunner {
 
     /// Port of `_deploy_args`.
     fn deploy_args(&self, app_owner: Option<&str>, app_name: Option<&str>) -> Vec<String> {
+        let app_owner = app_owner.filter(|owner| !owner.is_empty());
+        let app_name = app_name.filter(|name| !name.is_empty());
         let mut extra_args: Vec<String> = Vec::new();
         if let Some(registry) = &self.wasmer_registry {
             extra_args.extend(["--registry".to_owned(), registry.clone()]);
@@ -1156,10 +1158,10 @@ impl WasmerRunner {
         if let Some(token) = &self.wasmer_token {
             extra_args.extend(["--token".to_owned(), token.clone()]);
         }
-        if let Some(owner) = app_owner.filter(|owner| !owner.is_empty()) {
+        if let Some(owner) = app_owner {
             extra_args.extend(["--owner".to_owned(), owner.to_owned()]);
         }
-        if let Some(name) = app_name.filter(|name| !name.is_empty()) {
+        if let Some(name) = app_name {
             extra_args.extend(["--app-name".to_owned(), name.to_owned()]);
         }
         let mut args = vec![
@@ -1167,8 +1169,10 @@ impl WasmerRunner {
             "--publish-package".to_owned(),
             "--dir".to_owned(),
             path_str(&self.wasmer_dir_path),
-            "--non-interactive".to_owned(),
         ];
+        if app_owner.is_some() && app_name.is_some() {
+            args.push("--non-interactive".to_owned());
+        }
         args.extend(extra_args);
         args
     }
@@ -2132,6 +2136,50 @@ mod tests {
             .extra_args
             .iter()
             .any(|arg| arg == "--command=start"));
+    }
+
+    #[test]
+    fn test_wasmer_deploy_omits_unspecified_app_identity() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_runner(tmp.path());
+
+        runner.deploy(None, None).unwrap();
+
+        let captured = runner.captured_commands.last().unwrap();
+        assert_eq!(captured.command, "wasmer");
+        assert_eq!(
+            captured.extra_args,
+            [
+                "deploy",
+                "--publish-package",
+                "--dir",
+                &path_str(&runner.wasmer_dir_path),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_wasmer_deploy_is_non_interactive_with_complete_app_identity() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_runner(tmp.path());
+
+        runner.deploy(Some("acme"), Some("blog")).unwrap();
+
+        let captured = runner.captured_commands.last().unwrap();
+        assert_eq!(
+            captured.extra_args,
+            [
+                "deploy",
+                "--publish-package",
+                "--dir",
+                &path_str(&runner.wasmer_dir_path),
+                "--non-interactive",
+                "--owner",
+                "acme",
+                "--app-name",
+                "blog",
+            ]
+        );
     }
 
     #[test]

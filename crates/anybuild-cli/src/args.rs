@@ -75,10 +75,10 @@ pub struct DeployTargetArgs {
     /// Save the output of the Wasmer build to a json file
     #[arg(long)]
     pub wasmer_deploy_config: Option<PathBuf>,
-    /// Owner of the Wasmer app.
+    /// Override the owner of the Wasmer app (otherwise Wasmer prompts).
     #[arg(long)]
     pub wasmer_app_owner: Option<String>,
-    /// Name of the Wasmer app.
+    /// Override the name of the Wasmer app (otherwise Wasmer prompts).
     #[arg(long)]
     pub wasmer_app_name: Option<String>,
 }
