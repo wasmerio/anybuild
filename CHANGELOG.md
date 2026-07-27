@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.24.0](https://github.com/wasmerio/anybuild/compare/v0.23.0...v0.24.0) (2026-07-27)
+
+
+### Features
+
+* **release:** GH Releases of binaries & installer ([#70](https://github.com/wasmerio/anybuild/issues/70)) ([7bc6109](https://github.com/wasmerio/anybuild/commit/7bc61098f213df07de7431a7601164596453b1c2))
+
+
+### Bug Fixes
+
+* **release:** support linked Cargo workspace versions ([2668815](https://github.com/wasmerio/anybuild/commit/26688154a06f89c4a3c3d666b40bece2bc7f7ed8))
+
 ## [0.23.0](https://github.com/wasmerio/shipit/compare/v0.22.2...v0.23.0) (2026-07-23)
 
 
