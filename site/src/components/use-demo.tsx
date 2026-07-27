@@ -204,9 +204,13 @@ export function UseDemo() {
                   <span aria-hidden="true">⌁</span>
                   {selectedDemoConfig.previewUrl}
                 </div>
-                <span className="use-demo__live">
+                <span
+                  className={`use-demo__live ${
+                    selectedDemo === "nextjs-preview" ? "use-demo__live--preview" : ""
+                  }`}
+                >
                   <i />
-                  Live
+                  {selectedDemo === "nextjs-preview" ? "Preview" : "Live"}
                 </span>
               </div>
               <div className="use-demo__page">

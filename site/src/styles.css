@@ -347,6 +347,15 @@
   animation: use-demo-live 1.5s ease-in-out infinite;
 }
 
+.use-demo__live--preview {
+  color: #75b9ff;
+}
+
+.use-demo__live--preview i {
+  background: #409cff;
+  box-shadow: 0 0 0 4px rgba(64, 156, 255, 0.14);
+}
+
 .use-demo__page {
   display: flex;
   min-height: 240px;
