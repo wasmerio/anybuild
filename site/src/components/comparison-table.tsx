@@ -187,6 +187,9 @@ export function ComparisonTable() {
                     key={product.key}
                     className={product.key === "anybuild" ? "comparison__anybuild" : undefined}
                   >
+                    <span className="comparison__mobile-product" aria-hidden="true">
+                      {product.name}
+                    </span>
                     <Answer value={capability[product.key]} />
                   </td>
                 ))}

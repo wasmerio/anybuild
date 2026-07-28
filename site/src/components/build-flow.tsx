@@ -61,7 +61,7 @@ const frameworkIcons = {
 } as const;
 
 const artifacts = {
-  system: { label: "Local build", icon: null, color: "#AEB7C8" },
+  system: { label: "Local tools", icon: null, color: "#AEB7C8" },
   wrangler: {
     label: "Worker",
     icon: "https://cdn.simpleicons.org/cloudflareworkers",

@@ -20,7 +20,7 @@ const frameworkLogos = [
   },
   {
     name: "Django",
-    src: "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/django/django-plain.svg",
+    src: "/django-logo.svg",
   },
   {
     name: "WordPress",
