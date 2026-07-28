@@ -6,6 +6,7 @@
 //! and unknown attributes raise — honest access, same as Python.
 
 use std::fmt;
+use std::{cell::RefCell, rc::Rc};
 
 use allocative::Allocative;
 use serde_json::Value as Json;
@@ -21,6 +22,7 @@ use crate::providers::{
     apply_environment, finalize_config, load_explicit_provider, workspace, BaseConfig,
     ProviderConfig,
 };
+use crate::run::Runner;
 use crate::sdk::CommandOverrides;
 
 #[derive(Debug, Clone, ProvidesStaticType, NoSerialize, Allocative)]
@@ -50,7 +52,7 @@ impl ConfigValue {
 pub struct ConfigResolutionOptions {
     pub paths: ProjectPaths,
     pub overrides: CommandOverrides,
-    pub wasmer: bool,
+    pub runner: Option<Rc<RefCell<dyn Runner>>>,
     pub operation: OperationContext,
 }
 
@@ -100,9 +102,8 @@ impl ConfigResolutionOptions {
         if let Some(patch) = &self.overrides.config {
             config = config.merge_json(patch)?;
         }
-        if self.wasmer {
-            let patch = crate::run::wasmer::provider_config_patch(&config);
-            config = config.merge_json(&patch)?;
+        if let Some(runner) = &self.runner {
+            runner.borrow_mut().prepare_config(&mut config);
         }
         workspace::apply_subdir_provider_config(&mut config, self.paths.subdir.as_deref());
         config = finalize_config(&self.paths.app_path, config);

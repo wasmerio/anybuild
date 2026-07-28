@@ -43,7 +43,8 @@ pub struct PhpConfig {
     pub base: BaseConfig,
     #[serde(rename = "php_framework")]
     pub framework: Option<PhpFramework>,
-    pub phpix: bool,
+    /// Unspecified lets the selected runner choose its preferred engine.
+    pub phpix: Option<bool>,
     #[serde(rename = "composer_enable")]
     pub use_composer: bool,
     #[serde(rename = "composer_build_script")]
@@ -62,7 +63,7 @@ impl Default for PhpConfig {
         Self {
             base: BaseConfig::default(),
             framework: None,
-            phpix: false,
+            phpix: None,
             use_composer: false,
             composer_build_script: None,
             php_version: Some("8.3.29".to_owned()),
@@ -94,7 +95,7 @@ impl PhpConfig {
                 "a supported PHP framework",
                 PhpFramework::from_value,
             )?,
-            phpix: env_bool(operation, "phpix")?.unwrap_or(false),
+            phpix: env_bool(operation, "phpix")?,
             use_composer: env_bool(operation, "composer_enable")?.unwrap_or(false),
             composer_build_script: env_str(operation, "composer_build_script"),
             php_version: env_str(operation, "php_version").or_else(|| Some("8.3.29".to_owned())),
@@ -234,7 +235,7 @@ pub fn load_config(
     if config.framework == Some(PhpFramework::Drupal) {
         // Drupal relies on Apache-style rewrite behavior that the built-in
         // php server handles more predictably than phpix by default.
-        config.phpix = false;
+        config.phpix = Some(false);
     }
     config.public_dir =
         if config.framework == Some(PhpFramework::Drupal) && exists(path, &["web/index.php"]) {
@@ -417,7 +418,7 @@ mod tests {
         // `phpix`/`public_dir` is pinned byte-for-byte by the php-nobuild
         // and php-api plan snapshots, so the config bits that drive it are
         // asserted here.
-        assert!(!config.phpix);
+        assert_eq!(config.phpix, Some(false));
     }
 
     #[test]
