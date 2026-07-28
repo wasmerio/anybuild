@@ -376,13 +376,13 @@ mod tests {
 
         let (provider, config) = load_for_path(&example_dir);
         assert_eq!(provider, "wordpress");
-        assert!(!wordpress(&config).php.phpix);
+        assert_eq!(wordpress(&config).php.phpix, None);
 
         let config = config
             .merge_json(&serde_json::json!({"phpix": true}))
             .unwrap();
         let config = wordpress(&config);
-        assert!(config.php.phpix);
+        assert_eq!(config.php.phpix, Some(true));
         // A full site (not an extension) keeps wp_version unset unless the
         // user provides one.
         assert_eq!(config.wp_extension_kind, None);

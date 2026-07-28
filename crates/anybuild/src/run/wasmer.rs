@@ -368,13 +368,19 @@ fn apply_node_runner_flips(config: &mut NodeRuntimeConfigFields) {
 /// Apply Wasmer-specific overrides directly to the typed provider config.
 pub(crate) fn apply_runner_flips(config: &mut ProviderConfig) {
     match config {
-        ProviderConfig::Laravel(config) => config.phpix = true,
+        ProviderConfig::Laravel(config) => {
+            config.phpix.get_or_insert(true);
+        }
         ProviderConfig::Mkdocs(config) => {
             apply_python_runner_flips(&mut config.python);
         }
         ProviderConfig::Python(config) => apply_python_runner_flips(config),
-        ProviderConfig::Wordpress(config) => config.php.phpix = true,
-        ProviderConfig::Php(config) => config.phpix = true,
+        ProviderConfig::Wordpress(config) => {
+            config.php.phpix.get_or_insert(true);
+        }
+        ProviderConfig::Php(config) => {
+            config.phpix.get_or_insert(true);
+        }
         ProviderConfig::NodeStatic(config) => {
             apply_node_runner_flips(&mut config.node.runtime);
         }
@@ -2015,19 +2021,22 @@ mod tests {
     }
 
     #[test]
-    fn test_wasmer_prepare_config_enables_phpix() {
-        for initial_phpix in [false, true] {
+    fn test_wasmer_prepare_config_defaults_phpix_without_overriding() {
+        for initial_phpix in [None, Some(false), Some(true)] {
             let tmp = tempfile::tempdir().unwrap();
             let mut runner = make_runner(tmp.path());
             let mut php_json = crate::providers::defaults_json("php").unwrap();
-            php_json["phpix"] = JsonValue::Bool(initial_phpix);
+            php_json["phpix"] = initial_phpix
+                .map(JsonValue::Bool)
+                .unwrap_or(JsonValue::Null);
             let php = crate::providers::config_from_json("php", php_json).unwrap();
             let config = prepare_config(&mut runner, php);
+            let expected = initial_phpix.unwrap_or(true);
 
-            assert_eq!(config.to_json()["phpix"], JsonValue::Bool(true));
+            assert_eq!(config.to_json()["phpix"], JsonValue::Bool(expected));
             assert_eq!(
                 runner.provider_config.as_ref().unwrap()["phpix"],
-                JsonValue::Bool(true)
+                JsonValue::Bool(expected)
             );
         }
     }
@@ -2045,7 +2054,7 @@ mod tests {
         let ProviderConfig::Wordpress(config) = config else {
             panic!("expected wordpress config");
         };
-        assert!(config.php.phpix);
+        assert_eq!(config.php.phpix, Some(true));
         assert_eq!(
             runner.provider_config.as_ref().unwrap()["phpix"],
             JsonValue::Bool(true)
@@ -2295,7 +2304,7 @@ mod tests {
         let mut runner = make_runner(tmp.path());
 
         let mut config = crate::providers::wordpress::WordPressConfig::default();
-        config.php.phpix = true;
+        config.php.phpix = Some(true);
         prepare_config(&mut runner, ProviderConfig::Wordpress(config));
 
         let mut serve = serve(

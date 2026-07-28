@@ -23,7 +23,8 @@ pub struct LaravelConfig {
     #[serde(flatten)]
     pub node: NodeBuildConfigFields,
     pub php_framework: Option<PhpFramework>,
-    pub phpix: bool,
+    /// Unspecified lets the selected runner choose its preferred engine.
+    pub phpix: Option<bool>,
     #[serde(rename = "composer_enable")]
     pub use_composer: bool,
     #[serde(rename = "composer_build_script")]
@@ -41,7 +42,7 @@ impl Default for LaravelConfig {
             base: BaseConfig::default(),
             node: NodeBuildConfigFields::default(),
             php_framework: None,
-            phpix: false,
+            phpix: None,
             use_composer: false,
             composer_build_script: None,
             php_version: Some("8.3.29".to_owned()),
