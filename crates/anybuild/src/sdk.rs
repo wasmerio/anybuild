@@ -639,6 +639,7 @@ impl Anybuild {
             let plan = project_plan(&context);
             let build_steps = context
                 .runner
+                .borrow()
                 .prepare_build_steps(context.serve.build.clone());
             operation.emit(build_plan_event(
                 &build_steps,
@@ -657,7 +658,7 @@ impl Anybuild {
                 &context.serve,
                 Some(&context.anybuild_dir),
             )?;
-            context.runner.build(&context.serve)?;
+            context.runner.borrow_mut().build(&context.serve)?;
             if !options.skip_prepare
                 && context
                     .serve
@@ -670,6 +671,7 @@ impl Anybuild {
                 });
                 context
                     .runner
+                    .borrow_mut()
                     .prepare(&env, context.serve.prepare.as_deref().unwrap_or_default())?;
             }
             operation.emit(Event::ArtifactCreated {
@@ -688,7 +690,7 @@ impl Anybuild {
         operation: &OperationContext,
     ) -> AnyResult<RunOutcome> {
         let paths = self.paths()?;
-        let mut environment = resolve_environment(
+        let environment = resolve_environment(
             &paths,
             &environment_options(&options.build_environment, &options.runtime_environment),
             operation,
@@ -720,7 +722,7 @@ impl Anybuild {
         )]);
         for command in commands {
             if matches!(command.as_str(), "start" | "after_deploy")
-                && !environment.runner.has_serve_command(&command)
+                && !environment.runner.borrow().has_serve_command(&command)
             {
                 outcome.skipped.push(command);
                 continue;
@@ -729,9 +731,12 @@ impl Anybuild {
                 name: command.clone(),
                 command: None,
             });
-            environment
-                .runner
-                .run_serve_command(&command, Some(&mappings), &[], Some(&env))?;
+            environment.runner.borrow_mut().run_serve_command(
+                &command,
+                Some(&mappings),
+                &[],
+                Some(&env),
+            )?;
             outcome.executed.push(command);
         }
         Ok(outcome)
@@ -751,7 +756,7 @@ impl Anybuild {
             ),
             operation,
         )?;
-        let mut runner = environment.runner;
+        let mut runner = environment.runner.borrow_mut();
         let runner = runner
             .as_any()
             .downcast_mut::<crate::run::wasmer::WasmerRunner>()

@@ -18,6 +18,8 @@ pub(crate) struct HostMount<'a> {
 
 /// Port of `runners/base.py::Runner`.
 pub trait Runner {
+    /// Apply runner-specific provider configuration before plan evaluation.
+    fn prepare_config(&mut self, _config: &mut ProviderConfig) {}
     /// Retain the already resolved config for packaging metadata.
     fn record_provider_config(&mut self, _config: &ProviderConfig) {}
     fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step>;

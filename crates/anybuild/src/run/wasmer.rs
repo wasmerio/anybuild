@@ -24,6 +24,8 @@ use crate::common::volumes::load_volume_mappings;
 use crate::event::{Event, WasmerPackageMapping};
 use crate::operation::OperationContext;
 use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
+use crate::providers::node::{NodeRuntimeConfigFields, NodeServer};
+use crate::providers::python::PythonConfig;
 use crate::providers::ProviderConfig;
 
 use crate::run::{HostMount, Runner};
@@ -347,75 +349,43 @@ fn multiline_array(items: &[String]) -> Array {
     arr
 }
 
-/// Python `isinstance(config, PythonConfig)` — includes MkdocsConfig
-/// (`MkdocsConfig(PythonConfig, StaticFileConfig)`).
-fn is_python_config(provider: &str) -> bool {
-    matches!(provider, "python" | "mkdocs")
+fn apply_python_runner_flips(config: &mut PythonConfig) {
+    config.python_extra_index_url = Some("https://pythonindex.wasix.org/simple".to_owned());
+    config.cross_platform = Some("wasix_wasm32".to_owned());
+    config.precompile_python = true;
 }
 
-/// Python `isinstance(config, PhpConfig)` — includes WordPress + Laravel.
-fn is_php_config(provider: &str) -> bool {
-    matches!(provider, "php" | "wordpress" | "laravel")
-}
-
-/// Python `isinstance(config, NodeConfig)` — includes node-static +
-/// Laravel (`LaravelConfig(PhpConfig, NodeConfig)`).
-fn is_node_config(provider: &str) -> bool {
-    matches!(provider, "node" | "node-static" | "laravel")
-}
-
-/// Wasmer-specific overrides from `prepare_config`, applied through JSON to
-/// keep the runner decoupled from sibling config-struct layouts.
-fn apply_runner_flips(provider: &str, config_json: &mut JsonValue) {
-    let Some(map) = config_json.as_object_mut() else {
-        return;
-    };
-    if is_php_config(provider) {
-        map.insert("phpix".to_owned(), JsonValue::Bool(true));
+fn apply_node_runner_flips(config: &mut NodeRuntimeConfigFields) {
+    config.use_edgejs = Some(true);
+    if config.precompile_edgejs.is_none() {
+        // Nitro bundles can retain dependency sources that the recursive
+        // EdgeJS precompiler cannot parse; loaded modules are still cached.
+        config.precompile_edgejs = Some(config.server != Some(NodeServer::Nitro));
     }
-    if is_node_config(provider) {
-        map.insert("edgejs_enable".to_owned(), JsonValue::Bool(true));
-        if map.get("edgejs_precompile").is_none_or(JsonValue::is_null) {
-            // Nitro bundles can retain dependency sources that the recursive
-            // EdgeJS precompiler cannot parse; loaded modules are still cached.
-            let is_nitro = map.get("node_framework").and_then(JsonValue::as_str) == Some("nitro");
-            map.insert("edgejs_precompile".to_owned(), JsonValue::Bool(!is_nitro));
+    config.remove_native_binaries = Some(true);
+}
+
+/// Apply Wasmer-specific overrides directly to the typed provider config.
+pub(crate) fn apply_runner_flips(config: &mut ProviderConfig) {
+    match config {
+        ProviderConfig::Laravel(config) => config.phpix = true,
+        ProviderConfig::Mkdocs(config) => {
+            apply_python_runner_flips(&mut config.python);
         }
-        map.insert(
-            "node_remove_native_binaries".to_owned(),
-            JsonValue::Bool(true),
-        );
-    }
-}
-
-pub(crate) fn provider_config_patch(config: &ProviderConfig) -> JsonValue {
-    let provider = config.provider_name();
-    let original = config.to_json();
-    let mut effective = original.clone();
-    if is_python_config(provider) {
-        if let Some(map) = effective.as_object_mut() {
-            map.insert(
-                "python_extra_index_url".to_owned(),
-                JsonValue::String("https://pythonindex.wasix.org/simple".to_owned()),
-            );
-            map.insert(
-                "python_cross_platform".to_owned(),
-                JsonValue::String("wasix_wasm32".to_owned()),
-            );
-            map.insert("python_precompile".to_owned(), JsonValue::Bool(true));
+        ProviderConfig::Python(config) => apply_python_runner_flips(config),
+        ProviderConfig::Wordpress(config) => config.php.phpix = true,
+        ProviderConfig::Php(config) => config.phpix = true,
+        ProviderConfig::NodeStatic(config) => {
+            apply_node_runner_flips(&mut config.node.runtime);
         }
-    }
-    apply_runner_flips(provider, &mut effective);
-
-    let mut patch = serde_json::Map::new();
-    if let (Some(original), Some(effective)) = (original.as_object(), effective.as_object()) {
-        for (key, value) in effective {
-            if original.get(key) != Some(value) {
-                patch.insert(key.clone(), value.clone());
-            }
+        ProviderConfig::Node(config) => {
+            apply_node_runner_flips(&mut config.node.runtime);
         }
+        ProviderConfig::Hugo(_)
+        | ProviderConfig::Jekyll(_)
+        | ProviderConfig::Go(_)
+        | ProviderConfig::StaticFile(_) => {}
     }
-    JsonValue::Object(patch)
 }
 
 use crate::build::report::{console_print, section_started};
@@ -470,15 +440,6 @@ impl WasmerRunner {
             #[cfg(test)]
             captured_commands: Vec::new(),
         }
-    }
-
-    #[cfg(test)]
-    fn prepare_config(&mut self, config: ProviderConfig) -> ProviderConfig {
-        let config = config
-            .merge_json(&provider_config_patch(&config))
-            .unwrap_or(config);
-        self.record_provider_config(&config);
-        config
     }
 
     /// Query the Wasmer CLI version recorded alongside build artifacts.
@@ -1230,6 +1191,10 @@ impl Runner for WasmerRunner {
         self
     }
 
+    fn prepare_config(&mut self, config: &mut ProviderConfig) {
+        apply_runner_flips(config);
+    }
+
     fn record_provider_config(&mut self, config: &ProviderConfig) {
         self.provider_config = Some(config.to_json());
     }
@@ -1487,6 +1452,12 @@ mod tests {
         )
     }
 
+    fn prepare_config(runner: &mut WasmerRunner, mut config: ProviderConfig) -> ProviderConfig {
+        Runner::prepare_config(runner, &mut config);
+        runner.record_provider_config(&config);
+        config
+    }
+
     fn make_runner_with_events(root: &Path) -> (WasmerRunner, Arc<Mutex<Vec<Event>>>) {
         let src_dir = root.join("src");
         std::fs::create_dir_all(&src_dir).unwrap();
@@ -1679,7 +1650,7 @@ mod tests {
             framework: Some(PythonFramework::Django),
             ..PythonConfig::default()
         };
-        runner.prepare_config(ProviderConfig::Python(config));
+        prepare_config(&mut runner, ProviderConfig::Python(config));
 
         let serve = serve(
             "django",
@@ -1761,10 +1732,13 @@ mod tests {
         // sorted JSON. Pins exclude_none semantics and enum/default values.
         let tmp = tempfile::tempdir().unwrap();
         let mut runner = make_runner(tmp.path());
-        runner.prepare_config(ProviderConfig::Python(PythonConfig {
-            framework: Some(PythonFramework::Django),
-            ..PythonConfig::default()
-        }));
+        prepare_config(
+            &mut runner,
+            ProviderConfig::Python(PythonConfig {
+                framework: Some(PythonFramework::Django),
+                ..PythonConfig::default()
+            }),
+        );
         let annotation = serialize_provider_config("python", runner.provider_config.as_ref());
         let mut sorted = std::collections::BTreeMap::new();
         for (key, value) in annotation.as_object().unwrap() {
@@ -1976,7 +1950,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut runner = make_runner(tmp.path());
 
-        let config = runner.prepare_config(ProviderConfig::Node(NodeConfig::default()));
+        let config = prepare_config(&mut runner, ProviderConfig::Node(NodeConfig::default()));
 
         let runner_json = runner.provider_config.as_ref().unwrap();
         assert_eq!(runner_json["edgejs_enable"], JsonValue::Bool(true));
@@ -1996,34 +1970,48 @@ mod tests {
 
     #[test]
     fn test_wasmer_prepare_config_preserves_node_precompile_override() {
-        // Exercise the JSON flip directly to cover explicit and null values.
-        let mut runner_json = serde_json::json!({ "edgejs_precompile": false });
-        apply_runner_flips("node", &mut runner_json);
-        assert_eq!(runner_json["edgejs_enable"], JsonValue::Bool(true));
-        assert_eq!(runner_json["edgejs_precompile"], JsonValue::Bool(false));
-        assert_eq!(
-            runner_json["node_remove_native_binaries"],
-            JsonValue::Bool(true)
-        );
+        let mut explicit = ProviderConfig::Node(NodeConfig::default());
+        let ProviderConfig::Node(config) = &mut explicit else {
+            unreachable!();
+        };
+        config.node.runtime.precompile_edgejs = Some(false);
+        apply_runner_flips(&mut explicit);
+        let ProviderConfig::Node(config) = explicit else {
+            unreachable!();
+        };
+        assert_eq!(config.node.runtime.use_edgejs, Some(true));
+        assert_eq!(config.node.runtime.precompile_edgejs, Some(false));
+        assert_eq!(config.node.runtime.remove_native_binaries, Some(true));
 
-        let mut null_json = serde_json::json!({ "edgejs_precompile": null });
-        apply_runner_flips("node", &mut null_json);
-        assert_eq!(null_json["edgejs_precompile"], JsonValue::Bool(true));
+        let mut default = ProviderConfig::Node(NodeConfig::default());
+        apply_runner_flips(&mut default);
+        let ProviderConfig::Node(config) = default else {
+            unreachable!();
+        };
+        assert_eq!(config.node.runtime.precompile_edgejs, Some(true));
 
-        let mut nitro_json =
-            serde_json::json!({ "node_framework": "nitro", "edgejs_precompile": null });
-        apply_runner_flips("node", &mut nitro_json);
-        assert_eq!(nitro_json["edgejs_precompile"], JsonValue::Bool(false));
+        let mut nitro = ProviderConfig::Node(NodeConfig::default());
+        let ProviderConfig::Node(config) = &mut nitro else {
+            unreachable!();
+        };
+        config.node.runtime.server = Some(NodeServer::Nitro);
+        apply_runner_flips(&mut nitro);
+        let ProviderConfig::Node(config) = nitro else {
+            unreachable!();
+        };
+        assert_eq!(config.node.runtime.precompile_edgejs, Some(false));
 
-        let mut explicit_nitro_json = serde_json::json!({
-            "node_framework": "nitro",
-            "edgejs_precompile": true
-        });
-        apply_runner_flips("node", &mut explicit_nitro_json);
-        assert_eq!(
-            explicit_nitro_json["edgejs_precompile"],
-            JsonValue::Bool(true)
-        );
+        let mut explicit_nitro = ProviderConfig::Node(NodeConfig::default());
+        let ProviderConfig::Node(config) = &mut explicit_nitro else {
+            unreachable!();
+        };
+        config.node.runtime.server = Some(NodeServer::Nitro);
+        config.node.runtime.precompile_edgejs = Some(true);
+        apply_runner_flips(&mut explicit_nitro);
+        let ProviderConfig::Node(config) = explicit_nitro else {
+            unreachable!();
+        };
+        assert_eq!(config.node.runtime.precompile_edgejs, Some(true));
     }
 
     #[test]
@@ -2034,7 +2022,7 @@ mod tests {
             let mut php_json = crate::providers::defaults_json("php").unwrap();
             php_json["phpix"] = JsonValue::Bool(initial_phpix);
             let php = crate::providers::config_from_json("php", php_json).unwrap();
-            let config = runner.prepare_config(php);
+            let config = prepare_config(&mut runner, php);
 
             assert_eq!(config.to_json()["phpix"], JsonValue::Bool(true));
             assert_eq!(
@@ -2049,9 +2037,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut runner = make_runner(tmp.path());
 
-        let config = runner.prepare_config(ProviderConfig::Wordpress(
-            crate::providers::wordpress::WordPressConfig::default(),
-        ));
+        let config = prepare_config(
+            &mut runner,
+            ProviderConfig::Wordpress(crate::providers::wordpress::WordPressConfig::default()),
+        );
 
         let ProviderConfig::Wordpress(config) = config else {
             panic!("expected wordpress config");
@@ -2067,7 +2056,7 @@ mod tests {
     fn test_wasmer_prepare_config_python_trio_is_plan_visible() {
         let tmp = tempfile::tempdir().unwrap();
         let mut runner = make_runner(tmp.path());
-        let config = runner.prepare_config(ProviderConfig::Python(PythonConfig::default()));
+        let config = prepare_config(&mut runner, ProviderConfig::Python(PythonConfig::default()));
 
         let plan_json = config.to_json();
         assert_eq!(
@@ -2307,7 +2296,7 @@ mod tests {
 
         let mut config = crate::providers::wordpress::WordPressConfig::default();
         config.php.phpix = true;
-        runner.prepare_config(ProviderConfig::Wordpress(config));
+        prepare_config(&mut runner, ProviderConfig::Wordpress(config));
 
         let mut serve = serve(
             "wordpress",

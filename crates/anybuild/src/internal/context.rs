@@ -46,7 +46,7 @@ pub struct Environment {
     pub anybuild_dir: PathBuf,
     pub runtime_resources: resources::RuntimeResources,
     pub build_backend: Rc<RefCell<dyn BuildBackend>>,
-    pub runner: Box<dyn Runner>,
+    pub runner: Rc<RefCell<dyn Runner>>,
 }
 
 pub fn resolve_environment(
@@ -86,8 +86,8 @@ fn resolve_environment_inner(
                 operation.clone(),
             )))
         };
-    let runner: Box<dyn Runner> = if options.wasmer {
-        Box::new(WasmerRunner::new(
+    let runner: Rc<RefCell<dyn Runner>> = if options.wasmer {
+        Rc::new(RefCell::new(WasmerRunner::new(
             build_backend.clone(),
             paths.workspace_root.clone(),
             options.wasmer_registry.clone(),
@@ -95,14 +95,14 @@ fn resolve_environment_inner(
             options.wasmer_bin.clone(),
             Some(anybuild_dir.clone()),
             operation.clone(),
-        ))
+        )))
     } else {
-        Box::new(LocalRunner::new(
+        Rc::new(RefCell::new(LocalRunner::new(
             build_backend.clone(),
             paths.workspace_root.clone(),
             Some(anybuild_dir.clone()),
             operation.clone(),
-        ))
+        )))
     };
     Ok(Environment {
         anybuild_dir,
@@ -167,7 +167,7 @@ pub struct ProjectContext {
     pub serve: Serve,
     _runtime_resources: resources::RuntimeResources,
     pub build_backend: Rc<RefCell<dyn BuildBackend>>,
-    pub runner: Box<dyn Runner>,
+    pub runner: Rc<RefCell<dyn Runner>>,
 }
 
 pub fn base_config_for(
@@ -263,7 +263,7 @@ fn resolve_project_context_inner(
         anybuild_dir,
         runtime_resources,
         build_backend,
-        mut runner,
+        runner,
     } = environment;
 
     let evaluated = evaluate_anybuild(EvaluateOptions {
@@ -273,7 +273,7 @@ fn resolve_project_context_inner(
         config_resolution: ConfigResolutionOptions {
             paths: paths.clone(),
             overrides: overrides.clone(),
-            wasmer: env_options.wasmer,
+            runner: Some(runner.clone()),
             operation: operation.clone(),
         },
         layout: Box::new(EnvironmentLayout {
@@ -282,7 +282,9 @@ fn resolve_project_context_inner(
         }),
         stdlib: StdlibSource::Dir(runtime_resources.starlib_dir.clone()),
     })?;
-    runner.record_provider_config(&evaluated.provider_config);
+    runner
+        .borrow_mut()
+        .record_provider_config(&evaluated.provider_config);
     let provider = evaluated.provider_config.provider_name();
 
     Ok(ProjectContext {

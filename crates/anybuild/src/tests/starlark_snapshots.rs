@@ -105,7 +105,7 @@ fn plan_snapshots_match() {
                     config: Some(case.config.clone()),
                     ..CommandOverrides::default()
                 },
-                wasmer: false,
+                runner: None,
                 operation: crate::operation::OperationContext::for_test(),
             },
             layout: Box::new(layout),
