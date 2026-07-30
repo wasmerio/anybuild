@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1](https://github.com/wasmerio/anybuild/compare/v0.26.0...v0.26.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* **node-static:** prefer framework output directory ([#78](https://github.com/wasmerio/anybuild/issues/78)) ([b9333c9](https://github.com/wasmerio/anybuild/commit/b9333c9e0fe86d8e839340848a7fea03b50df4b9))
+
 ## [0.26.0](https://github.com/wasmerio/anybuild/compare/v0.25.0...v0.26.0) (2026-07-27)
 
 
