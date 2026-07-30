@@ -235,6 +235,7 @@ pub fn load_config(
     if node::non_empty(&config.static_dir).is_none() {
         config.static_dir = Some(match config.runtime.framework {
             Some(framework) => get_static_dir(path, package_json.as_ref(), framework)?,
+            None if has_public_index(path) => "public".to_owned(),
             None => "dist".to_owned(),
         });
     }
@@ -275,24 +276,21 @@ fn load_static_parts(path: &Path, operation: &OperationContext) -> Result<Static
 
     // StaticFileProvider._load_static_config
     let staticfile_path = path.join("Staticfile");
-    let mut handled = false;
     if staticfile_path.exists() {
         if let Some(root) = staticfile_config_root(&staticfile_path) {
             // StaticFileConfig(**base, static_dir=config.get("root")) —
             // the explicit kwarg masks the env overlay, even when None.
             parts.static_dir = root;
-            handled = true;
         }
-    }
-    if !handled
-        && (path.join("public/index.html").exists() || path.join("public/index.htm").exists())
-    {
-        parts.static_dir = Some("public".to_owned());
     }
 
     parts.redirects_config =
         compute_redirects_config(path, parts.static_dir.as_deref(), parts.convert_redirects)?;
     Ok(parts)
+}
+
+fn has_public_index(path: &Path) -> bool {
+    path.join("public/index.html").exists() || path.join("public/index.htm").exists()
 }
 
 /// Minimal Staticfile (YAML mapping) read: `Some(root)` when the file
@@ -1193,6 +1191,48 @@ mod tests {
                 "{example_name}"
             );
         }
+    }
+
+    #[test]
+    fn test_framework_output_dir_takes_precedence_over_public_source_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("public")).unwrap();
+        write(
+            &tmp.path().join("public/index.html"),
+            "<div id=\"root\"></div>\n",
+        );
+        write(
+            &tmp.path().join("package.json"),
+            r#"{
+  "scripts": {"build": "react-scripts build"},
+  "dependencies": {"react-scripts": "5.0.1"}
+}
+"#,
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
+
+        assert_eq!(
+            config.runtime.framework,
+            Some(NodeFramework::CreateReactApp)
+        );
+        assert_eq!(config.static_dir.as_deref(), Some("build"));
+    }
+
+    #[test]
+    fn test_public_source_dir_remains_fallback_without_framework() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("public")).unwrap();
+        write(&tmp.path().join("public/index.html"), "<h1>Hello</h1>\n");
+        write(
+            &tmp.path().join("package.json"),
+            r#"{"scripts": {"build": "custom-build"}}"#,
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
+
+        assert_eq!(config.runtime.framework, None);
+        assert_eq!(config.static_dir.as_deref(), Some("public"));
     }
 
     #[test]
