@@ -612,7 +612,8 @@ pub(crate) fn apply_environment(
         .as_object_mut()
         .ok_or_else(|| anyhow!("{provider} config did not serialize to an object"))?;
     let mut applied = None;
-    for (field, current) in fields.iter_mut() {
+    let field_names: Vec<String> = fields.keys().cloned().collect();
+    for field in field_names {
         let upper = field.to_ascii_uppercase();
         let anybuild = format!("ANYBUILD_{upper}");
         let shipit = format!("SHIPIT_{upper}");
@@ -636,7 +637,16 @@ pub(crate) fn apply_environment(
         else {
             continue;
         };
-        *current = parse_environment_value(&name, &raw, current)?;
+        let current = fields
+            .get(&field)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let value = if current.is_null() {
+            resolve_untyped_environment_value(provider, fields, &field, &raw)
+        } else {
+            parse_environment_value(&name, &raw, &current)?
+        };
+        fields.insert(field, value);
         applied = Some((name, raw));
     }
     let mut updated = config_from_json(provider, serde_json::Value::Object(fields.clone()))
@@ -677,8 +687,62 @@ fn parse_environment_value(
             serde_json::from_str(raw).map_err(|_| invalid("valid JSON"))
         }
         Value::String(_) => Ok(Value::String(raw.to_owned())),
+        // An unset field is handled by `resolve_untyped_environment_value`,
+        // which can probe the provider for the type this arm cannot see.
         Value::Null => Ok(serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.into()))),
     }
+}
+
+/// A field serialized as `null` carries no type, so JSON parsing alone reads
+/// `ANYBUILD_PHPIX=1` as the number 1 and the provider then rejects it as a
+/// boolean. Offer every plausible reading and keep the first one that
+/// deserializes, so an unset `Option<T>` coerces like a set `T` would.
+fn resolve_untyped_environment_value(
+    provider: &str,
+    fields: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    raw: &str,
+) -> serde_json::Value {
+    let candidates = untyped_environment_candidates(raw);
+    for candidate in &candidates {
+        let mut probe = fields.clone();
+        probe.insert(field.to_owned(), candidate.clone());
+        if config_from_json(provider, serde_json::Value::Object(probe)).is_ok() {
+            return candidate.clone();
+        }
+    }
+    // Nothing fits: keep the plain JSON reading so the caller reports the
+    // deserialization error against the value the user actually wrote.
+    candidates
+        .into_iter()
+        .next()
+        .unwrap_or(serde_json::Value::Null)
+}
+
+/// Readings of a raw environment value, most specific first: its JSON form,
+/// the pydantic-style boolean coercion, then the literal string.
+fn untyped_environment_candidates(raw: &str) -> Vec<serde_json::Value> {
+    use serde_json::Value;
+    let mut candidates = Vec::new();
+    if let Ok(parsed) = serde_json::from_str::<Value>(raw) {
+        candidates.push(parsed);
+    }
+    let boolean = match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "t" | "yes" | "y" | "on" | "1" => Some(true),
+        "false" | "f" | "no" | "n" | "off" | "0" => Some(false),
+        _ => None,
+    };
+    if let Some(boolean) = boolean {
+        let value = Value::Bool(boolean);
+        if !candidates.contains(&value) {
+            candidates.push(value);
+        }
+    }
+    let string = Value::String(raw.to_owned());
+    if !candidates.contains(&string) {
+        candidates.push(string);
+    }
+    candidates
 }
 
 /// Apply a provider's declared defaults to an already serialized config.
@@ -731,6 +795,77 @@ pub fn config_from_json(name: &str, json: serde_json::Value) -> Result<ProviderC
     ProviderKind::from_name(name)
         .ok_or_else(|| anyhow!("unknown provider {name:?}"))?
         .config_from_json(json)
+}
+
+#[cfg(test)]
+mod environment_overlay_tests {
+    use indexmap::IndexMap;
+
+    use super::*;
+    use crate::event::{ProcessIo, Reporter};
+
+    fn apply(config: ProviderConfig, name: &str, value: &str) -> Result<serde_json::Value> {
+        let environment: IndexMap<String, String> =
+            [(name.to_owned(), value.to_owned())].into_iter().collect();
+        // `inherit_process_env: false` keeps a stray ANYBUILD_* var in the
+        // developer's shell from steering the overlay.
+        let operation =
+            OperationContext::new(environment, false, ProcessIo::Inherit, Reporter::default());
+        apply_environment(config, &operation).map(|config| config.to_json())
+    }
+
+    /// An `Option<bool>` left unset serializes to `null`, which carries no
+    /// type. It must still accept every boolean spelling a set `bool` does,
+    /// rather than reading `1` as an integer and rejecting it.
+    #[test]
+    fn unset_optional_bool_accepts_numeric_booleans() {
+        for (raw, expected) in [
+            ("1", true),
+            ("0", false),
+            ("true", true),
+            ("false", false),
+            ("yes", true),
+            ("off", false),
+        ] {
+            let config = ProviderConfig::Wordpress(wordpress::WordPressConfig::default());
+            assert_eq!(config.to_json()["phpix"], serde_json::Value::Null);
+            let json = apply(config, "ANYBUILD_PHPIX", raw)
+                .unwrap_or_else(|error| panic!("ANYBUILD_PHPIX={raw}: {error}"));
+            assert_eq!(json["phpix"], serde_json::json!(expected), "PHPIX={raw}");
+        }
+    }
+
+    /// The legacy prefix reaches the same overlay, so it needs the same
+    /// coercion.
+    #[test]
+    fn unset_optional_bool_accepts_numeric_booleans_via_legacy_prefix() {
+        let config = ProviderConfig::Wordpress(wordpress::WordPressConfig::default());
+        let json = apply(config, "SHIPIT_PHPIX", "1").expect("SHIPIT_PHPIX=1 is accepted");
+        assert_eq!(json["phpix"], serde_json::json!(true));
+    }
+
+    /// A value that parses as JSON of the wrong type must not win over the
+    /// literal string an unset `Option<String>` expects.
+    #[test]
+    fn unset_optional_string_keeps_numeric_looking_values_as_strings() {
+        let config = ProviderConfig::Wordpress(wordpress::WordPressConfig::default());
+        let json = apply(config, "ANYBUILD_WP_VERSION", "6.4").expect("WP_VERSION=6.4 is accepted");
+        assert_eq!(json["wp_version"], serde_json::json!("6.4"));
+    }
+
+    /// Coercion must not swallow genuinely malformed input.
+    #[test]
+    fn unset_optional_bool_still_rejects_non_boolean_values() {
+        let config = ProviderConfig::Wordpress(wordpress::WordPressConfig::default());
+        let error =
+            apply(config, "ANYBUILD_PHPIX", "enabled").expect_err("PHPIX=enabled is not a boolean");
+        assert!(
+            error
+                .to_string()
+                .contains("Invalid value for ANYBUILD_PHPIX"),
+            "{error}"
+        );
+    }
 }
 
 #[cfg(test)]
