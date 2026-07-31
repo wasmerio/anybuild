@@ -2,7 +2,7 @@
 # Release Please needs a concrete root package to coordinate one workspace
 # release.
 name = "anybuild-workspace"
-version = "0.26.2"
+version = "0.27.0"
 publish = false
 edition.workspace = true
 license.workspace = true
