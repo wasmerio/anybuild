@@ -30,6 +30,7 @@ pub mod wordpress;
 pub mod workspace;
 
 pub use base::{BaseConfig, HasBase};
+pub(crate) use environment::apply_environment;
 
 const SNAPSHOT_EXCLUDED_FIELDS: &[&str] = &[
     "name",
@@ -603,46 +604,6 @@ pub(crate) fn load_explicit_provider(
         .with_context(|| format!("loading {name} config"))
 }
 
-pub(crate) fn apply_environment(
-    config: ProviderConfig,
-    operation: &OperationContext,
-) -> Result<ProviderConfig> {
-    let provider = config.provider_name();
-    let overlay = environment::apply(config.to_json(), operation)?;
-    let applied = overlay.applied.clone();
-    let mut updated =
-        deserialize_environment_overlay(provider, overlay).map_err(|error| match applied {
-            Some((name, raw)) => anyhow!("Invalid value for {name}: {raw:?}: {error}"),
-            None => error,
-        })?;
-    updated.copy_transient_fields_from(&config);
-    Ok(updated)
-}
-
-/// Resolve erased `Option<T>` types at the provider deserialization boundary.
-/// Environment parsing remains independent of every concrete config type.
-fn deserialize_environment_overlay(
-    provider: &str,
-    mut overlay: environment::EnvironmentOverlay,
-) -> Result<ProviderConfig> {
-    for field_override in overlay.overrides {
-        let Some(fallback) = field_override.candidates.first().cloned() else {
-            continue;
-        };
-        let selected = field_override
-            .candidates
-            .into_iter()
-            .find(|candidate| {
-                let mut probe = overlay.fields.clone();
-                probe.insert(field_override.field.clone(), candidate.clone());
-                config_from_json(provider, serde_json::Value::Object(probe)).is_ok()
-            })
-            .unwrap_or(fallback);
-        overlay.fields.insert(field_override.field, selected);
-    }
-    config_from_json(provider, serde_json::Value::Object(overlay.fields))
-}
-
 /// Apply a provider's declared defaults to an already serialized config.
 /// This is used by the Wasmer runner after applying runtime overrides.
 pub fn exclude_defaults_from_json(name: &str, dumped: serde_json::Value) -> serde_json::Value {
@@ -693,77 +654,6 @@ pub fn config_from_json(name: &str, json: serde_json::Value) -> Result<ProviderC
     ProviderKind::from_name(name)
         .ok_or_else(|| anyhow!("unknown provider {name:?}"))?
         .config_from_json(json)
-}
-
-#[cfg(test)]
-mod environment_overlay_tests {
-    use indexmap::IndexMap;
-
-    use super::*;
-    use crate::event::{ProcessIo, Reporter};
-
-    fn apply(config: ProviderConfig, name: &str, value: &str) -> Result<serde_json::Value> {
-        let environment: IndexMap<String, String> =
-            [(name.to_owned(), value.to_owned())].into_iter().collect();
-        // Do not let unrelated ANYBUILD_* variables in the developer's shell
-        // affect these overlay tests.
-        let operation =
-            OperationContext::new(environment, false, ProcessIo::Inherit, Reporter::default());
-        apply_environment(config, &operation).map(|config| config.to_json())
-    }
-
-    /// An `Option<bool>` left unset serializes to `null`, which carries no
-    /// type. It must still accept every boolean spelling a set `bool` does,
-    /// rather than reading `1` as an integer and rejecting it.
-    #[test]
-    fn unset_optional_bool_accepts_numeric_booleans() {
-        for (raw, expected) in [
-            ("1", true),
-            ("0", false),
-            ("true", true),
-            ("false", false),
-            ("yes", true),
-            ("off", false),
-        ] {
-            let config = ProviderConfig::Wordpress(wordpress::WordPressConfig::default());
-            assert_eq!(config.to_json()["phpix"], serde_json::Value::Null);
-            let json = apply(config, "ANYBUILD_PHPIX", raw)
-                .unwrap_or_else(|error| panic!("ANYBUILD_PHPIX={raw}: {error}"));
-            assert_eq!(json["phpix"], serde_json::json!(expected), "PHPIX={raw}");
-        }
-    }
-
-    /// The legacy prefix reaches the same overlay, so it needs the same
-    /// coercion.
-    #[test]
-    fn unset_optional_bool_accepts_numeric_booleans_via_legacy_prefix() {
-        let config = ProviderConfig::Wordpress(wordpress::WordPressConfig::default());
-        let json = apply(config, "SHIPIT_PHPIX", "1").expect("SHIPIT_PHPIX=1 is accepted");
-        assert_eq!(json["phpix"], serde_json::json!(true));
-    }
-
-    /// A value that parses as JSON of the wrong type must not win over the
-    /// literal string an unset `Option<String>` expects.
-    #[test]
-    fn unset_optional_string_keeps_numeric_looking_values_as_strings() {
-        let config = ProviderConfig::Wordpress(wordpress::WordPressConfig::default());
-        let json = apply(config, "ANYBUILD_WP_VERSION", "6.4").expect("WP_VERSION=6.4 is accepted");
-        assert_eq!(json["wp_version"], serde_json::json!("6.4"));
-    }
-
-    /// Coercion must not swallow genuinely malformed input.
-    #[test]
-    fn unset_optional_bool_still_rejects_non_boolean_values() {
-        let config = ProviderConfig::Wordpress(wordpress::WordPressConfig::default());
-        let error =
-            apply(config, "ANYBUILD_PHPIX", "enabled").expect_err("PHPIX=enabled is not a boolean");
-        assert!(
-            error
-                .to_string()
-                .contains("Invalid value for ANYBUILD_PHPIX"),
-            "{error}"
-        );
-    }
 }
 
 #[cfg(test)]
