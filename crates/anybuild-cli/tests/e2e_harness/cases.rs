@@ -787,7 +787,10 @@ pub static CASES: &[Case] = &[
         suite: Suite::StaticNode2,
         path: Some("examples/nodestatic-create-react-app"),
         serve_pattern: SWS_LISTENING,
-        http: &[body("/", r"Create React App Example")],
+        http: &[
+            body("/", r"Create React App Example"),
+            body("/", r"/static/js/main\.[a-f0-9]+\.js"),
+        ],
         build_modes: Some(WASMER_ONLY),
         ..BASE
     },
