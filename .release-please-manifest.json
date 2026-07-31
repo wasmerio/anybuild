@@ -1,5 +1,3 @@
 {
-  ".": "0.26.1",
-  "crates/anybuild": "0.26.1",
-  "crates/anybuild-cli": "0.26.1"
+  ".": "0.26.1"
 }
