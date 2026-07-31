@@ -118,7 +118,7 @@ dependencies = [
 
 [[package]]
 name = "anybuild"
-version = "0.26.2"
+version = "0.26.3"
 dependencies = [
  "allocative",
  "anyhow",
@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "anybuild-cli"
-version = "0.26.2"
+version = "0.26.3"
 dependencies = [
  "anybuild",
  "anyhow",
@@ -163,7 +163,7 @@ dependencies = [
 
 [[package]]
 name = "anybuild-workspace"
-version = "0.26.2"
+version = "0.26.3"
 
 [[package]]
 name = "anyhow"

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.26.3](https://github.com/wasmerio/anybuild/compare/v0.26.2...v0.26.3) (2026-07-31)
+
+
+### Bug Fixes
+
+* **release:** prevent draft release PR race ([714d739](https://github.com/wasmerio/anybuild/commit/714d7394b449ae2a56f8d1531be42d5c397aca67))
+* **release:** prevent draft release PR race ([7313b89](https://github.com/wasmerio/anybuild/commit/7313b895d6ba21855fe487994b9b990609bce113))
+
 ## [0.26.2](https://github.com/wasmerio/anybuild/compare/v0.26.1...v0.26.2) (2026-07-31)
 
 
