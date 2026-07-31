@@ -2,17 +2,12 @@
   "name": "anybuild-nodestatic-create-react-app-example",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "build": "ANYBUILD_EXAMPLE_TITLE='Create React App Example' ANYBUILD_EXAMPLE_OUTPUT=build node scripts/build-static.mjs && echo 'react-scripts build' >/dev/null"
+    "build": "react-scripts build"
   },
   "dependencies": {
-    "@testing-library/jest-dom": "5.16.5",
-    "@testing-library/react": "13.4.0",
-    "@testing-library/user-event": "14.4.3",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "react-scripts": "5.0.1",
-    "web-vitals": "3.0.4"
+    "react-scripts": "5.0.1"
   }
 }
