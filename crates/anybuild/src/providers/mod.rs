@@ -13,6 +13,7 @@ use crate::event::ProviderDetail;
 use crate::operation::OperationContext;
 
 pub mod base;
+mod environment;
 pub mod go;
 pub mod hugo;
 pub mod install_context;
@@ -29,6 +30,7 @@ pub mod wordpress;
 pub mod workspace;
 
 pub use base::{BaseConfig, HasBase};
+pub(crate) use environment::apply_environment;
 
 const SNAPSHOT_EXCLUDED_FIELDS: &[&str] = &[
     "name",
@@ -600,85 +602,6 @@ pub(crate) fn load_explicit_provider(
     kind.load(path, base, &operation.without_environment())
         .map(|config| finish_config(path, config))
         .with_context(|| format!("loading {name} config"))
-}
-
-pub(crate) fn apply_environment(
-    config: ProviderConfig,
-    operation: &OperationContext,
-) -> Result<ProviderConfig> {
-    let provider = config.provider_name();
-    let mut json = config.to_json();
-    let fields = json
-        .as_object_mut()
-        .ok_or_else(|| anyhow!("{provider} config did not serialize to an object"))?;
-    let mut applied = None;
-    for (field, current) in fields.iter_mut() {
-        let upper = field.to_ascii_uppercase();
-        let anybuild = format!("ANYBUILD_{upper}");
-        let shipit = format!("SHIPIT_{upper}");
-        let Some((name, raw)) = operation
-            .environment_var(&anybuild)
-            .map(|value| (anybuild, value))
-            .or_else(|| {
-                operation
-                    .environment_var(&shipit)
-                    .map(|value| (shipit, value))
-            })
-            .or_else(|| {
-                (field == "port")
-                    .then(|| {
-                        operation
-                            .environment_var("PORT")
-                            .map(|value| ("PORT".into(), value))
-                    })
-                    .flatten()
-            })
-        else {
-            continue;
-        };
-        *current = parse_environment_value(&name, &raw, current)?;
-        applied = Some((name, raw));
-    }
-    let mut updated = config_from_json(provider, serde_json::Value::Object(fields.clone()))
-        .map_err(|error| match applied {
-            Some((name, raw)) => anyhow!("Invalid value for {name}: {raw:?}: {error}"),
-            None => error,
-        })?;
-    updated.copy_transient_fields_from(&config);
-    Ok(updated)
-}
-
-fn parse_environment_value(
-    name: &str,
-    raw: &str,
-    current: &serde_json::Value,
-) -> Result<serde_json::Value> {
-    use serde_json::Value;
-    let invalid =
-        |expected: &str| anyhow!("Invalid value for {name}: {raw:?}; expected {expected}");
-    match current {
-        Value::Bool(_) => match raw.trim().to_ascii_lowercase().as_str() {
-            "true" | "t" | "yes" | "y" | "on" | "1" => Ok(Value::Bool(true)),
-            "false" | "f" | "no" | "n" | "off" | "0" => Ok(Value::Bool(false)),
-            _ => Err(invalid("a boolean")),
-        },
-        Value::Number(number) if number.is_i64() || number.is_u64() => raw
-            .trim()
-            .parse::<i64>()
-            .map(|value| Value::Number(value.into()))
-            .map_err(|_| invalid("an integer")),
-        Value::Number(_) => {
-            let value = raw.trim().parse::<f64>().map_err(|_| invalid("a number"))?;
-            serde_json::Number::from_f64(value)
-                .map(Value::Number)
-                .ok_or_else(|| invalid("a finite number"))
-        }
-        Value::Array(_) | Value::Object(_) => {
-            serde_json::from_str(raw).map_err(|_| invalid("valid JSON"))
-        }
-        Value::String(_) => Ok(Value::String(raw.to_owned())),
-        Value::Null => Ok(serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.into()))),
-    }
 }
 
 /// Apply a provider's declared defaults to an already serialized config.
