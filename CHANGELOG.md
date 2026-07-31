@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.26.2](https://github.com/wasmerio/anybuild/compare/v0.26.1...v0.26.2) (2026-07-31)
+
+
+### Bug Fixes
+
+* **release:** preserve release boundary and add CRA e2e fixture ([c516f2f](https://github.com/wasmerio/anybuild/commit/c516f2ff8e006fffe1adbd544999e36370036bb5))
+* **release:** track a single workspace release ([20c373d](https://github.com/wasmerio/anybuild/commit/20c373db707de973b7d5a86e3c6c5eabb0b30ecf))
+
 ## [0.26.1](https://github.com/wasmerio/anybuild/compare/v0.26.0...v0.26.1) (2026-07-30)
 
 
