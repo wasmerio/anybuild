@@ -27,12 +27,21 @@ jobs:
       tag_name: ${{ steps.release.outputs.tag_name }}
 
     steps:
-      - name: Create or update release PR
+      - name: Create release from merged release PR
         id: release
         uses: googleapis/release-please-action@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repo-url: ${{ github.repository }}
+          skip-github-pull-request: true
+
+      - name: Create or update release PR
+        if: steps.release.outputs.release_created != 'true'
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repo-url: ${{ github.repository }}
+          skip-github-release: true
 
   release_artifacts:
     name: Build release artifacts

@@ -57,3 +57,35 @@ fn release_please_tracks_one_workspace_release() {
         .collect::<BTreeSet<_>>();
     assert_eq!(manifest_paths, BTreeSet::from(["."]));
 }
+
+#[test]
+fn release_workflow_does_not_create_a_release_and_next_pr_together() {
+    let workflow_path = workspace_root().join(".github/workflows/release-please.yml");
+    let workflow = fs::read_to_string(&workflow_path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", workflow_path.display()));
+
+    assert_eq!(
+        workflow
+            .matches("uses: googleapis/release-please-action@v5")
+            .count(),
+        2,
+        "release creation and release-PR generation need separate invocations"
+    );
+    let (release_step, pr_step) = workflow
+        .split_once("      - name: Create or update release PR")
+        .expect("release workflow should have a distinct release-PR step");
+    assert!(
+        release_step.contains("      - name: Create release from merged release PR")
+            && release_step.contains("id: release")
+            && release_step.contains("skip-github-pull-request: true"),
+        "the release invocation must not generate the next release PR"
+    );
+    assert!(
+        pr_step.contains("if: steps.release.outputs.release_created != 'true'"),
+        "release-PR generation must be skipped while a draft release is created"
+    );
+    assert!(
+        pr_step.contains("skip-github-release: true"),
+        "the release-PR invocation must not create a GitHub release"
+    );
+}
