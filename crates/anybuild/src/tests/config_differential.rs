@@ -12,7 +12,7 @@ use crate::operation::OperationContext;
 use crate::providers::{base::BaseConfig, select_provider, workspace};
 use serde::Deserialize;
 
-const EXPECTED_CONFIG_CASES: usize = 98;
+const EXPECTED_CONFIG_CASES: usize = 99;
 const ALLOW_MISSING_FIXTURES_ENV: &str = "ANYBUILD_ALLOW_MISSING_FIXTURES";
 const UPDATE_FIXTURES_ENV: &str = "ANYBUILD_UPDATE_FIXTURES";
 

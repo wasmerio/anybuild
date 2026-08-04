@@ -1,0 +1,6 @@
+{
+    "name": "anybuild/php-composer-no-lock",
+    "require": {
+        "php": ">=8.2"
+    }
+}

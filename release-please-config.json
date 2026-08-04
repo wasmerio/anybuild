@@ -5,7 +5,14 @@
   "packages": {
     ".": {
       "draft": true,
-      "release-type": "rust"
+      "release-type": "rust",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "fixtures/sdk-consumer/Cargo.lock",
+          "jsonpath": "$.package[?(@.name==\"anybuild\")].version"
+        }
+      ]
     }
   }
 }

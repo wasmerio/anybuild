@@ -1,0 +1,83 @@
+{
+ "build": [
+  {
+   "__type__": "UseStep",
+   "dependencies": [
+    {
+     "name": "php",
+     "version": "8.3.29"
+    },
+    {
+     "name": "composer"
+    }
+   ]
+  },
+  {
+   "__type__": "WorkdirStep",
+   "path": "app"
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "assets",
+   "source": "php/php.ini",
+   "target": "opt/assets/php.ini"
+  },
+  {
+   "__type__": "EnvStep",
+   "variables": {
+    "COMPOSER_ALLOW_SUPERUSER": "1",
+    "COMPOSER_FUND": "0",
+    "COMPOSER_HOME": "/tmp"
+   }
+  },
+  {
+   "__type__": "RunStep",
+   "command": "composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction",
+   "group": "install",
+   "inputs": [
+    "composer.json"
+   ],
+   "outputs": [
+    "."
+   ]
+  },
+  {
+   "__type__": "CopyStep",
+   "base": "source",
+   "ignore": [
+    ".git",
+    "vendor"
+   ],
+   "source": ".",
+   "target": "."
+  }
+ ],
+ "commands": {
+  "start": "php -S localhost:8080 -t app/public"
+ },
+ "cwd": "app",
+ "deps": [
+  "php@8.3.29",
+  "bash"
+ ],
+ "env": {
+  "PHP_INI_SCAN_DIR": "opt/assets"
+ },
+ "mounts": [
+  {
+   "build_path": "app",
+   "name": "app",
+   "serve_path": "app"
+  },
+  {
+   "build_path": "opt/assets",
+   "name": "assets",
+   "serve_path": "opt/assets"
+  }
+ ],
+ "name": "php-composer-no-lock",
+ "prepare": [],
+ "provider": "php",
+ "services": [],
+ "volumes": []
+}

@@ -48,6 +48,15 @@ fn release_please_tracks_one_workspace_release() {
         config["packages"]["."].get("component").is_none(),
         "the v tag prefix is not a Release Please component"
     );
+    assert_eq!(
+        config["packages"]["."]["extra-files"],
+        serde_json::json!([{
+            "type": "toml",
+            "path": "fixtures/sdk-consumer/Cargo.lock",
+            "jsonpath": "$.package[?(@.name==\"anybuild\")].version",
+        }]),
+        "Release Please must keep the standalone SDK consumer lock in sync"
+    );
 
     let manifest_paths = manifest
         .as_object()

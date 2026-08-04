@@ -11,7 +11,7 @@ use crate::starlark::eval::{evaluate_anybuild, EvaluateOptions};
 use crate::starlark::loader::StdlibSource;
 use serde::Deserialize;
 
-const EXPECTED_SNAPSHOT_CASES: usize = 98;
+const EXPECTED_SNAPSHOT_CASES: usize = 99;
 const ALLOW_MISSING_FIXTURES_ENV: &str = "ANYBUILD_ALLOW_MISSING_FIXTURES";
 const UPDATE_FIXTURES_ENV: &str = "ANYBUILD_UPDATE_FIXTURES";
 
