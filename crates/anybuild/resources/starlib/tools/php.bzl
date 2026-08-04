@@ -64,9 +64,12 @@ def php_build(
     steps += php_ini_steps(config, assets)
     if config.composer_enable:
         steps.append(env(COMPOSER_HOME = "/tmp", COMPOSER_FUND = "0", COMPOSER_ALLOW_SUPERUSER = "1"))
+        composer_inputs = ["composer.json"]
+        if file_exists("composer.lock"):
+            composer_inputs.append("composer.lock")
         steps.append(run(
             "composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction",
-            inputs = ["composer.json", "composer.lock"],
+            inputs = composer_inputs,
             outputs = ["."],
             group = "install",
         ))
