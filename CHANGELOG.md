@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.26.4](https://github.com/wasmerio/anybuild/compare/v0.26.3...v0.26.4) (2026-08-04)
+
+
+### Bug Fixes
+
+* support Composer projects without lock files ([fc9ccdc](https://github.com/wasmerio/anybuild/commit/fc9ccdcc0a3c8d70a7744ae64c33501111651236))
+* support Composer projects without lock files ([000c456](https://github.com/wasmerio/anybuild/commit/000c4560bfd56048cc1b75dd4bf5d9923fb7335e))
+
 ## [0.26.3](https://github.com/wasmerio/anybuild/compare/v0.26.2...v0.26.3) (2026-07-31)
 
 
