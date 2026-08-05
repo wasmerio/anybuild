@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.26.5](https://github.com/wasmerio/anybuild/compare/v0.26.4...v0.26.5) (2026-08-05)
+
+
+### Bug Fixes
+
+* Update Edge.js to 0.1.3 ([a0bd0dd](https://github.com/wasmerio/anybuild/commit/a0bd0ddb9216359e9e9184d97f37a2457c298ba6))
+* Update edgejs and phpix versions to latest ([1b2f29a](https://github.com/wasmerio/anybuild/commit/1b2f29af747e5b0eb02c5087b37af78e8ad255d6))
+* update EdgeJS dependency to 0.1.1 ([#87](https://github.com/wasmerio/anybuild/issues/87)) ([6be5fd5](https://github.com/wasmerio/anybuild/commit/6be5fd5908869e2b7bcec96987b0ac50c22c36d8))
+
 ## [0.26.4](https://github.com/wasmerio/anybuild/compare/v0.26.3...v0.26.4) (2026-08-04)
 
 
