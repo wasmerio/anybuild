@@ -574,7 +574,7 @@ mod tests {
         let mappings = vec![
             WasmerPackageMapping {
                 source: "node@24".to_owned(),
-                target: "wasmer/edgejs-quickjs@=0.1.3".to_owned(),
+                target: "wasmer/edgejs-quickjs@=0.1.4".to_owned(),
             },
             WasmerPackageMapping {
                 source: "bash".to_owned(),
@@ -587,7 +587,7 @@ mod tests {
             concat!(
                 "  Mapping dependencies to Wasmer packages:\n",
                 "\n",
-                "  node@24  │  wasmer/edgejs-quickjs@=0.1.3\n",
+                "  node@24  │  wasmer/edgejs-quickjs@=0.1.4\n",
                 "  bash     │  wasmer/bash@=1.0.25\n",
             )
         );
