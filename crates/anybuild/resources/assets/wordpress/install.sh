@@ -18,6 +18,7 @@ echo "📁 Initializing wp-content..."
 mkdir -p "${WP_CONTENT_DIR}/plugins"
 mkdir -p "${WP_CONTENT_DIR}/themes"
 mkdir -p "${WP_CONTENT_DIR}/upgrade"
+mkdir -p "${WP_CONTENT_DIR}/languages"
 
 if [ -n "${WPCONTENT_BASE_PATH:-}" ] && [ -d "${WPCONTENT_BASE_PATH}" ]; then
   shopt -s dotglob nullglob
@@ -89,7 +90,7 @@ fi
 if [ -n "${WP_PLUGINS_ACTIVATE:-}" ]; then
   echo "✨ Activating plugins: $WP_PLUGINS_ACTIVATE"
   IFS=',' # Split by commas
-  
+
   for PLUGIN_ENTRY in $WP_PLUGINS_ACTIVATE; do
     echo "• Activating plugin: $PLUGIN_ENTRY"
     wp plugin activate "$PLUGIN_ENTRY"
@@ -127,10 +128,14 @@ fi
 
 if [ -n "${WP_LOCALE:-}" ]; then
   echo "🌐 Setting locale: $WP_LOCALE"
-  # wp language core install "$WP_LOCALE"
   # wp language theme install --all "$WP_LOCALE"
   # wp language plugin install --all "$WP_LOCALE"
-  wp site switch-language "$WP_LOCALE"
+  # `wp core install --locale` only writes the WPLANG option; it never fetches a
+  # language pack. Without the pack, `wp site switch-language` fails with
+  # "Language not installed." and aborts this script via `set -e`. Both steps are
+  # non-fatal so a network hiccup can't take down the whole setup.
+  wp language core install "$WP_LOCALE" || true
+  wp site switch-language "$WP_LOCALE" || true
 fi
 
 echo "✍️ Rewriting permalinks structure"
