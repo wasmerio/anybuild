@@ -38,6 +38,7 @@ pub const WASMER_VERSION_ANNOTATION: &str = "wasmer.io/version";
 pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
 pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.1.4";
 pub const PHPIX_VERSION: &str = "0.3.0-rc.4";
+pub const WASIX_PYTHON_INDEX_URL: &str = "https://pythonindex.wasix.org/simple";
 const PREPARE_COMMAND_PREFIX: &str = "__anybuild_prepare_";
 
 /// The workspace package version is embedded in every Rust crate and kept in
@@ -350,7 +351,9 @@ fn multiline_array(items: &[String]) -> Array {
 }
 
 fn apply_python_runner_flips(config: &mut PythonConfig) {
-    config.python_extra_index_url = Some("https://pythonindex.wasix.org/simple".to_owned());
+    if config.python_extra_index_url.is_none() {
+        config.python_extra_index_url = Some(WASIX_PYTHON_INDEX_URL.to_owned());
+    }
     config.cross_platform = Some("wasix_wasm32".to_owned());
     config.precompile_python = true;
 }
@@ -2083,6 +2086,28 @@ mod tests {
         assert_eq!(
             runner_json["python_cross_platform"],
             JsonValue::String("wasix_wasm32".to_owned())
+        );
+    }
+
+    #[test]
+    fn test_wasmer_prepare_config_preserves_python_index_override() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_runner(tmp.path());
+        let config = prepare_config(
+            &mut runner,
+            ProviderConfig::Python(PythonConfig {
+                python_extra_index_url: Some("https://mirror.example/simple".to_owned()),
+                ..PythonConfig::default()
+            }),
+        );
+
+        assert_eq!(
+            config.to_json()["python_extra_index_url"],
+            JsonValue::String("https://mirror.example/simple".to_owned())
+        );
+        assert_eq!(
+            runner.provider_config.as_ref().unwrap()["python_extra_index_url"],
+            JsonValue::String("https://mirror.example/simple".to_owned())
         );
     }
 
