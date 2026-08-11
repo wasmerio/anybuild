@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.27.0](https://github.com/wasmerio/anybuild/compare/v0.26.5...v0.27.0) (2026-08-11)
+
+
+### Features
+
+* allow passing wasix python registry ([#93](https://github.com/wasmerio/anybuild/issues/93)) ([54d68d6](https://github.com/wasmerio/anybuild/commit/54d68d619d918db48e869aee83db1ab96c17c31a))
+
+
+### Bug Fixes
+
+* restore language installation command ([#91](https://github.com/wasmerio/anybuild/issues/91)) ([c98324e](https://github.com/wasmerio/anybuild/commit/c98324e78ec052b76e7bdf8e2d7be34e7366063d))
+
 ## [0.26.5](https://github.com/wasmerio/anybuild/compare/v0.26.4...v0.26.5) (2026-08-05)
 
 
