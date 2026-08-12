@@ -169,6 +169,7 @@ jobs:
             echo "$WASMER_BIN_DIR" >> "$GITHUB_PATH"
           fi
           wasmer --version
+        if: runner.os == 'Linux' && runner.arch == 'X64'
 
       - name: Download anybuild binary
         uses: actions/download-artifact@v4
