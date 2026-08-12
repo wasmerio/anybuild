@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.1](https://github.com/wasmerio/anybuild/compare/v0.27.0...v0.27.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* update phpix to 0.3.0-rc.5 ([ea1a475](https://github.com/wasmerio/anybuild/commit/ea1a4756f95fbc3098952c9d650ac5a8ce624850))
+
 ## [0.27.0](https://github.com/wasmerio/anybuild/compare/v0.26.5...v0.27.0) (2026-08-11)
 
 
