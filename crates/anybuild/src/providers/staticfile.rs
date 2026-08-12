@@ -186,12 +186,11 @@ impl Provider for StaticFileConfig {
         base: &BaseConfig,
         operation: &OperationContext,
     ) -> Option<Self::Evidence> {
-        let is_python_php_js_project =
-            exists(path, &["package.json", "pyproject.toml", "composer.json"]);
+        let is_python_js_project = exists(path, &["package.json", "pyproject.toml"]);
         if exists(path, &["Staticfile"]) {
             return Some(DetectionEvidence::Staticfile);
         }
-        if !is_python_php_js_project {
+        if !is_python_js_project {
             return Some(
                 if exists(
                     path,
