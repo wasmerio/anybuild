@@ -267,6 +267,7 @@ pub(crate) enum DetectionEvidence {
     ComposerEntrypoint,
     Entrypoint,
     PhpFile,
+    ComposerProject,
     StartCommand,
     InstallCommand,
 }
@@ -322,6 +323,9 @@ impl Provider for PhpConfig {
         }
         if has_root_php_file(path) {
             return Some(DetectionEvidence::PhpFile);
+        }
+        if exists(path, &["composer.json", "composer.lock"]) {
+            return Some(DetectionEvidence::ComposerProject);
         }
         if base
             .commands
@@ -459,5 +463,17 @@ mod tests {
         assert_eq!(php_score, Some(20));
         assert_eq!(static_score, Some(15));
         assert_eq!(load_provider(&project_dir, &base, None).unwrap(), "php");
+    }
+
+    #[test]
+    fn test_composer_project_is_detected_as_php() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("composer.json"), "{}");
+        write(&tmp.path().join("index.html"), "<h1>Static index</h1>");
+        let base = BaseConfig::default();
+
+        assert_eq!(detection_score("php", tmp.path(), &base), Some(20));
+        assert_eq!(detection_score("staticfile", tmp.path(), &base), Some(15));
+        assert_eq!(load_provider(tmp.path(), &base, None).unwrap(), "php");
     }
 }

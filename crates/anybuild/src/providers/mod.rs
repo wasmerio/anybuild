@@ -434,6 +434,7 @@ impl ProviderKind {
                 php::DetectionEvidence::ComposerEntrypoint => 60,
                 php::DetectionEvidence::Entrypoint => 20,
                 php::DetectionEvidence::PhpFile => 20,
+                php::DetectionEvidence::ComposerProject => 20,
                 php::DetectionEvidence::StartCommand => 70,
                 php::DetectionEvidence::InstallCommand => 30,
             },
