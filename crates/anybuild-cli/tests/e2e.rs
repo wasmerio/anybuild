@@ -55,6 +55,10 @@ e2e_tests! {
     php__local__php_nobuild => ("php_nobuild", Local);
     php__wasmer__php_nobuild => ("php_nobuild", Wasmer);
     php__wasmer_and_docker__php_nobuild => ("php_nobuild", WasmerAndDocker);
+    // examples/php-static-mixed (static index plus executable PHP page)
+    php__local__php_static_mixed => ("php_static_mixed", Local);
+    php__wasmer__php_static_mixed => ("php_static_mixed", Wasmer);
+    php__wasmer_and_docker__php_static_mixed => ("php_static_mixed", WasmerAndDocker);
     // examples/php-api
     php__local__php_api => ("php_api", Local);
     php__wasmer__php_api => ("php_api", Wasmer);

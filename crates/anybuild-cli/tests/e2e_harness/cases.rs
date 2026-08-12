@@ -241,6 +241,19 @@ pub static CASES: &[Case] = &[
         http: &[body("/", r"PHP Version 8\.3\.[0-9]+")],
         ..BASE
     },
+    // A static index and a non-index PHP page must use the PHP server so
+    // both kinds of content work.
+    Case {
+        test_id: "php_static_mixed",
+        suite: Suite::Php,
+        path: Some("examples/php-static-mixed"),
+        serve_pattern: PHPIX_LISTENING,
+        http: &[
+            body("/", r"Mixed static and PHP site"),
+            body("/greeting.php", r"Hello from PHP 8\.[0-9]+\.[0-9]+"),
+        ],
+        ..BASE
+    },
     // PHP API example with JSON at / and greeting endpoint
     Case {
         test_id: "php_api",

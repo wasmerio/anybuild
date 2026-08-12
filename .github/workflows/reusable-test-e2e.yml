@@ -157,6 +157,20 @@ jobs:
         with:
           version: v7.2.1
 
+      - name: Verify Wasmer installation
+        run: |
+          if ! command -v wasmer &> /dev/null; then
+            echo "setup-wasmer failed silently; installing wasmer v7.2.1 directly"
+            WASMER_BIN_DIR="${WASMER_DIR:-$HOME/.wasmer}/bin"
+            mkdir -p "${WASMER_DIR:-$HOME/.wasmer}"
+            curl -sSfL https://github.com/wasmerio/wasmer/releases/download/v7.2.1/wasmer-linux-amd64.tar.gz \
+              | tar -xz -C "${WASMER_DIR:-$HOME/.wasmer}"
+            export PATH="$WASMER_BIN_DIR:$PATH"
+            echo "$WASMER_BIN_DIR" >> "$GITHUB_PATH"
+          fi
+          wasmer --version
+        if: runner.os == 'Linux' && runner.arch == 'X64'
+
       - name: Download anybuild binary
         uses: actions/download-artifact@v4
         with:
@@ -173,7 +187,6 @@ jobs:
           chmod +x anybuild-bin/anybuild
           uv --version
           python --version
-          wasmer --version
           docker --version
           ./anybuild-bin/anybuild generate --help > /dev/null
 

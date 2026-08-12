@@ -5,6 +5,7 @@
 //! loading with the ANYBUILD_* env overlay.
 
 use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::path::Path;
 
 use anyhow::Result;
@@ -113,6 +114,15 @@ impl PhpConfig {
 
 fn exists(path: &Path, candidates: &[&str]) -> bool {
     candidates.iter().any(|c| path.join(c).exists())
+}
+
+fn has_root_php_file(path: &Path) -> bool {
+    std::fs::read_dir(path).is_ok_and(|entries| {
+        entries.filter_map(Result::ok).any(|entry| {
+            entry.file_type().is_ok_and(|kind| kind.is_file())
+                && entry.path().extension() == Some(OsStr::new("php"))
+        })
+    })
 }
 
 /// Port of `PhpProvider.load_composer_config`.
@@ -256,6 +266,8 @@ pub(crate) enum DetectionEvidence {
     Framework,
     ComposerEntrypoint,
     Entrypoint,
+    PhpFile,
+    ComposerProject,
     StartCommand,
     InstallCommand,
 }
@@ -309,6 +321,12 @@ impl Provider for PhpConfig {
         ) {
             return Some(DetectionEvidence::Entrypoint);
         }
+        if has_root_php_file(path) {
+            return Some(DetectionEvidence::PhpFile);
+        }
+        if exists(path, &["composer.json", "composer.lock"]) {
+            return Some(DetectionEvidence::ComposerProject);
+        }
         if base
             .commands
             .start
@@ -359,6 +377,7 @@ mod tests {
 
     use super::PhpFramework;
     use crate::providers::{
+        detection_score_for_test as detection_score,
         load_provider_config_for_test as load_provider_config,
         load_provider_for_test as load_provider, BaseConfig, ProviderConfig,
     };
@@ -430,5 +449,31 @@ mod tests {
 
         let config = load_php_config(&project_dir);
         assert_eq!(config.framework, Some(PhpFramework::Drupal));
+    }
+
+    #[test]
+    fn test_php_page_wins_over_static_index() {
+        let project_dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/php-static-mixed");
+        let base = BaseConfig::default();
+
+        let php_score = detection_score("php", &project_dir, &base);
+        let static_score = detection_score("staticfile", &project_dir, &base);
+
+        assert_eq!(php_score, Some(20));
+        assert_eq!(static_score, Some(15));
+        assert_eq!(load_provider(&project_dir, &base, None).unwrap(), "php");
+    }
+
+    #[test]
+    fn test_composer_project_is_detected_as_php() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("composer.json"), "{}");
+        write(&tmp.path().join("index.html"), "<h1>Static index</h1>");
+        let base = BaseConfig::default();
+
+        assert_eq!(detection_score("php", tmp.path(), &base), Some(20));
+        assert_eq!(detection_score("staticfile", tmp.path(), &base), Some(15));
+        assert_eq!(load_provider(tmp.path(), &base, None).unwrap(), "php");
     }
 }
