@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.2](https://github.com/wasmerio/anybuild/compare/v0.27.1...v0.27.2) (2026-08-12)
+
+
+### Bug Fixes
+
+* trigger patch release ([2f151d3](https://github.com/wasmerio/anybuild/commit/2f151d39042531e9a0cba4848706eab5db87b6b0))
+
 ## [0.27.1](https://github.com/wasmerio/anybuild/compare/v0.27.0...v0.27.1) (2026-08-12)
 
 
