@@ -89,7 +89,9 @@ pub(crate) fn execution(
             registry: environment.wasmer_registry,
             token: environment.wasmer_token,
         })
-    } else if targets.runner == Some(RunTarget::Docker) {
+    } else if targets.runner == Some(RunTarget::Docker)
+        || (targets.runner.is_none() && environment.docker)
+    {
         RuntimeEnvironment::Docker(DockerOptions {
             client: environment.docker_client,
             extra_options: environment.docker_opts,
@@ -305,7 +307,22 @@ mod tests {
     }
 
     #[test]
-    fn legacy_execution_flags_remain_shorthands() {
+    fn docker_shorthand_selects_docker_builder_and_runner() {
+        let (build, runtime) = execution(
+            ExecutionTargetArgs::default(),
+            EnvironmentOptions {
+                docker: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(build, BuildEnvironment::Docker(_)));
+        assert!(matches!(runtime, RuntimeEnvironment::Docker(_)));
+    }
+
+    #[test]
+    fn wasmer_and_docker_select_docker_builder_and_wasmer_runner() {
         let (build, runtime) = execution(
             ExecutionTargetArgs::default(),
             EnvironmentOptions {
@@ -318,6 +335,21 @@ mod tests {
 
         assert!(matches!(build, BuildEnvironment::Docker(_)));
         assert!(matches!(runtime, RuntimeEnvironment::Wasmer(_)));
+    }
+
+    #[test]
+    fn explicit_runner_overrides_docker_shorthand_runner() {
+        let (build, runtime) = execution(
+            targets(None, Some(RunTarget::Local)),
+            EnvironmentOptions {
+                docker: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(build, BuildEnvironment::Docker(_)));
+        assert!(matches!(runtime, RuntimeEnvironment::Local));
     }
 
     #[test]

@@ -29,7 +29,7 @@ pub struct BuildArgs {
     pub skip_prepare: bool,
     #[command(flatten)]
     pub wasmer_conn: WasmerConnArgs,
-    /// Shorthand for `--builder=docker`.
+    /// Use Docker for building and, unless a runner is selected, running.
     #[arg(long)]
     pub docker: bool,
     #[arg(long)]

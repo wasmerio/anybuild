@@ -27,8 +27,9 @@ and falls back to Docker or Wasmer when requested:
   docker client as well, eg: `--docker-client depot`).
 - `anybuild . --start` launches the app after building.
 
-`--wasmer` remains shorthand for `--runner=wasmer`, and `--docker` remains
-shorthand for `--builder=docker`.
+`--wasmer` remains shorthand for `--runner=wasmer`. `--docker` selects both
+the Docker builder and Docker runner unless another runner is selected. For
+example, `--wasmer --docker` uses the Docker builder and Wasmer runner.
 
 The builder and runner are independent, so deployment images can be produced
 from either local or Docker-built artifacts:

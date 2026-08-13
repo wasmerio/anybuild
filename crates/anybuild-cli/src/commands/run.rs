@@ -17,7 +17,7 @@ pub struct RunArgs {
     pub wasmer: bool,
     #[arg(long)]
     pub wasmer_bin: Option<String>,
-    /// Shorthand for `--builder=docker`.
+    /// Use Docker for building and, unless a runner is selected, running.
     #[arg(long)]
     pub docker: bool,
     #[arg(long)]
