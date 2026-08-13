@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use anybuild::BuildOptions;
 use anyhow::Result;
 
-use crate::args::{ProjectArgs, WasmerConnArgs};
+use crate::args::{ExecutionTargetArgs, ProjectArgs, WasmerConnArgs};
 use crate::commands::{client_with_render_options, execution, RenderOptions};
+use crate::context::EnvironmentOptions;
 use crate::SharedProjectArgs;
 
 #[derive(clap::Args, Debug, Clone, Default)]
@@ -19,12 +20,16 @@ pub struct BuildArgs {
     pub install_command: Option<String>,
     #[arg(long)]
     pub build_command: Option<String>,
+    #[command(flatten)]
+    pub targets: ExecutionTargetArgs,
+    /// Shorthand for `--runner=wasmer`.
     #[arg(long)]
     pub wasmer: bool,
     #[arg(long)]
     pub skip_prepare: bool,
     #[command(flatten)]
     pub wasmer_conn: WasmerConnArgs,
+    /// Use Docker for building and, unless a runner is selected, running.
     #[arg(long)]
     pub docker: bool,
     #[arg(long)]
@@ -69,14 +74,17 @@ pub fn run(args: BuildArgs) -> Result<()> {
         config: args.config,
     };
     let (build_environment, runtime_environment) = execution(
-        args.wasmer,
-        args.wasmer_conn.wasmer_bin,
-        args.wasmer_conn.wasmer_registry,
-        args.wasmer_conn.wasmer_token,
-        args.docker,
-        args.docker_client,
-        args.docker_opts,
-    );
+        args.targets,
+        EnvironmentOptions {
+            wasmer: args.wasmer,
+            wasmer_bin: args.wasmer_conn.wasmer_bin,
+            wasmer_registry: args.wasmer_conn.wasmer_registry,
+            wasmer_token: args.wasmer_conn.wasmer_token,
+            docker: args.docker,
+            docker_client: args.docker_client,
+            docker_opts: args.docker_opts,
+        },
+    )?;
     client_with_render_options(
         &shared,
         args.serve_port,

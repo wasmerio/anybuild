@@ -57,12 +57,12 @@ impl MountLayout for LocalLayout {
     }
 }
 
-/// Wasmer serve-side layout: `/app` for the app mount, `/opt/<name>`
-/// for everything else (`runners/wasmer.py: get_serve_mount_path`).
+/// Container serve-side layout: `/app` for the app mount, `/opt/<name>`
+/// for everything else.
 #[derive(Debug, Clone)]
-pub struct WasmerServeLayout;
+pub struct ContainerServeLayout;
 
-impl WasmerServeLayout {
+impl ContainerServeLayout {
     pub fn serve_mount_path(name: &str) -> PathBuf {
         if name == "app" {
             Path::new("/app").to_path_buf()

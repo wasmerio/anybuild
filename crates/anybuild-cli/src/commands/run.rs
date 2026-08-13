@@ -1,18 +1,23 @@
 use anybuild::RunOptions;
 use anyhow::Result;
 
-use crate::args::{ProjectArgs, RunSelectionArgs};
+use crate::args::{ExecutionTargetArgs, ProjectArgs, RunSelectionArgs};
 use crate::commands::{client, execution};
+use crate::context::EnvironmentOptions;
 use crate::SharedProjectArgs;
 
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct RunArgs {
     #[command(flatten)]
     pub project: ProjectArgs,
+    #[command(flatten)]
+    pub targets: ExecutionTargetArgs,
+    /// Shorthand for `--runner=wasmer`.
     #[arg(long)]
     pub wasmer: bool,
     #[arg(long)]
     pub wasmer_bin: Option<String>,
+    /// Use Docker for building and, unless a runner is selected, running.
     #[arg(long)]
     pub docker: bool,
     #[arg(long)]
@@ -36,14 +41,17 @@ pub fn run(args: RunArgs) -> Result<()> {
         ..Default::default()
     };
     let (build_environment, runtime_environment) = execution(
-        args.wasmer,
-        args.wasmer_bin,
-        args.wasmer_registry,
-        None,
-        args.docker,
-        args.docker_client,
-        args.docker_opts,
-    );
+        args.targets,
+        EnvironmentOptions {
+            wasmer: args.wasmer,
+            wasmer_bin: args.wasmer_bin,
+            wasmer_registry: args.wasmer_registry,
+            wasmer_token: None,
+            docker: args.docker,
+            docker_client: args.docker_client,
+            docker_opts: args.docker_opts,
+        },
+    )?;
     let mut options = RunOptions {
         build_environment,
         runtime_environment,

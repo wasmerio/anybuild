@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
-use anybuild::{PlanOptions, RuntimeEnvironment};
+use anybuild::PlanOptions;
 use anyhow::Result;
 
+use crate::args::ExecutionTargetArgs;
 use crate::commands::{client, execution};
 use crate::context::EnvironmentOptions;
 use crate::SharedProjectArgs;
@@ -16,18 +17,8 @@ pub fn run(
     serve_port: Option<i64>,
     environment: EnvironmentOptions,
 ) -> Result<()> {
-    let (build_environment, mut runtime_environment) = execution(
-        environment.wasmer,
-        environment.wasmer_bin,
-        environment.wasmer_registry,
-        environment.wasmer_token,
-        environment.docker,
-        environment.docker_client,
-        environment.docker_opts,
-    );
-    if !environment.wasmer {
-        runtime_environment = RuntimeEnvironment::Local;
-    }
+    let (build_environment, runtime_environment) =
+        execution(ExecutionTargetArgs::default(), environment)?;
     let plan = client(&shared, serve_port)?.plan(PlanOptions {
         anybuild_path,
         regenerate,

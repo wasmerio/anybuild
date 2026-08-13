@@ -155,6 +155,8 @@ impl Step {
 pub struct Serve {
     pub name: String,
     pub provider: String,
+    #[serde(skip)]
+    pub runtime_port: Option<i64>,
     pub build: Vec<Step>,
     #[serde(serialize_with = "serde_contract::packages_as_strings")]
     pub deps: Vec<Package>,

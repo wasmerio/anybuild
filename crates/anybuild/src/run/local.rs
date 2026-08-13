@@ -204,6 +204,7 @@ mod tests {
         Serve {
             name: "test".to_owned(),
             provider: "test".to_owned(),
+            runtime_port: None,
             build: Vec::new(),
             deps: Vec::new(),
             commands: IndexMap::from([("start".to_owned(), "true".to_owned())]),

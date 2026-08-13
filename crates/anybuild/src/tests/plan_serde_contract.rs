@@ -22,6 +22,7 @@ fn serde_json_matches_the_plan_contract() {
     let serve = Serve {
         name: "app".to_owned(),
         provider: "node".to_owned(),
+        runtime_port: None,
         build: vec![
             Step::Run(run.clone()),
             Step::Use(UseStep {
@@ -81,6 +82,7 @@ fn snapshot_render_uses_one_space_indent() {
     let serve = Serve {
         name: "app".to_owned(),
         provider: "node".to_owned(),
+        runtime_port: None,
         build: Vec::new(),
         deps: Vec::new(),
         commands: IndexMap::new(),

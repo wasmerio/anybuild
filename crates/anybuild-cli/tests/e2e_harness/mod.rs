@@ -30,23 +30,44 @@ pub const BUILD_PHRASE: &str = "Build complete in ";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BuildMode {
     Local,
+    DockerRunner,
     Wasmer,
     WasmerAndDocker,
+    DockerBuilderAndRunner,
 }
 
 impl BuildMode {
-    pub const ALL: [BuildMode; 3] = [
+    pub const ALL: [BuildMode; 5] = [
         BuildMode::Local,
+        BuildMode::DockerRunner,
         BuildMode::Wasmer,
         BuildMode::WasmerAndDocker,
+        BuildMode::DockerBuilderAndRunner,
     ];
 
     /// Slug used in generated test names (`__wasmer_and_docker__` etc.).
     pub fn slug(self) -> &'static str {
         match self {
             BuildMode::Local => "local",
+            BuildMode::DockerRunner => "docker_runner",
             BuildMode::Wasmer => "wasmer",
             BuildMode::WasmerAndDocker => "wasmer_and_docker",
+            BuildMode::DockerBuilderAndRunner => "docker_builder_and_runner",
+        }
+    }
+
+    fn uses_docker_runner(self) -> bool {
+        matches!(
+            self,
+            BuildMode::DockerRunner | BuildMode::DockerBuilderAndRunner
+        )
+    }
+
+    fn build_timeout(self) -> Duration {
+        if self.uses_docker_runner() {
+            Duration::from_secs(600)
+        } else {
+            Duration::from_secs(180)
         }
     }
 }
@@ -158,13 +179,13 @@ fn run_case_inner(
         volume_specs.push("wp-content:/app/wp-content".to_string());
     }
 
-    if case.download.is_some() || !case.commands.is_empty() {
+    if case.download.is_some() || !case.commands.is_empty() || build_mode.uses_docker_runner() {
         // Build first, then serve via `anybuild run --start`, then execute
         // each RunCommand via `anybuild run --command=...`.
         let build_cmd =
             anybuild_build_command(repo_root, project_path, build_mode, port, case.provider)?;
         let build_result =
-            run_completed_command(&build_cmd, repo_root, envs, Duration::from_secs(180))?;
+            run_completed_command(&build_cmd, repo_root, envs, build_mode.build_timeout())?;
         let build_output = build_result.output();
         if build_result.returncode != Some(0) || !build_output.contains(BUILD_PHRASE) {
             bail!(
@@ -872,6 +893,9 @@ fn anybuild_run_command(
 
 fn append_build_mode_flags(cmd: &mut Vec<String>, build_mode: BuildMode) {
     match build_mode {
+        BuildMode::DockerRunner => {
+            cmd.push("--runner=docker".to_string());
+        }
         BuildMode::Wasmer => {
             cmd.push("--wasmer".to_string());
             cmd.push("--wasmer-registry=wasmer.io".to_string());
@@ -880,6 +904,10 @@ fn append_build_mode_flags(cmd: &mut Vec<String>, build_mode: BuildMode) {
             cmd.push("--wasmer".to_string());
             cmd.push("--wasmer-registry=wasmer.io".to_string());
             cmd.push("--docker".to_string());
+        }
+        BuildMode::DockerBuilderAndRunner => {
+            cmd.push("--builder=docker".to_string());
+            cmd.push("--runner=docker".to_string());
         }
         BuildMode::Local => {}
     }
@@ -1505,6 +1533,30 @@ mod tests {
         )
         .unwrap();
         assert!(run.iter().any(|arg| arg == "--serve-port=43210"));
+    }
+
+    #[test]
+    fn docker_modes_use_explicit_builder_and_runner_flags() {
+        let root = workspace_root();
+        let project = root.join("examples/static-nobuild");
+
+        let local_builder =
+            anybuild_auto_command(&root, &project, BuildMode::DockerRunner, 43210, false, None)
+                .unwrap();
+        assert!(local_builder.iter().any(|arg| arg == "--runner=docker"));
+        assert!(!local_builder.iter().any(|arg| arg == "--builder=docker"));
+
+        let docker_builder = anybuild_auto_command(
+            &root,
+            &project,
+            BuildMode::DockerBuilderAndRunner,
+            43210,
+            false,
+            None,
+        )
+        .unwrap();
+        assert!(docker_builder.iter().any(|arg| arg == "--runner=docker"));
+        assert!(docker_builder.iter().any(|arg| arg == "--builder=docker"));
     }
 
     #[test]

@@ -8,6 +8,7 @@ use indexmap::IndexMap;
 use crate::plan::{RunStep, Serve, Step};
 use crate::providers::ProviderConfig;
 
+pub mod docker;
 pub mod local;
 pub mod wasmer;
 

@@ -6,6 +6,7 @@ use anyhow::{bail, Result};
 
 use crate::args::{DeployTargetArgs, RunSelectionArgs};
 use crate::commands::{build, client_with_render_options, execution, RenderOptions};
+use crate::context::EnvironmentOptions;
 use crate::SharedProjectArgs;
 
 #[derive(clap::Args, Debug, Clone, Default)]
@@ -45,14 +46,17 @@ pub fn run(args: AutoArgs) -> Result<()> {
         config: args.build.config.clone(),
     };
     let (build_environment, runtime_environment) = execution(
-        wasmer,
-        args.build.wasmer_conn.wasmer_bin.clone(),
-        args.build.wasmer_conn.wasmer_registry.clone(),
-        args.build.wasmer_conn.wasmer_token.clone(),
-        args.build.docker,
-        args.build.docker_client.clone(),
-        args.build.docker_opts.clone(),
-    );
+        args.build.targets.clone(),
+        EnvironmentOptions {
+            wasmer,
+            wasmer_bin: args.build.wasmer_conn.wasmer_bin.clone(),
+            wasmer_registry: args.build.wasmer_conn.wasmer_registry.clone(),
+            wasmer_token: args.build.wasmer_conn.wasmer_token.clone(),
+            docker: args.build.docker,
+            docker_client: args.build.docker_client.clone(),
+            docker_opts: args.build.docker_opts.clone(),
+        },
+    )?;
     let build_options = anybuild::BuildOptions {
         anybuild_path: args.build.anybuild_path,
         build_environment: build_environment.clone(),
@@ -131,6 +135,6 @@ pub fn run(args: AutoArgs) -> Result<()> {
 fn wasmer_options(runtime: &RuntimeEnvironment) -> WasmerOptions {
     match runtime {
         RuntimeEnvironment::Wasmer(options) => options.clone(),
-        RuntimeEnvironment::Local => WasmerOptions::default(),
+        RuntimeEnvironment::Local | RuntimeEnvironment::Docker(_) => WasmerOptions::default(),
     }
 }

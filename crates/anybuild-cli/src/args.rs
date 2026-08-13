@@ -10,6 +10,29 @@
 
 use std::path::PathBuf;
 
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildTarget {
+    Local,
+    Docker,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunTarget {
+    Local,
+    Docker,
+    Wasmer,
+}
+
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct ExecutionTargetArgs {
+    /// Select the build backend.
+    #[arg(long, value_enum, value_name = "BACKEND")]
+    pub builder: Option<BuildTarget>,
+    /// Select the runtime.
+    #[arg(long, value_enum, value_name = "RUNTIME")]
+    pub runner: Option<RunTarget>,
+}
+
 /// Positional project path + `--subdir` (every command).
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct ProjectArgs {

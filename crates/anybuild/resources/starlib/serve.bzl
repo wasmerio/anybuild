@@ -108,6 +108,7 @@ def serve(
     return _serve(
         name = name or config.name,
         provider = provider or config.provider,
+        runtime_port = config.port,
         cwd = cwd,
         build = _override_group_commands(config, steps),
         deps = list(build.serve_deps) + list(serve_deps) + list(extra_deps),
