@@ -11,6 +11,8 @@ use anybuild::{
 };
 use anyhow::{Context, Result};
 
+use crate::args::{BuildTarget, ExecutionTargetArgs, RunTarget};
+use crate::context::EnvironmentOptions;
 use crate::SharedProjectArgs;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -51,32 +53,51 @@ pub(crate) fn client_with_render_options(
 }
 
 pub(crate) fn execution(
-    wasmer: bool,
-    wasmer_bin: Option<String>,
-    wasmer_registry: Option<String>,
-    wasmer_token: Option<String>,
-    docker: bool,
-    docker_client: Option<String>,
-    docker_opts: Option<String>,
-) -> (BuildEnvironment, RuntimeEnvironment) {
-    let build = if docker || docker_client.is_some() {
+    targets: ExecutionTargetArgs,
+    environment: EnvironmentOptions,
+) -> Result<(BuildEnvironment, RuntimeEnvironment)> {
+    if targets.builder == Some(BuildTarget::Local)
+        && (environment.docker
+            || (environment.docker_client.is_some() && targets.runner != Some(RunTarget::Docker)))
+    {
+        anyhow::bail!("--builder=local cannot be combined with --docker or --docker-client");
+    }
+    if targets.runner == Some(RunTarget::Local) && environment.wasmer {
+        anyhow::bail!("--runner=local cannot be combined with --wasmer");
+    }
+    if targets.runner == Some(RunTarget::Docker) && environment.wasmer {
+        anyhow::bail!("--runner=docker cannot be combined with --wasmer");
+    }
+
+    let docker_client_selects_builder = environment.docker_client.is_some()
+        && targets.builder.is_none()
+        && targets.runner != Some(RunTarget::Docker);
+    let build = if targets.builder == Some(BuildTarget::Docker)
+        || environment.docker
+        || docker_client_selects_builder
+    {
         BuildEnvironment::Docker(DockerOptions {
-            client: docker_client,
-            extra_options: docker_opts,
+            client: environment.docker_client.clone(),
+            extra_options: environment.docker_opts.clone(),
         })
     } else {
         BuildEnvironment::Local
     };
-    let runtime = if wasmer {
+    let runtime = if targets.runner == Some(RunTarget::Wasmer) || environment.wasmer {
         RuntimeEnvironment::Wasmer(WasmerOptions {
-            binary: wasmer_bin,
-            registry: wasmer_registry,
-            token: wasmer_token,
+            binary: environment.wasmer_bin,
+            registry: environment.wasmer_registry,
+            token: environment.wasmer_token,
+        })
+    } else if targets.runner == Some(RunTarget::Docker) {
+        RuntimeEnvironment::Docker(DockerOptions {
+            client: environment.docker_client,
+            extra_options: environment.docker_opts,
         })
     } else {
         RuntimeEnvironment::Local
     };
-    (build, runtime)
+    Ok((build, runtime))
 }
 
 fn render_event(event: &Event, options: RenderOptions) {
@@ -239,5 +260,83 @@ fn provider_display_name(provider: &str) -> &str {
         "laravel" => "Laravel",
         "python" => "Python",
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn targets(builder: Option<BuildTarget>, runner: Option<RunTarget>) -> ExecutionTargetArgs {
+        ExecutionTargetArgs { builder, runner }
+    }
+
+    #[test]
+    fn explicit_execution_targets_select_the_requested_environments() {
+        let (build, runtime) = execution(
+            targets(Some(BuildTarget::Docker), Some(RunTarget::Wasmer)),
+            EnvironmentOptions::default(),
+        )
+        .unwrap();
+
+        assert!(matches!(build, BuildEnvironment::Docker(_)));
+        assert!(matches!(runtime, RuntimeEnvironment::Wasmer(_)));
+    }
+
+    #[test]
+    fn docker_runner_is_independent_from_the_builder() {
+        let (build, runtime) = execution(
+            targets(Some(BuildTarget::Local), Some(RunTarget::Docker)),
+            EnvironmentOptions {
+                docker_client: Some("podman".to_owned()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(build, BuildEnvironment::Local));
+        assert!(matches!(
+            runtime,
+            RuntimeEnvironment::Docker(DockerOptions {
+                client: Some(client),
+                ..
+            }) if client == "podman"
+        ));
+    }
+
+    #[test]
+    fn legacy_execution_flags_remain_shorthands() {
+        let (build, runtime) = execution(
+            ExecutionTargetArgs::default(),
+            EnvironmentOptions {
+                wasmer: true,
+                docker: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(build, BuildEnvironment::Docker(_)));
+        assert!(matches!(runtime, RuntimeEnvironment::Wasmer(_)));
+    }
+
+    #[test]
+    fn contradictory_execution_targets_are_rejected() {
+        assert!(execution(
+            targets(Some(BuildTarget::Local), None),
+            EnvironmentOptions {
+                docker: true,
+                ..Default::default()
+            },
+        )
+        .is_err());
+        assert!(execution(
+            targets(None, Some(RunTarget::Local)),
+            EnvironmentOptions {
+                wasmer: true,
+                ..Default::default()
+            },
+        )
+        .is_err());
     }
 }

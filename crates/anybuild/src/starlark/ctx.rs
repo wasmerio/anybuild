@@ -165,6 +165,7 @@ fn build_serve(
     volumes: Option<&UnpackListOrTuple<Value>>,
     env: Option<&UnpackDictEntries<String, String>>,
     services: Option<&UnpackListOrTuple<Value>>,
+    runtime_port: Option<i64>,
 ) -> Result<()> {
     // Conditional steps evaluate to None; prepare only runs commands.
     let prepare_steps: Option<Vec<RunStep>> = prepare.map(|items| {
@@ -241,6 +242,7 @@ fn build_serve(
     let serve = Serve {
         name: name.to_owned(),
         provider: provider.to_owned(),
+        runtime_port,
         build: build_steps,
         deps: dep_list,
         commands: command_map,
@@ -431,6 +433,7 @@ pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
         volumes: Option<NoneOr<UnpackListOrTuple<Value>>>,
         env: Option<NoneOr<UnpackDictEntries<String, String>>>,
         services: Option<NoneOr<UnpackListOrTuple<Value>>>,
+        runtime_port: Option<i64>,
         eval: &mut Evaluator,
     ) -> anyhow::Result<NoneType> {
         build_serve(
@@ -446,6 +449,7 @@ pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
             flat(volumes).as_ref(),
             flat(env).as_ref(),
             flat(services).as_ref(),
+            runtime_port,
         )?;
         Ok(NoneType)
     }
@@ -464,6 +468,7 @@ pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
         volumes: Option<NoneOr<UnpackListOrTuple<Value>>>,
         env: Option<NoneOr<UnpackDictEntries<String, String>>>,
         services: Option<NoneOr<UnpackListOrTuple<Value>>>,
+        runtime_port: Option<i64>,
         eval: &mut Evaluator,
     ) -> anyhow::Result<NoneType> {
         build_serve(
@@ -479,6 +484,7 @@ pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
             flat(volumes).as_ref(),
             flat(env).as_ref(),
             flat(services).as_ref(),
+            runtime_port,
         )?;
         Ok(NoneType)
     }

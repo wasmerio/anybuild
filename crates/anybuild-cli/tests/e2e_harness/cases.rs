@@ -158,7 +158,7 @@ pub struct Case {
 impl Case {
     /// The build modes for which a test structurally exists.
     ///
-    /// In pytest every case is collected for all three modes and then
+    /// In pytest every case is collected for every mode and then
     /// runtime-skipped ("case is not enabled for this build mode" /
     /// "phpix memory-cap checks run in Wasmer mode only"). Both conditions
     /// are decidable from the case data alone, so here they determine which
@@ -207,7 +207,8 @@ const SWS_LISTENING: &str = r"server is listening on";
 const UVICORN: &str = r"Uvicorn running on .*";
 
 const WASMER_ONLY: &[BuildMode] = &[BuildMode::Wasmer];
-const LOCAL_AND_WASMER: &[BuildMode] = &[BuildMode::Local, BuildMode::Wasmer];
+const LOCAL_AND_WASMER: &[BuildMode] =
+    &[BuildMode::Local, BuildMode::DockerRunner, BuildMode::Wasmer];
 
 const WORDPRESS_DB_ENV: &[(&str, &str)] = &[
     ("DB_NAME", "test"),
@@ -974,8 +975,10 @@ pub static CASES: &[Case] = &[
         http: &[body("/", r"Django")],
         build_modes: Some(&[
             BuildMode::Local,
+            BuildMode::DockerRunner,
             BuildMode::Wasmer,
             BuildMode::WasmerAndDocker,
+            BuildMode::DockerBuilderAndRunner,
         ]),
         ..BASE
     },

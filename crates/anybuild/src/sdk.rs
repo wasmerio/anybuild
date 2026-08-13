@@ -60,6 +60,7 @@ pub enum BuildEnvironment {
 pub enum RuntimeEnvironment {
     #[default]
     Local,
+    Docker(DockerOptions),
     Wasmer(WasmerOptions),
 }
 
@@ -877,9 +878,29 @@ fn environment_options(
             (true, options.client.clone(), options.extra_options.clone())
         }
     };
-    let (wasmer, wasmer_bin, wasmer_registry, wasmer_token) = match runtime {
-        RuntimeEnvironment::Local => (false, None, None, None),
+    let (
+        docker_runner,
+        docker_runner_client,
+        docker_runner_opts,
+        wasmer,
+        wasmer_bin,
+        wasmer_registry,
+        wasmer_token,
+    ) = match runtime {
+        RuntimeEnvironment::Local => (false, None, None, false, None, None, None),
+        RuntimeEnvironment::Docker(options) => (
+            true,
+            options.client.clone(),
+            options.extra_options.clone(),
+            false,
+            None,
+            None,
+            None,
+        ),
         RuntimeEnvironment::Wasmer(options) => (
+            false,
+            None,
+            None,
             true,
             options.binary.clone(),
             options.registry.clone(),
@@ -891,6 +912,9 @@ fn environment_options(
         wasmer_bin,
         wasmer_registry,
         wasmer_token,
+        docker_runner,
+        docker_runner_client,
+        docker_runner_opts,
         docker,
         docker_client,
         docker_opts,

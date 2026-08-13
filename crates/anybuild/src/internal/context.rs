@@ -8,9 +8,10 @@ use std::rc::Rc;
 use crate::build::docker::DockerBuildBackend;
 use crate::build::local::LocalBuildBackend;
 use crate::build::BuildBackend;
-use crate::plan::layout::{MountLayout, WasmerServeLayout};
+use crate::plan::layout::{ContainerServeLayout, MountLayout};
 use crate::plan::Serve;
 use crate::providers::{base::BaseConfig, select_provider, workspace, ProviderConfig};
+use crate::run::docker::DockerRunner;
 use crate::run::local::LocalRunner;
 use crate::run::wasmer::WasmerRunner;
 use crate::run::Runner;
@@ -35,6 +36,9 @@ pub struct EnvironmentOptions {
     pub wasmer_bin: Option<String>,
     pub wasmer_registry: Option<String>,
     pub wasmer_token: Option<String>,
+    pub docker_runner: bool,
+    pub docker_runner_client: Option<String>,
+    pub docker_runner_opts: Option<String>,
     pub docker: bool,
     pub docker_client: Option<String>,
     pub docker_opts: Option<String>,
@@ -96,6 +100,15 @@ fn resolve_environment_inner(
             Some(anybuild_dir.clone()),
             operation.clone(),
         )))
+    } else if options.docker_runner {
+        Rc::new(RefCell::new(DockerRunner::new(
+            build_backend.clone(),
+            paths.workspace_root.clone(),
+            options.docker_runner_client.clone(),
+            options.docker_runner_opts.clone(),
+            Some(anybuild_dir.clone()),
+            operation.clone(),
+        )))
     } else {
         Rc::new(RefCell::new(LocalRunner::new(
             build_backend.clone(),
@@ -137,7 +150,7 @@ fn migrate_legacy_state_dir(paths: &ProjectPaths, operation: &OperationContext) 
 /// live backend/runner pair; a fixed layout would break --wasmer/--docker).
 struct EnvironmentLayout {
     backend: Rc<RefCell<dyn BuildBackend>>,
-    wasmer: bool,
+    containerized: bool,
 }
 
 impl MountLayout for EnvironmentLayout {
@@ -146,8 +159,8 @@ impl MountLayout for EnvironmentLayout {
     }
 
     fn serve_mount_path(&self, name: &str) -> PathBuf {
-        if self.wasmer {
-            WasmerServeLayout::serve_mount_path(name)
+        if self.containerized {
+            ContainerServeLayout::serve_mount_path(name)
         } else {
             self.backend.borrow().get_artifact_mount_path(name)
         }
@@ -278,7 +291,7 @@ fn resolve_project_context_inner(
         },
         layout: Box::new(EnvironmentLayout {
             backend: build_backend.clone(),
-            wasmer: env_options.wasmer,
+            containerized: env_options.wasmer || env_options.docker_runner,
         }),
         stdlib: StdlibSource::Dir(runtime_resources.starlib_dir.clone()),
     })?;

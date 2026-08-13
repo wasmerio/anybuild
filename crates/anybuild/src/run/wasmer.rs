@@ -1512,6 +1512,7 @@ mod tests {
         Serve {
             name: name.to_owned(),
             provider: provider.to_owned(),
+            runtime_port: None,
             build: vec![],
             deps,
             commands: commands

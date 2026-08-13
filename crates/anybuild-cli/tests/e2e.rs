@@ -2,7 +2,7 @@
 //! parametrization in `tests/test_e2e.py`.
 //!
 //! Naming: `<suite>__<mode>__<example>`, where `<suite>` matches the pytest
-//! `e2e_<suite>` marker and `<mode>` is local / wasmer / wasmer_and_docker.
+//! `e2e_<suite>` marker and `<mode>` identifies the builder/runner pairing.
 //! CI slices with nextest filter expressions, e.g.
 //!   -E 'test(/^php__/)'            # one suite
 //!   -E 'test(/__wasmer__/)'        # one mode
@@ -18,7 +18,9 @@
 
 mod e2e_harness;
 
-use e2e_harness::BuildMode::{Local, Wasmer, WasmerAndDocker};
+use e2e_harness::BuildMode::{
+    DockerBuilderAndRunner, DockerRunner, Local, Wasmer, WasmerAndDocker,
+};
 
 macro_rules! e2e_tests {
     ($($name:ident => ($id:literal, $mode:expr);)*) => {
@@ -49,24 +51,34 @@ macro_rules! e2e_tests {
 e2e_tests! {
     // examples/cdn
     static__local__cdn => ("cdn", Local);
+    static__docker_runner__cdn => ("cdn", DockerRunner);
     static__wasmer__cdn => ("cdn", Wasmer);
     static__wasmer_and_docker__cdn => ("cdn", WasmerAndDocker);
+    static__docker_builder_and_runner__cdn => ("cdn", DockerBuilderAndRunner);
     // examples/php-nobuild (phpinfo)
     php__local__php_nobuild => ("php_nobuild", Local);
+    php__docker_runner__php_nobuild => ("php_nobuild", DockerRunner);
     php__wasmer__php_nobuild => ("php_nobuild", Wasmer);
     php__wasmer_and_docker__php_nobuild => ("php_nobuild", WasmerAndDocker);
+    php__docker_builder_and_runner__php_nobuild => ("php_nobuild", DockerBuilderAndRunner);
     // examples/php-static-mixed (static index plus executable PHP page)
     php__local__php_static_mixed => ("php_static_mixed", Local);
+    php__docker_runner__php_static_mixed => ("php_static_mixed", DockerRunner);
     php__wasmer__php_static_mixed => ("php_static_mixed", Wasmer);
     php__wasmer_and_docker__php_static_mixed => ("php_static_mixed", WasmerAndDocker);
+    php__docker_builder_and_runner__php_static_mixed => ("php_static_mixed", DockerBuilderAndRunner);
     // examples/php-api
     php__local__php_api => ("php_api", Local);
+    php__docker_runner__php_api => ("php_api", DockerRunner);
     php__wasmer__php_api => ("php_api", Wasmer);
     php__wasmer_and_docker__php_api => ("php_api", WasmerAndDocker);
+    php__docker_builder_and_runner__php_api => ("php_api", DockerBuilderAndRunner);
     // examples/php-wordpress
     php__local__php_wordpress0 => ("php_wordpress0", Local);
+    php__docker_runner__php_wordpress0 => ("php_wordpress0", DockerRunner);
     php__wasmer__php_wordpress0 => ("php_wordpress0", Wasmer);
     php__wasmer_and_docker__php_wordpress0 => ("php_wordpress0", WasmerAndDocker);
+    php__docker_builder_and_runner__php_wordpress0 => ("php_wordpress0", DockerBuilderAndRunner);
     // wordpress-6.9.4.zip release archive (Wasmer only)
     php__wasmer__wordpress_6_9_4 => ("wordpress_6_9_4", Wasmer);
     // examples/php-wordpress-empty (Wasmer only)
@@ -79,24 +91,31 @@ e2e_tests! {
     php__wasmer__php_nobuild_phpix => ("php_nobuild_phpix", Wasmer);
     // examples/static-nobuild
     static__local__static_nobuild => ("static_nobuild", Local);
+    static__docker_runner__static_nobuild => ("static_nobuild", DockerRunner);
     static__wasmer__static_nobuild => ("static_nobuild", Wasmer);
     static__wasmer_and_docker__static_nobuild => ("static_nobuild", WasmerAndDocker);
+    static__docker_builder_and_runner__static_nobuild => ("static_nobuild", DockerBuilderAndRunner);
     // examples/static-htmlwithjs (Wasmer only)
     static__wasmer__static_htmlwithjs => ("static_htmlwithjs", Wasmer);
     // examples/staticfile
     static__local__staticfile => ("staticfile", Local);
+    static__docker_runner__staticfile => ("staticfile", DockerRunner);
     static__wasmer__staticfile => ("staticfile", Wasmer);
     static__wasmer_and_docker__staticfile => ("staticfile", WasmerAndDocker);
+    static__docker_builder_and_runner__staticfile => ("staticfile", DockerBuilderAndRunner);
     // examples/staticfile-redirects (Wasmer only)
     static__wasmer__staticfile_redirects => ("staticfile_redirects", Wasmer);
     // examples/node
     node__local__node => ("node", Local);
+    node__docker_runner__node => ("node", DockerRunner);
     node__wasmer__node => ("node", Wasmer);
     // examples/node-hono
     node__local__node_hono => ("node_hono", Local);
+    node__docker_runner__node_hono => ("node_hono", DockerRunner);
     node__wasmer__node_hono => ("node_hono", Wasmer);
     // examples/node-fastify
     node__local__node_fastify => ("node_fastify", Local);
+    node__docker_runner__node_fastify => ("node_fastify", DockerRunner);
     node__wasmer__node_fastify => ("node_fastify", Wasmer);
     // examples/node-express (Wasmer only)
     node__wasmer__node_express => ("node_express", Wasmer);
@@ -128,22 +147,30 @@ e2e_tests! {
     node__wasmer__node_mastra => ("node_mastra", Wasmer);
     // examples/node-next
     node__local__node_next => ("node_next", Local);
+    node__docker_runner__node_next => ("node_next", DockerRunner);
     node__wasmer__node_next => ("node_next", Wasmer);
     // examples/node-astro
     node__local__node_astro => ("node_astro", Local);
+    node__docker_runner__node_astro => ("node_astro", DockerRunner);
     node__wasmer__node_astro => ("node_astro", Wasmer);
     // examples/hugo
     static__local__hugo => ("hugo", Local);
+    static__docker_runner__hugo => ("hugo", DockerRunner);
     static__wasmer__hugo => ("hugo", Wasmer);
     static__wasmer_and_docker__hugo => ("hugo", WasmerAndDocker);
+    static__docker_builder_and_runner__hugo => ("hugo", DockerBuilderAndRunner);
     // examples/mkdocs
     staticpython__local__mkdocs => ("mkdocs", Local);
+    staticpython__docker_runner__mkdocs => ("mkdocs", DockerRunner);
     staticpython__wasmer__mkdocs => ("mkdocs", Wasmer);
     staticpython__wasmer_and_docker__mkdocs => ("mkdocs", WasmerAndDocker);
+    staticpython__docker_builder_and_runner__mkdocs => ("mkdocs", DockerBuilderAndRunner);
     // examples/mkdocs-with-plugins
     staticpython__local__mkdocs_with_plugins => ("mkdocs_with_plugins", Local);
+    staticpython__docker_runner__mkdocs_with_plugins => ("mkdocs_with_plugins", DockerRunner);
     staticpython__wasmer__mkdocs_with_plugins => ("mkdocs_with_plugins", Wasmer);
     staticpython__wasmer_and_docker__mkdocs_with_plugins => ("mkdocs_with_plugins", WasmerAndDocker);
+    staticpython__docker_builder_and_runner__mkdocs_with_plugins => ("mkdocs_with_plugins", DockerBuilderAndRunner);
     // examples/nodestatic-astro (Wasmer only)
     staticnode1__wasmer__nodestatic_astro => ("nodestatic_astro", Wasmer);
     // examples/nodestatic-next (Wasmer only)
@@ -160,24 +187,31 @@ e2e_tests! {
     staticnode1__wasmer__nodestatic_remix => ("nodestatic_remix", Wasmer);
     // examples/nodestatic-eleventy
     staticnode1__local__nodestatic_eleventy => ("nodestatic_eleventy", Local);
+    staticnode1__docker_runner__nodestatic_eleventy => ("nodestatic_eleventy", DockerRunner);
     staticnode1__wasmer__nodestatic_eleventy => ("nodestatic_eleventy", Wasmer);
     // examples/nodestatic-vitepress
     staticnode1__local__nodestatic_vitepress => ("nodestatic_vitepress", Local);
+    staticnode1__docker_runner__nodestatic_vitepress => ("nodestatic_vitepress", DockerRunner);
     staticnode1__wasmer__nodestatic_vitepress => ("nodestatic_vitepress", Wasmer);
     // examples/nodestatic-vuepress
     staticnode1__local__nodestatic_vuepress => ("nodestatic_vuepress", Local);
+    staticnode1__docker_runner__nodestatic_vuepress => ("nodestatic_vuepress", DockerRunner);
     staticnode1__wasmer__nodestatic_vuepress => ("nodestatic_vuepress", Wasmer);
     // examples/nodestatic-hexo
     staticnode1__local__nodestatic_hexo => ("nodestatic_hexo", Local);
+    staticnode1__docker_runner__nodestatic_hexo => ("nodestatic_hexo", DockerRunner);
     staticnode1__wasmer__nodestatic_hexo => ("nodestatic_hexo", Wasmer);
     // examples/nodestatic-metalsmith
     staticnode1__local__nodestatic_metalsmith => ("nodestatic_metalsmith", Local);
+    staticnode1__docker_runner__nodestatic_metalsmith => ("nodestatic_metalsmith", DockerRunner);
     staticnode1__wasmer__nodestatic_metalsmith => ("nodestatic_metalsmith", Wasmer);
     // examples/nodestatic-assemble
     staticnode1__local__nodestatic_assemble => ("nodestatic_assemble", Local);
+    staticnode1__docker_runner__nodestatic_assemble => ("nodestatic_assemble", DockerRunner);
     staticnode1__wasmer__nodestatic_assemble => ("nodestatic_assemble", Wasmer);
     // examples/nodestatic-harp
     staticnode1__local__nodestatic_harp => ("nodestatic_harp", Local);
+    staticnode1__docker_runner__nodestatic_harp => ("nodestatic_harp", DockerRunner);
     staticnode1__wasmer__nodestatic_harp => ("nodestatic_harp", Wasmer);
     // examples/nodestatic-angular (Wasmer only)
     staticnode1__wasmer__nodestatic_angular => ("nodestatic_angular", Wasmer);
@@ -215,34 +249,50 @@ e2e_tests! {
     staticnode2__wasmer__nodestatic_storybook => ("nodestatic_storybook", Wasmer);
     // examples/python-fastapi
     python__local__python_fastapi => ("python_fastapi", Local);
+    python__docker_runner__python_fastapi => ("python_fastapi", DockerRunner);
     python__wasmer__python_fastapi => ("python_fastapi", Wasmer);
     python__wasmer_and_docker__python_fastapi => ("python_fastapi", WasmerAndDocker);
+    python__docker_builder_and_runner__python_fastapi => ("python_fastapi", DockerBuilderAndRunner);
     // examples/python-flask
     python__local__python_flask => ("python_flask", Local);
+    python__docker_runner__python_flask => ("python_flask", DockerRunner);
     python__wasmer__python_flask => ("python_flask", Wasmer);
     python__wasmer_and_docker__python_flask => ("python_flask", WasmerAndDocker);
+    python__docker_builder_and_runner__python_flask => ("python_flask", DockerBuilderAndRunner);
     // examples/python-django
     python__local__python_django => ("python_django", Local);
+    python__docker_runner__python_django => ("python_django", DockerRunner);
     python__wasmer__python_django => ("python_django", Wasmer);
     python__wasmer_and_docker__python_django => ("python_django", WasmerAndDocker);
+    python__docker_builder_and_runner__python_django => ("python_django", DockerBuilderAndRunner);
     // examples/python-ffmpeg
     python__local__python_ffmpeg => ("python_ffmpeg", Local);
+    python__docker_runner__python_ffmpeg => ("python_ffmpeg", DockerRunner);
     python__wasmer__python_ffmpeg => ("python_ffmpeg", Wasmer);
     python__wasmer_and_docker__python_ffmpeg => ("python_ffmpeg", WasmerAndDocker);
+    python__docker_builder_and_runner__python_ffmpeg => ("python_ffmpeg", DockerBuilderAndRunner);
     // examples/python-pillow
     python__local__python_pillow => ("python_pillow", Local);
+    python__docker_runner__python_pillow => ("python_pillow", DockerRunner);
     python__wasmer__python_pillow => ("python_pillow", Wasmer);
     python__wasmer_and_docker__python_pillow => ("python_pillow", WasmerAndDocker);
+    python__docker_builder_and_runner__python_pillow => ("python_pillow", DockerBuilderAndRunner);
     // examples/python-pandoc
     python__local__python_pandoc => ("python_pandoc", Local);
+    python__docker_runner__python_pandoc => ("python_pandoc", DockerRunner);
     python__wasmer__python_pandoc => ("python_pandoc", Wasmer);
     python__wasmer_and_docker__python_pandoc => ("python_pandoc", WasmerAndDocker);
+    python__docker_builder_and_runner__python_pandoc => ("python_pandoc", DockerBuilderAndRunner);
     // examples/python-procfile
     python__local__python_procfile => ("python_procfile", Local);
+    python__docker_runner__python_procfile => ("python_procfile", DockerRunner);
     python__wasmer__python_procfile => ("python_procfile", Wasmer);
     python__wasmer_and_docker__python_procfile => ("python_procfile", WasmerAndDocker);
+    python__docker_builder_and_runner__python_procfile => ("python_procfile", DockerBuilderAndRunner);
     // examples/python-streamlit
     python__local__python_streamlit => ("python_streamlit", Local);
+    python__docker_runner__python_streamlit => ("python_streamlit", DockerRunner);
     python__wasmer__python_streamlit => ("python_streamlit", Wasmer);
     python__wasmer_and_docker__python_streamlit => ("python_streamlit", WasmerAndDocker);
+    python__docker_builder_and_runner__python_streamlit => ("python_streamlit", DockerBuilderAndRunner);
 }

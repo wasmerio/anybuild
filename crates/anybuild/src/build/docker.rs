@@ -13,7 +13,7 @@ use base64::Engine as _;
 use indexmap::IndexMap;
 
 use crate::operation::OperationContext;
-use crate::plan::{Mount, Step};
+use crate::plan::{Mount, Package, Step};
 
 use crate::build::BuildBackend;
 
@@ -35,6 +35,51 @@ fn mise_postinstall(dependency: &str) -> Option<&'static str> {
         ),
         _ => None,
     }
+}
+
+pub(crate) fn dependency_install_contents(dependency: &Package) -> String {
+    let mut contents = String::new();
+    if dependency.name == "bash" {
+        return contents;
+    }
+    if dependency.name == "pie" {
+        contents.push_str(
+            "RUN apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n",
+        );
+        contents.push_str(
+            "RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n",
+        );
+        return contents;
+    }
+    if dependency.name == "composer" {
+        let version = dependency.version.as_deref().unwrap_or("2.9.2");
+        contents.push_str(&format!(
+            "RUN curl -L --output /usr/bin/composer https://github.com/composer/composer/releases/download/{version}/composer.phar && chmod +x /usr/bin/composer\n"
+        ));
+        return contents;
+    }
+    if dependency.name == "static-web-server" {
+        if let Some(version) = dependency.version.as_deref() {
+            contents.push_str(&format!("ENV SWS_INSTALL_VERSION={version}\n"));
+        }
+        contents.push_str(
+            "RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n",
+        );
+        return contents;
+    }
+
+    let package_name = mise_source(&dependency.name).unwrap_or(dependency.name.as_str());
+    if let Some(version) = dependency.version.as_deref() {
+        contents.push_str(&format!(
+            "RUN mise use --global \"{package_name}@{version}\"\n"
+        ));
+    } else {
+        contents.push_str(&format!("RUN mise use --global \"{package_name}\"\n"));
+    }
+    if let Some(postinstall) = mise_postinstall(&dependency.name) {
+        contents.push_str(&format!("RUN {postinstall}\n"));
+    }
+    contents
 }
 
 /// The build-stage preamble (verbatim from docker.py).
@@ -302,46 +347,7 @@ impl DockerBuildBackend {
                 }
                 Step::Use(step) => {
                     for dependency in &step.dependencies {
-                        if dependency.name == "bash" {
-                            continue;
-                        } else if dependency.name == "pie" {
-                            docker_file_contents.push_str(
-                                "RUN apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n",
-                            );
-                            docker_file_contents.push_str(
-                                "RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n",
-                            );
-                            continue;
-                        } else if dependency.name == "composer" {
-                            let version = dependency.version.as_deref().unwrap_or("2.9.2");
-                            docker_file_contents.push_str(&format!(
-                                "RUN curl -L --output /usr/bin/composer https://github.com/composer/composer/releases/download/{version}/composer.phar && chmod +x /usr/bin/composer\n"
-                            ));
-                            continue;
-                        } else if dependency.name == "static-web-server" {
-                            if let Some(version) = dependency.version.as_deref() {
-                                docker_file_contents
-                                    .push_str(&format!("ENV SWS_INSTALL_VERSION={version}\n"));
-                            }
-                            docker_file_contents.push_str(
-                                "RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n",
-                            );
-                            continue;
-                        }
-
-                        let package_name =
-                            mise_source(&dependency.name).unwrap_or(dependency.name.as_str());
-                        if let Some(version) = dependency.version.as_deref() {
-                            docker_file_contents.push_str(&format!(
-                                "RUN mise use --global \"{package_name}@{version}\"\n"
-                            ));
-                        } else {
-                            docker_file_contents
-                                .push_str(&format!("RUN mise use --global \"{package_name}\"\n"));
-                        }
-                        if let Some(postinstall) = mise_postinstall(&dependency.name) {
-                            docker_file_contents.push_str(&format!("RUN {postinstall}\n"));
-                        }
+                        docker_file_contents.push_str(&dependency_install_contents(dependency));
                     }
                 }
             }
@@ -413,6 +419,10 @@ impl BuildBackend for DockerBuildBackend {
 
     fn get_runtime_path(&self) -> Option<String> {
         self.runtime_path.clone()
+    }
+
+    fn artifact_platform(&self) -> Option<&str> {
+        Some("linux/amd64")
     }
 }
 

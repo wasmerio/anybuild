@@ -98,6 +98,18 @@ jobs:
         # Docker-mode slices, only for the suites that have such cases.
         include:
           - suite: static
+            mode: docker_runner
+          - suite: staticpython
+            mode: docker_runner
+          - suite: staticnode1
+            mode: docker_runner
+          - suite: python
+            mode: docker_runner
+          - suite: node
+            mode: docker_runner
+          - suite: php
+            mode: docker_runner
+          - suite: static
             mode: wasmer_and_docker
           - suite: staticpython
             mode: wasmer_and_docker
@@ -105,6 +117,14 @@ jobs:
             mode: wasmer_and_docker
           - suite: php
             mode: wasmer_and_docker
+          - suite: static
+            mode: docker_builder_and_runner
+          - suite: staticpython
+            mode: docker_builder_and_runner
+          - suite: python
+            mode: docker_builder_and_runner
+          - suite: php
+            mode: docker_builder_and_runner
     services:
       mysql:
         image: mysql:8.0

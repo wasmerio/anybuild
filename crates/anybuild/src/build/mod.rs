@@ -24,4 +24,7 @@ pub trait BuildBackend {
     fn get_artifact_mount_path(&self, name: &str) -> PathBuf;
     fn get_volume_path(&self, name: &str) -> PathBuf;
     fn get_runtime_path(&self) -> Option<String>;
+    fn artifact_platform(&self) -> Option<&str> {
+        None
+    }
 }
