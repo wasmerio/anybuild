@@ -27,9 +27,9 @@ pub use event::{
 pub use sdk::{
     Anybuild, AutoOptions, AutoOutcome, BuildEnvironment, BuildOptions, BuildOutcome,
     CommandOverrides, ConfigDifference, DeployOptions, DeployOutcome, DeployTarget,
-    DeploymentPlatform, DockerOptions, GenerateOptions, GeneratedAnybuild, GenerationCheck,
-    GenerationCheckStatus, GenerationPolicy, PlanOptions, ProjectPlan, ProviderConfigSnapshot,
-    RunOptions, RunOutcome, RuntimeEnvironment, WasmerOptions,
+    DeploymentPlatform, DockerOptions, FlyOptions, GenerateOptions, GeneratedAnybuild,
+    GenerationCheck, GenerationCheckStatus, GenerationPolicy, PlanOptions, ProjectPlan,
+    ProviderConfigSnapshot, RunOptions, RunOutcome, RuntimeEnvironment, WasmerOptions,
 };
 
 /// Version of the Anybuild SDK and CLI.

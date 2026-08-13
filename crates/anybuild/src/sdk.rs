@@ -51,9 +51,18 @@ pub struct WasmerOptions {
     pub token: Option<String>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct FlyOptions {
+    pub binary: Option<String>,
+    pub token: Option<String>,
+    pub app: Option<String>,
+    pub config: Option<PathBuf>,
+}
+
 #[derive(Debug, Clone)]
 pub enum DeploymentPlatform {
     Wasmer(WasmerOptions),
+    Fly(FlyOptions),
 }
 
 impl Default for DeploymentPlatform {
@@ -767,8 +776,10 @@ impl Anybuild {
         let paths = self.paths()?;
         let anybuild_dir = resolve_anybuild_dir(&paths, operation)?;
         let mut deployer = resolve_deployer(options.platform, operation.clone());
-        let artifact = RuntimeArtifact::load(&anybuild_dir)?
-            .unwrap_or(deployer.load_legacy_artifact(&anybuild_dir)?);
+        let artifact = match RuntimeArtifact::load(&anybuild_dir)? {
+            Some(artifact) => artifact,
+            None => deployer.load_legacy_artifact(&anybuild_dir)?,
+        };
         anyhow::ensure!(
             artifact.kind() == deployer.artifact_kind(),
             "{} deployment requires a {:?} artifact, found {:?}",

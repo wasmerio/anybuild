@@ -59,6 +59,19 @@ impl OperationContext {
         }
     }
 
+    pub fn with_secret(&self, secret: impl Into<String>) -> Self {
+        let secret = secret.into();
+        if secret.is_empty() || self.secrets.iter().any(|existing| existing == &secret) {
+            return self.clone();
+        }
+        let mut secrets = self.secrets.as_ref().clone();
+        secrets.push(secret);
+        Self {
+            secrets: Arc::new(secrets),
+            ..self.clone()
+        }
+    }
+
     pub fn without_environment(&self) -> Self {
         Self {
             environment: Arc::new(IndexMap::new()),

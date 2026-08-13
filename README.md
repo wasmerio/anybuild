@@ -28,6 +28,8 @@ and falls back to Docker or Wasmer when requested:
 - `anybuild . --start` launches the app after building.
 - `anybuild . --platform=wasmer` builds a Wasmer runtime artifact and deploys
   it to Wasmer.
+- `anybuild . --platform=fly --fly-app=my-app` builds a Docker runtime
+  artifact and deploys it to Fly.io.
 
 `--wasmer` remains shorthand for `--runner=wasmer`. `--docker` selects both
 the Docker builder and Docker runner unless another runner is selected. For
@@ -107,8 +109,8 @@ WebAssembly execution.
 anybuild deploy
 ```
 
-Deploy a runtime artifact to a deployment platform. Wasmer is currently the
-first supported platform and remains the default:
+Deploy a runtime artifact to a deployment platform. Wasmer remains the
+default:
 
 ```bash
 anybuild deploy --platform=wasmer
@@ -117,6 +119,19 @@ anybuild deploy --platform=wasmer
 The artifact must first be generated with `anybuild build --runner=wasmer`.
 Use `--wasmer-deploy-config` to write deployment metadata instead of
 publishing.
+
+Fly.io consumes the Docker runtime artifact:
+
+```bash
+anybuild build --runner=docker
+anybuild deploy --platform=fly --fly-app=my-app
+```
+
+The Fly.io app must already exist. Anybuild uses the project's `fly.toml` when
+present. Otherwise it generates a minimal configuration from `--fly-app` and
+the Docker runtime port. Use `--fly-config`, `--fly-bin`, or `--fly-token` to
+override the configuration, CLI binary, or credentials. The `FLY_API_TOKEN`
+environment variable and flyctl's configured credentials also work.
 
 ## The Anybuild file
 

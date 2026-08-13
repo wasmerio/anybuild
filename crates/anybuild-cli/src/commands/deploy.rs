@@ -1,7 +1,9 @@
-use anybuild::{DeployOptions, DeployTarget, DeploymentPlatform, WasmerOptions};
-use anyhow::Result;
+use anybuild::{DeployOptions, DeployTarget, DeploymentPlatform, FlyOptions, WasmerOptions};
+use anyhow::{bail, Result};
 
-use crate::args::{DeployTargetArgs, DeploymentPlatformArg, ProjectArgs, WasmerConnArgs};
+use crate::args::{
+    DeployTargetArgs, DeploymentPlatformArg, FlyPlatformArgs, ProjectArgs, WasmerConnArgs,
+};
 use crate::commands::client;
 use crate::SharedProjectArgs;
 
@@ -20,6 +22,8 @@ pub struct DeployArgs {
     #[command(flatten)]
     pub conn: WasmerConnArgs,
     #[command(flatten)]
+    pub fly: FlyPlatformArgs,
+    #[command(flatten)]
     pub target: DeployTargetArgs,
 }
 
@@ -29,9 +33,14 @@ pub fn run(args: DeployArgs) -> Result<()> {
         subdir: args.project.subdir,
         ..Default::default()
     };
+    if args.platform == DeploymentPlatformArg::Fly && args.target.wasmer_deploy_config.is_some() {
+        bail!("--wasmer-deploy-config cannot be used with --platform=fly");
+    }
     let target = if let Some(path) = args.target.wasmer_deploy_config {
         DeployTarget::WriteConfig { path }
-    } else if args.wasmer_deploy && !args.no_wasmer_deploy {
+    } else if args.platform == DeploymentPlatformArg::Fly
+        || (args.wasmer_deploy && !args.no_wasmer_deploy)
+    {
         DeployTarget::Publish {
             owner: args.target.wasmer_app_owner,
             name: args.target.wasmer_app_name,
@@ -45,6 +54,12 @@ pub fn run(args: DeployArgs) -> Result<()> {
                 binary: args.conn.wasmer_bin,
                 registry: args.conn.wasmer_registry,
                 token: args.conn.wasmer_token,
+            }),
+            DeploymentPlatformArg::Fly => DeploymentPlatform::Fly(FlyOptions {
+                binary: args.fly.fly_bin,
+                token: args.fly.fly_token,
+                app: args.fly.fly_app,
+                config: args.fly.fly_config,
             }),
         },
         target,

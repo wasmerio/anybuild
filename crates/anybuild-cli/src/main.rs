@@ -54,7 +54,7 @@ struct SharedProjectArgs {
 #[derive(Subcommand)]
 enum Command {
     /// Generate the Anybuild file if needed, build, and optionally run.
-    Auto(commands::auto::AutoArgs),
+    Auto(Box<commands::auto::AutoArgs>),
     /// Create or refresh the Anybuild file.
     Generate {
         #[command(flatten)]
@@ -151,7 +151,7 @@ fn main() {
         print_banner();
     }
     let result = match cli.command {
-        Command::Auto(args) => commands::auto::run(args),
+        Command::Auto(args) => commands::auto::run(*args),
         Command::Generate { shared, out, check } => commands::generate::run(shared, out, check),
         Command::Plan {
             shared,
@@ -215,7 +215,7 @@ mod tests {
         let mut argv = vec!["anybuild"];
         argv.extend_from_slice(args);
         match super::Cli::try_parse_from(argv).expect("parses").command {
-            super::Command::Auto(args) => args,
+            super::Command::Auto(args) => *args,
             _ => panic!("expected the auto command"),
         }
     }
@@ -314,6 +314,20 @@ mod tests {
     }
 
     #[test]
+    fn auto_accepts_fly_deployment_options() {
+        let args = parse_auto(&[
+            "auto",
+            "proj",
+            "--platform=fly",
+            "--fly-app=example-api",
+            "--fly-token=secret",
+        ]);
+        assert_eq!(args.platform, Some(DeploymentPlatformArg::Fly));
+        assert_eq!(args.fly.fly_app.as_deref(), Some("example-api"));
+        assert_eq!(args.fly.fly_token.as_deref(), Some("secret"));
+    }
+
+    #[test]
     fn deploy_accepts_wasmer_deploy_without_app_identity() {
         let args = parse_deploy(&["deploy", "proj", "--wasmer-deploy"]);
         assert!(args.wasmer_deploy);
@@ -325,5 +339,22 @@ mod tests {
     fn deploy_defaults_to_wasmer_platform() {
         let args = parse_deploy(&["deploy", "proj"]);
         assert_eq!(args.platform, DeploymentPlatformArg::Wasmer);
+    }
+
+    #[test]
+    fn deploy_accepts_fly_deployment_options() {
+        let args = parse_deploy(&[
+            "deploy",
+            "proj",
+            "--platform=fly",
+            "--fly-app=example-api",
+            "--fly-config=deploy/fly.toml",
+        ]);
+        assert_eq!(args.platform, DeploymentPlatformArg::Fly);
+        assert_eq!(args.fly.fly_app.as_deref(), Some("example-api"));
+        assert_eq!(
+            args.fly.fly_config.as_deref(),
+            Some(std::path::Path::new("deploy/fly.toml"))
+        );
     }
 }

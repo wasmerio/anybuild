@@ -18,9 +18,17 @@ pub enum ArtifactKind {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RuntimeArtifact {
-    Local { directory: PathBuf },
-    Docker { directory: PathBuf, image: String },
-    Wasmer { directory: PathBuf },
+    Local {
+        directory: PathBuf,
+    },
+    Docker {
+        directory: PathBuf,
+        image: String,
+        context: PathBuf,
+    },
+    Wasmer {
+        directory: PathBuf,
+    },
 }
 
 impl RuntimeArtifact {
@@ -36,6 +44,17 @@ impl RuntimeArtifact {
         match self {
             Self::Wasmer { directory } => Some(directory),
             Self::Local { .. } | Self::Docker { .. } => None,
+        }
+    }
+
+    pub(crate) fn docker_parts(&self) -> Option<(&std::path::Path, &str, &std::path::Path)> {
+        match self {
+            Self::Docker {
+                directory,
+                image,
+                context,
+            } => Some((directory, image, context)),
+            Self::Local { .. } | Self::Wasmer { .. } => None,
         }
     }
 
@@ -72,6 +91,7 @@ mod tests {
         let artifact = RuntimeArtifact::Docker {
             directory: temporary.path().join("docker"),
             image: "acme-api".to_owned(),
+            context: temporary.path().join("project"),
         };
 
         artifact.persist(temporary.path()).unwrap();

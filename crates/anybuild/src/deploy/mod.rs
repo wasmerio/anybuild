@@ -8,6 +8,7 @@ use crate::artifact::{ArtifactKind, RuntimeArtifact};
 use crate::operation::OperationContext;
 use crate::sdk::{DeployOutcome, DeployTarget, DeploymentPlatform};
 
+pub mod fly;
 pub mod wasmer;
 
 pub(crate) trait Deployer {
@@ -26,5 +27,6 @@ pub(crate) fn resolve_deployer(
         DeploymentPlatform::Wasmer(options) => {
             Box::new(wasmer::WasmerDeployer::new(options, operation))
         }
+        DeploymentPlatform::Fly(options) => Box::new(fly::FlyDeployer::new(options, operation)),
     }
 }

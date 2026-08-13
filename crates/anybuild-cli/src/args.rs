@@ -27,6 +27,7 @@ pub enum RunTarget {
 pub enum DeploymentPlatformArg {
     #[default]
     Wasmer,
+    Fly,
 }
 
 #[derive(clap::Args, Debug, Clone, Default)]
@@ -63,6 +64,22 @@ pub struct WasmerConnArgs {
     /// Wasmer token.
     #[arg(long)]
     pub wasmer_token: Option<String>,
+}
+
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct FlyPlatformArgs {
+    /// The path to the Fly CLI binary.
+    #[arg(long)]
+    pub fly_bin: Option<String>,
+    /// Fly.io API token. Defaults to flyctl's configured credentials.
+    #[arg(long)]
+    pub fly_token: Option<String>,
+    /// Fly.io application name.
+    #[arg(long)]
+    pub fly_app: Option<String>,
+    /// Existing fly.toml path, relative to the project root.
+    #[arg(long)]
+    pub fly_config: Option<PathBuf>,
 }
 
 /// Command selection shared by `run` and `auto`.

@@ -353,6 +353,7 @@ impl Runner for DockerRunner {
         Ok(RuntimeArtifact::Docker {
             directory: self.runner_path.clone(),
             image: image_name,
+            context: self.src_dir.clone(),
         })
     }
 

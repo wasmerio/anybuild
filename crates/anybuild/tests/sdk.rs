@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use anybuild::plan::Step;
 use anybuild::{
     Anybuild, AutoOptions, BuildOptions, DeployOptions, DeployOutcome, DeployTarget,
-    DeploymentPlatform, Event, GenerateOptions, GenerationCheckStatus, GenerationPolicy,
-    PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, WasmerOptions,
+    DeploymentPlatform, Event, FlyOptions, GenerateOptions, GenerationCheckStatus,
+    GenerationPolicy, PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, WasmerOptions,
 };
 
 fn static_project() -> tempfile::TempDir {
@@ -421,6 +421,62 @@ fn deploy_config_can_use_piped_process_events() {
     assert!(!format!("{events:?}").contains("do-not-leak"));
 }
 
+#[cfg(unix)]
+#[test]
+fn fly_deployment_uses_the_docker_artifact_and_redacts_its_token() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let project = static_project();
+    let state = project.path().join(".anybuild");
+    let artifact_dir = state.join("runner/docker");
+    std::fs::create_dir_all(&artifact_dir).unwrap();
+    std::fs::write(artifact_dir.join("Dockerfile"), "FROM scratch\n").unwrap();
+    std::fs::write(artifact_dir.join("Dockerfile.dockerignore"), "**\n").unwrap();
+    std::fs::write(artifact_dir.join("port"), "8080\n").unwrap();
+    std::fs::write(
+        state.join("artifact.json"),
+        serde_json::to_string_pretty(&RuntimeArtifact::Docker {
+            directory: artifact_dir,
+            image: "sdk-fly-app".to_owned(),
+            context: project.path().to_path_buf(),
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    let fake_fly = project.path().join("fake-flyctl");
+    std::fs::write(&fake_fly, "#!/bin/sh\necho \"fly:$*:$FLY_API_TOKEN\"\n").unwrap();
+    std::fs::set_permissions(&fake_fly, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let captured = Arc::clone(&events);
+
+    let outcome = Anybuild::new(project.path())
+        .with_event_handler(move |event: &Event| captured.lock().unwrap().push(event.clone()))
+        .deploy(DeployOptions {
+            platform: DeploymentPlatform::Fly(FlyOptions {
+                binary: Some(fake_fly.display().to_string()),
+                token: Some("fly-secret".to_owned()),
+                app: Some("sdk-fly-app".to_owned()),
+                config: None,
+            }),
+            target: DeployTarget::Publish {
+                owner: None,
+                name: None,
+            },
+            process_io: ProcessIo::Events,
+        })
+        .unwrap();
+
+    assert!(matches!(
+        outcome,
+        DeployOutcome::Published { name: Some(name), .. } if name == "sdk-fly-app"
+    ));
+    let events = events.lock().unwrap();
+    assert!(events.iter().any(
+        |event| matches!(event, Event::ProcessOutput { text, .. } if text.contains("--local-only"))
+    ));
+    assert!(!format!("{events:?}").contains("fly-secret"));
+}
+
 #[test]
 fn deployment_rejects_an_incompatible_runtime_artifact() {
     let project = static_project();
@@ -448,5 +504,20 @@ fn deployment_rejects_an_incompatible_runtime_artifact() {
 
     let message = error.to_string();
     assert!(message.contains("Wasmer deployment requires a Wasmer artifact"));
+    assert!(message.contains("found Local"));
+
+    let error = Anybuild::new(project.path())
+        .deploy(DeployOptions {
+            platform: DeploymentPlatform::Fly(FlyOptions::default()),
+            target: DeployTarget::Publish {
+                owner: None,
+                name: None,
+            },
+            process_io: ProcessIo::Events,
+        })
+        .unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("Fly.io deployment requires a Docker artifact"));
     assert!(message.contains("found Local"));
 }
