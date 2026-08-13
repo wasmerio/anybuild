@@ -61,6 +61,14 @@ pub fn resolve_environment(
     resolve_environment_inner(paths, options, operation, true)
 }
 
+pub(crate) fn resolve_anybuild_dir(
+    paths: &ProjectPaths,
+    operation: &OperationContext,
+) -> Result<PathBuf> {
+    migrate_legacy_state_dir(paths, operation)?;
+    Ok(default_anybuild_dir(paths))
+}
+
 fn resolve_environment_inner(
     paths: &ProjectPaths,
     options: &EnvironmentOptions,

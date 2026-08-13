@@ -14,6 +14,7 @@ use crate::internal::volumes::load_volume_mappings;
 use crate::operation::OperationContext;
 use crate::plan::{RunStep, Serve, Step};
 use crate::run::{HostMount, Runner};
+use crate::RuntimeArtifact;
 
 const TOOLCHAIN_STAGE: &str = r#"# syntax=docker/dockerfile:1.7-labs
 FROM debian:trixie-slim AS runtime-tools
@@ -322,15 +323,11 @@ impl DockerRunner {
 }
 
 impl Runner for DockerRunner {
-    fn as_any(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-
     fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step> {
         steps
     }
 
-    fn build(&mut self, serve: &Serve) -> Result<()> {
+    fn build(&mut self, serve: &Serve) -> Result<RuntimeArtifact> {
         match std::fs::remove_dir_all(&self.runner_path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -353,7 +350,10 @@ impl Runner for DockerRunner {
             &self.operation,
             format!("Created Docker image {image_name}"),
         );
-        Ok(())
+        Ok(RuntimeArtifact::Docker {
+            directory: self.runner_path.clone(),
+            image: image_name,
+        })
     }
 
     fn prepare(&mut self, env: &IndexMap<String, String>, prepare: &[RunStep]) -> Result<()> {

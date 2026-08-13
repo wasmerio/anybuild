@@ -3,8 +3,10 @@
 //! The [`Anybuild`] facade provides synchronous, typed access to generation,
 //! planning, building, running, and deployment without going through the CLI.
 
+mod artifact;
 mod build;
 mod common;
+mod deploy;
 mod error;
 mod event;
 mod internal;
@@ -14,7 +16,9 @@ mod providers;
 mod run;
 mod sdk;
 mod starlark;
+mod wasmer;
 
+pub use artifact::{ArtifactKind, RuntimeArtifact};
 pub use error::{Error, ErrorKind, Result};
 pub use event::{
     BuildPlanPackage, BuildPlanStep, DeployScript, DiagnosticLevel, Event, EventHandler,
@@ -22,10 +26,10 @@ pub use event::{
 };
 pub use sdk::{
     Anybuild, AutoOptions, AutoOutcome, BuildEnvironment, BuildOptions, BuildOutcome,
-    CommandOverrides, ConfigDifference, DeployOptions, DeployOutcome, DeployTarget, DockerOptions,
-    GenerateOptions, GeneratedAnybuild, GenerationCheck, GenerationCheckStatus, GenerationPolicy,
-    PlanOptions, ProjectPlan, ProviderConfigSnapshot, RunOptions, RunOutcome, RuntimeEnvironment,
-    WasmerOptions,
+    CommandOverrides, ConfigDifference, DeployOptions, DeployOutcome, DeployTarget,
+    DeploymentPlatform, DockerOptions, GenerateOptions, GeneratedAnybuild, GenerationCheck,
+    GenerationCheckStatus, GenerationPolicy, PlanOptions, ProjectPlan, ProviderConfigSnapshot,
+    RunOptions, RunOutcome, RuntimeEnvironment, WasmerOptions,
 };
 
 /// Version of the Anybuild SDK and CLI.

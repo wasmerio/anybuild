@@ -17,6 +17,7 @@ use crate::build::BuildBackend;
 use crate::operation::OperationContext;
 use crate::plan::{RunStep, Serve, Step};
 use crate::run::{HostMount, Runner};
+use crate::RuntimeArtifact;
 
 pub struct LocalRunner {
     build_backend: Rc<RefCell<dyn BuildBackend>>,
@@ -125,15 +126,11 @@ fn set_executable(path: &std::path::Path) -> Result<()> {
 }
 
 impl Runner for LocalRunner {
-    fn as_any(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-
     fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step> {
         steps
     }
 
-    fn build(&mut self, serve: &Serve) -> Result<()> {
+    fn build(&mut self, serve: &Serve) -> Result<RuntimeArtifact> {
         match std::fs::remove_dir_all(&self.runner_path) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -144,7 +141,9 @@ impl Runner for LocalRunner {
         }
         self.build_prepare(serve)?;
         self.build_serve(serve)?;
-        Ok(())
+        Ok(RuntimeArtifact::Local {
+            directory: self.runner_path.clone(),
+        })
     }
 
     fn prepare(&mut self, _env: &IndexMap<String, String>, _prepare: &[RunStep]) -> Result<()> {

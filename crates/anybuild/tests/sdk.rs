@@ -2,9 +2,9 @@ use std::sync::{Arc, Mutex};
 
 use anybuild::plan::Step;
 use anybuild::{
-    Anybuild, AutoOptions, BuildOptions, DeployOptions, DeployOutcome, DeployTarget, Event,
-    GenerateOptions, GenerationCheckStatus, GenerationPolicy, PlanOptions, ProcessIo, RunOptions,
-    WasmerOptions,
+    Anybuild, AutoOptions, BuildOptions, DeployOptions, DeployOutcome, DeployTarget,
+    DeploymentPlatform, Event, GenerateOptions, GenerationCheckStatus, GenerationPolicy,
+    PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, WasmerOptions,
 };
 
 fn static_project() -> tempfile::TempDir {
@@ -336,6 +336,12 @@ serve(
     let build = sdk.build(BuildOptions::default()).unwrap();
     assert_eq!(build.plan.provider, "staticfile");
     assert!(build.state_dir.ends_with(".anybuild"));
+    assert!(matches!(
+        build.artifact,
+        RuntimeArtifact::Local { ref directory }
+            if directory.ends_with(".anybuild/runner/local")
+    ));
+    assert!(build.state_dir.join("artifact.json").is_file());
 
     let run = sdk
         .run(
@@ -395,10 +401,10 @@ fn deploy_config_can_use_piped_process_events() {
         .with_env("SDK_SECRET", "do-not-leak")
         .with_event_handler(move |event: &Event| captured.lock().unwrap().push(event.clone()))
         .deploy(DeployOptions {
-            wasmer: WasmerOptions {
+            platform: DeploymentPlatform::Wasmer(WasmerOptions {
                 binary: Some(fake_wasmer.display().to_string()),
                 ..Default::default()
-            },
+            }),
             target: DeployTarget::WriteConfig {
                 path: config.clone(),
             },
@@ -413,4 +419,34 @@ fn deploy_config_can_use_piped_process_events() {
         |event| matches!(event, Event::ProcessOutput { text, .. } if text.contains("packaged:[REDACTED]"))
     ));
     assert!(!format!("{events:?}").contains("do-not-leak"));
+}
+
+#[test]
+fn deployment_rejects_an_incompatible_runtime_artifact() {
+    let project = static_project();
+    let state = project.path().join(".anybuild");
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(
+        state.join("artifact.json"),
+        format!(
+            "{{\"kind\":\"local\",\"directory\":{}}}\n",
+            serde_json::to_string(&state.join("runner/local")).unwrap()
+        ),
+    )
+    .unwrap();
+
+    let error = Anybuild::new(project.path())
+        .deploy(DeployOptions {
+            platform: DeploymentPlatform::default(),
+            target: DeployTarget::Publish {
+                owner: None,
+                name: None,
+            },
+            process_io: ProcessIo::Events,
+        })
+        .unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("Wasmer deployment requires a Wasmer artifact"));
+    assert!(message.contains("found Local"));
 }

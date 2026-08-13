@@ -1,7 +1,7 @@
-use anybuild::{DeployOptions, DeployTarget, WasmerOptions};
+use anybuild::{DeployOptions, DeployTarget, DeploymentPlatform, WasmerOptions};
 use anyhow::Result;
 
-use crate::args::{DeployTargetArgs, ProjectArgs, WasmerConnArgs};
+use crate::args::{DeployTargetArgs, DeploymentPlatformArg, ProjectArgs, WasmerConnArgs};
 use crate::commands::client;
 use crate::SharedProjectArgs;
 
@@ -9,6 +9,10 @@ use crate::SharedProjectArgs;
 pub struct DeployArgs {
     #[command(flatten)]
     pub project: ProjectArgs,
+    /// Deployment platform receiving the runtime artifact.
+    #[arg(long, value_enum, default_value = "wasmer")]
+    pub platform: DeploymentPlatformArg,
+    /// Legacy switch retained for Wasmer deployment compatibility.
     #[arg(long, default_value_t = true, overrides_with = "no_wasmer_deploy")]
     pub wasmer_deploy: bool,
     #[arg(long = "no-wasmer-deploy", hide = true)]
@@ -36,10 +40,12 @@ pub fn run(args: DeployArgs) -> Result<()> {
         return Ok(());
     };
     client(&shared, None)?.deploy(DeployOptions {
-        wasmer: WasmerOptions {
-            binary: args.conn.wasmer_bin,
-            registry: args.conn.wasmer_registry,
-            token: args.conn.wasmer_token,
+        platform: match args.platform {
+            DeploymentPlatformArg::Wasmer => DeploymentPlatform::Wasmer(WasmerOptions {
+                binary: args.conn.wasmer_bin,
+                registry: args.conn.wasmer_registry,
+                token: args.conn.wasmer_token,
+            }),
         },
         target,
         process_io: Default::default(),

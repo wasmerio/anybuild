@@ -1,10 +1,10 @@
 use anybuild::{
-    AutoOptions, DeployOptions, DeployTarget, GenerationPolicy, RunOptions, RuntimeEnvironment,
-    WasmerOptions,
+    AutoOptions, DeployOptions, DeployTarget, DeploymentPlatform, GenerationPolicy, RunOptions,
+    RuntimeEnvironment, WasmerOptions,
 };
 use anyhow::{bail, Result};
 
-use crate::args::{DeployTargetArgs, RunSelectionArgs};
+use crate::args::{DeployTargetArgs, DeploymentPlatformArg, RunSelectionArgs};
 use crate::commands::{build, client_with_render_options, execution, RenderOptions};
 use crate::context::EnvironmentOptions;
 use crate::SharedProjectArgs;
@@ -15,6 +15,10 @@ pub struct AutoArgs {
     pub build: build::BuildArgs,
     #[command(flatten)]
     pub selection: RunSelectionArgs,
+    /// Deploy to a platform after producing its runtime artifact.
+    #[arg(long, value_enum)]
+    pub platform: Option<DeploymentPlatformArg>,
+    /// Legacy shorthand for `--platform=wasmer`.
     #[arg(long)]
     pub wasmer_deploy: bool,
     #[command(flatten)]
@@ -31,7 +35,9 @@ pub fn run(args: AutoArgs) -> Result<()> {
     if args.temp_anybuild && args.build.anybuild_path.is_some() {
         bail!("Cannot use both --temp-anybuild and --anybuild-path");
     }
-    let deploy_requested = args.wasmer_deploy || args.deploy_target.wasmer_deploy_config.is_some();
+    let deploy_requested = args.platform.is_some()
+        || args.wasmer_deploy
+        || args.deploy_target.wasmer_deploy_config.is_some();
     let skip_docker_if_safe = args.build.effective_skip_docker_if_safe_build();
     let start = args.selection.effective_start();
     let after_deploy = args.selection.effective_after_deploy();
@@ -92,13 +98,19 @@ pub fn run(args: AutoArgs) -> Result<()> {
     };
     let deploy = if let Some(path) = args.deploy_target.wasmer_deploy_config {
         Some(DeployOptions {
-            wasmer: wasmer_options(&runtime_environment),
+            platform: deployment_platform(
+                args.platform.unwrap_or(DeploymentPlatformArg::Wasmer),
+                &runtime_environment,
+            ),
             target: DeployTarget::WriteConfig { path },
             process_io: Default::default(),
         })
-    } else if args.wasmer_deploy {
+    } else if args.wasmer_deploy || args.platform.is_some() {
         Some(DeployOptions {
-            wasmer: wasmer_options(&runtime_environment),
+            platform: deployment_platform(
+                args.platform.unwrap_or(DeploymentPlatformArg::Wasmer),
+                &runtime_environment,
+            ),
             target: DeployTarget::Publish {
                 owner: args.deploy_target.wasmer_app_owner,
                 name: args.deploy_target.wasmer_app_name,
@@ -136,5 +148,14 @@ fn wasmer_options(runtime: &RuntimeEnvironment) -> WasmerOptions {
     match runtime {
         RuntimeEnvironment::Wasmer(options) => options.clone(),
         RuntimeEnvironment::Local | RuntimeEnvironment::Docker(_) => WasmerOptions::default(),
+    }
+}
+
+fn deployment_platform(
+    platform: DeploymentPlatformArg,
+    runtime: &RuntimeEnvironment,
+) -> DeploymentPlatform {
+    match platform {
+        DeploymentPlatformArg::Wasmer => DeploymentPlatform::Wasmer(wasmer_options(runtime)),
     }
 }

@@ -7,6 +7,8 @@ use serde_json::Value;
 
 use crate::plan::{Serve, Service, Step};
 
+use crate::artifact::RuntimeArtifact;
+use crate::deploy::resolve_deployer;
 use crate::error::{Error, ErrorKind, Result};
 pub use crate::event::ProcessIo;
 use crate::event::{
@@ -14,8 +16,8 @@ use crate::event::{
     PackagePhase, Reporter,
 };
 use crate::internal::context::{
-    resolve_environment, resolve_project_context, resolve_project_context_for_check,
-    EnvironmentOptions, ProjectContext,
+    resolve_anybuild_dir, resolve_environment, resolve_project_context,
+    resolve_project_context_for_check, EnvironmentOptions, ProjectContext,
 };
 use crate::internal::generator::generate_anybuild;
 use crate::internal::paths::{
@@ -47,6 +49,17 @@ pub struct WasmerOptions {
     pub binary: Option<String>,
     pub registry: Option<String>,
     pub token: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum DeploymentPlatform {
+    Wasmer(WasmerOptions),
+}
+
+impl Default for DeploymentPlatform {
+    fn default() -> Self {
+        Self::Wasmer(WasmerOptions::default())
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -181,7 +194,7 @@ pub enum DeployTarget {
 
 #[derive(Debug, Clone)]
 pub struct DeployOptions {
-    pub wasmer: WasmerOptions,
+    pub platform: DeploymentPlatform,
     pub target: DeployTarget,
     pub process_io: ProcessIo,
 }
@@ -264,6 +277,7 @@ pub struct ProjectPlan {
 pub struct BuildOutcome {
     pub plan: ProjectPlan,
     pub state_dir: PathBuf,
+    pub artifact: RuntimeArtifact,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -659,7 +673,7 @@ impl Anybuild {
                 &context.serve,
                 Some(&context.anybuild_dir),
             )?;
-            context.runner.borrow_mut().build(&context.serve)?;
+            let artifact = context.runner.borrow_mut().build(&context.serve)?;
             if !options.skip_prepare
                 && context
                     .serve
@@ -675,12 +689,14 @@ impl Anybuild {
                     .borrow_mut()
                     .prepare(&env, context.serve.prepare.as_deref().unwrap_or_default())?;
             }
+            artifact.persist(&context.anybuild_dir)?;
             operation.emit(Event::ArtifactCreated {
                 path: context.anybuild_dir.clone(),
             });
             return Ok(BuildOutcome {
                 plan,
                 state_dir: context.anybuild_dir,
+                artifact,
             });
         }
     }
@@ -749,32 +765,23 @@ impl Anybuild {
         operation: &OperationContext,
     ) -> AnyResult<DeployOutcome> {
         let paths = self.paths()?;
-        let environment = resolve_environment(
-            &paths,
-            &environment_options(
-                &BuildEnvironment::Local,
-                &RuntimeEnvironment::Wasmer(options.wasmer.clone()),
-            ),
-            operation,
-        )?;
-        let mut runner = environment.runner.borrow_mut();
-        let runner = runner
-            .as_any()
-            .downcast_mut::<crate::run::wasmer::WasmerRunner>()
-            .expect("Wasmer runtime resolves a WasmerRunner");
-        let outcome = match options.target {
-            DeployTarget::WriteConfig { path } => {
-                runner.deploy_config(&path)?;
-                DeployOutcome::ConfigWritten { path }
-            }
-            DeployTarget::Publish { owner, name } => {
-                runner.deploy(owner.as_deref(), name.as_deref())?;
-                DeployOutcome::Published { owner, name }
-            }
-        };
+        let anybuild_dir = resolve_anybuild_dir(&paths, operation)?;
+        let mut deployer = resolve_deployer(options.platform, operation.clone());
+        let artifact = RuntimeArtifact::load(&anybuild_dir)?
+            .unwrap_or(deployer.load_legacy_artifact(&anybuild_dir)?);
+        anyhow::ensure!(
+            artifact.kind() == deployer.artifact_kind(),
+            "{} deployment requires a {:?} artifact, found {:?}",
+            deployer.platform_name(),
+            deployer.artifact_kind(),
+            artifact.kind()
+        );
+        let outcome = deployer.deploy(&artifact, options.target)?;
         operation.emit(Event::Deployment {
             description: match &outcome {
-                DeployOutcome::Published { .. } => "Published Wasmer application".to_owned(),
+                DeployOutcome::Published { .. } => {
+                    format!("Published {} application", deployer.platform_name())
+                }
                 DeployOutcome::ConfigWritten { path } => {
                     format!("Wrote deployment config to {}", path.display())
                 }

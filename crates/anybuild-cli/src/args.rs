@@ -23,6 +23,12 @@ pub enum RunTarget {
     Wasmer,
 }
 
+#[derive(clap::ValueEnum, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DeploymentPlatformArg {
+    #[default]
+    Wasmer,
+}
+
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct ExecutionTargetArgs {
     /// Select the build backend.
