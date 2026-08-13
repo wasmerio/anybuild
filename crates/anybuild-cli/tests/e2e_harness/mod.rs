@@ -55,6 +55,21 @@ impl BuildMode {
             BuildMode::DockerBuilderAndRunner => "docker_builder_and_runner",
         }
     }
+
+    fn uses_docker_runner(self) -> bool {
+        matches!(
+            self,
+            BuildMode::DockerRunner | BuildMode::DockerBuilderAndRunner
+        )
+    }
+
+    fn build_timeout(self) -> Duration {
+        if self.uses_docker_runner() {
+            Duration::from_secs(600)
+        } else {
+            Duration::from_secs(180)
+        }
+    }
 }
 
 /// Entry point used by every generated test in `tests/e2e.rs`.
@@ -164,13 +179,13 @@ fn run_case_inner(
         volume_specs.push("wp-content:/app/wp-content".to_string());
     }
 
-    if case.download.is_some() || !case.commands.is_empty() {
+    if case.download.is_some() || !case.commands.is_empty() || build_mode.uses_docker_runner() {
         // Build first, then serve via `anybuild run --start`, then execute
         // each RunCommand via `anybuild run --command=...`.
         let build_cmd =
             anybuild_build_command(repo_root, project_path, build_mode, port, case.provider)?;
         let build_result =
-            run_completed_command(&build_cmd, repo_root, envs, Duration::from_secs(180))?;
+            run_completed_command(&build_cmd, repo_root, envs, build_mode.build_timeout())?;
         let build_output = build_result.output();
         if build_result.returncode != Some(0) || !build_output.contains(BUILD_PHRASE) {
             bail!(

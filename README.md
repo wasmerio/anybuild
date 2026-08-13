@@ -38,6 +38,9 @@ anybuild build . --builder=local --runner=docker
 anybuild build . --builder=docker --runner=docker
 ```
 
+Python virtual environments produced by the local builder are host-specific.
+Use `--builder=docker --runner=docker` for Python deployment images.
+
 The resulting image is tagged with the normalized application name. Its
 generated Dockerfile and image name are stored under
 `.anybuild/runner/docker/` for later deployment.

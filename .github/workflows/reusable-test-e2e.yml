@@ -103,8 +103,6 @@ jobs:
             mode: docker_runner
           - suite: staticnode1
             mode: docker_runner
-          - suite: python
-            mode: docker_runner
           - suite: node
             mode: docker_runner
           - suite: php
@@ -218,8 +216,13 @@ jobs:
         env:
           ANYBUILD_BIN: ${{ github.workspace }}/anybuild-bin/anybuild
         run: |
+          test_threads=4
+          if [[ "${{ matrix.mode }}" == docker* ]]; then
+            test_threads=1
+          fi
           cargo nextest run \
             --archive-file anybuild-e2e.tar.zst \
             --workspace-remap "$GITHUB_WORKSPACE" \
             --profile e2e --run-ignored all \
+            --test-threads "$test_threads" \
             -E 'test(/^${{ matrix.suite }}__${{ matrix.mode }}__/) and not test(/cdn|python_streamlit/)'

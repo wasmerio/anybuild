@@ -53,7 +53,7 @@
   }
  ],
  "commands": {
-  "start": "php -S localhost:8080 -t app/public"
+  "start": "php -S 0.0.0.0:8080 -t app/public"
  },
  "cwd": "app",
  "deps": [

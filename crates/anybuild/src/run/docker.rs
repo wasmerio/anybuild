@@ -18,10 +18,12 @@ use crate::run::{HostMount, Runner};
 const TOOLCHAIN_STAGE: &str = r#"# syntax=docker/dockerfile:1.7-labs
 FROM debian:trixie-slim AS runtime-tools
 
-RUN apt-get update \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update \
     && apt-get -y --no-install-recommends install \
-        curl ca-certificates unzip git xz-utils \
-    && rm -rf /var/lib/apt/lists/*
+        curl ca-certificates unzip git xz-utils
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 "#;
@@ -44,16 +46,6 @@ ENV MISE_CONFIG_DIR="/mise"
 ENV PATH="/mise/shims:$PATH"
 
 COPY --from=runtime-tools /etc/ssl/certs /etc/ssl/certs
-"#;
-
-const NATIVE_BUILD_DEPS: &str = r#"RUN apt-get update \
-    && apt-get -y --no-install-recommends install \
-        build-essential gcc make autoconf libtool bison \
-        dpkg-dev pkg-config re2c locate \
-        libmariadb-dev libmariadb-dev-compat libpq-dev libsqlite3-dev \
-        libvips-dev default-libmysqlclient-dev libmagickwand-dev \
-        libicu-dev libxml2-dev libxslt1-dev libyaml-dev \
-    && rm -rf /var/lib/apt/lists/*
 "#;
 
 pub struct DockerRunner {
@@ -172,21 +164,11 @@ impl DockerRunner {
                 "bash" | "composer" | "pie" | "static-web-server"
             )
         });
-        let builds_native_runtime = serve
-            .deps
-            .iter()
-            .any(|dependency| matches!(dependency.name.as_str(), "php" | "python" | "pie"));
-        if builds_native_runtime {
-            contents.push_str(NATIVE_BUILD_DEPS);
-        }
         if uses_mise {
             contents.push_str(MISE_SETUP);
         }
         for dependency in &serve.deps {
             contents.push_str(&dependency_install_contents(dependency));
-        }
-        if uses_mise {
-            contents.push_str("RUN rm -rf /mise/cache\n");
         }
         contents.push_str(RUNTIME_STAGE);
         if uses_mise {
@@ -195,7 +177,6 @@ impl DockerRunner {
             );
             contents.push_str("COPY --from=runtime-tools /mise /mise\n");
             contents.push_str("COPY --from=runtime-tools /usr/local/bin /usr/local/bin\n");
-            contents.push_str("COPY --from=runtime-tools /usr/lib /usr/lib\n");
         } else if serve
             .deps
             .iter()
@@ -244,6 +225,13 @@ impl DockerRunner {
         }
         for (key, value) in serve.env.as_ref().into_iter().flatten() {
             contents.push_str(&format!("ENV {key}={}\n", docker_env_value(value)));
+        }
+        if !serve
+            .env
+            .as_ref()
+            .is_some_and(|env| env.contains_key("HOST"))
+        {
+            contents.push_str("ENV HOST=\"0.0.0.0\"\n");
         }
         if let Some(cwd) = &serve.cwd {
             contents.push_str(&format!("WORKDIR {}\n", docker_env_value(cwd)));
@@ -368,12 +356,12 @@ impl Runner for DockerRunner {
         Ok(())
     }
 
-    fn prepare(&mut self, _env: &IndexMap<String, String>, prepare: &[RunStep]) -> Result<()> {
+    fn prepare(&mut self, env: &IndexMap<String, String>, prepare: &[RunStep]) -> Result<()> {
         if prepare.is_empty() {
             return Ok(());
         }
         let mappings = load_volume_mappings(&self.src_dir, Some(&self.anybuild_dir))?;
-        self.run_serve_command("prepare", Some(&mappings), &[], None)
+        self.run_serve_command("prepare", Some(&mappings), &[], Some(env))
     }
 
     fn has_serve_command(&self, command: &str) -> bool {
@@ -393,6 +381,10 @@ impl Runner for DockerRunner {
         }
         let image_name = self.stored_image_name()?;
         let mut args = vec!["run".to_owned(), "--rm".to_owned()];
+        args.extend([
+            "--add-host".to_owned(),
+            "host.docker.internal:host-gateway".to_owned(),
+        ]);
         if parsed[0] == "start" {
             let host_port = env
                 .and_then(|values| values.get("PORT"))
@@ -418,6 +410,7 @@ impl Runner for DockerRunner {
         }
         if let Some(env) = env {
             for (key, value) in env {
+                let value = docker_container_env_value(key, value);
                 args.extend(["--env".to_owned(), format!("{key}={value}")]);
             }
         }
@@ -438,6 +431,14 @@ impl Runner for DockerRunner {
             status.code()
         );
         Ok(())
+    }
+}
+
+fn docker_container_env_value<'a>(key: &str, value: &'a str) -> &'a str {
+    if matches!(key, "DB_HOST" | "DATABASE_HOST") && matches!(value, "127.0.0.1" | "localhost") {
+        "host.docker.internal"
+    } else {
+        value
     }
 }
 
@@ -531,10 +532,15 @@ mod tests {
         let dockerfile = runner.dockerfile_contents(&serve).unwrap();
 
         assert!(dockerfile.contains("FROM debian:trixie-slim AS runtime-tools"));
-        assert!(dockerfile.contains("RUN mise use --global \"node@22\""));
+        assert!(dockerfile.contains(
+            "RUN --mount=type=cache,target=/mise/cache,sharing=locked mise use --global \"node@22\""
+        ));
         assert!(dockerfile.contains("FROM debian:trixie-slim AS runtime"));
         assert!(dockerfile.contains("COPY [\".anybuild/local/build/app\",\"/app\"]"));
         assert!(dockerfile.contains("ENV NODE_ENV=\"production\""));
+        assert!(dockerfile.contains("ENV HOST=\"0.0.0.0\""));
+        assert!(!dockerfile.contains("build-essential"));
+        assert!(!dockerfile.contains("COPY --from=runtime-tools /usr/lib /usr/lib"));
         assert!(dockerfile.contains("WORKDIR \"/app\""));
         assert!(dockerfile.contains("ENTRYPOINT [\"/anybuild/bin/entrypoint\"]"));
         assert!(dockerfile.contains("EXPOSE 8080"));
@@ -555,6 +561,39 @@ mod tests {
 
         let dockerfile = runner.dockerfile_contents(&serve).unwrap();
         assert!(dockerfile.contains("ENV PATH=\"/opt/venv/bin:$PATH\""));
+    }
+
+    #[test]
+    fn dockerfile_preserves_explicit_host() {
+        let temporary = tempfile::tempdir().unwrap();
+        let runner = runner(temporary.path());
+        let mut serve = serve();
+        serve
+            .env
+            .as_mut()
+            .unwrap()
+            .insert("HOST".to_owned(), "127.0.0.1".to_owned());
+
+        let dockerfile = runner.dockerfile_contents(&serve).unwrap();
+        assert!(dockerfile.contains("ENV HOST=\"127.0.0.1\""));
+        assert!(!dockerfile.contains("ENV HOST=\"0.0.0.0\""));
+    }
+
+    #[test]
+    fn loopback_database_hosts_use_the_docker_host_gateway() {
+        assert_eq!(
+            docker_container_env_value("DB_HOST", "127.0.0.1"),
+            "host.docker.internal"
+        );
+        assert_eq!(
+            docker_container_env_value("DATABASE_HOST", "localhost"),
+            "host.docker.internal"
+        );
+        assert_eq!(
+            docker_container_env_value("DB_HOST", "database.internal"),
+            "database.internal"
+        );
+        assert_eq!(docker_container_env_value("HOST", "localhost"), "localhost");
     }
 
     #[test]

@@ -103,7 +103,7 @@ def php_commands(config, app):
     docroot = app.serve_path
     if config.php_public_dir:
         docroot = "{}/{}".format(app.serve_path, config.php_public_dir)
-    return {"start": "{} -S localhost:{} -t {}".format(engine, config.port, docroot)}
+    return {"start": "{} -S 0.0.0.0:{} -t {}".format(engine, config.port, docroot)}
 
 def php_serve(config, build, name = None, provider = None, commands = None, **overrides):
     """Serve a PHP build with the php (or phpix) dev server."""

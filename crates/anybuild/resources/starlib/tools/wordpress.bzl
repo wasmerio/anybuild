@@ -119,7 +119,7 @@ def wordpress_build(config, app = None, assets = None, wpcontent_base = None):
 def wordpress_commands(config, app, assets):
     commands = php_commands(config, app)
     if config.phpix and "start" in commands:
-        commands["start"] = "phpix --startup-script={}/start-wp.php -S localhost:{} -t {}".format(assets.serve_path, config.port, app.serve_path)
+        commands["start"] = "phpix --startup-script={}/start-wp.php -S 0.0.0.0:{} -t {}".format(assets.serve_path, config.port, app.serve_path)
     return merged({
         "wp": "php {}/wp-cli.phar --allow-root --path={}".format(assets.serve_path, app.serve_path),
         "after_deploy": "bash {}/setup-wp.sh".format(assets.serve_path),

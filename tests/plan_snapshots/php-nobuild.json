@@ -30,7 +30,7 @@
   }
  ],
  "commands": {
-  "start": "php -S localhost:8080 -t app"
+  "start": "php -S 0.0.0.0:8080 -t app"
  },
  "cwd": "app",
  "deps": [

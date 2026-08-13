@@ -97,7 +97,7 @@
  ],
  "commands": {
   "after_deploy": "php artisan migrate",
-  "start": "php -S localhost:8080 -t public"
+  "start": "php -S 0.0.0.0:8080 -t public"
  },
  "cwd": "app",
  "deps": [

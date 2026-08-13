@@ -209,6 +209,12 @@ const UVICORN: &str = r"Uvicorn running on .*";
 const WASMER_ONLY: &[BuildMode] = &[BuildMode::Wasmer];
 const LOCAL_AND_WASMER: &[BuildMode] =
     &[BuildMode::Local, BuildMode::DockerRunner, BuildMode::Wasmer];
+const PYTHON_MODES: &[BuildMode] = &[
+    BuildMode::Local,
+    BuildMode::Wasmer,
+    BuildMode::WasmerAndDocker,
+    BuildMode::DockerBuilderAndRunner,
+];
 
 const WORDPRESS_DB_ENV: &[(&str, &str)] = &[
     ("DB_NAME", "test"),
@@ -955,6 +961,7 @@ pub static CASES: &[Case] = &[
         path: Some("examples/python-fastapi"),
         serve_pattern: UVICORN,
         http: &[body("/", r"Hello World from fastapi!")],
+        build_modes: Some(PYTHON_MODES),
         ..BASE
     },
     // Python Flask app served via Uvicorn WSGI
@@ -964,6 +971,7 @@ pub static CASES: &[Case] = &[
         path: Some("examples/python-flask"),
         serve_pattern: UVICORN,
         http: &[body("/", r"Welcome to Flask")],
+        build_modes: Some(PYTHON_MODES),
         ..BASE
     },
     // Python Django via Uvicorn WSGI. Docker covers collectstatic.
@@ -973,13 +981,7 @@ pub static CASES: &[Case] = &[
         path: Some("examples/python-django"),
         serve_pattern: UVICORN,
         http: &[body("/", r"Django")],
-        build_modes: Some(&[
-            BuildMode::Local,
-            BuildMode::DockerRunner,
-            BuildMode::Wasmer,
-            BuildMode::WasmerAndDocker,
-            BuildMode::DockerBuilderAndRunner,
-        ]),
+        build_modes: Some(PYTHON_MODES),
         ..BASE
     },
     // Python ffmpeg demo (FastAPI), homepage is static HTML form
@@ -989,6 +991,7 @@ pub static CASES: &[Case] = &[
         path: Some("examples/python-ffmpeg"),
         serve_pattern: UVICORN,
         http: &[body("/", r"Take screenshot at 1s")],
+        build_modes: Some(PYTHON_MODES),
         ..BASE
     },
     // Python Pillow demo (FastAPI), homepage has form title
@@ -998,6 +1001,7 @@ pub static CASES: &[Case] = &[
         path: Some("examples/python-pillow"),
         serve_pattern: UVICORN,
         http: &[body("/", r"Image Crop\s*&\s*Rotate")],
+        build_modes: Some(PYTHON_MODES),
         ..BASE
     },
     // Python Pandoc demo: app may require pandoc binary; only assert serve
@@ -1008,6 +1012,7 @@ pub static CASES: &[Case] = &[
         path: Some("examples/python-pandoc"),
         serve_pattern: UVICORN,
         http: &[],
+        build_modes: Some(PYTHON_MODES),
         ..BASE
     },
     // Python Procfile demo using python -m http.server
@@ -1017,6 +1022,7 @@ pub static CASES: &[Case] = &[
         path: Some("examples/python-procfile"),
         serve_pattern: r"Serving HTTP on .*",
         http: &[body("/", r"Test")],
+        build_modes: Some(PYTHON_MODES),
         ..BASE
     },
     // Python Streamlit app
@@ -1026,6 +1032,7 @@ pub static CASES: &[Case] = &[
         path: Some("examples/python-streamlit"),
         serve_pattern: r".*You can now view your Streamlit app in your browser.*",
         http: &[body("/", r"Streamlit")],
+        build_modes: Some(PYTHON_MODES),
         ..BASE
     },
 ];

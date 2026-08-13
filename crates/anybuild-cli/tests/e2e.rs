@@ -249,49 +249,41 @@ e2e_tests! {
     staticnode2__wasmer__nodestatic_storybook => ("nodestatic_storybook", Wasmer);
     // examples/python-fastapi
     python__local__python_fastapi => ("python_fastapi", Local);
-    python__docker_runner__python_fastapi => ("python_fastapi", DockerRunner);
     python__wasmer__python_fastapi => ("python_fastapi", Wasmer);
     python__wasmer_and_docker__python_fastapi => ("python_fastapi", WasmerAndDocker);
     python__docker_builder_and_runner__python_fastapi => ("python_fastapi", DockerBuilderAndRunner);
     // examples/python-flask
     python__local__python_flask => ("python_flask", Local);
-    python__docker_runner__python_flask => ("python_flask", DockerRunner);
     python__wasmer__python_flask => ("python_flask", Wasmer);
     python__wasmer_and_docker__python_flask => ("python_flask", WasmerAndDocker);
     python__docker_builder_and_runner__python_flask => ("python_flask", DockerBuilderAndRunner);
     // examples/python-django
     python__local__python_django => ("python_django", Local);
-    python__docker_runner__python_django => ("python_django", DockerRunner);
     python__wasmer__python_django => ("python_django", Wasmer);
     python__wasmer_and_docker__python_django => ("python_django", WasmerAndDocker);
     python__docker_builder_and_runner__python_django => ("python_django", DockerBuilderAndRunner);
     // examples/python-ffmpeg
     python__local__python_ffmpeg => ("python_ffmpeg", Local);
-    python__docker_runner__python_ffmpeg => ("python_ffmpeg", DockerRunner);
     python__wasmer__python_ffmpeg => ("python_ffmpeg", Wasmer);
     python__wasmer_and_docker__python_ffmpeg => ("python_ffmpeg", WasmerAndDocker);
     python__docker_builder_and_runner__python_ffmpeg => ("python_ffmpeg", DockerBuilderAndRunner);
     // examples/python-pillow
     python__local__python_pillow => ("python_pillow", Local);
-    python__docker_runner__python_pillow => ("python_pillow", DockerRunner);
     python__wasmer__python_pillow => ("python_pillow", Wasmer);
     python__wasmer_and_docker__python_pillow => ("python_pillow", WasmerAndDocker);
     python__docker_builder_and_runner__python_pillow => ("python_pillow", DockerBuilderAndRunner);
     // examples/python-pandoc
     python__local__python_pandoc => ("python_pandoc", Local);
-    python__docker_runner__python_pandoc => ("python_pandoc", DockerRunner);
     python__wasmer__python_pandoc => ("python_pandoc", Wasmer);
     python__wasmer_and_docker__python_pandoc => ("python_pandoc", WasmerAndDocker);
     python__docker_builder_and_runner__python_pandoc => ("python_pandoc", DockerBuilderAndRunner);
     // examples/python-procfile
     python__local__python_procfile => ("python_procfile", Local);
-    python__docker_runner__python_procfile => ("python_procfile", DockerRunner);
     python__wasmer__python_procfile => ("python_procfile", Wasmer);
     python__wasmer_and_docker__python_procfile => ("python_procfile", WasmerAndDocker);
     python__docker_builder_and_runner__python_procfile => ("python_procfile", DockerBuilderAndRunner);
     // examples/python-streamlit
     python__local__python_streamlit => ("python_streamlit", Local);
-    python__docker_runner__python_streamlit => ("python_streamlit", DockerRunner);
     python__wasmer__python_streamlit => ("python_streamlit", Wasmer);
     python__wasmer_and_docker__python_streamlit => ("python_streamlit", WasmerAndDocker);
     python__docker_builder_and_runner__python_streamlit => ("python_streamlit", DockerBuilderAndRunner);

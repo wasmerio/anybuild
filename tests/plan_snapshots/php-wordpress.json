@@ -62,7 +62,7 @@
  ],
  "commands": {
   "after_deploy": "bash opt/assets/setup-wp.sh",
-  "start": "php -S localhost:8080 -t app",
+  "start": "php -S 0.0.0.0:8080 -t app",
   "wp": "php opt/assets/wp-cli.phar --allow-root --path=app"
  },
  "cwd": "app",

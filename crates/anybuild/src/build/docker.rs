@@ -44,7 +44,7 @@ pub(crate) fn dependency_install_contents(dependency: &Package) -> String {
     }
     if dependency.name == "pie" {
         contents.push_str(
-            "RUN apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n",
+            "RUN --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt/lists,sharing=locked rm -f /etc/apt/apt.conf.d/docker-clean && apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n",
         );
         contents.push_str(
             "RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n",
@@ -71,10 +71,12 @@ pub(crate) fn dependency_install_contents(dependency: &Package) -> String {
     let package_name = mise_source(&dependency.name).unwrap_or(dependency.name.as_str());
     if let Some(version) = dependency.version.as_deref() {
         contents.push_str(&format!(
-            "RUN mise use --global \"{package_name}@{version}\"\n"
+            "RUN --mount=type=cache,target=/mise/cache,sharing=locked mise use --global \"{package_name}@{version}\"\n"
         ));
     } else {
-        contents.push_str(&format!("RUN mise use --global \"{package_name}\"\n"));
+        contents.push_str(&format!(
+            "RUN --mount=type=cache,target=/mise/cache,sharing=locked mise use --global \"{package_name}\"\n"
+        ));
     }
     if let Some(postinstall) = mise_postinstall(&dependency.name) {
         contents.push_str(&format!("RUN {postinstall}\n"));
@@ -87,15 +89,17 @@ const DOCKERFILE_HEADER: &str = "\
 # syntax=docker/dockerfile:1.7-labs
 FROM debian:trixie-slim AS build
 
-RUN apt-get update \\
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\
+    rm -f /etc/apt/apt.conf.d/docker-clean \\
+    && apt-get update \\
     && apt-get -y --no-install-recommends install \\
         build-essential gcc make autoconf libtool bison \\
         dpkg-dev pkg-config re2c locate \\
         libmariadb-dev libmariadb-dev-compat libpq-dev libsqlite3-dev \\
         libvips-dev default-libmysqlclient-dev libmagickwand-dev \\
         libicu-dev libxml2-dev libxslt-dev libyaml-dev \\
-        sudo curl ca-certificates unzip git \\
-    && rm -rf /var/lib/apt/lists/*
+        sudo curl ca-certificates unzip git
 
 SHELL [\"/bin/bash\", \"-o\", \"pipefail\", \"-c\"]
 ENV MISE_DATA_DIR=\"/mise\"
@@ -551,12 +555,16 @@ mod tests {
         assert!(contents.contains("RUN curl https://mise.run | sh\n"));
         assert!(contents.contains("RUN mkdir -p /app\n"));
         assert!(contents.contains("WORKDIR /app\n"));
-        assert!(contents.contains("RUN mise use --global \"ubi:adwinying/php@8.3\"\n"));
+        assert!(contents.contains(
+            "RUN --mount=type=cache,target=/mise/cache,sharing=locked mise use --global \"ubi:adwinying/php@8.3\"\n"
+        ));
         assert!(contents.contains(
             "RUN curl -L --output /usr/bin/composer https://github.com/composer/composer/releases/download/2.9.2/composer.phar && chmod +x /usr/bin/composer\n"
         ));
-        assert!(contents.contains("RUN mise use --global \"node\"\n"));
-        assert!(!contents.contains("RUN mise use --global \"bash\"\n"));
+        assert!(contents.contains(
+            "RUN --mount=type=cache,target=/mise/cache,sharing=locked mise use --global \"node\"\n"
+        ));
+        assert!(!contents.contains("mise use --global \"bash\"\n"));
         assert!(contents.contains("ENV FOO=bar\n"));
         assert!(contents.contains("ENV PATH=/custom/bin:$PATH\n"));
         assert_eq!(env.get("FOO"), Some(&"bar".to_owned()));

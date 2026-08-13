@@ -31,7 +31,7 @@ def laravel_prepare(config, app):
 
 def laravel_commands(config):
     return {
-        "start": "php -S localhost:{} -t public".format(config.port),
+        "start": "php -S 0.0.0.0:{} -t public".format(config.port),
         "after_deploy": "php artisan migrate",
     }
 
