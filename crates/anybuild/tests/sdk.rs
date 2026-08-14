@@ -609,34 +609,23 @@ fn aws_lambda_deployment_creates_then_updates_a_managed_runtime_function() {
 
     let project = static_project();
     let state = project.path().join(".anybuild");
-    let artifact_dir = state.join("runner/docker");
-    let archive = artifact_dir.join("lambda/function.zip");
+    let archive = state.join("runner/lambda/function.zip");
     std::fs::create_dir_all(archive.parent().unwrap()).unwrap();
     std::fs::write(&archive, "zip-placeholder").unwrap();
     std::fs::write(
         state.join("artifact.json"),
-        serde_json::to_string_pretty(&RuntimeArtifact::Collection {
-            artifacts: vec![
-                RuntimeArtifact::Docker {
-                    directory: artifact_dir,
-                    image: "sdk-lambda".to_owned(),
-                    context: project.path().to_path_buf(),
-                    platform: Some("linux/amd64".to_owned()),
-                },
-                RuntimeArtifact::LambdaZip {
-                    archive,
-                    runtime: "python3.13".to_owned(),
-                    handler: "run.sh".to_owned(),
-                    environment: indexmap::IndexMap::from([
-                        (
-                            "AWS_LAMBDA_EXEC_WRAPPER".to_owned(),
-                            "/opt/bootstrap".to_owned(),
-                        ),
-                        ("AWS_LWA_PORT".to_owned(), "8080".to_owned()),
-                    ]),
-                    platform: Some("linux/amd64".to_owned()),
-                },
-            ],
+        serde_json::to_string_pretty(&RuntimeArtifact::LambdaZip {
+            archive,
+            runtime: "python3.13".to_owned(),
+            handler: "run.sh".to_owned(),
+            environment: indexmap::IndexMap::from([
+                (
+                    "AWS_LAMBDA_EXEC_WRAPPER".to_owned(),
+                    "/opt/bootstrap".to_owned(),
+                ),
+                ("AWS_LWA_PORT".to_owned(), "8080".to_owned()),
+            ]),
+            platform: Some("linux/amd64".to_owned()),
         })
         .unwrap(),
     )
@@ -764,6 +753,6 @@ fn deployment_rejects_an_incompatible_runtime_artifact() {
         .unwrap_err();
 
     let message = error.to_string();
-    assert!(message.contains("AWS Lambda deployment requires a Docker artifact"));
+    assert!(message.contains("AWS Lambda deployment requires a Lambda ZIP or Docker artifact"));
     assert!(message.contains("found Local"));
 }

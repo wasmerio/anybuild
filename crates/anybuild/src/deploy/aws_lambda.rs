@@ -371,7 +371,7 @@ impl AwsLambdaDeployer {
         };
         anyhow::ensure!(
             archive.is_file(),
-            "AWS Lambda archive is missing; rebuild with --builder=docker --runner=docker ({})",
+            "AWS Lambda archive is missing; rebuild with --builder=docker --runner=lambda ({})",
             archive.display()
         );
         let archive = std::path::absolute(archive)?;
@@ -530,18 +530,13 @@ impl Deployer for AwsLambdaDeployer {
         "AWS Lambda"
     }
 
-    fn artifact_kind(&self) -> ArtifactKind {
-        ArtifactKind::Docker
-    }
-
-    fn accepts_artifact(&self, artifact: &RuntimeArtifact) -> bool {
-        artifact.contains_kind(ArtifactKind::Docker)
-            || artifact.contains_kind(ArtifactKind::LambdaZip)
+    fn artifact_kinds(&self) -> &'static [ArtifactKind] {
+        &[ArtifactKind::LambdaZip, ArtifactKind::Docker]
     }
 
     fn load_legacy_artifact(&self, _anybuild_dir: &Path) -> Result<RuntimeArtifact> {
         bail!(
-            "AWS Lambda deployment requires a Docker or Lambda ZIP artifact; build with --runner=docker first"
+            "AWS Lambda deployment requires a Docker or Lambda ZIP artifact; build with --runner=lambda or --runner=docker first"
         )
     }
 

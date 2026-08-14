@@ -14,9 +14,21 @@ pub mod wasmer;
 
 pub(crate) trait Deployer {
     fn platform_name(&self) -> &'static str;
-    fn artifact_kind(&self) -> ArtifactKind;
+    fn artifact_kinds(&self) -> &'static [ArtifactKind];
     fn accepts_artifact(&self, artifact: &RuntimeArtifact) -> bool {
-        artifact.contains_kind(self.artifact_kind())
+        self.artifact_kinds().contains(&artifact.kind())
+    }
+    fn artifact_requirement(&self) -> String {
+        self.artifact_kinds()
+            .iter()
+            .map(|kind| match kind {
+                ArtifactKind::Local => "Local",
+                ArtifactKind::Docker => "Docker",
+                ArtifactKind::LambdaZip => "Lambda ZIP",
+                ArtifactKind::Wasmer => "Wasmer",
+            })
+            .collect::<Vec<_>>()
+            .join(" or ")
     }
     fn load_legacy_artifact(&self, anybuild_dir: &Path) -> Result<RuntimeArtifact>;
     fn deploy(&mut self, artifact: &RuntimeArtifact, target: DeployTarget)

@@ -56,22 +56,21 @@ pub(crate) fn execution(
     targets: ExecutionTargetArgs,
     environment: EnvironmentOptions,
 ) -> Result<(BuildEnvironment, RuntimeEnvironment)> {
+    let docker_based_runner = matches!(targets.runner, Some(RunTarget::Docker | RunTarget::Lambda));
     if targets.builder == Some(BuildTarget::Local)
-        && (environment.docker
-            || (environment.docker_client.is_some() && targets.runner != Some(RunTarget::Docker)))
+        && (environment.docker || (environment.docker_client.is_some() && !docker_based_runner))
     {
         anyhow::bail!("--builder=local cannot be combined with --docker or --docker-client");
     }
     if targets.runner == Some(RunTarget::Local) && environment.wasmer {
         anyhow::bail!("--runner=local cannot be combined with --wasmer");
     }
-    if targets.runner == Some(RunTarget::Docker) && environment.wasmer {
-        anyhow::bail!("--runner=docker cannot be combined with --wasmer");
+    if matches!(targets.runner, Some(RunTarget::Docker | RunTarget::Lambda)) && environment.wasmer {
+        anyhow::bail!("Docker-based runners cannot be combined with --wasmer");
     }
 
-    let docker_client_selects_builder = environment.docker_client.is_some()
-        && targets.builder.is_none()
-        && targets.runner != Some(RunTarget::Docker);
+    let docker_client_selects_builder =
+        environment.docker_client.is_some() && targets.builder.is_none() && !docker_based_runner;
     let build = if targets.builder == Some(BuildTarget::Docker)
         || environment.docker
         || docker_client_selects_builder
@@ -88,6 +87,11 @@ pub(crate) fn execution(
             binary: environment.wasmer_bin,
             registry: environment.wasmer_registry,
             token: environment.wasmer_token,
+        })
+    } else if targets.runner == Some(RunTarget::Lambda) {
+        RuntimeEnvironment::Lambda(DockerOptions {
+            client: environment.docker_client,
+            extra_options: environment.docker_opts,
         })
     } else if targets.runner == Some(RunTarget::Docker)
         || (targets.runner.is_none() && environment.docker)
@@ -300,6 +304,27 @@ mod tests {
         assert!(matches!(
             runtime,
             RuntimeEnvironment::Docker(DockerOptions {
+                client: Some(client),
+                ..
+            }) if client == "podman"
+        ));
+    }
+
+    #[test]
+    fn lambda_runner_uses_docker_options_without_changing_the_builder() {
+        let (build, runtime) = execution(
+            targets(Some(BuildTarget::Local), Some(RunTarget::Lambda)),
+            EnvironmentOptions {
+                docker_client: Some("podman".to_owned()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(build, BuildEnvironment::Local));
+        assert!(matches!(
+            runtime,
+            RuntimeEnvironment::Lambda(DockerOptions {
                 client: Some(client),
                 ..
             }) if client == "podman"

@@ -299,6 +299,12 @@ mod tests {
     }
 
     #[test]
+    fn auto_accepts_lambda_runner() {
+        let args = parse_auto(&["auto", "proj", "--runner=lambda"]);
+        assert_eq!(args.build.targets.runner, Some(RunTarget::Lambda));
+    }
+
+    #[test]
     fn auto_accepts_wasmer_deploy_without_app_identity() {
         let args = parse_auto(&["auto", "proj", "--wasmer-deploy"]);
         assert!(args.wasmer_deploy);

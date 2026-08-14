@@ -23,6 +23,8 @@ and falls back to Docker or Wasmer when requested:
 - `anybuild . --runner=wasmer` builds locally and runs inside Wasmer.
 - `anybuild . --runner=docker` packages the build as a deployable Docker
   image and runs commands in containers.
+- `anybuild . --runner=lambda` packages one AWS Lambda artifact, selecting a
+  managed-runtime ZIP or container image from the serving dependencies.
 - `anybuild . --builder=docker` builds it with Docker (you can customize the
   docker client as well, eg: `--docker-client depot`).
 - `anybuild . --start` launches the app after building.
@@ -38,9 +40,10 @@ the Docker builder and Docker runner unless another runner is selected. For
 example, `--wasmer --docker` uses the Docker builder and Wasmer runner.
 
 The builder and runner are independent. The builder controls where build
-steps execute; the runner produces the runtime artifact and can execute it.
-The deployment platform publishes a compatible runtime artifact. For example,
-deployment images can be produced from either local or Docker-built outputs:
+steps execute; the runner produces the runtime artifact and, where supported,
+can execute it. The deployment platform publishes a compatible runtime
+artifact. For example, deployment images can be produced from either local or
+Docker-built outputs:
 
 ```bash
 anybuild build . --builder=local --runner=docker
@@ -135,32 +138,35 @@ the Docker runtime port. Use `--fly-config`, `--fly-bin`, or `--fly-token` to
 override the configuration, CLI binary, or credentials. The `FLY_API_TOKEN`
 environment variable and flyctl's configured credentials also work.
 
-AWS Lambda consumes the artifact produced by the Docker runner. When the
-service runtime dependencies are Python or Node.js, with optional Bash,
-Anybuild packages the Docker-built Linux artifacts as a `.zip` for the matching
-AWS-managed runtime. Other runtime dependencies use a container image. Both
-paths include the AWS Lambda Web Adapter, so regular HTTP applications can run
-on Lambda without a Lambda-specific handler:
+The Lambda runner produces one AWS Lambda artifact. When the service runtime
+dependencies are Python or Node.js, with optional Bash, it packages the
+Docker-built Linux artifacts as a `.zip` for the matching AWS-managed runtime.
+Other runtime dependencies produce a container image. Both paths include the
+AWS Lambda Web Adapter, so regular HTTP applications can run on Lambda without
+a Lambda-specific handler:
 
 ```bash
-anybuild build --builder=docker --runner=docker
+anybuild build --builder=docker --runner=lambda
 anybuild deploy --platform=aws-lambda \
   --aws-function=my-function \
   --aws-region=us-west-2
 ```
 
-`anybuild auto --platform=aws-lambda` selects both the Docker builder and
-Docker runner unless either is explicitly set. This makes Python and Node.js
+`anybuild auto --platform=aws-lambda` selects the Docker builder and Lambda
+runner unless either is explicitly set. This makes Python and Node.js
 dependencies portable to Lambda's Linux environment. Supported managed
 runtimes are selected from the runtime version in the build plan. Adding
-another serving dependency automatically retains the container-image path.
+another serving dependency automatically selects the container-image path.
+Use `--runner=docker` explicitly to force an image for an otherwise eligible
+service.
 
 For image deployments, Anybuild creates the ECR repository when needed, logs
 Docker into ECR, and pushes the image. Managed-runtime deployments upload the
 `.zip` directly and do not use ECR. Creating either kind of function also
 requires `--aws-role` with its IAM execution role ARN; updates do not. An
-existing function keeps its current package type because AWS does not allow
-switching between `Zip` and `Image` in place.
+AWS does not allow switching an existing function between `Zip` and `Image`.
+If the selected artifact differs from the function's current package type,
+rebuild with `--runner=docker` or recreate the function as appropriate.
 
 Use `--aws-profile`, `--aws-repository`, `--aws-image-tag`, and
 `--aws-architecture` to override their defaults. The public Lambda Web Adapter

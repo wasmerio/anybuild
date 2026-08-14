@@ -198,8 +198,8 @@ impl Deployer for WasmerDeployer {
         "Wasmer"
     }
 
-    fn artifact_kind(&self) -> ArtifactKind {
-        ArtifactKind::Wasmer
+    fn artifact_kinds(&self) -> &'static [ArtifactKind] {
+        &[ArtifactKind::Wasmer]
     }
 
     fn load_legacy_artifact(&self, anybuild_dir: &Path) -> Result<RuntimeArtifact> {

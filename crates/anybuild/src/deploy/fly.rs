@@ -159,8 +159,8 @@ impl Deployer for FlyDeployer {
         "Fly.io"
     }
 
-    fn artifact_kind(&self) -> ArtifactKind {
-        ArtifactKind::Docker
+    fn artifact_kinds(&self) -> &'static [ArtifactKind] {
+        &[ArtifactKind::Docker]
     }
 
     fn load_legacy_artifact(&self, _anybuild_dir: &Path) -> Result<RuntimeArtifact> {
@@ -208,23 +208,11 @@ mod tests {
         std::fs::write(directory.join("Dockerfile"), "FROM scratch\n").unwrap();
         std::fs::write(directory.join("Dockerfile.dockerignore"), "**\n").unwrap();
         std::fs::write(directory.join("port"), "3000").unwrap();
-        let docker = RuntimeArtifact::Docker {
+        RuntimeArtifact::Docker {
             directory,
             image: "example-api".to_owned(),
             context,
             platform: None,
-        };
-        RuntimeArtifact::Collection {
-            artifacts: vec![
-                docker,
-                RuntimeArtifact::LambdaZip {
-                    archive: root.join("function.zip"),
-                    runtime: "nodejs24.x".to_owned(),
-                    handler: "run.sh".to_owned(),
-                    environment: Default::default(),
-                    platform: Some("linux/amd64".to_owned()),
-                },
-            ],
         }
     }
 

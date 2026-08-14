@@ -20,6 +20,7 @@ pub enum BuildTarget {
 pub enum RunTarget {
     Local,
     Docker,
+    Lambda,
     Wasmer,
 }
 

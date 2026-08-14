@@ -113,6 +113,7 @@ pub enum RuntimeEnvironment {
     #[default]
     Local,
     Docker(DockerOptions),
+    Lambda(DockerOptions),
     Wasmer(WasmerOptions),
 }
 
@@ -812,9 +813,9 @@ impl Anybuild {
         };
         anyhow::ensure!(
             deployer.accepts_artifact(&artifact),
-            "{} deployment requires a {:?} artifact, found {:?}",
+            "{} deployment requires a {} artifact, found {:?}",
             deployer.platform_name(),
-            deployer.artifact_kind(),
+            deployer.artifact_requirement(),
             artifact.kind()
         );
         let outcome = deployer.deploy(&artifact, options.target)?;
@@ -930,16 +931,28 @@ fn environment_options(
         docker_runner,
         docker_runner_client,
         docker_runner_opts,
+        lambda_runner,
         wasmer,
         wasmer_bin,
         wasmer_registry,
         wasmer_token,
     ) = match runtime {
-        RuntimeEnvironment::Local => (false, None, None, false, None, None, None),
+        RuntimeEnvironment::Local => (false, None, None, false, false, None, None, None),
         RuntimeEnvironment::Docker(options) => (
             true,
             options.client.clone(),
             options.extra_options.clone(),
+            false,
+            false,
+            None,
+            None,
+            None,
+        ),
+        RuntimeEnvironment::Lambda(options) => (
+            false,
+            options.client.clone(),
+            options.extra_options.clone(),
+            true,
             false,
             None,
             None,
@@ -949,6 +962,7 @@ fn environment_options(
             false,
             None,
             None,
+            false,
             true,
             options.binary.clone(),
             options.registry.clone(),
@@ -963,6 +977,7 @@ fn environment_options(
         docker_runner,
         docker_runner_client,
         docker_runner_opts,
+        lambda_runner,
         docker,
         docker_client,
         docker_opts,

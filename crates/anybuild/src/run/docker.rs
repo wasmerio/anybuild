@@ -13,7 +13,6 @@ use crate::build::BuildBackend;
 use crate::internal::volumes::load_volume_mappings;
 use crate::operation::OperationContext;
 use crate::plan::{RunStep, Serve, Step};
-use crate::run::lambda_zip;
 use crate::run::{HostMount, Runner};
 use crate::RuntimeArtifact;
 
@@ -361,35 +360,11 @@ impl Runner for DockerRunner {
             .borrow()
             .artifact_platform()
             .map(str::to_owned);
-        let lambda = lambda_zip::package(
-            serve,
-            &*self.build_backend.borrow(),
-            &self.runner_path.join("lambda/function.zip"),
-        )?;
-        if let Some(RuntimeArtifact::LambdaZip {
-            archive, runtime, ..
-        }) = &lambda
-        {
-            crate::build::report::success(
-                &self.operation,
-                format!(
-                    "Created AWS Lambda {} archive {}",
-                    runtime,
-                    archive.display()
-                ),
-            );
-        }
-        let docker = RuntimeArtifact::Docker {
+        Ok(RuntimeArtifact::Docker {
             directory: self.runner_path.clone(),
             image: image_name,
             context: self.src_dir.clone(),
             platform,
-        };
-        Ok(match lambda {
-            Some(lambda) => RuntimeArtifact::Collection {
-                artifacts: vec![docker, lambda],
-            },
-            None => docker,
         })
     }
 

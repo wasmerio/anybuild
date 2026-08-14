@@ -12,6 +12,7 @@ use crate::plan::layout::{ContainerServeLayout, MountLayout};
 use crate::plan::Serve;
 use crate::providers::{base::BaseConfig, select_provider, workspace, ProviderConfig};
 use crate::run::docker::DockerRunner;
+use crate::run::lambda::LambdaRunner;
 use crate::run::local::LocalRunner;
 use crate::run::wasmer::WasmerRunner;
 use crate::run::Runner;
@@ -39,6 +40,7 @@ pub struct EnvironmentOptions {
     pub docker_runner: bool,
     pub docker_runner_client: Option<String>,
     pub docker_runner_opts: Option<String>,
+    pub lambda_runner: bool,
     pub docker: bool,
     pub docker_client: Option<String>,
     pub docker_opts: Option<String>,
@@ -105,6 +107,15 @@ fn resolve_environment_inner(
             options.wasmer_registry.clone(),
             options.wasmer_token.clone(),
             options.wasmer_bin.clone(),
+            Some(anybuild_dir.clone()),
+            operation.clone(),
+        )))
+    } else if options.lambda_runner {
+        Rc::new(RefCell::new(LambdaRunner::new(
+            build_backend.clone(),
+            paths.workspace_root.clone(),
+            options.docker_runner_client.clone(),
+            options.docker_runner_opts.clone(),
             Some(anybuild_dir.clone()),
             operation.clone(),
         )))
@@ -299,7 +310,9 @@ fn resolve_project_context_inner(
         },
         layout: Box::new(EnvironmentLayout {
             backend: build_backend.clone(),
-            containerized: env_options.wasmer || env_options.docker_runner,
+            containerized: env_options.wasmer
+                || env_options.docker_runner
+                || env_options.lambda_runner,
         }),
         stdlib: StdlibSource::Dir(runtime_resources.starlib_dir.clone()),
     })?;
