@@ -59,10 +59,39 @@ pub struct FlyOptions {
     pub config: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LambdaArchitecture {
+    X86_64,
+    Arm64,
+}
+
+impl LambdaArchitecture {
+    pub(crate) fn as_aws_value(self) -> &'static str {
+        match self {
+            Self::X86_64 => "x86_64",
+            Self::Arm64 => "arm64",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AwsLambdaOptions {
+    pub binary: Option<String>,
+    pub docker_binary: Option<String>,
+    pub profile: Option<String>,
+    pub region: Option<String>,
+    pub function: Option<String>,
+    pub role: Option<String>,
+    pub repository: Option<String>,
+    pub image_tag: Option<String>,
+    pub architecture: Option<LambdaArchitecture>,
+}
+
 #[derive(Debug, Clone)]
 pub enum DeploymentPlatform {
     Wasmer(WasmerOptions),
     Fly(FlyOptions),
+    AwsLambda(AwsLambdaOptions),
 }
 
 impl Default for DeploymentPlatform {

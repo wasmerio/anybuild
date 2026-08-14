@@ -1,4 +1,5 @@
-use std::process::{Command, ExitStatus};
+use std::io::Write;
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use indexmap::IndexMap;
@@ -145,6 +146,48 @@ impl OperationContext {
             ProcessIo::Inherit => command.status(),
             ProcessIo::Events => {
                 let output = command.output()?;
+                if !output.stdout.is_empty() {
+                    self.emit(Event::ProcessOutput {
+                        stream: ProcessStream::Stdout,
+                        text: String::from_utf8_lossy(&output.stdout).into_owned(),
+                    });
+                }
+                if !output.stderr.is_empty() {
+                    self.emit(Event::ProcessOutput {
+                        stream: ProcessStream::Stderr,
+                        text: String::from_utf8_lossy(&output.stderr).into_owned(),
+                    });
+                }
+                Ok(output.status)
+            }
+        }
+    }
+
+    pub fn command_status_with_stdin(
+        &self,
+        command: &mut Command,
+        input: &[u8],
+    ) -> std::io::Result<ExitStatus> {
+        command.stdin(Stdio::piped());
+        match self.process_io {
+            ProcessIo::Inherit => {
+                let mut child = command.spawn()?;
+                child
+                    .stdin
+                    .take()
+                    .expect("stdin is piped")
+                    .write_all(input)?;
+                child.wait()
+            }
+            ProcessIo::Events => {
+                command.stdout(Stdio::piped()).stderr(Stdio::piped());
+                let mut child = command.spawn()?;
+                child
+                    .stdin
+                    .take()
+                    .expect("stdin is piped")
+                    .write_all(input)?;
+                let output = child.wait_with_output()?;
                 if !output.stdout.is_empty() {
                     self.emit(Event::ProcessOutput {
                         stream: ProcessStream::Stdout,

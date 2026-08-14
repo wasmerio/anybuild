@@ -212,6 +212,7 @@ mod tests {
             directory,
             image: "example-api".to_owned(),
             context,
+            platform: None,
         }
     }
 

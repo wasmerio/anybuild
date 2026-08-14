@@ -25,6 +25,8 @@ pub enum RuntimeArtifact {
         directory: PathBuf,
         image: String,
         context: PathBuf,
+        #[serde(default)]
+        platform: Option<String>,
     },
     Wasmer {
         directory: PathBuf,
@@ -53,7 +55,15 @@ impl RuntimeArtifact {
                 directory,
                 image,
                 context,
+                ..
             } => Some((directory, image, context)),
+            Self::Local { .. } | Self::Wasmer { .. } => None,
+        }
+    }
+
+    pub(crate) fn docker_platform(&self) -> Option<&str> {
+        match self {
+            Self::Docker { platform, .. } => platform.as_deref(),
             Self::Local { .. } | Self::Wasmer { .. } => None,
         }
     }
@@ -92,6 +102,7 @@ mod tests {
             directory: temporary.path().join("docker"),
             image: "acme-api".to_owned(),
             context: temporary.path().join("project"),
+            platform: Some("linux/amd64".to_owned()),
         };
 
         artifact.persist(temporary.path()).unwrap();

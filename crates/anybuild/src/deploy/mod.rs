@@ -8,6 +8,7 @@ use crate::artifact::{ArtifactKind, RuntimeArtifact};
 use crate::operation::OperationContext;
 use crate::sdk::{DeployOutcome, DeployTarget, DeploymentPlatform};
 
+pub mod aws_lambda;
 pub mod fly;
 pub mod wasmer;
 
@@ -28,5 +29,8 @@ pub(crate) fn resolve_deployer(
             Box::new(wasmer::WasmerDeployer::new(options, operation))
         }
         DeploymentPlatform::Fly(options) => Box::new(fly::FlyDeployer::new(options, operation)),
+        DeploymentPlatform::AwsLambda(options) => {
+            Box::new(aws_lambda::AwsLambdaDeployer::new(options, operation))
+        }
     }
 }

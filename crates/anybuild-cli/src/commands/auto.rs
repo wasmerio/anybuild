@@ -1,12 +1,12 @@
 use anybuild::{
-    AutoOptions, DeployOptions, DeployTarget, DeploymentPlatform, FlyOptions, GenerationPolicy,
-    RunOptions, RuntimeEnvironment, WasmerOptions,
+    AutoOptions, AwsLambdaOptions, DeployOptions, DeployTarget, DeploymentPlatform, FlyOptions,
+    GenerationPolicy, LambdaArchitecture, RunOptions, RuntimeEnvironment, WasmerOptions,
 };
 use anyhow::{bail, Result};
 
 use crate::args::{
-    DeployTargetArgs, DeploymentPlatformArg, ExecutionTargetArgs, FlyPlatformArgs,
-    RunSelectionArgs, RunTarget,
+    AwsLambdaPlatformArgs, DeployTargetArgs, DeploymentPlatformArg, ExecutionTargetArgs,
+    FlyPlatformArgs, LambdaArchitectureArg, RunSelectionArgs, RunTarget,
 };
 use crate::commands::{build, client_with_render_options, execution, RenderOptions};
 use crate::context::EnvironmentOptions;
@@ -23,6 +23,8 @@ pub struct AutoArgs {
     pub platform: Option<DeploymentPlatformArg>,
     #[command(flatten)]
     pub fly: FlyPlatformArgs,
+    #[command(flatten)]
+    pub aws_lambda: AwsLambdaPlatformArgs,
     /// Legacy shorthand for `--platform=wasmer`.
     #[arg(long)]
     pub wasmer_deploy: bool,
@@ -42,8 +44,12 @@ pub fn run(args: AutoArgs) -> Result<()> {
     }
     let legacy_wasmer_deploy =
         args.wasmer_deploy || args.deploy_target.wasmer_deploy_config.is_some();
-    if args.platform == Some(DeploymentPlatformArg::Fly) && legacy_wasmer_deploy {
-        bail!("Wasmer deployment flags cannot be used with --platform=fly");
+    if args
+        .platform
+        .is_some_and(|platform| platform != DeploymentPlatformArg::Wasmer)
+        && legacy_wasmer_deploy
+    {
+        bail!("Wasmer deployment flags cannot be used with this platform");
     }
     let platform = args.platform.or(if legacy_wasmer_deploy {
         Some(DeploymentPlatformArg::Wasmer)
@@ -117,6 +123,7 @@ pub fn run(args: AutoArgs) -> Result<()> {
                 platform.unwrap_or(DeploymentPlatformArg::Wasmer),
                 &runtime_environment,
                 &args.fly,
+                &args.aws_lambda,
             ),
             target: DeployTarget::WriteConfig { path },
             process_io: Default::default(),
@@ -127,6 +134,7 @@ pub fn run(args: AutoArgs) -> Result<()> {
                 platform.unwrap_or(DeploymentPlatformArg::Wasmer),
                 &runtime_environment,
                 &args.fly,
+                &args.aws_lambda,
             ),
             target: DeployTarget::Publish {
                 owner: args.deploy_target.wasmer_app_owner,
@@ -168,12 +176,16 @@ fn validate_platform_runtime(
     match (platform, runtime) {
         (Some(DeploymentPlatformArg::Wasmer), RuntimeEnvironment::Wasmer(_))
         | (Some(DeploymentPlatformArg::Fly), RuntimeEnvironment::Docker(_))
+        | (Some(DeploymentPlatformArg::AwsLambda), RuntimeEnvironment::Docker(_))
         | (None, _) => Ok(()),
         (Some(DeploymentPlatformArg::Wasmer), _) => {
             bail!("--platform=wasmer requires --runner=wasmer")
         }
         (Some(DeploymentPlatformArg::Fly), _) => {
             bail!("--platform=fly requires --runner=docker")
+        }
+        (Some(DeploymentPlatformArg::AwsLambda), _) => {
+            bail!("--platform=aws-lambda requires --runner=docker")
         }
     }
 }
@@ -188,6 +200,7 @@ fn apply_platform_runner(
     targets.runner = match platform {
         Some(DeploymentPlatformArg::Wasmer) => Some(RunTarget::Wasmer),
         Some(DeploymentPlatformArg::Fly) => Some(RunTarget::Docker),
+        Some(DeploymentPlatformArg::AwsLambda) => Some(RunTarget::Docker),
         None => None,
     };
 }
@@ -203,6 +216,7 @@ fn deployment_platform(
     platform: DeploymentPlatformArg,
     runtime: &RuntimeEnvironment,
     fly: &FlyPlatformArgs,
+    aws_lambda: &AwsLambdaPlatformArgs,
 ) -> DeploymentPlatform {
     match platform {
         DeploymentPlatformArg::Wasmer => DeploymentPlatform::Wasmer(wasmer_options(runtime)),
@@ -212,6 +226,33 @@ fn deployment_platform(
             app: fly.fly_app.clone(),
             config: fly.fly_config.clone(),
         }),
+        DeploymentPlatformArg::AwsLambda => {
+            let runtime_docker_client = match runtime {
+                RuntimeEnvironment::Docker(options) => options.client.clone(),
+                RuntimeEnvironment::Local | RuntimeEnvironment::Wasmer(_) => None,
+            };
+            DeploymentPlatform::AwsLambda(AwsLambdaOptions {
+                binary: aws_lambda.aws_bin.clone(),
+                docker_binary: aws_lambda
+                    .aws_docker_client
+                    .clone()
+                    .or(runtime_docker_client),
+                profile: aws_lambda.aws_profile.clone(),
+                region: aws_lambda.aws_region.clone(),
+                function: aws_lambda.aws_function.clone(),
+                role: aws_lambda.aws_role.clone(),
+                repository: aws_lambda.aws_repository.clone(),
+                image_tag: aws_lambda.aws_image_tag.clone(),
+                architecture: aws_lambda.aws_architecture.map(lambda_architecture),
+            })
+        }
+    }
+}
+
+fn lambda_architecture(architecture: LambdaArchitectureArg) -> LambdaArchitecture {
+    match architecture {
+        LambdaArchitectureArg::X86_64 => LambdaArchitecture::X86_64,
+        LambdaArchitectureArg::Arm64 => LambdaArchitecture::Arm64,
     }
 }
 
@@ -224,6 +265,15 @@ mod tests {
         let mut targets = ExecutionTargetArgs::default();
 
         apply_platform_runner(&mut targets, Some(DeploymentPlatformArg::Fly));
+
+        assert_eq!(targets.runner, Some(RunTarget::Docker));
+    }
+
+    #[test]
+    fn aws_lambda_platform_selects_the_docker_runner() {
+        let mut targets = ExecutionTargetArgs::default();
+
+        apply_platform_runner(&mut targets, Some(DeploymentPlatformArg::AwsLambda));
 
         assert_eq!(targets.runner, Some(RunTarget::Docker));
     }
@@ -247,5 +297,37 @@ mod tests {
                 .unwrap_err();
 
         assert_eq!(error.to_string(), "--platform=fly requires --runner=docker");
+    }
+
+    #[test]
+    fn aws_lambda_platform_rejects_an_incompatible_runner() {
+        let error = validate_platform_runtime(
+            Some(DeploymentPlatformArg::AwsLambda),
+            &RuntimeEnvironment::Local,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "--platform=aws-lambda requires --runner=docker"
+        );
+    }
+
+    #[test]
+    fn aws_lambda_deployment_reuses_the_runtime_docker_client() {
+        let platform = deployment_platform(
+            DeploymentPlatformArg::AwsLambda,
+            &RuntimeEnvironment::Docker(anybuild::DockerOptions {
+                client: Some("podman".to_owned()),
+                ..Default::default()
+            }),
+            &FlyPlatformArgs::default(),
+            &AwsLambdaPlatformArgs::default(),
+        );
+
+        let DeploymentPlatform::AwsLambda(options) = platform else {
+            panic!("expected AWS Lambda platform");
+        };
+        assert_eq!(options.docker_binary.as_deref(), Some("podman"));
     }
 }

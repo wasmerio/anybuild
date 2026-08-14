@@ -30,6 +30,8 @@ and falls back to Docker or Wasmer when requested:
   it to Wasmer.
 - `anybuild . --platform=fly --fly-app=my-app` builds a Docker runtime
   artifact and deploys it to Fly.io.
+- `anybuild . --platform=aws-lambda --aws-function=my-function` builds a
+  Lambda-compatible Docker artifact and deploys it through Amazon ECR.
 
 `--wasmer` remains shorthand for `--runner=wasmer`. `--docker` selects both
 the Docker builder and Docker runner unless another runner is selected. For
@@ -132,6 +134,29 @@ present. Otherwise it generates a minimal configuration from `--fly-app` and
 the Docker runtime port. Use `--fly-config`, `--fly-bin`, or `--fly-token` to
 override the configuration, CLI binary, or credentials. The `FLY_API_TOKEN`
 environment variable and flyctl's configured credentials also work.
+
+AWS Lambda currently consumes the Docker runtime artifact. Anybuild includes
+the AWS Lambda Web Adapter in Docker images so the same HTTP application image
+continues to run locally, on Fly.io, or on Lambda:
+
+```bash
+anybuild build --builder=docker --runner=docker
+anybuild deploy --platform=aws-lambda \
+  --aws-function=my-function \
+  --aws-region=us-west-2
+```
+
+Anybuild creates the ECR repository when needed, logs Docker into ECR, pushes
+the image, and creates or updates the Lambda function. Creating the function
+also requires `--aws-role` with its IAM execution role ARN; updates do not.
+Use `--aws-profile`, `--aws-repository`, `--aws-image-tag`, and
+`--aws-architecture` to override their defaults. The AWS CLI and a
+Docker-compatible client must be installed and authenticated. This initial
+Lambda integration deploys container images; native `.zip` runtime artifacts
+can be added through the same platform abstraction later.
+
+The deploy command manages the function image, but does not create public
+function URLs or other event triggers.
 
 ## The Anybuild file
 

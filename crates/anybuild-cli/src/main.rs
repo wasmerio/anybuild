@@ -328,6 +328,25 @@ mod tests {
     }
 
     #[test]
+    fn auto_accepts_aws_lambda_deployment_options() {
+        let args = parse_auto(&[
+            "auto",
+            "proj",
+            "--platform=aws-lambda",
+            "--aws-function=example-api",
+            "--aws-region=us-west-2",
+            "--aws-architecture=arm64",
+        ]);
+        assert_eq!(args.platform, Some(DeploymentPlatformArg::AwsLambda));
+        assert_eq!(args.aws_lambda.aws_function.as_deref(), Some("example-api"));
+        assert_eq!(args.aws_lambda.aws_region.as_deref(), Some("us-west-2"));
+        assert_eq!(
+            args.aws_lambda.aws_architecture,
+            Some(crate::args::LambdaArchitectureArg::Arm64)
+        );
+    }
+
+    #[test]
     fn deploy_accepts_wasmer_deploy_without_app_identity() {
         let args = parse_deploy(&["deploy", "proj", "--wasmer-deploy"]);
         assert!(args.wasmer_deploy);
@@ -356,5 +375,24 @@ mod tests {
             args.fly.fly_config.as_deref(),
             Some(std::path::Path::new("deploy/fly.toml"))
         );
+    }
+
+    #[test]
+    fn deploy_accepts_aws_lambda_alias_and_options() {
+        let args = parse_deploy(&[
+            "deploy",
+            "proj",
+            "--platform=lambda",
+            "--aws-function=example-api",
+            "--aws-role=arn:aws:iam::123456789012:role/lambda",
+        ]);
+        assert_eq!(args.platform, DeploymentPlatformArg::AwsLambda);
+        assert_eq!(args.aws_lambda.aws_function.as_deref(), Some("example-api"));
+        assert!(args
+            .aws_lambda
+            .aws_role
+            .as_deref()
+            .unwrap()
+            .ends_with("role/lambda"));
     }
 }
