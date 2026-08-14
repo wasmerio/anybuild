@@ -20,7 +20,23 @@ pub enum BuildTarget {
 pub enum RunTarget {
     Local,
     Docker,
+    Lambda,
     Wasmer,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DeploymentPlatformArg {
+    #[default]
+    Wasmer,
+    Fly,
+    #[value(name = "aws-lambda", alias = "lambda")]
+    AwsLambda,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LambdaArchitectureArg {
+    X86_64,
+    Arm64,
 }
 
 #[derive(clap::Args, Debug, Clone, Default)]
@@ -57,6 +73,56 @@ pub struct WasmerConnArgs {
     /// Wasmer token.
     #[arg(long)]
     pub wasmer_token: Option<String>,
+}
+
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct FlyPlatformArgs {
+    /// The path to the Fly CLI binary.
+    #[arg(long)]
+    pub fly_bin: Option<String>,
+    /// Fly.io API token. Defaults to flyctl's configured credentials.
+    #[arg(long)]
+    pub fly_token: Option<String>,
+    /// Fly.io application name.
+    #[arg(long)]
+    pub fly_app: Option<String>,
+    /// Existing fly.toml path, relative to the project root.
+    #[arg(long)]
+    pub fly_config: Option<PathBuf>,
+}
+
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct AwsLambdaPlatformArgs {
+    /// The path to the AWS CLI binary.
+    #[arg(long)]
+    pub aws_bin: Option<String>,
+    /// Docker-compatible client used to push the Lambda image.
+    #[arg(long)]
+    pub aws_docker_client: Option<String>,
+    /// AWS CLI profile.
+    #[arg(long)]
+    pub aws_profile: Option<String>,
+    /// AWS region for both Lambda and ECR.
+    #[arg(long)]
+    pub aws_region: Option<String>,
+    /// AWS Lambda function name.
+    #[arg(long)]
+    pub aws_function: Option<String>,
+    /// IAM execution role ARN, required when creating a function.
+    #[arg(long)]
+    pub aws_role: Option<String>,
+    /// ECR repository name. Defaults to the normalized function name.
+    #[arg(long)]
+    pub aws_repository: Option<String>,
+    /// ECR image tag.
+    #[arg(long)]
+    pub aws_image_tag: Option<String>,
+    /// Lambda instruction-set architecture.
+    #[arg(long, value_enum)]
+    pub aws_architecture: Option<LambdaArchitectureArg>,
+    /// Lambda Web Adapter layer ARN. Defaults to the public AWS layer.
+    #[arg(long)]
+    pub aws_lambda_adapter_layer: Option<String>,
 }
 
 /// Command selection shared by `run` and `auto`.

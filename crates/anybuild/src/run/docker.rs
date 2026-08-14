@@ -14,6 +14,7 @@ use crate::internal::volumes::load_volume_mappings;
 use crate::operation::OperationContext;
 use crate::plan::{RunStep, Serve, Step};
 use crate::run::{HostMount, Runner};
+use crate::RuntimeArtifact;
 
 const TOOLCHAIN_STAGE: &str = r#"# syntax=docker/dockerfile:1.7-labs
 FROM debian:trixie-slim AS runtime-tools
@@ -46,6 +47,7 @@ ENV MISE_CONFIG_DIR="/mise"
 ENV PATH="/mise/shims:$PATH"
 
 COPY --from=runtime-tools /etc/ssl/certs /etc/ssl/certs
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0 /lambda-adapter /opt/extensions/lambda-adapter
 "#;
 
 pub struct DockerRunner {
@@ -233,6 +235,10 @@ impl DockerRunner {
         {
             contents.push_str("ENV HOST=\"0.0.0.0\"\n");
         }
+        contents.push_str(&format!(
+            "ENV AWS_LWA_PORT={}\n",
+            serve.runtime_port.unwrap_or(8080)
+        ));
         if let Some(cwd) = &serve.cwd {
             contents.push_str(&format!("WORKDIR {}\n", docker_env_value(cwd)));
         }
@@ -322,15 +328,11 @@ impl DockerRunner {
 }
 
 impl Runner for DockerRunner {
-    fn as_any(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-
     fn prepare_build_steps(&self, steps: Vec<Step>) -> Vec<Step> {
         steps
     }
 
-    fn build(&mut self, serve: &Serve) -> Result<()> {
+    fn build(&mut self, serve: &Serve) -> Result<RuntimeArtifact> {
         match std::fs::remove_dir_all(&self.runner_path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -353,7 +355,17 @@ impl Runner for DockerRunner {
             &self.operation,
             format!("Created Docker image {image_name}"),
         );
-        Ok(())
+        let platform = self
+            .build_backend
+            .borrow()
+            .artifact_platform()
+            .map(str::to_owned);
+        Ok(RuntimeArtifact::Docker {
+            directory: self.runner_path.clone(),
+            image: image_name,
+            context: self.src_dir.clone(),
+            platform,
+        })
     }
 
     fn prepare(&mut self, env: &IndexMap<String, String>, prepare: &[RunStep]) -> Result<()> {
@@ -536,9 +548,11 @@ mod tests {
             "RUN --mount=type=cache,target=/mise/cache,sharing=locked mise use --global \"node@22\""
         ));
         assert!(dockerfile.contains("FROM debian:trixie-slim AS runtime"));
+        assert!(dockerfile.contains("COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0"));
         assert!(dockerfile.contains("COPY [\".anybuild/local/build/app\",\"/app\"]"));
         assert!(dockerfile.contains("ENV NODE_ENV=\"production\""));
         assert!(dockerfile.contains("ENV HOST=\"0.0.0.0\""));
+        assert!(dockerfile.contains("ENV AWS_LWA_PORT=8080"));
         assert!(!dockerfile.contains("build-essential"));
         assert!(!dockerfile.contains("COPY --from=runtime-tools /usr/lib /usr/lib"));
         assert!(dockerfile.contains("WORKDIR \"/app\""));

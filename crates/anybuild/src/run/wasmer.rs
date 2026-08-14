@@ -16,7 +16,6 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use indexmap::IndexMap;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
-use sha2::Digest;
 use toml_edit::{value, Array, ArrayOfTables, DocumentMut, Item, Table};
 
 use crate::build::BuildBackend;
@@ -27,8 +26,9 @@ use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
 use crate::providers::node::{NodeRuntimeConfigFields, NodeServer};
 use crate::providers::python::PythonConfig;
 use crate::providers::ProviderConfig;
-
 use crate::run::{HostMount, Runner};
+use crate::wasmer::{dump_yaml_sorted, path_str, yaml_str};
+use crate::RuntimeArtifact;
 
 pub const ANYBUILD_CONFIG_ANNOTATION: &str = "anybuild.run/config";
 pub const ANYBUILD_PROVIDER_ANNOTATION: &str = "anybuild.run/provider";
@@ -282,10 +282,6 @@ fn absolute_path(path: &Path) -> PathBuf {
     }
 }
 
-fn path_str(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
-}
-
 fn prepare_command_name(index: usize) -> String {
     format!("{PREPARE_COMMAND_PREFIX}{index}")
 }
@@ -414,7 +410,6 @@ pub struct WasmerRunner {
     pub anybuild_dir: PathBuf,
     pub wasmer_dir_path: PathBuf,
     pub wasmer_registry: Option<String>,
-    pub wasmer_token: Option<String>,
     pub bin: String,
     /// Snapshot of the plan-visible config after Wasmer overrides. Feeds
     /// `anybuild.run/config` annotations.
@@ -429,7 +424,7 @@ impl WasmerRunner {
         build_backend: Rc<RefCell<dyn BuildBackend>>,
         src_dir: PathBuf,
         registry: Option<String>,
-        token: Option<String>,
+        _token: Option<String>,
         bin: Option<String>,
         anybuild_dir: Option<PathBuf>,
         operation: OperationContext,
@@ -442,7 +437,6 @@ impl WasmerRunner {
             anybuild_dir,
             wasmer_dir_path,
             wasmer_registry: registry,
-            wasmer_token: token,
             bin: bin.unwrap_or_else(|| "wasmer".to_owned()),
             provider_config: None,
             operation,
@@ -1077,129 +1071,9 @@ impl WasmerRunner {
             Ok(())
         }
     }
-
-    /// Port of `_update_app_yaml`.
-    fn update_app_yaml(&self, app_owner: Option<&str>, app_name: Option<&str>) -> Result<()> {
-        let app_owner = app_owner.filter(|owner| !owner.is_empty());
-        let app_name = app_name.filter(|name| !name.is_empty());
-        if app_owner.is_none() && app_name.is_none() {
-            return Ok(());
-        }
-        let app_yaml_path = self.wasmer_dir_path.join("app.yaml");
-        if !app_yaml_path.exists() {
-            return Ok(());
-        }
-        let text = std::fs::read_to_string(&app_yaml_path)?;
-        let mut yaml_config = match serde_yaml::from_str::<YamlValue>(&text)? {
-            YamlValue::Mapping(map) => map,
-            YamlValue::Null => serde_yaml::Mapping::new(),
-            _ => bail!("app.yaml must be a mapping"),
-        };
-        let mut changed = false;
-        if let Some(owner) = app_owner {
-            if yaml_config.get(yaml_str("owner")) != Some(&yaml_str(owner)) {
-                yaml_config.insert(yaml_str("owner"), yaml_str(owner));
-                changed = true;
-            }
-        }
-        if let Some(name) = app_name {
-            if yaml_config.get(yaml_str("name")) != Some(&yaml_str(name)) {
-                yaml_config.insert(yaml_str("name"), yaml_str(name));
-                changed = true;
-            }
-        }
-        if changed {
-            std::fs::write(
-                &app_yaml_path,
-                dump_yaml_sorted(&YamlValue::Mapping(yaml_config))?,
-            )?;
-        }
-        Ok(())
-    }
-
-    /// Port of `_deploy_args`.
-    fn deploy_args(&self, app_owner: Option<&str>, app_name: Option<&str>) -> Vec<String> {
-        let app_owner = app_owner.filter(|owner| !owner.is_empty());
-        let app_name = app_name.filter(|name| !name.is_empty());
-        let mut extra_args: Vec<String> = Vec::new();
-        if let Some(registry) = &self.wasmer_registry {
-            extra_args.extend(["--registry".to_owned(), registry.clone()]);
-        }
-        if let Some(token) = &self.wasmer_token {
-            extra_args.extend(["--token".to_owned(), token.clone()]);
-        }
-        if let Some(owner) = app_owner {
-            extra_args.extend(["--owner".to_owned(), owner.to_owned()]);
-        }
-        if let Some(name) = app_name {
-            extra_args.extend(["--app-name".to_owned(), name.to_owned()]);
-        }
-        let mut args = vec![
-            "deploy".to_owned(),
-            "--publish-package".to_owned(),
-            "--dir".to_owned(),
-            path_str(&self.wasmer_dir_path),
-        ];
-        if app_owner.is_some() && app_name.is_some() {
-            args.push("--non-interactive".to_owned());
-        }
-        args.extend(extra_args);
-        args
-    }
-
-    /// Port of `deploy_config`: build package.webc and write the deploy
-    /// descriptor JSON (byte-compatible with Python's `json.dumps`).
-    pub fn deploy_config(&mut self, config_path: &Path) -> Result<()> {
-        let package_webc_path = self.wasmer_dir_path.join("package.webc");
-        let app_yaml_path = self.wasmer_dir_path.join("app.yaml");
-        if let Some(parent) = package_webc_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let bin = self.bin.clone();
-        self.run_command(
-            &bin,
-            &[
-                "package".to_owned(),
-                "build".to_owned(),
-                path_str(&self.wasmer_dir_path),
-                "--out".to_owned(),
-                path_str(&package_webc_path),
-            ],
-            None,
-        )?;
-        let contents = std::fs::read(&package_webc_path)
-            .with_context(|| format!("reading {}", package_webc_path.display()))?;
-        let sha256 = format!("{:x}", sha2::Sha256::digest(&contents));
-        // json.dumps default separators: (", ", ": ").
-        let payload = format!(
-            "{{\"app_yaml_path\": {}, \"package_webc_path\": {}, \"package_webc_size\": {}, \"package_webc_sha256\": {}}}",
-            serde_json::to_string(&path_str(&absolute_path(&app_yaml_path)))?,
-            serde_json::to_string(&path_str(&absolute_path(&package_webc_path)))?,
-            contents.len(),
-            serde_json::to_string(&sha256)?,
-        );
-        std::fs::write(config_path, payload)?;
-        console_print(
-            &self.operation,
-            &format!("\nSaved deploy config to {}", config_path.display()),
-        );
-        Ok(())
-    }
-
-    /// Port of `deploy`.
-    pub fn deploy(&mut self, app_owner: Option<&str>, app_name: Option<&str>) -> Result<()> {
-        self.update_app_yaml(app_owner, app_name)?;
-        let bin = self.bin.clone();
-        let args = self.deploy_args(app_owner, app_name);
-        self.run_command(&bin, &args, None)
-    }
 }
 
 impl Runner for WasmerRunner {
-    fn as_any(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-
     fn prepare_config(&mut self, config: &mut ProviderConfig) {
         apply_runner_flips(config);
     }
@@ -1244,10 +1118,13 @@ impl Runner for WasmerRunner {
         new_build_steps
     }
 
-    fn build(&mut self, serve: &Serve) -> Result<()> {
+    fn build(&mut self, serve: &Serve) -> Result<RuntimeArtifact> {
         self.write_build_annotations()?;
         self.build_prepare(serve)?;
-        self.build_serve(serve)
+        self.build_serve(serve)?;
+        Ok(RuntimeArtifact::Wasmer {
+            directory: self.wasmer_dir_path.clone(),
+        })
     }
 
     /// Run dependency-backed preparation directly, falling back to the
@@ -1350,10 +1227,6 @@ impl Runner for WasmerRunner {
     }
 }
 
-fn yaml_str(value: &str) -> YamlValue {
-    YamlValue::String(value.to_owned())
-}
-
 fn parse_wasmer_version(output: &str) -> Result<String> {
     let output = output.trim();
     let Some((name, version)) = output.split_once(' ') else {
@@ -1378,29 +1251,6 @@ fn take_mapping(
         Some(_) => bail!("{message}"),
         None => Ok(serde_yaml::Mapping::new()),
     }
-}
-
-/// PyYAML's `yaml.dump`: block style with keys sorted at every level.
-fn dump_yaml_sorted(value: &YamlValue) -> Result<String> {
-    fn sort(value: &YamlValue) -> YamlValue {
-        match value {
-            YamlValue::Mapping(map) => {
-                let mut entries: Vec<(YamlValue, YamlValue)> =
-                    map.iter().map(|(k, v)| (k.clone(), sort(v))).collect();
-                entries.sort_by_key(|a| yaml_key(&a.0));
-                YamlValue::Mapping(entries.into_iter().collect())
-            }
-            YamlValue::Sequence(items) => YamlValue::Sequence(items.iter().map(sort).collect()),
-            other => other.clone(),
-        }
-    }
-    fn yaml_key(value: &YamlValue) -> String {
-        match value {
-            YamlValue::String(s) => s.clone(),
-            other => serde_yaml::to_string(other).unwrap_or_default(),
-        }
-    }
-    Ok(serde_yaml::to_string(&sort(value))?)
 }
 
 #[cfg(test)]
@@ -2160,50 +2010,6 @@ mod tests {
             .extra_args
             .iter()
             .any(|arg| arg == "--command=start"));
-    }
-
-    #[test]
-    fn test_wasmer_deploy_omits_unspecified_app_identity() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut runner = make_runner(tmp.path());
-
-        runner.deploy(None, None).unwrap();
-
-        let captured = runner.captured_commands.last().unwrap();
-        assert_eq!(captured.command, "wasmer");
-        assert_eq!(
-            captured.extra_args,
-            [
-                "deploy",
-                "--publish-package",
-                "--dir",
-                &path_str(&runner.wasmer_dir_path),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_wasmer_deploy_is_non_interactive_with_complete_app_identity() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut runner = make_runner(tmp.path());
-
-        runner.deploy(Some("acme"), Some("blog")).unwrap();
-
-        let captured = runner.captured_commands.last().unwrap();
-        assert_eq!(
-            captured.extra_args,
-            [
-                "deploy",
-                "--publish-package",
-                "--dir",
-                &path_str(&runner.wasmer_dir_path),
-                "--non-interactive",
-                "--owner",
-                "acme",
-                "--app-name",
-                "blog",
-            ]
-        );
     }
 
     #[test]

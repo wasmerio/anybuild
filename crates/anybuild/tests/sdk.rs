@@ -2,9 +2,9 @@ use std::sync::{Arc, Mutex};
 
 use anybuild::plan::Step;
 use anybuild::{
-    Anybuild, AutoOptions, BuildOptions, DeployOptions, DeployOutcome, DeployTarget, Event,
-    GenerateOptions, GenerationCheckStatus, GenerationPolicy, PlanOptions, ProcessIo, RunOptions,
-    WasmerOptions,
+    Anybuild, AutoOptions, AwsLambdaOptions, BuildOptions, DeployOptions, DeployOutcome,
+    DeployTarget, DeploymentPlatform, Event, FlyOptions, GenerateOptions, GenerationCheckStatus,
+    GenerationPolicy, PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, WasmerOptions,
 };
 
 fn static_project() -> tempfile::TempDir {
@@ -336,6 +336,12 @@ serve(
     let build = sdk.build(BuildOptions::default()).unwrap();
     assert_eq!(build.plan.provider, "staticfile");
     assert!(build.state_dir.ends_with(".anybuild"));
+    assert!(matches!(
+        build.artifact,
+        RuntimeArtifact::Local { ref directory }
+            if directory.ends_with(".anybuild/runner/local")
+    ));
+    assert!(build.state_dir.join("artifact.json").is_file());
 
     let run = sdk
         .run(
@@ -395,10 +401,10 @@ fn deploy_config_can_use_piped_process_events() {
         .with_env("SDK_SECRET", "do-not-leak")
         .with_event_handler(move |event: &Event| captured.lock().unwrap().push(event.clone()))
         .deploy(DeployOptions {
-            wasmer: WasmerOptions {
+            platform: DeploymentPlatform::Wasmer(WasmerOptions {
                 binary: Some(fake_wasmer.display().to_string()),
                 ..Default::default()
-            },
+            }),
             target: DeployTarget::WriteConfig {
                 path: config.clone(),
             },
@@ -413,4 +419,340 @@ fn deploy_config_can_use_piped_process_events() {
         |event| matches!(event, Event::ProcessOutput { text, .. } if text.contains("packaged:[REDACTED]"))
     ));
     assert!(!format!("{events:?}").contains("do-not-leak"));
+}
+
+#[cfg(unix)]
+#[test]
+fn fly_deployment_uses_the_docker_artifact_and_redacts_its_token() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let project = static_project();
+    let state = project.path().join(".anybuild");
+    let artifact_dir = state.join("runner/docker");
+    std::fs::create_dir_all(&artifact_dir).unwrap();
+    std::fs::write(artifact_dir.join("Dockerfile"), "FROM scratch\n").unwrap();
+    std::fs::write(artifact_dir.join("Dockerfile.dockerignore"), "**\n").unwrap();
+    std::fs::write(artifact_dir.join("port"), "8080\n").unwrap();
+    std::fs::write(
+        state.join("artifact.json"),
+        serde_json::to_string_pretty(&RuntimeArtifact::Docker {
+            directory: artifact_dir,
+            image: "sdk-fly-app".to_owned(),
+            context: project.path().to_path_buf(),
+            platform: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    let fake_fly = project.path().join("fake-flyctl");
+    std::fs::write(&fake_fly, "#!/bin/sh\necho \"fly:$*:$FLY_API_TOKEN\"\n").unwrap();
+    std::fs::set_permissions(&fake_fly, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let captured = Arc::clone(&events);
+
+    let outcome = Anybuild::new(project.path())
+        .with_event_handler(move |event: &Event| captured.lock().unwrap().push(event.clone()))
+        .deploy(DeployOptions {
+            platform: DeploymentPlatform::Fly(FlyOptions {
+                binary: Some(fake_fly.display().to_string()),
+                token: Some("fly-secret".to_owned()),
+                app: Some("sdk-fly-app".to_owned()),
+                config: None,
+            }),
+            target: DeployTarget::Publish {
+                owner: None,
+                name: None,
+            },
+            process_io: ProcessIo::Events,
+        })
+        .unwrap();
+
+    assert!(matches!(
+        outcome,
+        DeployOutcome::Published { name: Some(name), .. } if name == "sdk-fly-app"
+    ));
+    let events = events.lock().unwrap();
+    assert!(events.iter().any(
+        |event| matches!(event, Event::ProcessOutput { text, .. } if text.contains("--local-only"))
+    ));
+    assert!(!format!("{events:?}").contains("fly-secret"));
+}
+
+#[cfg(unix)]
+#[test]
+fn aws_lambda_deployment_creates_then_updates_a_container_function() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let project = static_project();
+    let state = project.path().join(".anybuild");
+    let artifact_dir = state.join("runner/docker");
+    std::fs::create_dir_all(&artifact_dir).unwrap();
+    std::fs::write(
+        artifact_dir.join("Dockerfile"),
+        "FROM scratch\nCOPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0 /lambda-adapter /opt/extensions/lambda-adapter\n",
+    )
+    .unwrap();
+    std::fs::write(
+        state.join("artifact.json"),
+        serde_json::to_string_pretty(&RuntimeArtifact::Docker {
+            directory: artifact_dir,
+            image: "sdk-lambda".to_owned(),
+            context: project.path().to_path_buf(),
+            platform: Some("linux/amd64".to_owned()),
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let command_log = project.path().join("commands.log");
+    let repository_marker = project.path().join("repository-created");
+    let function_marker = project.path().join("function-created");
+    let fake_aws = project.path().join("fake-aws");
+    std::fs::write(
+        &fake_aws,
+        r#"#!/bin/sh
+printf 'aws %s\n' "$*" >> "$COMMAND_LOG"
+case "$1 $2" in
+  'ecr describe-repositories')
+    if [ ! -f "$REPOSITORY_MARKER" ]; then
+      echo 'RepositoryNotFoundException' >&2
+      exit 254
+    fi
+    echo '123456789012.dkr.ecr.us-west-2.amazonaws.com/sdk-lambda'
+    ;;
+  'ecr create-repository')
+    touch "$REPOSITORY_MARKER"
+    echo '123456789012.dkr.ecr.us-west-2.amazonaws.com/sdk-lambda'
+    ;;
+  'ecr get-login-password') echo 'registry-password' ;;
+  'lambda get-function')
+    if [ ! -f "$FUNCTION_MARKER" ]; then
+      echo 'ResourceNotFoundException' >&2
+      exit 254
+    fi
+      echo '{"Configuration":{"PackageType":"Image"}}'
+    ;;
+  'lambda create-function')
+    touch "$FUNCTION_MARKER"
+    echo "created:$AWS_SECRET_ACCESS_KEY"
+    ;;
+  'lambda update-function-code') echo "updated:$AWS_SECRET_ACCESS_KEY" ;;
+  *) echo "unexpected AWS command: $*" >&2; exit 1 ;;
+esac
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_aws, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let fake_docker = project.path().join("fake-docker");
+    std::fs::write(
+        &fake_docker,
+        r#"#!/bin/sh
+if [ "$1" = 'login' ]; then
+  cat >/dev/null
+fi
+printf 'docker %s\n' "$*" >> "$COMMAND_LOG"
+echo "docker:$*"
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_docker, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let captured = Arc::clone(&events);
+    let sdk = Anybuild::new(project.path())
+        .with_env("COMMAND_LOG", command_log.display().to_string())
+        .with_env("REPOSITORY_MARKER", repository_marker.display().to_string())
+        .with_env("FUNCTION_MARKER", function_marker.display().to_string())
+        .with_env("AWS_SECRET_ACCESS_KEY", "aws-secret")
+        .with_event_handler(move |event: &Event| captured.lock().unwrap().push(event.clone()));
+    let options = |role: Option<&str>| DeployOptions {
+        platform: DeploymentPlatform::AwsLambda(AwsLambdaOptions {
+            binary: Some(fake_aws.display().to_string()),
+            docker_binary: Some(fake_docker.display().to_string()),
+            region: Some("us-west-2".to_owned()),
+            function: Some("sdk-lambda".to_owned()),
+            role: role.map(str::to_owned),
+            ..Default::default()
+        }),
+        target: DeployTarget::Publish {
+            owner: None,
+            name: None,
+        },
+        process_io: ProcessIo::Events,
+    };
+
+    sdk.deploy(options(Some(
+        "arn:aws:iam::123456789012:role/lambda-execution",
+    )))
+    .unwrap();
+    sdk.deploy(options(None)).unwrap();
+
+    let log = std::fs::read_to_string(command_log).unwrap();
+    assert!(log.contains("ecr create-repository"));
+    assert!(log.contains("docker login --username AWS --password-stdin"));
+    assert!(log.contains("docker tag sdk-lambda"));
+    assert!(log
+        .contains("docker push 123456789012.dkr.ecr.us-west-2.amazonaws.com/sdk-lambda:anybuild"));
+    assert!(log.contains("lambda create-function"));
+    assert!(log.contains("--package-type Image"));
+    assert!(log.contains("--architectures x86_64"));
+    assert!(log.contains("lambda update-function-code"));
+    let events = events.lock().unwrap();
+    assert!(!format!("{events:?}").contains("aws-secret"));
+}
+
+#[cfg(unix)]
+#[test]
+fn aws_lambda_deployment_creates_then_updates_a_managed_runtime_function() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let project = static_project();
+    let state = project.path().join(".anybuild");
+    let archive = state.join("runner/lambda/function.zip");
+    std::fs::create_dir_all(archive.parent().unwrap()).unwrap();
+    std::fs::write(&archive, "zip-placeholder").unwrap();
+    std::fs::write(
+        state.join("artifact.json"),
+        serde_json::to_string_pretty(&RuntimeArtifact::LambdaZip {
+            archive,
+            runtime: "python3.13".to_owned(),
+            handler: "run.sh".to_owned(),
+            environment: indexmap::IndexMap::from([
+                (
+                    "AWS_LAMBDA_EXEC_WRAPPER".to_owned(),
+                    "/opt/bootstrap".to_owned(),
+                ),
+                ("AWS_LWA_PORT".to_owned(), "8080".to_owned()),
+            ]),
+            platform: Some("linux/amd64".to_owned()),
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let command_log = project.path().join("commands.log");
+    let function_marker = project.path().join("function-created");
+    let fake_aws = project.path().join("fake-aws");
+    std::fs::write(
+        &fake_aws,
+        r#"#!/bin/sh
+printf 'aws %s\n' "$*" >> "$COMMAND_LOG"
+case "$1 $2" in
+  'lambda get-function')
+    if [ ! -f "$FUNCTION_MARKER" ]; then
+      echo 'ResourceNotFoundException' >&2
+      exit 254
+    fi
+    echo '{"Configuration":{"PackageType":"Zip","Environment":{"Variables":{"KEEP":"yes"}},"Layers":[{"Arn":"arn:aws:lambda:us-west-2:123456789012:layer:observability:1"}]}}'
+    ;;
+  'lambda create-function') touch "$FUNCTION_MARKER" ;;
+  'lambda update-function-code') ;;
+  'lambda update-function-configuration') ;;
+  'lambda wait') ;;
+  *) echo "unexpected AWS command: $*" >&2; exit 1 ;;
+esac
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_aws, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let sdk = Anybuild::new(project.path())
+        .with_env("COMMAND_LOG", command_log.display().to_string())
+        .with_env("FUNCTION_MARKER", function_marker.display().to_string());
+    let options = |role: Option<&str>| DeployOptions {
+        platform: DeploymentPlatform::AwsLambda(AwsLambdaOptions {
+            binary: Some(fake_aws.display().to_string()),
+            region: Some("us-west-2".to_owned()),
+            function: Some("sdk-lambda".to_owned()),
+            role: role.map(str::to_owned),
+            ..Default::default()
+        }),
+        target: DeployTarget::Publish {
+            owner: None,
+            name: None,
+        },
+        process_io: ProcessIo::Events,
+    };
+
+    sdk.deploy(options(Some(
+        "arn:aws:iam::123456789012:role/lambda-execution",
+    )))
+    .unwrap();
+    sdk.deploy(options(None)).unwrap();
+
+    let log = std::fs::read_to_string(command_log).unwrap();
+    assert!(!log.contains(" ecr "));
+    assert!(!log.lines().any(|line| line.starts_with("docker ")));
+    assert!(log.contains("lambda create-function"));
+    assert!(log.contains("--package-type Zip"));
+    assert!(log.contains("--runtime python3.13"));
+    assert!(log.contains("--handler run.sh"));
+    assert!(log.contains("--zip-file fileb://"));
+    assert!(log.contains("arn:aws:lambda:us-west-2:753240598075:layer:LambdaAdapterLayerX86:28"));
+    assert!(log.contains("lambda update-function-code"));
+    assert!(log.contains("lambda update-function-configuration"));
+    assert!(log.contains("lambda wait function-updated-v2"));
+    assert!(log.contains("KEEP"));
+    assert!(log.contains("observability:1"));
+}
+
+#[test]
+fn deployment_rejects_an_incompatible_runtime_artifact() {
+    let project = static_project();
+    let state = project.path().join(".anybuild");
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(
+        state.join("artifact.json"),
+        format!(
+            "{{\"kind\":\"local\",\"directory\":{}}}\n",
+            serde_json::to_string(&state.join("runner/local")).unwrap()
+        ),
+    )
+    .unwrap();
+
+    let error = Anybuild::new(project.path())
+        .deploy(DeployOptions {
+            platform: DeploymentPlatform::default(),
+            target: DeployTarget::Publish {
+                owner: None,
+                name: None,
+            },
+            process_io: ProcessIo::Events,
+        })
+        .unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("Wasmer deployment requires a Wasmer artifact"));
+    assert!(message.contains("found Local"));
+
+    let error = Anybuild::new(project.path())
+        .deploy(DeployOptions {
+            platform: DeploymentPlatform::Fly(FlyOptions::default()),
+            target: DeployTarget::Publish {
+                owner: None,
+                name: None,
+            },
+            process_io: ProcessIo::Events,
+        })
+        .unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("Fly.io deployment requires a Docker artifact"));
+    assert!(message.contains("found Local"));
+
+    let error = Anybuild::new(project.path())
+        .deploy(DeployOptions {
+            platform: DeploymentPlatform::AwsLambda(AwsLambdaOptions::default()),
+            target: DeployTarget::Publish {
+                owner: None,
+                name: None,
+            },
+            process_io: ProcessIo::Events,
+        })
+        .unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("AWS Lambda deployment requires a Lambda ZIP or Docker artifact"));
+    assert!(message.contains("found Local"));
 }

@@ -7,6 +7,8 @@ use serde_json::Value;
 
 use crate::plan::{Serve, Service, Step};
 
+use crate::artifact::RuntimeArtifact;
+use crate::deploy::resolve_deployer;
 use crate::error::{Error, ErrorKind, Result};
 pub use crate::event::ProcessIo;
 use crate::event::{
@@ -14,8 +16,8 @@ use crate::event::{
     PackagePhase, Reporter,
 };
 use crate::internal::context::{
-    resolve_environment, resolve_project_context, resolve_project_context_for_check,
-    EnvironmentOptions, ProjectContext,
+    resolve_anybuild_dir, resolve_environment, resolve_project_context,
+    resolve_project_context_for_check, EnvironmentOptions, ProjectContext,
 };
 use crate::internal::generator::generate_anybuild;
 use crate::internal::paths::{
@@ -50,6 +52,56 @@ pub struct WasmerOptions {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct FlyOptions {
+    pub binary: Option<String>,
+    pub token: Option<String>,
+    pub app: Option<String>,
+    pub config: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LambdaArchitecture {
+    X86_64,
+    Arm64,
+}
+
+impl LambdaArchitecture {
+    pub(crate) fn as_aws_value(self) -> &'static str {
+        match self {
+            Self::X86_64 => "x86_64",
+            Self::Arm64 => "arm64",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AwsLambdaOptions {
+    pub binary: Option<String>,
+    pub docker_binary: Option<String>,
+    pub profile: Option<String>,
+    pub region: Option<String>,
+    pub function: Option<String>,
+    pub role: Option<String>,
+    pub repository: Option<String>,
+    pub image_tag: Option<String>,
+    pub architecture: Option<LambdaArchitecture>,
+    pub adapter_layer: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum DeploymentPlatform {
+    Wasmer(WasmerOptions),
+    Fly(FlyOptions),
+    AwsLambda(AwsLambdaOptions),
+}
+
+impl Default for DeploymentPlatform {
+    fn default() -> Self {
+        Self::Wasmer(WasmerOptions::default())
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub enum BuildEnvironment {
     #[default]
     Local,
@@ -61,6 +113,7 @@ pub enum RuntimeEnvironment {
     #[default]
     Local,
     Docker(DockerOptions),
+    Lambda(DockerOptions),
     Wasmer(WasmerOptions),
 }
 
@@ -181,7 +234,7 @@ pub enum DeployTarget {
 
 #[derive(Debug, Clone)]
 pub struct DeployOptions {
-    pub wasmer: WasmerOptions,
+    pub platform: DeploymentPlatform,
     pub target: DeployTarget,
     pub process_io: ProcessIo,
 }
@@ -264,6 +317,7 @@ pub struct ProjectPlan {
 pub struct BuildOutcome {
     pub plan: ProjectPlan,
     pub state_dir: PathBuf,
+    pub artifact: RuntimeArtifact,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -659,7 +713,7 @@ impl Anybuild {
                 &context.serve,
                 Some(&context.anybuild_dir),
             )?;
-            context.runner.borrow_mut().build(&context.serve)?;
+            let artifact = context.runner.borrow_mut().build(&context.serve)?;
             if !options.skip_prepare
                 && context
                     .serve
@@ -675,12 +729,14 @@ impl Anybuild {
                     .borrow_mut()
                     .prepare(&env, context.serve.prepare.as_deref().unwrap_or_default())?;
             }
+            artifact.persist(&context.anybuild_dir)?;
             operation.emit(Event::ArtifactCreated {
                 path: context.anybuild_dir.clone(),
             });
             return Ok(BuildOutcome {
                 plan,
                 state_dir: context.anybuild_dir,
+                artifact,
             });
         }
     }
@@ -749,32 +805,25 @@ impl Anybuild {
         operation: &OperationContext,
     ) -> AnyResult<DeployOutcome> {
         let paths = self.paths()?;
-        let environment = resolve_environment(
-            &paths,
-            &environment_options(
-                &BuildEnvironment::Local,
-                &RuntimeEnvironment::Wasmer(options.wasmer.clone()),
-            ),
-            operation,
-        )?;
-        let mut runner = environment.runner.borrow_mut();
-        let runner = runner
-            .as_any()
-            .downcast_mut::<crate::run::wasmer::WasmerRunner>()
-            .expect("Wasmer runtime resolves a WasmerRunner");
-        let outcome = match options.target {
-            DeployTarget::WriteConfig { path } => {
-                runner.deploy_config(&path)?;
-                DeployOutcome::ConfigWritten { path }
-            }
-            DeployTarget::Publish { owner, name } => {
-                runner.deploy(owner.as_deref(), name.as_deref())?;
-                DeployOutcome::Published { owner, name }
-            }
+        let anybuild_dir = resolve_anybuild_dir(&paths, operation)?;
+        let mut deployer = resolve_deployer(options.platform, operation.clone());
+        let artifact = match RuntimeArtifact::load(&anybuild_dir)? {
+            Some(artifact) => artifact,
+            None => deployer.load_legacy_artifact(&anybuild_dir)?,
         };
+        anyhow::ensure!(
+            deployer.accepts_artifact(&artifact),
+            "{} deployment requires a {} artifact, found {:?}",
+            deployer.platform_name(),
+            deployer.artifact_requirement(),
+            artifact.kind()
+        );
+        let outcome = deployer.deploy(&artifact, options.target)?;
         operation.emit(Event::Deployment {
             description: match &outcome {
-                DeployOutcome::Published { .. } => "Published Wasmer application".to_owned(),
+                DeployOutcome::Published { .. } => {
+                    format!("Published {} application", deployer.platform_name())
+                }
                 DeployOutcome::ConfigWritten { path } => {
                     format!("Wrote deployment config to {}", path.display())
                 }
@@ -882,16 +931,28 @@ fn environment_options(
         docker_runner,
         docker_runner_client,
         docker_runner_opts,
+        lambda_runner,
         wasmer,
         wasmer_bin,
         wasmer_registry,
         wasmer_token,
     ) = match runtime {
-        RuntimeEnvironment::Local => (false, None, None, false, None, None, None),
+        RuntimeEnvironment::Local => (false, None, None, false, false, None, None, None),
         RuntimeEnvironment::Docker(options) => (
             true,
             options.client.clone(),
             options.extra_options.clone(),
+            false,
+            false,
+            None,
+            None,
+            None,
+        ),
+        RuntimeEnvironment::Lambda(options) => (
+            false,
+            options.client.clone(),
+            options.extra_options.clone(),
+            true,
             false,
             None,
             None,
@@ -901,6 +962,7 @@ fn environment_options(
             false,
             None,
             None,
+            false,
             true,
             options.binary.clone(),
             options.registry.clone(),
@@ -915,6 +977,7 @@ fn environment_options(
         docker_runner,
         docker_runner_client,
         docker_runner_opts,
+        lambda_runner,
         docker,
         docker_client,
         docker_opts,
