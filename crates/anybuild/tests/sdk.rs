@@ -530,7 +530,7 @@ case "$1 $2" in
       echo 'ResourceNotFoundException' >&2
       exit 254
     fi
-    echo '{}'
+      echo '{"Configuration":{"PackageType":"Image"}}'
     ;;
   'lambda create-function')
     touch "$FUNCTION_MARKER"
@@ -600,6 +600,112 @@ echo "docker:$*"
     assert!(log.contains("lambda update-function-code"));
     let events = events.lock().unwrap();
     assert!(!format!("{events:?}").contains("aws-secret"));
+}
+
+#[cfg(unix)]
+#[test]
+fn aws_lambda_deployment_creates_then_updates_a_managed_runtime_function() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let project = static_project();
+    let state = project.path().join(".anybuild");
+    let artifact_dir = state.join("runner/docker");
+    let archive = artifact_dir.join("lambda/function.zip");
+    std::fs::create_dir_all(archive.parent().unwrap()).unwrap();
+    std::fs::write(&archive, "zip-placeholder").unwrap();
+    std::fs::write(
+        state.join("artifact.json"),
+        serde_json::to_string_pretty(&RuntimeArtifact::Collection {
+            artifacts: vec![
+                RuntimeArtifact::Docker {
+                    directory: artifact_dir,
+                    image: "sdk-lambda".to_owned(),
+                    context: project.path().to_path_buf(),
+                    platform: Some("linux/amd64".to_owned()),
+                },
+                RuntimeArtifact::LambdaZip {
+                    archive,
+                    runtime: "python3.13".to_owned(),
+                    handler: "run.sh".to_owned(),
+                    environment: indexmap::IndexMap::from([
+                        (
+                            "AWS_LAMBDA_EXEC_WRAPPER".to_owned(),
+                            "/opt/bootstrap".to_owned(),
+                        ),
+                        ("AWS_LWA_PORT".to_owned(), "8080".to_owned()),
+                    ]),
+                    platform: Some("linux/amd64".to_owned()),
+                },
+            ],
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let command_log = project.path().join("commands.log");
+    let function_marker = project.path().join("function-created");
+    let fake_aws = project.path().join("fake-aws");
+    std::fs::write(
+        &fake_aws,
+        r#"#!/bin/sh
+printf 'aws %s\n' "$*" >> "$COMMAND_LOG"
+case "$1 $2" in
+  'lambda get-function')
+    if [ ! -f "$FUNCTION_MARKER" ]; then
+      echo 'ResourceNotFoundException' >&2
+      exit 254
+    fi
+    echo '{"Configuration":{"PackageType":"Zip","Environment":{"Variables":{"KEEP":"yes"}},"Layers":[{"Arn":"arn:aws:lambda:us-west-2:123456789012:layer:observability:1"}]}}'
+    ;;
+  'lambda create-function') touch "$FUNCTION_MARKER" ;;
+  'lambda update-function-code') ;;
+  'lambda update-function-configuration') ;;
+  'lambda wait') ;;
+  *) echo "unexpected AWS command: $*" >&2; exit 1 ;;
+esac
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_aws, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let sdk = Anybuild::new(project.path())
+        .with_env("COMMAND_LOG", command_log.display().to_string())
+        .with_env("FUNCTION_MARKER", function_marker.display().to_string());
+    let options = |role: Option<&str>| DeployOptions {
+        platform: DeploymentPlatform::AwsLambda(AwsLambdaOptions {
+            binary: Some(fake_aws.display().to_string()),
+            region: Some("us-west-2".to_owned()),
+            function: Some("sdk-lambda".to_owned()),
+            role: role.map(str::to_owned),
+            ..Default::default()
+        }),
+        target: DeployTarget::Publish {
+            owner: None,
+            name: None,
+        },
+        process_io: ProcessIo::Events,
+    };
+
+    sdk.deploy(options(Some(
+        "arn:aws:iam::123456789012:role/lambda-execution",
+    )))
+    .unwrap();
+    sdk.deploy(options(None)).unwrap();
+
+    let log = std::fs::read_to_string(command_log).unwrap();
+    assert!(!log.contains(" ecr "));
+    assert!(!log.lines().any(|line| line.starts_with("docker ")));
+    assert!(log.contains("lambda create-function"));
+    assert!(log.contains("--package-type Zip"));
+    assert!(log.contains("--runtime python3.13"));
+    assert!(log.contains("--handler run.sh"));
+    assert!(log.contains("--zip-file fileb://"));
+    assert!(log.contains("arn:aws:lambda:us-west-2:753240598075:layer:LambdaAdapterLayerX86:28"));
+    assert!(log.contains("lambda update-function-code"));
+    assert!(log.contains("lambda update-function-configuration"));
+    assert!(log.contains("lambda wait function-updated-v2"));
+    assert!(log.contains("KEEP"));
+    assert!(log.contains("observability:1"));
 }
 
 #[test]

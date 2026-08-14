@@ -85,6 +85,7 @@ pub struct AwsLambdaOptions {
     pub repository: Option<String>,
     pub image_tag: Option<String>,
     pub architecture: Option<LambdaArchitecture>,
+    pub adapter_layer: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -810,7 +811,7 @@ impl Anybuild {
             None => deployer.load_legacy_artifact(&anybuild_dir)?,
         };
         anyhow::ensure!(
-            artifact.kind() == deployer.artifact_kind(),
+            deployer.accepts_artifact(&artifact),
             "{} deployment requires a {:?} artifact, found {:?}",
             deployer.platform_name(),
             deployer.artifact_kind(),

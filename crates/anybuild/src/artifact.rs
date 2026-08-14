@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 const ARTIFACT_MANIFEST: &str = "artifact.json";
@@ -12,7 +13,9 @@ const ARTIFACT_MANIFEST: &str = "artifact.json";
 pub enum ArtifactKind {
     Local,
     Docker,
+    LambdaZip,
     Wasmer,
+    Collection,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -28,8 +31,20 @@ pub enum RuntimeArtifact {
         #[serde(default)]
         platform: Option<String>,
     },
+    LambdaZip {
+        archive: PathBuf,
+        runtime: String,
+        handler: String,
+        #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+        environment: IndexMap<String, String>,
+        #[serde(default)]
+        platform: Option<String>,
+    },
     Wasmer {
         directory: PathBuf,
+    },
+    Collection {
+        artifacts: Vec<RuntimeArtifact>,
     },
 }
 
@@ -38,14 +53,33 @@ impl RuntimeArtifact {
         match self {
             Self::Local { .. } => ArtifactKind::Local,
             Self::Docker { .. } => ArtifactKind::Docker,
+            Self::LambdaZip { .. } => ArtifactKind::LambdaZip,
             Self::Wasmer { .. } => ArtifactKind::Wasmer,
+            Self::Collection { .. } => ArtifactKind::Collection,
+        }
+    }
+
+    pub(crate) fn contains_kind(&self, kind: ArtifactKind) -> bool {
+        self.find(kind).is_some()
+    }
+
+    fn find(&self, kind: ArtifactKind) -> Option<&Self> {
+        if self.kind() == kind {
+            return Some(self);
+        }
+        match self {
+            Self::Collection { artifacts } => artifacts.iter().find_map(|item| item.find(kind)),
+            _ => None,
         }
     }
 
     pub(crate) fn wasmer_directory(&self) -> Option<&std::path::Path> {
         match self {
             Self::Wasmer { directory } => Some(directory),
-            Self::Local { .. } | Self::Docker { .. } => None,
+            Self::Collection { artifacts } => {
+                artifacts.iter().find_map(RuntimeArtifact::wasmer_directory)
+            }
+            Self::Local { .. } | Self::Docker { .. } | Self::LambdaZip { .. } => None,
         }
     }
 
@@ -57,15 +91,23 @@ impl RuntimeArtifact {
                 context,
                 ..
             } => Some((directory, image, context)),
+            Self::Collection { artifacts } => {
+                artifacts.iter().find_map(RuntimeArtifact::docker_parts)
+            }
+            Self::Local { .. } | Self::LambdaZip { .. } | Self::Wasmer { .. } => None,
+        }
+    }
+
+    pub(crate) fn platform(&self) -> Option<&str> {
+        match self {
+            Self::Docker { platform, .. } | Self::LambdaZip { platform, .. } => platform.as_deref(),
+            Self::Collection { artifacts } => artifacts.iter().find_map(RuntimeArtifact::platform),
             Self::Local { .. } | Self::Wasmer { .. } => None,
         }
     }
 
-    pub(crate) fn docker_platform(&self) -> Option<&str> {
-        match self {
-            Self::Docker { platform, .. } => platform.as_deref(),
-            Self::Local { .. } | Self::Wasmer { .. } => None,
-        }
+    pub(crate) fn lambda_zip(&self) -> Option<&Self> {
+        self.find(ArtifactKind::LambdaZip)
     }
 
     pub(crate) fn persist(&self, anybuild_dir: &std::path::Path) -> Result<()> {
@@ -104,14 +146,29 @@ mod tests {
             context: temporary.path().join("project"),
             platform: Some("linux/amd64".to_owned()),
         };
+        let lambda = RuntimeArtifact::LambdaZip {
+            archive: temporary.path().join("function.zip"),
+            runtime: "python3.13".to_owned(),
+            handler: "run.sh".to_owned(),
+            environment: IndexMap::from([(
+                "AWS_LAMBDA_EXEC_WRAPPER".to_owned(),
+                "/opt/bootstrap".to_owned(),
+            )]),
+            platform: Some("linux/amd64".to_owned()),
+        };
+        let artifact = RuntimeArtifact::Collection {
+            artifacts: vec![artifact, lambda],
+        };
 
         artifact.persist(temporary.path()).unwrap();
         let loaded = RuntimeArtifact::load(temporary.path()).unwrap().unwrap();
 
-        assert_eq!(loaded.kind(), ArtifactKind::Docker);
+        assert_eq!(loaded.kind(), ArtifactKind::Collection);
+        assert!(loaded.contains_kind(ArtifactKind::Docker));
         assert!(matches!(
-            loaded,
-            RuntimeArtifact::Docker { image, .. } if image == "acme-api"
+            loaded.lambda_zip(),
+            Some(RuntimeArtifact::LambdaZip { runtime, .. }) if runtime == "python3.13"
         ));
+        assert_eq!(loaded.docker_parts().unwrap().1, "acme-api");
     }
 }

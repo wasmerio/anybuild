@@ -5,8 +5,8 @@ use anybuild::{
 use anyhow::{bail, Result};
 
 use crate::args::{
-    AwsLambdaPlatformArgs, DeployTargetArgs, DeploymentPlatformArg, ExecutionTargetArgs,
-    FlyPlatformArgs, LambdaArchitectureArg, RunSelectionArgs, RunTarget,
+    AwsLambdaPlatformArgs, BuildTarget, DeployTargetArgs, DeploymentPlatformArg,
+    ExecutionTargetArgs, FlyPlatformArgs, LambdaArchitectureArg, RunSelectionArgs, RunTarget,
 };
 use crate::commands::{build, client_with_render_options, execution, RenderOptions};
 use crate::context::EnvironmentOptions;
@@ -61,7 +61,7 @@ pub fn run(args: AutoArgs) -> Result<()> {
     let start = args.selection.effective_start();
     let after_deploy = args.selection.effective_after_deploy();
     let mut execution_targets = args.build.targets.clone();
-    apply_platform_runner(&mut execution_targets, platform);
+    apply_platform_targets(&mut execution_targets, platform);
     let shared = SharedProjectArgs {
         path: args.build.project.path.clone(),
         subdir: args.build.project.subdir.clone(),
@@ -190,19 +190,22 @@ fn validate_platform_runtime(
     }
 }
 
-fn apply_platform_runner(
+fn apply_platform_targets(
     targets: &mut ExecutionTargetArgs,
     platform: Option<DeploymentPlatformArg>,
 ) {
-    if targets.runner.is_some() {
-        return;
+    if targets.builder.is_none() && platform == Some(DeploymentPlatformArg::AwsLambda) {
+        targets.builder = Some(BuildTarget::Docker);
     }
-    targets.runner = match platform {
-        Some(DeploymentPlatformArg::Wasmer) => Some(RunTarget::Wasmer),
-        Some(DeploymentPlatformArg::Fly) => Some(RunTarget::Docker),
-        Some(DeploymentPlatformArg::AwsLambda) => Some(RunTarget::Docker),
-        None => None,
-    };
+    if targets.runner.is_none() {
+        targets.runner = match platform {
+            Some(DeploymentPlatformArg::Wasmer) => Some(RunTarget::Wasmer),
+            Some(DeploymentPlatformArg::Fly) | Some(DeploymentPlatformArg::AwsLambda) => {
+                Some(RunTarget::Docker)
+            }
+            None => None,
+        };
+    }
 }
 
 fn wasmer_options(runtime: &RuntimeEnvironment) -> WasmerOptions {
@@ -244,6 +247,7 @@ fn deployment_platform(
                 repository: aws_lambda.aws_repository.clone(),
                 image_tag: aws_lambda.aws_image_tag.clone(),
                 architecture: aws_lambda.aws_architecture.map(lambda_architecture),
+                adapter_layer: aws_lambda.aws_lambda_adapter_layer.clone(),
             })
         }
     }
@@ -264,7 +268,7 @@ mod tests {
     fn fly_platform_selects_the_docker_runner() {
         let mut targets = ExecutionTargetArgs::default();
 
-        apply_platform_runner(&mut targets, Some(DeploymentPlatformArg::Fly));
+        apply_platform_targets(&mut targets, Some(DeploymentPlatformArg::Fly));
 
         assert_eq!(targets.runner, Some(RunTarget::Docker));
     }
@@ -273,9 +277,10 @@ mod tests {
     fn aws_lambda_platform_selects_the_docker_runner() {
         let mut targets = ExecutionTargetArgs::default();
 
-        apply_platform_runner(&mut targets, Some(DeploymentPlatformArg::AwsLambda));
+        apply_platform_targets(&mut targets, Some(DeploymentPlatformArg::AwsLambda));
 
         assert_eq!(targets.runner, Some(RunTarget::Docker));
+        assert_eq!(targets.builder, Some(BuildTarget::Docker));
     }
 
     #[test]
@@ -285,9 +290,22 @@ mod tests {
             ..Default::default()
         };
 
-        apply_platform_runner(&mut targets, Some(DeploymentPlatformArg::Fly));
+        apply_platform_targets(&mut targets, Some(DeploymentPlatformArg::Fly));
 
         assert_eq!(targets.runner, Some(RunTarget::Local));
+    }
+
+    #[test]
+    fn aws_lambda_platform_preserves_explicit_targets() {
+        let mut targets = ExecutionTargetArgs {
+            builder: Some(BuildTarget::Local),
+            runner: Some(RunTarget::Docker),
+        };
+
+        apply_platform_targets(&mut targets, Some(DeploymentPlatformArg::AwsLambda));
+
+        assert_eq!(targets.builder, Some(BuildTarget::Local));
+        assert_eq!(targets.runner, Some(RunTarget::Docker));
     }
 
     #[test]

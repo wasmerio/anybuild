@@ -78,6 +78,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
                 repository: args.aws_lambda.aws_repository,
                 image_tag: args.aws_lambda.aws_image_tag,
                 architecture: args.aws_lambda.aws_architecture.map(lambda_architecture),
+                adapter_layer: args.aws_lambda.aws_lambda_adapter_layer,
             }),
         },
         target,

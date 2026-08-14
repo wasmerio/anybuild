@@ -336,6 +336,7 @@ mod tests {
             "--aws-function=example-api",
             "--aws-region=us-west-2",
             "--aws-architecture=arm64",
+            "--aws-lambda-adapter-layer=arn:aws:lambda:us-west-2:123:layer:adapter:1",
         ]);
         assert_eq!(args.platform, Some(DeploymentPlatformArg::AwsLambda));
         assert_eq!(args.aws_lambda.aws_function.as_deref(), Some("example-api"));
@@ -343,6 +344,10 @@ mod tests {
         assert_eq!(
             args.aws_lambda.aws_architecture,
             Some(crate::args::LambdaArchitectureArg::Arm64)
+        );
+        assert_eq!(
+            args.aws_lambda.aws_lambda_adapter_layer.as_deref(),
+            Some("arn:aws:lambda:us-west-2:123:layer:adapter:1")
         );
     }
 

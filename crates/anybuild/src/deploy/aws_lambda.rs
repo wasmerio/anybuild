@@ -1,10 +1,12 @@
-//! AWS Lambda container-image deployment adapter.
+//! AWS Lambda managed-runtime and container-image deployment adapter.
 
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
 use anyhow::{bail, Context, Result};
+use indexmap::IndexMap;
+use serde::Deserialize;
 
 use crate::artifact::{ArtifactKind, RuntimeArtifact};
 use crate::deploy::Deployer;
@@ -12,6 +14,36 @@ use crate::operation::OperationContext;
 use crate::sdk::{AwsLambdaOptions, DeployOutcome, DeployTarget, LambdaArchitecture};
 
 const LAMBDA_ADAPTER_IMAGE: &str = "public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0";
+const LAMBDA_ADAPTER_LAYER_VERSION: u32 = 28;
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct FunctionLookup {
+    configuration: FunctionConfiguration,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct FunctionConfiguration {
+    package_type: String,
+    #[serde(default)]
+    environment: FunctionEnvironment,
+    #[serde(default)]
+    layers: Vec<FunctionLayer>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct FunctionEnvironment {
+    #[serde(default)]
+    variables: IndexMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct FunctionLayer {
+    arn: String,
+}
 
 pub(crate) struct AwsLambdaDeployer {
     options: AwsLambdaOptions,
@@ -242,7 +274,7 @@ impl AwsLambdaDeployer {
         Ok(image_uri)
     }
 
-    fn function_exists(&self, function: &str, region: &str) -> Result<bool> {
+    fn function(&self, function: &str, region: &str) -> Result<Option<FunctionConfiguration>> {
         let args = self.aws_args(
             "lambda",
             "get-function",
@@ -251,24 +283,31 @@ impl AwsLambdaDeployer {
         );
         let output = self.capture(self.aws_binary(), &args, None)?;
         if output.status.success() {
-            return Ok(true);
+            let lookup: FunctionLookup = serde_json::from_slice(&output.stdout)
+                .context("AWS returned invalid Lambda function metadata")?;
+            anyhow::ensure!(
+                !lookup.configuration.package_type.is_empty(),
+                "AWS returned Lambda function metadata without a package type"
+            );
+            return Ok(Some(lookup.configuration));
         }
         if String::from_utf8_lossy(&output.stderr).contains("ResourceNotFoundException") {
-            return Ok(false);
+            return Ok(None);
         }
         Self::output_text(&output, "looking up the Lambda function")?;
         unreachable!()
     }
 
-    fn publish_function(
+    fn publish_image_function(
         &self,
         function: &str,
         image_uri: &str,
         region: &str,
         architecture: LambdaArchitecture,
+        existing: Option<&FunctionConfiguration>,
     ) -> Result<()> {
         let architecture = architecture.as_aws_value();
-        let args = if self.function_exists(function, region)? {
+        let args = if existing.is_some() {
             self.aws_args(
                 "lambda",
                 "update-function-code",
@@ -312,8 +351,162 @@ impl AwsLambdaDeployer {
         self.run(self.aws_binary(), &args)
     }
 
+    fn publish_zip_function(
+        &self,
+        function: &str,
+        artifact: &RuntimeArtifact,
+        region: &str,
+        architecture: LambdaArchitecture,
+        existing: Option<&FunctionConfiguration>,
+    ) -> Result<()> {
+        let RuntimeArtifact::LambdaZip {
+            archive,
+            runtime,
+            handler,
+            environment: artifact_environment,
+            ..
+        } = artifact
+        else {
+            bail!("AWS managed runtime deployment requires a Lambda ZIP artifact")
+        };
+        anyhow::ensure!(
+            archive.is_file(),
+            "AWS Lambda archive is missing; rebuild with --builder=docker --runner=docker ({})",
+            archive.display()
+        );
+        let archive = std::path::absolute(archive)?;
+        let archive = format!("fileb://{}", archive.display());
+        let architecture = architecture.as_aws_value();
+        let mut environment = existing
+            .map(|function| function.environment.variables.clone())
+            .unwrap_or_default();
+        environment.extend(artifact_environment.clone());
+        let environment = serde_json::to_string(&serde_json::json!({
+            "Variables": environment,
+        }))?;
+        let layers = self.lambda_layers(existing, region, architecture)?;
+
+        if existing.is_none() {
+            let role = self
+                .options
+                .role
+                .as_deref()
+                .filter(|role| !role.is_empty())
+                .context(
+                    "Creating an AWS Lambda function requires --aws-role with an IAM role ARN",
+                )?;
+            let mut args = self.aws_args(
+                "lambda",
+                "create-function",
+                region,
+                &[
+                    "--function-name",
+                    function,
+                    "--package-type",
+                    "Zip",
+                    "--runtime",
+                    runtime,
+                    "--handler",
+                    handler,
+                    "--zip-file",
+                    &archive,
+                    "--role",
+                    role,
+                    "--architectures",
+                    architecture,
+                    "--environment",
+                    &environment,
+                ],
+            );
+            add_layers(&mut args, &layers);
+            return self.run(self.aws_binary(), &args);
+        }
+
+        let code = self.aws_args(
+            "lambda",
+            "update-function-code",
+            region,
+            &[
+                "--function-name",
+                function,
+                "--zip-file",
+                &archive,
+                "--architectures",
+                architecture,
+            ],
+        );
+        self.run(self.aws_binary(), &code)?;
+        self.wait_for_update(function, region)?;
+
+        let mut configuration = self.aws_args(
+            "lambda",
+            "update-function-configuration",
+            region,
+            &[
+                "--function-name",
+                function,
+                "--runtime",
+                runtime,
+                "--handler",
+                handler,
+                "--environment",
+                &environment,
+            ],
+        );
+        add_layers(&mut configuration, &layers);
+        self.run(self.aws_binary(), &configuration)?;
+        self.wait_for_update(function, region)
+    }
+
+    fn wait_for_update(&self, function: &str, region: &str) -> Result<()> {
+        let args = self.aws_args(
+            "lambda",
+            "wait",
+            region,
+            &["function-updated-v2", "--function-name", function],
+        );
+        self.run(self.aws_binary(), &args)
+    }
+
+    fn lambda_layers(
+        &self,
+        existing: Option<&FunctionConfiguration>,
+        region: &str,
+        architecture: &str,
+    ) -> Result<Vec<String>> {
+        let layer = if let Some(layer) = self
+            .options
+            .adapter_layer
+            .as_deref()
+            .filter(|layer| !layer.is_empty())
+        {
+            layer.to_owned()
+        } else {
+            anyhow::ensure!(
+                !region.starts_with("cn-") && !region.starts_with("us-gov-"),
+                "Pass --aws-lambda-adapter-layer for AWS China or GovCloud regions"
+            );
+            let name = if architecture == "arm64" {
+                "LambdaAdapterLayerArm64"
+            } else {
+                "LambdaAdapterLayerX86"
+            };
+            format!(
+                "arn:aws:lambda:{region}:753240598075:layer:{name}:{LAMBDA_ADAPTER_LAYER_VERSION}"
+            )
+        };
+        let mut layers: Vec<String> = existing
+            .into_iter()
+            .flat_map(|function| &function.layers)
+            .map(|layer| layer.arn.clone())
+            .filter(|arn| !arn.contains(":layer:LambdaAdapterLayer"))
+            .collect();
+        layers.push(layer);
+        Ok(layers)
+    }
+
     fn architecture(&self, artifact: &RuntimeArtifact) -> Result<LambdaArchitecture> {
-        let artifact_architecture = match artifact.docker_platform() {
+        let artifact_architecture = match artifact.platform() {
             Some("linux/amd64") => LambdaArchitecture::X86_64,
             Some("linux/arm64") => LambdaArchitecture::Arm64,
             Some(platform) => bail!("Unsupported Docker platform for AWS Lambda: {platform}"),
@@ -323,7 +516,7 @@ impl AwsLambdaDeployer {
         if let Some(requested) = self.options.architecture {
             anyhow::ensure!(
                 requested == artifact_architecture,
-                "AWS Lambda architecture {} does not match the Docker artifact architecture {}",
+                "AWS Lambda architecture {} does not match the runtime artifact architecture {}",
                 requested.as_aws_value(),
                 artifact_architecture.as_aws_value()
             );
@@ -341,8 +534,15 @@ impl Deployer for AwsLambdaDeployer {
         ArtifactKind::Docker
     }
 
+    fn accepts_artifact(&self, artifact: &RuntimeArtifact) -> bool {
+        artifact.contains_kind(ArtifactKind::Docker)
+            || artifact.contains_kind(ArtifactKind::LambdaZip)
+    }
+
     fn load_legacy_artifact(&self, _anybuild_dir: &Path) -> Result<RuntimeArtifact> {
-        bail!("AWS Lambda deployment requires a Docker artifact; build with --runner=docker first")
+        bail!(
+            "AWS Lambda deployment requires a Docker or Lambda ZIP artifact; build with --runner=docker first"
+        )
     }
 
     fn deploy(
@@ -353,43 +553,85 @@ impl Deployer for AwsLambdaDeployer {
         if matches!(target, DeployTarget::WriteConfig { .. }) {
             bail!("AWS Lambda does not support Wasmer deployment configs");
         }
-        let (artifact_dir, local_image, _context) = artifact.docker_parts().with_context(|| {
-            format!(
-                "{} deployment requires a Docker artifact, found {:?}",
-                self.platform_name(),
-                artifact.kind()
-            )
-        })?;
-        let dockerfile = std::fs::read_to_string(artifact_dir.join("Dockerfile"))
-            .with_context(|| "Docker artifact metadata is missing; rebuild with --runner=docker")?;
-        anyhow::ensure!(
-            dockerfile.contains(LAMBDA_ADAPTER_IMAGE),
-            "Docker artifact predates AWS Lambda support; rebuild with --runner=docker"
-        );
-
         let function = self
             .options
             .function
             .as_deref()
             .filter(|function| !function.is_empty())
             .context("AWS Lambda deployment requires --aws-function")?;
-        let repository = self
-            .options
-            .repository
-            .as_deref()
-            .filter(|repository| !repository.is_empty())
-            .map(str::to_owned)
-            .unwrap_or_else(|| repository_name(function));
         let region = self.resolve_region()?;
         let architecture = self.architecture(artifact)?;
-        let repository_uri = self.ensure_repository(&repository, &region)?;
-        let image_uri = self.push_image(local_image, &repository_uri, &region)?;
-        self.publish_function(function, &image_uri, &region, architecture)?;
+        let existing = self.function(function, &region)?;
+        let lambda_zip = artifact.lambda_zip();
+        let use_zip = match existing
+            .as_ref()
+            .map(|function| function.package_type.as_str())
+        {
+            Some("Zip") => {
+                anyhow::ensure!(
+                    lambda_zip.is_some(),
+                    "Existing AWS Lambda function uses Zip packages, but this service requires a Docker image"
+                );
+                true
+            }
+            Some("Image") => false,
+            Some(package_type) => bail!("Unsupported AWS Lambda package type: {package_type}"),
+            None => lambda_zip.is_some(),
+        };
+
+        if use_zip {
+            self.publish_zip_function(
+                function,
+                lambda_zip.expect("checked above"),
+                &region,
+                architecture,
+                existing.as_ref(),
+            )?;
+        } else {
+            let (artifact_dir, local_image, _context) =
+                artifact.docker_parts().with_context(|| {
+                    "AWS Lambda image deployment requires a Docker artifact, but only a Lambda ZIP is available"
+                })?;
+            let dockerfile = std::fs::read_to_string(artifact_dir.join("Dockerfile"))
+                .with_context(|| {
+                    "Docker artifact metadata is missing; rebuild with --runner=docker"
+                })?;
+            anyhow::ensure!(
+                dockerfile.contains(LAMBDA_ADAPTER_IMAGE),
+                "Docker artifact predates AWS Lambda support; rebuild with --runner=docker"
+            );
+            let repository = self
+                .options
+                .repository
+                .as_deref()
+                .filter(|repository| !repository.is_empty())
+                .map(str::to_owned)
+                .unwrap_or_else(|| repository_name(function));
+            let repository_uri = self.ensure_repository(&repository, &region)?;
+            let image_uri = self.push_image(local_image, &repository_uri, &region)?;
+            self.publish_image_function(
+                function,
+                &image_uri,
+                &region,
+                architecture,
+                existing.as_ref(),
+            )?;
+        }
 
         Ok(DeployOutcome::Published {
             owner: None,
             name: Some(function.to_owned()),
         })
+    }
+}
+
+fn add_layers(args: &mut Vec<String>, layers: &[String]) {
+    if !layers.is_empty() {
+        let insert_at = args.len().saturating_sub(1);
+        args.splice(
+            insert_at..insert_at,
+            std::iter::once("--layers".to_owned()).chain(layers.iter().cloned()),
+        );
     }
 }
 
@@ -455,7 +697,7 @@ mod tests {
     }
 
     #[test]
-    fn requested_architecture_must_match_the_docker_artifact() {
+    fn requested_architecture_must_match_the_runtime_artifact() {
         let deployer = AwsLambdaDeployer::new(
             AwsLambdaOptions {
                 architecture: Some(LambdaArchitecture::Arm64),
@@ -474,7 +716,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "AWS Lambda architecture arm64 does not match the Docker artifact architecture x86_64"
+            "AWS Lambda architecture arm64 does not match the runtime artifact architecture x86_64"
         );
     }
 }

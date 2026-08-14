@@ -119,6 +119,9 @@ pub struct AwsLambdaPlatformArgs {
     /// Lambda instruction-set architecture.
     #[arg(long, value_enum)]
     pub aws_architecture: Option<LambdaArchitectureArg>,
+    /// Lambda Web Adapter layer ARN. Defaults to the public AWS layer.
+    #[arg(long)]
+    pub aws_lambda_adapter_layer: Option<String>,
 }
 
 /// Command selection shared by `run` and `auto`.

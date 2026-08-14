@@ -10,6 +10,7 @@ use crate::providers::ProviderConfig;
 use crate::RuntimeArtifact;
 
 pub mod docker;
+mod lambda_zip;
 pub mod local;
 pub mod wasmer;
 

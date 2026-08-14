@@ -15,6 +15,9 @@ pub mod wasmer;
 pub(crate) trait Deployer {
     fn platform_name(&self) -> &'static str;
     fn artifact_kind(&self) -> ArtifactKind;
+    fn accepts_artifact(&self, artifact: &RuntimeArtifact) -> bool {
+        artifact.contains_kind(self.artifact_kind())
+    }
     fn load_legacy_artifact(&self, anybuild_dir: &Path) -> Result<RuntimeArtifact>;
     fn deploy(&mut self, artifact: &RuntimeArtifact, target: DeployTarget)
         -> Result<DeployOutcome>;

@@ -31,7 +31,7 @@ and falls back to Docker or Wasmer when requested:
 - `anybuild . --platform=fly --fly-app=my-app` builds a Docker runtime
   artifact and deploys it to Fly.io.
 - `anybuild . --platform=aws-lambda --aws-function=my-function` builds a
-  Lambda-compatible Docker artifact and deploys it through Amazon ECR.
+  Lambda artifact and deploys it using a managed runtime or a container image.
 
 `--wasmer` remains shorthand for `--runner=wasmer`. `--docker` selects both
 the Docker builder and Docker runner unless another runner is selected. For
@@ -135,9 +135,12 @@ the Docker runtime port. Use `--fly-config`, `--fly-bin`, or `--fly-token` to
 override the configuration, CLI binary, or credentials. The `FLY_API_TOKEN`
 environment variable and flyctl's configured credentials also work.
 
-AWS Lambda currently consumes the Docker runtime artifact. Anybuild includes
-the AWS Lambda Web Adapter in Docker images so the same HTTP application image
-continues to run locally, on Fly.io, or on Lambda:
+AWS Lambda consumes the artifact produced by the Docker runner. When the
+service runtime dependencies are Python or Node.js, with optional Bash,
+Anybuild packages the Docker-built Linux artifacts as a `.zip` for the matching
+AWS-managed runtime. Other runtime dependencies use a container image. Both
+paths include the AWS Lambda Web Adapter, so regular HTTP applications can run
+on Lambda without a Lambda-specific handler:
 
 ```bash
 anybuild build --builder=docker --runner=docker
@@ -146,16 +149,27 @@ anybuild deploy --platform=aws-lambda \
   --aws-region=us-west-2
 ```
 
-Anybuild creates the ECR repository when needed, logs Docker into ECR, pushes
-the image, and creates or updates the Lambda function. Creating the function
-also requires `--aws-role` with its IAM execution role ARN; updates do not.
-Use `--aws-profile`, `--aws-repository`, `--aws-image-tag`, and
-`--aws-architecture` to override their defaults. The AWS CLI and a
-Docker-compatible client must be installed and authenticated. This initial
-Lambda integration deploys container images; native `.zip` runtime artifacts
-can be added through the same platform abstraction later.
+`anybuild auto --platform=aws-lambda` selects both the Docker builder and
+Docker runner unless either is explicitly set. This makes Python and Node.js
+dependencies portable to Lambda's Linux environment. Supported managed
+runtimes are selected from the runtime version in the build plan. Adding
+another serving dependency automatically retains the container-image path.
 
-The deploy command manages the function image, but does not create public
+For image deployments, Anybuild creates the ECR repository when needed, logs
+Docker into ECR, and pushes the image. Managed-runtime deployments upload the
+`.zip` directly and do not use ECR. Creating either kind of function also
+requires `--aws-role` with its IAM execution role ARN; updates do not. An
+existing function keeps its current package type because AWS does not allow
+switching between `Zip` and `Image` in place.
+
+Use `--aws-profile`, `--aws-repository`, `--aws-image-tag`, and
+`--aws-architecture` to override their defaults. The public Lambda Web Adapter
+layer is selected automatically for managed runtimes; use
+`--aws-lambda-adapter-layer` to override its ARN. The AWS CLI must be installed
+and authenticated. A Docker-compatible client is also required for building
+and for image deployments.
+
+The deploy command manages the function artifact, but does not create public
 function URLs or other event triggers.
 
 ## The Anybuild file
