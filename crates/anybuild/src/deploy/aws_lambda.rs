@@ -11,7 +11,7 @@ use crate::deploy::Deployer;
 use crate::operation::OperationContext;
 use crate::sdk::{AwsLambdaOptions, DeployOutcome, DeployTarget, LambdaArchitecture};
 
-const LAMBDA_ADAPTER_PATH: &str = "/opt/extensions/lambda-adapter";
+const LAMBDA_ADAPTER_IMAGE: &str = "public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0";
 
 pub(crate) struct AwsLambdaDeployer {
     options: AwsLambdaOptions,
@@ -363,7 +363,7 @@ impl Deployer for AwsLambdaDeployer {
         let dockerfile = std::fs::read_to_string(artifact_dir.join("Dockerfile"))
             .with_context(|| "Docker artifact metadata is missing; rebuild with --runner=docker")?;
         anyhow::ensure!(
-            dockerfile.contains(LAMBDA_ADAPTER_PATH),
+            dockerfile.contains(LAMBDA_ADAPTER_IMAGE),
             "Docker artifact predates AWS Lambda support; rebuild with --runner=docker"
         );
 

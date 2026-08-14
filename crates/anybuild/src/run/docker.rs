@@ -12,17 +12,12 @@ use crate::build::docker::dependency_install_contents;
 use crate::build::BuildBackend;
 use crate::internal::volumes::load_volume_mappings;
 use crate::operation::OperationContext;
-use crate::plan::{Package, RunStep, Serve, Step};
+use crate::plan::{RunStep, Serve, Step};
 use crate::run::{HostMount, Runner};
 use crate::RuntimeArtifact;
 
-const DOCKERFILE_SYNTAX: &str = "# syntax=docker/dockerfile:1.7-labs\n";
-const LAMBDA_ADAPTER_IMAGE: &str = "public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1";
-const PYTHON_VENV_COMPATIBILITY: &str = r#"RUN python_target="$(readlink /opt/venv/bin/python)" \
-    && case "$python_target" in /mise/*) mkdir -p "$(dirname "$python_target")"; ln -sf /usr/local/bin/python "$python_target" ;; esac
-"#;
-
-const TOOLCHAIN_STAGE: &str = r#"FROM debian:trixie-slim AS runtime-tools
+const TOOLCHAIN_STAGE: &str = r#"# syntax=docker/dockerfile:1.7-labs
+FROM debian:trixie-slim AS runtime-tools
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
@@ -52,13 +47,8 @@ ENV MISE_CONFIG_DIR="/mise"
 ENV PATH="/mise/shims:$PATH"
 
 COPY --from=runtime-tools /etc/ssl/certs /etc/ssl/certs
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0 /lambda-adapter /opt/extensions/lambda-adapter
 "#;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum LanguageRuntime {
-    Python,
-    Node,
-}
 
 pub struct DockerRunner {
     build_backend: Rc<RefCell<dyn BuildBackend>>,
@@ -169,57 +159,45 @@ impl DockerRunner {
     }
 
     fn dockerfile_contents(&self, serve: &Serve) -> Result<String> {
-        let mut contents = String::from(DOCKERFILE_SYNTAX);
-        let language_runtime = language_runtime_image(&serve.deps);
-        if let Some((_, image)) = &language_runtime {
-            contents.push_str(&format!(
-                "FROM {image} AS runtime\n\nSHELL [\"/bin/bash\", \"-o\", \"pipefail\", \"-c\"]\n"
-            ));
-        } else {
-            contents.push_str(TOOLCHAIN_STAGE);
-            let uses_mise = serve.deps.iter().any(|dependency| {
-                !matches!(
-                    dependency.name.as_str(),
-                    "bash" | "composer" | "pie" | "static-web-server"
-                )
-            });
-            if uses_mise {
-                contents.push_str(MISE_SETUP);
-            }
-            for dependency in &serve.deps {
-                contents.push_str(&dependency_install_contents(dependency));
-            }
-            contents.push_str(RUNTIME_STAGE);
-            if uses_mise {
-                contents.push_str(
-                    "# Copy resolved toolchains and shared libraries without compilers or caches.\n",
-                );
-                contents.push_str("COPY --from=runtime-tools /mise /mise\n");
-                contents.push_str("COPY --from=runtime-tools /usr/local/bin /usr/local/bin\n");
-            } else if serve
-                .deps
-                .iter()
-                .any(|dependency| dependency.name == "static-web-server")
-            {
-                contents.push_str(
-                    "COPY --from=runtime-tools /usr/local/bin/static-web-server /usr/local/bin/static-web-server\n",
-                );
-            }
-            if serve
-                .deps
-                .iter()
-                .any(|dependency| dependency.name == "composer")
-            {
-                contents
-                    .push_str("COPY --from=runtime-tools /usr/bin/composer /usr/bin/composer\n");
-            }
-            if serve.deps.iter().any(|dependency| dependency.name == "pie") {
-                contents.push_str("COPY --from=runtime-tools /usr/bin/pie /usr/bin/pie\n");
-            }
+        let mut contents = String::from(TOOLCHAIN_STAGE);
+        let uses_mise = serve.deps.iter().any(|dependency| {
+            !matches!(
+                dependency.name.as_str(),
+                "bash" | "composer" | "pie" | "static-web-server"
+            )
+        });
+        if uses_mise {
+            contents.push_str(MISE_SETUP);
         }
-        contents.push_str(&format!(
-            "COPY --from={LAMBDA_ADAPTER_IMAGE} /lambda-adapter /opt/extensions/lambda-adapter\n"
-        ));
+        for dependency in &serve.deps {
+            contents.push_str(&dependency_install_contents(dependency));
+        }
+        contents.push_str(RUNTIME_STAGE);
+        if uses_mise {
+            contents.push_str(
+                "# Copy resolved toolchains and shared libraries without compilers or caches.\n",
+            );
+            contents.push_str("COPY --from=runtime-tools /mise /mise\n");
+            contents.push_str("COPY --from=runtime-tools /usr/local/bin /usr/local/bin\n");
+        } else if serve
+            .deps
+            .iter()
+            .any(|dependency| dependency.name == "static-web-server")
+        {
+            contents.push_str(
+                "COPY --from=runtime-tools /usr/local/bin/static-web-server /usr/local/bin/static-web-server\n",
+            );
+        }
+        if serve
+            .deps
+            .iter()
+            .any(|dependency| dependency.name == "composer")
+        {
+            contents.push_str("COPY --from=runtime-tools /usr/bin/composer /usr/bin/composer\n");
+        }
+        if serve.deps.iter().any(|dependency| dependency.name == "pie") {
+            contents.push_str("COPY --from=runtime-tools /usr/bin/pie /usr/bin/pie\n");
+        }
 
         for mount in serve.mounts.as_deref().unwrap_or_default() {
             let source = self
@@ -231,18 +209,6 @@ impl DockerRunner {
                 "COPY {}\n",
                 serde_json::to_string(&(source, mount.serve_path.to_string_lossy()))?
             ));
-        }
-        if language_runtime
-            .as_ref()
-            .is_some_and(|(runtime, _)| *runtime == LanguageRuntime::Python)
-            && serve
-                .mounts
-                .as_deref()
-                .unwrap_or_default()
-                .iter()
-                .any(|mount| mount.serve_path == Path::new("/opt/venv"))
-        {
-            contents.push_str(PYTHON_VENV_COMPATIBILITY);
         }
 
         let bin_path = self.context_path(&self.bin_path)?;
@@ -359,46 +325,6 @@ impl DockerRunner {
         }
         Ok(args)
     }
-}
-
-fn language_runtime_image(dependencies: &[Package]) -> Option<(LanguageRuntime, String)> {
-    for (runtime, language, repository) in [
-        (
-            LanguageRuntime::Python,
-            "python",
-            "public.ecr.aws/docker/library/python",
-        ),
-        (
-            LanguageRuntime::Node,
-            "node",
-            "public.ecr.aws/docker/library/node",
-        ),
-    ] {
-        let Some(package) = dependencies
-            .iter()
-            .find(|dependency| dependency.name == language)
-        else {
-            continue;
-        };
-        if dependencies
-            .iter()
-            .all(|dependency| dependency.name == "bash" || dependency.name == language)
-        {
-            let version = package
-                .version
-                .as_deref()
-                .filter(|version| is_container_version(version))?;
-            return Some((runtime, format!("{repository}:{version}-slim")));
-        }
-    }
-    None
-}
-
-fn is_container_version(version: &str) -> bool {
-    !version.is_empty()
-        && version
-            .chars()
-            .all(|character| character.is_ascii_digit() || matches!(character, '.' | '-' | '_'))
 }
 
 impl Runner for DockerRunner {
@@ -586,18 +512,11 @@ mod tests {
             provider: "node".to_owned(),
             runtime_port: Some(8080),
             build: Vec::new(),
-            deps: vec![
-                Package {
-                    name: "node".to_owned(),
-                    version: Some("22".to_owned()),
-                    architecture: None,
-                },
-                Package {
-                    name: "bash".to_owned(),
-                    version: None,
-                    architecture: None,
-                },
-            ],
+            deps: vec![Package {
+                name: "node".to_owned(),
+                version: Some("22".to_owned()),
+                architecture: None,
+            }],
             commands: IndexMap::from([("start".to_owned(), "node server.js".to_owned())]),
             cwd: Some("/app".to_owned()),
             prepare: None,
@@ -624,10 +543,12 @@ mod tests {
 
         let dockerfile = runner.dockerfile_contents(&serve).unwrap();
 
-        assert!(dockerfile.contains("FROM public.ecr.aws/docker/library/node:22-slim AS runtime"));
-        assert!(!dockerfile.contains("FROM debian:trixie-slim AS runtime-tools"));
-        assert!(!dockerfile.contains("mise use"));
-        assert!(dockerfile.contains("COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1"));
+        assert!(dockerfile.contains("FROM debian:trixie-slim AS runtime-tools"));
+        assert!(dockerfile.contains(
+            "RUN --mount=type=cache,target=/mise/cache,sharing=locked mise use --global \"node@22\""
+        ));
+        assert!(dockerfile.contains("FROM debian:trixie-slim AS runtime"));
+        assert!(dockerfile.contains("COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0"));
         assert!(dockerfile.contains("COPY [\".anybuild/local/build/app\",\"/app\"]"));
         assert!(dockerfile.contains("ENV NODE_ENV=\"production\""));
         assert!(dockerfile.contains("ENV HOST=\"0.0.0.0\""));
@@ -642,45 +563,10 @@ mod tests {
     }
 
     #[test]
-    fn dockerfile_uses_the_generic_runtime_for_additional_dependencies() {
-        let temporary = tempfile::tempdir().unwrap();
-        let runner = runner(temporary.path());
-        let mut serve = serve();
-        serve.deps.push(Package {
-            name: "ffmpeg".to_owned(),
-            version: Some("7".to_owned()),
-            architecture: None,
-        });
-        runner.write_scripts(&serve).unwrap();
-
-        let dockerfile = runner.dockerfile_contents(&serve).unwrap();
-
-        assert!(dockerfile.contains("FROM debian:trixie-slim AS runtime-tools"));
-        assert!(dockerfile.contains("mise use --global \"node@22\""));
-        assert!(dockerfile.contains("mise use --global \"ffmpeg@7\""));
-        assert!(dockerfile.contains("FROM debian:trixie-slim AS runtime"));
-    }
-
-    #[test]
-    fn non_container_language_versions_use_the_generic_runtime() {
-        assert!(language_runtime_image(&[Package {
-            name: "node".to_owned(),
-            version: Some("lts/*".to_owned()),
-            architecture: None,
-        }])
-        .is_none());
-    }
-
-    #[test]
     fn dockerfile_adds_python_virtualenv_to_path() {
         let temporary = tempfile::tempdir().unwrap();
         let runner = runner(temporary.path());
         let mut serve = serve();
-        serve.deps = vec![Package {
-            name: "python".to_owned(),
-            version: Some("3.13".to_owned()),
-            architecture: None,
-        }];
         serve.mounts = Some(vec![Mount {
             name: "venv".to_owned(),
             build_path: PathBuf::from("unused"),
@@ -688,11 +574,6 @@ mod tests {
         }]);
 
         let dockerfile = runner.dockerfile_contents(&serve).unwrap();
-        assert!(
-            dockerfile.contains("FROM public.ecr.aws/docker/library/python:3.13-slim AS runtime")
-        );
-        assert!(dockerfile.contains("readlink /opt/venv/bin/python"));
-        assert!(dockerfile.contains("ln -sf /usr/local/bin/python"));
         assert!(dockerfile.contains("ENV PATH=\"/opt/venv/bin:$PATH\""));
     }
 

@@ -489,7 +489,7 @@ fn aws_lambda_deployment_creates_then_updates_a_container_function() {
     std::fs::create_dir_all(&artifact_dir).unwrap();
     std::fs::write(
         artifact_dir.join("Dockerfile"),
-        "FROM scratch\nCOPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1 /lambda-adapter /opt/extensions/lambda-adapter\n",
+        "FROM scratch\nCOPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0 /lambda-adapter /opt/extensions/lambda-adapter\n",
     )
     .unwrap();
     std::fs::write(

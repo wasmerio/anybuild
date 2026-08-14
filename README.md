@@ -54,11 +54,6 @@ The resulting image is tagged with the normalized application name. Its
 generated Dockerfile and image name are stored under
 `.anybuild/runner/docker/` for later deployment.
 
-When the serve dependencies are only Python or Node plus optional Bash,
-Anybuild uses the matching slim language image from the Docker Official Images
-mirror on Amazon ECR. Plans with additional runtime dependencies continue to
-use the general Debian and mise image.
-
 You can combine them as needed:
 
 ```
