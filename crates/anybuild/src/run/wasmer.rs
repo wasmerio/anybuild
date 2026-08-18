@@ -151,8 +151,8 @@ pub fn mapper() -> &'static IndexMap<&'static str, MapperItem> {
             "python",
             MapperItem {
                 dependencies: deps(&[
-                    ("latest", "python/python@=3.13.5"),
-                    ("3.13", "python/python@=3.13.5"),
+                    ("latest", "python/python@=3.13.17"),
+                    ("3.13", "python/python@=3.13.17"),
                 ]),
                 scripts: &["python"],
                 env: Some(&[("PYTHONEXECUTABLE", "/bin/python")]),
