@@ -38,7 +38,7 @@ pub const WASMER_VERSION_ANNOTATION: &str = "wasmer.io/version";
 pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
 pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.1.4";
 pub const PHPIX_VERSION: &str = "0.3.0-rc.5";
-pub const WASIX_PYTHON_INDEX_URL: &str = "https://pythonindex.wasix.org/simple";
+pub const WASIX_PYTHON_INDEX_URL: &str = "https://python-registry.wasix.org/simple";
 const PREPARE_COMMAND_PREFIX: &str = "__anybuild_prepare_";
 
 /// The workspace package version is embedded in every Rust crate and kept in
@@ -1571,7 +1571,7 @@ mod tests {
         );
         assert_eq!(
             config.get(yaml_str("python_extra_index_url")),
-            Some(&yaml_str("https://pythonindex.wasix.org/simple"))
+            Some(&yaml_str("https://python-registry.wasix.org/simple"))
         );
         assert!(!config.contains_key(yaml_str("python_version")));
         assert!(!config.contains_key(yaml_str("python_precompile")));
@@ -1607,7 +1607,7 @@ mod tests {
         let json = serde_json::to_string(&sorted).unwrap();
         assert_eq!(
             json,
-            "{\"python_cross_platform\":\"wasix_wasm32\",\"python_extra_index_url\":\"https://pythonindex.wasix.org/simple\",\"python_framework\":\"django\"}"
+            "{\"python_cross_platform\":\"wasix_wasm32\",\"python_extra_index_url\":\"https://python-registry.wasix.org/simple\",\"python_framework\":\"django\"}"
         );
     }
 
@@ -1924,7 +1924,7 @@ mod tests {
         let plan_json = config.to_json();
         assert_eq!(
             plan_json["python_extra_index_url"],
-            JsonValue::String("https://pythonindex.wasix.org/simple".to_owned())
+            JsonValue::String("https://python-registry.wasix.org/simple".to_owned())
         );
         assert_eq!(
             plan_json["python_cross_platform"],
