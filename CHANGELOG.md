@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0](https://github.com/wasmerio/anybuild/compare/v0.27.2...v0.28.0) (2026-08-21)
+
+
+### Features
+
+* Add support for multiple deployment platforms ([#98](https://github.com/wasmerio/anybuild/issues/98)) ([53871ae](https://github.com/wasmerio/anybuild/commit/53871ae2ad123343ba80df69a1b24647862a0e6e))
+
 ## [0.27.2](https://github.com/wasmerio/anybuild/compare/v0.27.1...v0.27.2) (2026-08-12)
 
 
