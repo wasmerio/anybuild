@@ -152,7 +152,7 @@ sets — common fields `name`, `port`, and `app_subdir` live on the base):
 
 | Provider   | Fields                                                        |
 | ---------- | ------------------------------------------------------------- |
-| python     | `python_version`, `python_server`, `python_framework`, `asgi_application`, `wsgi_application`, `python_extra_dependencies`, `python_precompile`, `python_database`, `python_extra_index_url` |
+| python     | `python_version`, `python_server`, `python_framework`, `asgi_application`, `wsgi_application`, `python_extra_dependencies`, `python_precompile`, `python_database`, `python_index_url`, `python_extra_index_url` |
 | node       | `node_version`, `node_package_manager`, `node_framework`, `node_server`, `node_build_command`, `edgejs_enable`, `edgejs_precompile`, `optimize_node_dependencies` |
 | php        | `php_version`, `phpix`, `composer_enable`, `composer_build_script`, `php_public_dir` |
 | wordpress  | php fields plus `wp_version`, `wp_locale`, `wp_cli_version`    |

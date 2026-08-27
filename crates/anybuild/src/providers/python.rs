@@ -146,6 +146,8 @@ pub struct PythonConfig {
     #[serde(rename = "python_cross_platform")]
     pub cross_platform: Option<String>,
     pub python_extra_index_url: Option<String>,
+    /// Default Python package index used for cross-platform resolution.
+    pub python_index_url: Option<String>,
     /// Derived install inputs for the Starlark provider (None => all files).
     #[serde(rename = "python_install_inputs")]
     pub install_inputs: Option<Vec<String>>,
@@ -175,6 +177,7 @@ impl Default for PythonConfig {
             precompile_python: true,
             cross_platform: None,
             python_extra_index_url: None,
+            python_index_url: None,
             install_inputs: None,
             mcp_self_running: false,
         }
@@ -225,6 +228,7 @@ impl PythonConfig {
             precompile_python: env_bool(operation, "python_precompile")?.unwrap_or(true),
             cross_platform: env_str(operation, "python_cross_platform"),
             python_extra_index_url: env_str(operation, "python_extra_index_url"),
+            python_index_url: env_str(operation, "python_index_url"),
             install_inputs: env_json(operation, "python_install_inputs")?,
             mcp_self_running: env_bool(operation, "python_mcp_self_running")?.unwrap_or(false),
         })

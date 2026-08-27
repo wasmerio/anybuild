@@ -78,19 +78,20 @@ def _cross_wheel_steps(config, venv, local_venv):
     python_version = config.python_version
     extra = ", ".join(config.python_extra_dependencies)
     index = config.python_extra_index_url
+    default_index = config.python_index_url or "https://pypi.org/simple"
     all_files = config.python_install_requires_all_files
     in_subdir = config.app_subdir != None
     cross_packages = "{}/lib/python{}/site-packages".format(venv.path, python_version)
 
     if file_exists("pyproject.toml"):
         compile_step = run(
-            "uv pip compile pyproject.toml --universal --extra-index-url {} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt".format(index),
+            "uv pip compile pyproject.toml --universal --extra-index-url {} --default-index {} --emit-index-url --no-deps -o cross-requirements.txt".format(index, default_index),
             outputs = ["cross-requirements.txt"],
         )
     else:
         inputs = None if (in_subdir or all_files) else config.python_install_inputs
         compile_step = run(
-            "uv pip compile requirements.txt --python-version={} --universal --extra-index-url {} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt".format(python_version, index),
+            "uv pip compile requirements.txt --python-version={} --universal --extra-index-url {} --default-index {} --emit-index-url --no-deps -o cross-requirements.txt".format(python_version, index, default_index),
             inputs = inputs,
             outputs = ["cross-requirements.txt"],
         )
