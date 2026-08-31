@@ -220,6 +220,71 @@ surface, and composition examples.
 
 ## Supported Technologies
 
+Anybuild detects the following frameworks and tools. The configuration column
+shows the value written to a generated `Anybuild` file; in most cases, you can
+let `anybuild generate` detect it for you.
+
+| Ecosystem | Framework or tool | Configuration | Provider |
+| --------- | ----------------- | ------------- | -------- |
+| Node.js | Angular | `node_framework = "angular"` | `node`, `node-static` |
+| Node.js | Assemble | `node_framework = "assemble"` | `node`, `node-static` |
+| Node.js | Astro | `node_framework = "astro"` | `node`, `node-static` |
+| Node.js | Brunch | `node_framework = "brunch"` | `node`, `node-static` |
+| Node.js | Create React App | `node_framework = "create-react-app"` | `node`, `node-static` |
+| Node.js | Docusaurus | `node_framework = "docusaurus"` or `"docusaurus-old"` | `node`, `node-static` |
+| Node.js | Eleventy | `node_framework = "eleventy"` | `node`, `node-static` |
+| Node.js | Ember | `node_framework = "ember"` | `node`, `node-static` |
+| Node.js | Gatsby | `node_framework = "gatsby"` | `node`, `node-static` |
+| Node.js | Harp | `node_framework = "harp"` | `node`, `node-static` |
+| Node.js | Hexo | `node_framework = "hexo"` | `node`, `node-static` |
+| Node.js | Hydrogen | `node_framework = "hydrogen"` | `node` |
+| Node.js | Ionic Angular | `node_framework = "ionic-angular"` | `node`, `node-static` |
+| Node.js | Ionic React | `node_framework = "ionic-react"` | `node`, `node-static` |
+| Node.js | Mastra | `node_framework = "mastra"` | `node` |
+| Node.js | Metalsmith | `node_framework = "metalsmith"` | `node`, `node-static` |
+| Node.js | NestJS | `node_framework = "nestjs"` | `node` |
+| Node.js | Next.js | `node_framework = "next"` | `node`, `node-static` |
+| Node.js | Nuxt | `node_framework = "nuxt"` or `"nuxt3"` | `node`, `node-static` |
+| Node.js | Parcel | `node_framework = "parcel"` | `node`, `node-static` |
+| Node.js | Polymer | `node_framework = "polymer"` | `node`, `node-static` |
+| Node.js | Preact | `node_framework = "preact"` | `node`, `node-static` |
+| Node.js | React Router | `node_framework = "react-router"` | `node` |
+| Node.js | Remix | `node_framework = "remix"`, `"remix-old"`, `"remix-v2"`, or `"remix-v2-classic"` | `node`, `node-static` |
+| Node.js | Sanity | `node_framework = "sanity"` or `"sanity-v3"` | `node`, `node-static` |
+| Node.js | SolidStart | `node_framework = "solidstart"` | `node` |
+| Node.js | Stencil | `node_framework = "stencil"` | `node`, `node-static` |
+| Node.js | Storybook | `node_framework = "storybook"` | `node`, `node-static` |
+| Node.js | Svelte | `node_framework = "svelte"` | `node`, `node-static` |
+| Node.js | SvelteKit | `node_framework = "sveltekit"` | `node`, `node-static` |
+| Node.js | TanStack Start | `node_framework = "tanstack-start"` | `node`, `node-static` |
+| Node.js | UmiJS | `node_framework = "umijs"` | `node`, `node-static` |
+| Node.js | Vite | `node_framework = "vite"` | `node`, `node-static` |
+| Node.js | VitePress | `node_framework = "vitepress"` | `node`, `node-static` |
+| Node.js | Vue | `node_framework = "vue"` | `node`, `node-static` |
+| Node.js | VuePress | `node_framework = "vuepress"` | `node`, `node-static` |
+| Node.js | xMCP | `node_framework = "xmcp"` | `node` |
+| Node.js server | Elysia | `node_server = "elysia"` | `node` |
+| Node.js server | Express | `node_server = "express"` | `node` |
+| Node.js server | Fastify | `node_server = "fastify"` | `node` |
+| Node.js server | H3 | `node_server = "h3"` | `node` |
+| Node.js server | Hono | `node_server = "hono"` | `node` |
+| Node.js server | Koa | `node_server = "koa"` | `node` |
+| Node.js server | Nitro | `node_server = "nitro"` | `node` |
+| Python | Django | `python_framework = "django"` | `python` |
+| Python | FastAPI | `python_framework = "fastapi"` | `python` |
+| Python | FastHTML | `python_framework = "python-fasthtml"` | `python` |
+| Python | Flask | `python_framework = "flask"` | `python` |
+| Python | MCP | `python_framework = "mcp"` | `python` |
+| Python | Streamlit | `python_framework = "streamlit"` | `python` |
+| PHP | Drupal | `php_framework = "drupal"` | `php` |
+| PHP | Laravel | `php_framework = "laravel"` | `laravel`, `php` |
+| PHP | Moodle | `php_framework = "moodle"` | `php` |
+| PHP | Symfony | `php_framework = "symfony"` | `php` |
+| CMS | WordPress | Automatically detected | `wordpress` |
+| Static site | Hugo | Automatically detected | `hugo` |
+| Static site | Jekyll | Automatically detected | `jekyll` |
+| Static site | MkDocs | Automatically detected | `mkdocs` |
+
 Anybuild works with three execution environments:
 
 - Local builder for fast, host-native builds.

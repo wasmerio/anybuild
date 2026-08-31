@@ -6,7 +6,7 @@ load("//anybuild/tools:node.bzl", "node_build", "node_config", "node_serve")
 config = node_config(
     schema = 1,
     commands = {
-        "start": "node server.mjs",
+        "start": "node .next-bundle/server.mjs",
     },
     node_package_manager = "npm",
     node_framework = "next",

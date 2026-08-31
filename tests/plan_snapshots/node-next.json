@@ -63,11 +63,11 @@
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R .next-bundle/* app"
+   "command": "cp -R .next-bundle app"
   }
  ],
  "commands": {
-  "start": "node server.mjs"
+  "start": "node .next-bundle/server.mjs"
  },
  "cwd": "app",
  "deps": [

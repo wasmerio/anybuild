@@ -54,7 +54,7 @@
   },
   {
    "__type__": "WorkdirStep",
-   "path": "opt/build"
+   "path": "opt/build/apps/dashboard"
   },
   {
    "__type__": "RunStep",
