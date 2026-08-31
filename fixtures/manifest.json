@@ -98,6 +98,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [],
     "python_mcp_self_running": false,
     "static_convert_redirects": true,
@@ -139,6 +140,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [],
     "python_mcp_self_running": false,
     "static_convert_redirects": true,
@@ -177,6 +179,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -218,6 +221,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2593,6 +2597,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -2633,6 +2638,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -2670,6 +2676,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -2708,6 +2715,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -2745,6 +2753,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2781,6 +2790,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2818,6 +2828,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2856,6 +2867,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2893,6 +2905,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2931,6 +2944,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -2968,6 +2982,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -3008,6 +3023,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "pyproject.toml",
      "uv.lock",
@@ -3047,6 +3063,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3085,6 +3102,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3122,6 +3140,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3160,6 +3179,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3195,6 +3215,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3231,6 +3252,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3266,6 +3288,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [],
     "python_mcp_self_running": false
    },
@@ -3300,6 +3323,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [],
     "python_mcp_self_running": false
    }
@@ -3333,6 +3357,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3369,6 +3394,7 @@
     "python_precompile": true,
     "python_cross_platform": "wasix_wasm32",
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],
@@ -3491,6 +3517,7 @@
     "python_precompile": true,
     "python_cross_platform": null,
     "python_extra_index_url": null,
+    "python_index_url": null,
     "python_install_inputs": [
      "requirements.txt"
     ],

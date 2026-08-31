@@ -70,6 +70,7 @@ fn default_python_config() -> PythonConfig {
         ("python_precompile", Value::Bool(true)),
         ("python_cross_platform", Value::Null),
         ("python_extra_index_url", Value::Null),
+        ("python_index_url", Value::Null),
         ("python_install_inputs", Value::Null),
         ("python_mcp_self_running", Value::Bool(false)),
     ] {
