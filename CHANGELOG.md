@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.1](https://github.com/wasmerio/anybuild/compare/v0.28.0...v0.28.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* Fix some templates when using subdirs ([#105](https://github.com/wasmerio/anybuild/issues/105)) ([780bb94](https://github.com/wasmerio/anybuild/commit/780bb94ce0e737a4e1b9a16af82d013b47cb098c))
+
 ## [0.28.0](https://github.com/wasmerio/anybuild/compare/v0.27.2...v0.28.0) (2026-08-21)
 
 
