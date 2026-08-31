@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.2](https://github.com/wasmerio/anybuild/compare/v0.28.1...v0.28.2) (2026-08-31)
+
+
+### Bug Fixes
+
+* **wasmer:** update edgejs-quickjs to 0.2.0 ([#107](https://github.com/wasmerio/anybuild/issues/107)) ([31c20da](https://github.com/wasmerio/anybuild/commit/31c20dad9cc8170899640d9fb0219efafed57cc0))
+
 ## [0.28.1](https://github.com/wasmerio/anybuild/compare/v0.28.0...v0.28.1) (2026-08-31)
 
 
