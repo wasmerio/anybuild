@@ -99,7 +99,7 @@ function Index() {
             <span className="text-[17px] font-bold tracking-tight text-[#F7F9FC]">Anybuild</span>
             <span className="hidden sm:flex items-center gap-1.5 opacity-20 mt-1 ml-2">
               <span className="text-xs text-[#F7F9FC] font-serif mt-1">by</span>
-              <a href="https://wasmer.io" target="_blank" rel="noopener noreferrer">
+              <a href="https://wasmer.io/oss" target="_blank" rel="noopener noreferrer">
                 <svg viewBox="0 0 623 124" fill="none" height="19" className="inline-block">
                   <path
                     fill="currentColor"
