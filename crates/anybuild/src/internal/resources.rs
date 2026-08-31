@@ -183,6 +183,11 @@ fn materialize(root: &Path, files: &[(&str, &[u8])]) -> Result<()> {
 mod tests {
     use std::collections::BTreeSet;
 
+    #[cfg(unix)]
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    #[cfg(unix)]
+    use std::process::Command;
+
     use super::*;
 
     fn source_files(root: &Path) -> BTreeSet<String> {
@@ -223,5 +228,48 @@ mod tests {
                 .collect::<BTreeSet<_>>(),
             source_files(&root.join("assets"))
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn node_optimizer_removes_dangling_native_binary_links() {
+        let resources = resolve(&OperationContext::for_test()).unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let modules = temp.path().join("node_modules");
+        let bin = modules.join(".bin");
+        let esbuild = modules.join("esbuild/bin/esbuild");
+        let script = modules.join("tool/cli.js");
+        let wasm = modules.join("runtime/module.wasm");
+        std::fs::create_dir_all(esbuild.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(wasm.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(&bin).unwrap();
+
+        std::fs::write(&esbuild, b"\x7fELF\0native").unwrap();
+        std::fs::write(&script, b"#!/usr/bin/env node\nconsole.log('ok');\n").unwrap();
+        std::fs::write(&wasm, b"\0asm\x01\0\0\0").unwrap();
+        for path in [&esbuild, &script, &wasm] {
+            let mut permissions = std::fs::metadata(path).unwrap().permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(path, permissions).unwrap();
+        }
+        symlink("../esbuild/bin/esbuild", bin.join("esbuild")).unwrap();
+        symlink("../tool/cli.js", bin.join("tool")).unwrap();
+
+        let status = Command::new("bash")
+            .arg(resources.assets_dir.join("node/optimize-node-modules.sh"))
+            .arg(&modules)
+            .status()
+            .unwrap();
+
+        assert!(status.success());
+        assert!(!esbuild.exists());
+        assert!(std::fs::symlink_metadata(bin.join("esbuild")).is_err());
+        assert!(script.exists());
+        assert!(std::fs::symlink_metadata(bin.join("tool"))
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert!(wasm.exists());
     }
 }

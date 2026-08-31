@@ -469,7 +469,7 @@ impl NodeFramework {
     }
 
     pub fn start_command(self) -> Option<&'static str> {
-        (self == NodeFramework::Next).then_some("node server.mjs")
+        (self == NodeFramework::Next).then_some("node .next-bundle/server.mjs")
     }
 
     fn from_value(value: &str) -> Option<Self> {
@@ -2018,7 +2018,7 @@ mod tests {
         );
         assert_eq!(
             config.base.commands.start.as_deref(),
-            Some("node server.mjs")
+            Some("node .next-bundle/server.mjs")
         );
     }
 

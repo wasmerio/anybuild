@@ -141,6 +141,70 @@ fn nitro_projects_build_and_start_with_the_node_server_preset() {
 }
 
 #[test]
+fn pnpm_next_subdir_deploys_from_the_app_and_preserves_the_bundle() {
+    let project = tempfile::tempdir().unwrap();
+    let app = project.path().join("apps/site");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("package.json"),
+        r#"{
+  "name": "next-site",
+  "private": true,
+  "scripts": {"build": "next build", "start": "next start"},
+  "dependencies": {"next": "16.1.7", "react": "19.2.3", "react-dom": "19.2.3"}
+}"#,
+    )
+    .unwrap();
+    std::fs::write(app.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n").unwrap();
+    std::fs::write(
+        app.join("pnpm-workspace.yaml"),
+        "ignoredBuiltDependencies:\n  - sharp\n",
+    )
+    .unwrap();
+
+    let sdk = Anybuild::new(project.path())
+        .with_subdir("apps/site")
+        .with_env("ANYBUILD_NODE_REMOVE_NATIVE_BINARIES", "true");
+    sdk.generate(GenerateOptions::default()).unwrap();
+    let plan = sdk.plan(PlanOptions::default()).unwrap();
+    let steps = &plan.serve.build;
+    let deploy_index = steps
+        .iter()
+        .position(|step| {
+            matches!(
+                step,
+                Step::Run(run)
+                    if run.command.contains("pnpm deploy --filter next-site")
+            )
+        })
+        .expect("pnpm deploy step");
+
+    assert!(matches!(
+        &steps[deploy_index - 1],
+        Step::Workdir(step) if step.path.ends_with("apps/site")
+    ));
+    assert!(matches!(&steps[deploy_index + 1], Step::Workdir(_)));
+    assert!(!steps.iter().any(|step| {
+        matches!(step, Step::Run(run) if run.command.contains("rm -rf .next-bundle"))
+    }));
+    let optimize_index = steps
+        .iter()
+        .position(|step| {
+            matches!(
+                step,
+                Step::Run(run) if run.command.contains("optimize-node-modules.sh")
+            )
+        })
+        .expect("node_modules optimizer step");
+    assert!(optimize_index > deploy_index + 1);
+    assert!(matches!(
+        &steps[optimize_index],
+        Step::Run(run) if run.command.ends_with(".next-bundle/node_modules")
+    ));
+    assert_eq!(plan.serve.commands["start"], "node .next-bundle/server.mjs");
+}
+
+#[test]
 fn env_files_layer_from_workspace_to_subdir_and_named_environment() {
     let project = static_project();
     let app = project.path().join("apps/site");

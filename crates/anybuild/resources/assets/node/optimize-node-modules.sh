@@ -32,3 +32,10 @@ while IFS= read -r -d "" file; do
 done < <(
   find "$root" -type f \( -perm -100 -o -perm -010 -o -perm -001 \) -print0
 )
+
+# Removing native executables can leave dangling .bin links that make cp -RL fail.
+while IFS= read -r -d "" link; do
+  if [[ ! -e "$link" ]]; then
+    rm -f -- "$link"
+  fi
+done < <(find "$root" -type l -print0)

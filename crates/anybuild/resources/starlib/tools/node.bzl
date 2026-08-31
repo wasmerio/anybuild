@@ -179,22 +179,26 @@ def node_optimize_steps(config, assets = None, include_prune = True, serving = T
     if optimize_paths and config.optimize_node_dependencies:
         steps.append(run(_DLX_PREFIXES[config.node_package_manager] + "optimize-deps@{} {} --replace".format(OPTIMIZE_DEPS_VERSION, ", ".join(optimize_paths))))
     if serving and config.node_remove_native_binaries:
+        node_modules_path = ".next-bundle/node_modules" if config.node_framework == "next" else "node_modules"
         steps += [
             run("mkdir -p {}".format(assets.path), group = "optimize"),
             copy(NODE_MODULES_OPTIMIZER_ASSET, "{}/optimize-node-modules.sh".format(assets.path), base = "assets"),
-            run("bash {}/optimize-node-modules.sh node_modules".format(assets.path), group = "optimize"),
+            run("bash {}/optimize-node-modules.sh {}".format(assets.path, node_modules_path), group = "optimize"),
         ]
     return steps
 
+def _uses_pnpm_deploy(config):
+    return config.app_subdir and config.node_package_manager == "pnpm" and config.node_package_name
+
 def _export_steps(config, build_mount, app):
     """Move the built app from the build mount into the served app mount."""
-    if config.app_subdir and config.node_package_manager == "pnpm" and config.node_package_name:
+    if _uses_pnpm_deploy(config):
         return [
-            workdir(build_mount.path),
+            workdir("{}/{}".format(build_mount.path, config.app_subdir)),
             run("pnpm deploy --filter {} --prod --config.node-linker=hoisted {}".format(config.node_package_name, app.path)),
             workdir(app.path),
         ]
-    copy_source = ".next-bundle/*" if config.node_framework == "next" else "."
+    copy_source = ".next-bundle" if config.node_framework == "next" else "."
     copy_flags = "-RL" if config.app_subdir else "-R"
     return [run("cp {} {} {}".format(copy_flags, copy_source, app.path))]
 
@@ -205,9 +209,7 @@ def node_build(config, build_mount = None, app = None):
     app = app or mount("app")
     assets = mount("assets") if config.node_remove_native_binaries else None
 
-    uses_pnpm_deploy = (
-        config.app_subdir and config.node_package_manager == "pnpm" and config.node_package_name
-    )
+    uses_pnpm_deploy = _uses_pnpm_deploy(config)
     export = _export_steps(config, build_mount, app)
     optimize = node_optimize_steps(
         config, assets = assets, include_prune = not uses_pnpm_deploy
