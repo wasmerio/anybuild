@@ -47,7 +47,7 @@ pub fn entrypoint(provider: &str) -> Result<Entrypoint> {
         "node-static" => Entrypoint {
             config: ("//anybuild/tools:node_static.bzl", "nodestatic_config"),
             build: ("//anybuild/tools:node_static.bzl", "nodestatic_build"),
-            serve: STATICFILE_SERVE,
+            serve: ("//anybuild/tools:node_static.bzl", "nodestatic_serve"),
         },
         "go" => Entrypoint {
             config: ("//anybuild/tools:go.bzl", "go_config"),

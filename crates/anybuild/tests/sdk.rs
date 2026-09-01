@@ -140,8 +140,7 @@ fn node_static_subdirectory_build_respects_gitignore() {
     std::fs::write(project.path().join("web/package-lock.json"), "{}\n").unwrap();
     std::fs::write(
         project.path().join("Anybuild"),
-        r#"load("//anybuild/tools:node_static.bzl", "nodestatic_build", "nodestatic_config")
-load("//anybuild/tools:staticfile.bzl", "staticfile_serve")
+        r#"load("//anybuild/tools:node_static.bzl", "nodestatic_build", "nodestatic_config", "nodestatic_serve")
 
 app_subdir = "web"
 config = nodestatic_config(
@@ -154,7 +153,7 @@ config = nodestatic_config(
     node_version = "24",
 )
 build = nodestatic_build(config)
-staticfile_serve(config, build, name = "web")
+nodestatic_serve(config, build, name = "web")
 "#,
     )
     .unwrap();

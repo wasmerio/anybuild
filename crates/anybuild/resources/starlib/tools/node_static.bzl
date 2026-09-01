@@ -54,3 +54,13 @@ def nodestatic_build(config, static_app = None):
         static_app = static_app,
         static_config = static_config,
     )
+
+def nodestatic_serve(config, build, name = None, **overrides):
+    """Serve the Node-built static artifact while preserving its provider."""
+    return staticfile_serve(
+        config,
+        build,
+        name = name,
+        provider = "node-static",
+        **overrides
+    )
