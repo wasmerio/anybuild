@@ -163,6 +163,7 @@ staticfile_serve(config, build, name = "web")
         .plan(PlanOptions::default())
         .unwrap();
 
+    assert_eq!(plan.provider, "node-static");
     assert!(plan.serve.build.iter().any(|step| {
         matches!(
             step,
@@ -172,6 +173,36 @@ staticfile_serve(config, build, name = "web")
                     && copy.gitignore
         )
     }));
+
+    let build_index = plan
+        .serve
+        .build
+        .iter()
+        .position(|step| {
+            matches!(
+                step,
+                Step::Run(run) if run.command == "npm run build"
+            )
+        })
+        .expect("Node build step");
+    let publish_index = plan
+        .serve
+        .build
+        .iter()
+        .position(|step| {
+            matches!(
+                step,
+                Step::Run(run) if run.command.starts_with("cp -R dist/. ")
+            )
+        })
+        .expect("static artifact publish step");
+
+    assert!(build_index < publish_index);
+    assert!(
+        plan.serve.commands["start"].starts_with("static-web-server "),
+        "start command: {}",
+        plan.serve.commands["start"]
+    );
 }
 
 #[test]
