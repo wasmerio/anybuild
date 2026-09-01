@@ -75,6 +75,7 @@ impl<'v> StarlarkValue<'v> for StepValue {
             (Step::Copy(s), "source") => Some(heap.alloc(s.source.as_str())),
             (Step::Copy(s), "target") => Some(heap.alloc(s.target.as_str())),
             (Step::Copy(s), "ignore") => Some(alloc_opt_str_list(heap, &s.ignore)),
+            (Step::Copy(s), "gitignore") => Some(heap.alloc(s.gitignore)),
             (Step::Copy(s), "base") => Some(heap.alloc(s.base.as_str())),
             (Step::Env(s), "variables") => {
                 let entries: Vec<(Value<'v>, Value<'v>)> = s

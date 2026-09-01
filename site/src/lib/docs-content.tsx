@@ -1320,8 +1320,7 @@ const nodeStaticProvider: DocPage = {
             . Any configuration field or environment variable documented on those pages can also be
             set for Node Static.
           </Paragraph>
-          <CodeBlock label="Anybuild">{`load("//anybuild/tools:node_static.bzl", "nodestatic_build", "nodestatic_config")
-load("//anybuild/tools:staticfile.bzl", "staticfile_serve")
+          <CodeBlock label="Anybuild">{`load("//anybuild/tools:node_static.bzl", "nodestatic_build", "nodestatic_config", "nodestatic_serve")
 
 config = nodestatic_config(
     schema = 1,
@@ -1336,7 +1335,7 @@ config = nodestatic_config(
 
 build = nodestatic_build(config)
 
-staticfile_serve(config, build, name = "site")`}</CodeBlock>
+nodestatic_serve(config, build, name = "site")`}</CodeBlock>
         </>
       ),
     },

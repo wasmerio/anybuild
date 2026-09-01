@@ -85,8 +85,15 @@ pub struct CopyStep {
     pub target: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<Vec<String>>,
+    /// Apply repository-local `.gitignore` rules while walking the source tree.
+    #[serde(skip_serializing_if = "is_false")]
+    pub gitignore: bool,
     /// "source" | "assets"
     pub base: String,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl CopyStep {

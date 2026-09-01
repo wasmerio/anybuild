@@ -103,6 +103,108 @@ fn provider_detection_includes_provider_specific_details() {
 }
 
 #[test]
+fn node_static_build_preserves_hidden_output_directories() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project.path().join("package.json"),
+        r#"{"scripts":{"build":"vite build"},"devDependencies":{"vite":"8.2.0"}}"#,
+    )
+    .unwrap();
+    std::fs::write(project.path().join("package-lock.json"), "{}\n").unwrap();
+
+    let sdk = Anybuild::new(project.path()).with_provider("node-static");
+    sdk.generate(GenerateOptions::default()).unwrap();
+    let plan = sdk.plan(PlanOptions::default()).unwrap();
+
+    assert!(
+        plan.serve.build.iter().any(|step| {
+            matches!(
+                step,
+                Step::Run(run) if run.command.starts_with("cp -R dist/. ")
+            )
+        }),
+        "build steps: {:?}",
+        plan.serve.build
+    );
+}
+
+#[test]
+fn node_static_subdirectory_build_respects_gitignore() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::create_dir(project.path().join("web")).unwrap();
+    std::fs::write(
+        project.path().join("web/package.json"),
+        r#"{"scripts":{"build":"vite build"},"devDependencies":{"vite":"8.2.0"}}"#,
+    )
+    .unwrap();
+    std::fs::write(project.path().join("web/package-lock.json"), "{}\n").unwrap();
+    std::fs::write(
+        project.path().join("Anybuild"),
+        r#"load("//anybuild/tools:node_static.bzl", "nodestatic_build", "nodestatic_config", "nodestatic_serve")
+
+app_subdir = "web"
+config = nodestatic_config(
+    schema = 1,
+    static_dir = "dist",
+    node_package_manager = "npm",
+    node_framework = "vite",
+    node_server = "node",
+    node_build_command = "npm run build",
+    node_version = "24",
+)
+build = nodestatic_build(config)
+nodestatic_serve(config, build, name = "web")
+"#,
+    )
+    .unwrap();
+
+    let plan = Anybuild::new(project.path())
+        .plan(PlanOptions::default())
+        .unwrap();
+
+    assert_eq!(plan.provider, "node-static");
+    assert!(plan.serve.build.iter().any(|step| {
+        matches!(
+            step,
+            Step::Copy(copy)
+                if copy.source == "."
+                    && copy.target == "."
+                    && copy.gitignore
+        )
+    }));
+
+    let build_index = plan
+        .serve
+        .build
+        .iter()
+        .position(|step| {
+            matches!(
+                step,
+                Step::Run(run) if run.command == "npm run build"
+            )
+        })
+        .expect("Node build step");
+    let publish_index = plan
+        .serve
+        .build
+        .iter()
+        .position(|step| {
+            matches!(
+                step,
+                Step::Run(run) if run.command.starts_with("cp -R dist/. ")
+            )
+        })
+        .expect("static artifact publish step");
+
+    assert!(build_index < publish_index);
+    assert!(
+        plan.serve.commands["start"].starts_with("static-web-server "),
+        "start command: {}",
+        plan.serve.commands["start"]
+    );
+}
+
+#[test]
 fn nitro_projects_build_and_start_with_the_node_server_preset() {
     let project = tempfile::tempdir().unwrap();
     std::fs::write(

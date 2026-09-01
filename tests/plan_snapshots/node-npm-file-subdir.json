@@ -19,6 +19,7 @@
   {
    "__type__": "CopyStep",
    "base": "source",
+   "gitignore": true,
    "ignore": [
     ".git",
     "node_modules"

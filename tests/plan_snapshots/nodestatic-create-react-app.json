@@ -51,7 +51,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R build/* opt/static_app/"
+   "command": "cp -R build/. opt/static_app/"
   }
  ],
  "commands": {

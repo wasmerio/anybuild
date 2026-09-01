@@ -90,6 +90,52 @@ pub fn copy_tree_with_ignore(source: &Path, target: &Path, patterns: &[String]) 
     copy_tree_inner(source, target, &ignore)
 }
 
+/// Copy a source tree using Git's ignore rules, while also applying AnyBuild's
+/// explicit basename patterns. Hidden files remain eligible unless ignored.
+pub fn copy_tree_with_gitignore(source: &Path, target: &Path, patterns: &[String]) -> Result<()> {
+    let explicit_ignore = build_ignore_set(patterns)?;
+    let source = source.to_path_buf();
+    let filter_root = source.clone();
+    let mut builder = ignore::WalkBuilder::new(&source);
+    builder
+        .hidden(false)
+        .follow_links(true)
+        .git_ignore(true)
+        .git_exclude(true)
+        .git_global(false)
+        .ignore(false)
+        .parents(false)
+        .require_git(false)
+        .filter_entry(move |entry| {
+            entry.path() == filter_root || !explicit_ignore.is_match(entry.file_name())
+        });
+
+    std::fs::create_dir_all(target)?;
+    for entry in builder.build() {
+        let entry = entry.with_context(|| format!("Failed to walk {}", source.display()))?;
+        if entry.path() == source {
+            continue;
+        }
+        let relative = entry
+            .path()
+            .strip_prefix(&source)
+            .with_context(|| format!("Failed to relativize {}", entry.path().display()))?;
+        let destination = target.join(relative);
+        let metadata = std::fs::metadata(entry.path())
+            .with_context(|| format!("Failed to stat {}", entry.path().display()))?;
+        if metadata.is_dir() {
+            std::fs::create_dir_all(&destination)?;
+        } else {
+            if let Some(parent) = destination.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(entry.path(), &destination)
+                .with_context(|| format!("Failed to copy {}", entry.path().display()))?;
+        }
+    }
+    Ok(())
+}
+
 fn copy_tree_inner(source: &Path, target: &Path, ignore: &globset::GlobSet) -> Result<()> {
     std::fs::create_dir_all(target)?;
     for entry in std::fs::read_dir(source)
@@ -356,7 +402,11 @@ impl LocalBuildBackend {
                         std::fs::create_dir_all(parent)?;
                     }
                     if source.is_dir() {
-                        copy_tree_with_ignore(&source, &target, &ignore_matches)?;
+                        if step.gitignore {
+                            copy_tree_with_gitignore(&source, &target, &ignore_matches)?;
+                        } else {
+                            copy_tree_with_ignore(&source, &target, &ignore_matches)?;
+                        }
                     } else if source.is_file() {
                         std::fs::copy(&source, &target)
                             .with_context(|| format!("Failed to copy {}", source.display()))?;
@@ -490,6 +540,40 @@ mod tests {
         assert!(!dst.join("nested/node_modules").exists());
         assert!(!dst.join(".anybuild").exists());
         assert!(!dst.join("Anybuild").exists());
+    }
+
+    #[test]
+    fn copy_tree_uses_root_nested_and_negated_gitignore_rules() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        let dst = tmp.path().join("dst");
+        write(
+            &src.join(".gitignore"),
+            "/target\n/.wasmer\n*.log\n!important.log\n",
+        );
+        write(&src.join("index.html"), "hello");
+        write(&src.join("target/output.bin"), "ignored");
+        write(&src.join(".wasmer/cache.bin"), "ignored");
+        write(&src.join("debug.log"), "ignored");
+        write(&src.join("important.log"), "kept");
+        write(&src.join("web/.gitignore"), "cache/\n");
+        write(&src.join("web/cache/output.bin"), "ignored");
+        write(&src.join("web/service-worker/.wasmer/host.html"), "kept");
+        write(
+            &src.join("web/node_modules/pkg/main.js"),
+            "ignored explicitly",
+        );
+
+        copy_tree_with_gitignore(&src, &dst, &["node_modules".to_owned()]).unwrap();
+
+        assert!(dst.join("index.html").is_file());
+        assert!(dst.join("important.log").is_file());
+        assert!(dst.join("web/service-worker/.wasmer/host.html").is_file());
+        assert!(!dst.join("target").exists());
+        assert!(!dst.join(".wasmer").exists());
+        assert!(!dst.join("debug.log").exists());
+        assert!(!dst.join("web/cache").exists());
+        assert!(!dst.join("web/node_modules").exists());
     }
 
     #[test]

@@ -21,6 +21,7 @@ tempfile = "3"
 allocative.workspace = true
 base64 = "0.22"
 globset = "0.4"
+ignore = "0.4"
 path-clean = "1"
 regex = "1"
 serde_yaml = "0.9"

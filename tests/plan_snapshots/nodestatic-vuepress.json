@@ -58,7 +58,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "cp -R docs/.vuepress/dist/* opt/static_app/"
+   "command": "cp -R docs/.vuepress/dist/. opt/static_app/"
   }
  ],
  "commands": {
