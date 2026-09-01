@@ -42,7 +42,9 @@ def nodestatic_build(config, static_app = None):
         node_server = config.node_server,
         node_framework = config.node_framework,
     )
-    steps.append(run("cp -R {}/* {}/".format(config.static_dir, static_app.path)))
+    # Copy the directory contents rather than a shell glob so hidden build
+    # outputs such as `.well-known` and `.wasmer` reach the static artifact.
+    steps.append(run("cp -R {}/. {}/".format(config.static_dir, static_app.path)))
     if static_config != None:
         steps.append(sws_config_step(config, static_config))
 

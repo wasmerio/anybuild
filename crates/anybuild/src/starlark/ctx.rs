@@ -338,12 +338,14 @@ pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
         source: &str,
         target: Option<NoneOr<&str>>,
         ignore: Option<NoneOr<UnpackListOrTuple<String>>>,
+        gitignore: Option<bool>,
         base: Option<NoneOr<&str>>,
     ) -> anyhow::Result<StepValue> {
         Ok(StepValue(Step::Copy(CopyStep {
             source: source.to_owned(),
             target: flat(target).unwrap_or(source).to_owned(),
             ignore: flat(ignore).map(|l| l.items),
+            gitignore: gitignore.unwrap_or(false),
             base: flat(base).unwrap_or("source").to_owned(),
         })))
     }

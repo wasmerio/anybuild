@@ -88,7 +88,7 @@ def node_stage_steps(config, source):
         return [workdir(source.path)]
     return [
         workdir(source.path),
-        copy(".", ".", ignore = [".git", "node_modules"]),
+        copy(".", ".", ignore = [".git", "node_modules"], gitignore = True),
         workdir("{}/{}".format(source.path, config.app_subdir)),
     ]
 

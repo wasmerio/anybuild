@@ -528,12 +528,14 @@ mod tests {
                 source: ".".to_owned(),
                 target: "/app".to_owned(),
                 ignore: Some(vec!["node_modules".to_owned()]),
+                gitignore: false,
                 base: "source".to_owned(),
             }),
             Step::Copy(CopyStep {
                 source: "cfg.ini".to_owned(),
                 target: "/app/cfg.ini".to_owned(),
                 ignore: None,
+                gitignore: false,
                 base: "assets".to_owned(),
             }),
             Step::WriteFile(WriteFileStep {
@@ -601,6 +603,7 @@ mod tests {
                 source: "missing.txt".to_owned(),
                 target: "/x".to_owned(),
                 ignore: None,
+                gitignore: false,
                 base: "assets".to_owned(),
             })],
         );
@@ -616,6 +619,7 @@ mod tests {
                 source: "dir".to_owned(),
                 target: "/x".to_owned(),
                 ignore: None,
+                gitignore: false,
                 base: "assets".to_owned(),
             })],
         );
@@ -638,6 +642,7 @@ mod tests {
                     source: "https://example.com/x.tar.gz".to_owned(),
                     target: "/tmp/x.tar.gz".to_owned(),
                     ignore: None,
+                    gitignore: false,
                     base: "source".to_owned(),
                 })],
             )
