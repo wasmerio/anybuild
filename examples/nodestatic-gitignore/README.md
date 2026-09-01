@@ -13,7 +13,7 @@ shell `dist/*` copy silently omits.
 From the repository root, run:
 
 ```console
-anybuild examples/nodestatic-gitignore --subdir app --wasmer --start
+anybuild examples/nodestatic-gitignore --subdir service-worker --wasmer --start
 ```
 
 Then verify both outputs:
