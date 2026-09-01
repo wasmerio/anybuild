@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.3](https://github.com/wasmerio/anybuild/compare/v0.28.2...v0.28.3) (2026-09-01)
+
+
+### Bug Fixes
+
+* Respect gitignore in Node-static subdirectory builds ([#109](https://github.com/wasmerio/anybuild/issues/109)) ([699b6f6](https://github.com/wasmerio/anybuild/commit/699b6f6ba673c71b75e75e5ed72998ab02e0326f))
+
 ## [0.28.2](https://github.com/wasmerio/anybuild/compare/v0.28.1...v0.28.2) (2026-08-31)
 
 
