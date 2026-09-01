@@ -10,10 +10,12 @@ file. A source copy that does not honor `.gitignore` fails while trying to
 follow it. The application build also writes `.wasmer/host.html`, which a
 shell `dist/*` copy silently omits.
 
-From the repository root, run:
+Enter this example so it acts as the repository root, then select the nested
+service-worker application exactly as a monorepo build would:
 
 ```console
-anybuild examples/nodestatic-gitignore --subdir service-worker --wasmer --start
+cd examples/nodestatic-gitignore
+anybuild . --subdir wasmer-sh/service-worker --wasmer --start
 ```
 
 Then verify both outputs:

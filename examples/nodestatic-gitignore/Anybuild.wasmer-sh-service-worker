@@ -4,7 +4,7 @@
 load("//anybuild/tools:node_static.bzl", "nodestatic_build", "nodestatic_config")
 load("//anybuild/tools:staticfile.bzl", "staticfile_serve")
 
-app_subdir = "service-worker"
+app_subdir = "wasmer-sh/service-worker"
 
 config = nodestatic_config(
     schema = 1,
