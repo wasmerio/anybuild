@@ -25,11 +25,12 @@ pub use event::{
     PackagePhase, ProcessIo, ProcessStream, ProviderDetail, WasmerPackageMapping,
 };
 pub use sdk::{
-    Anybuild, AutoOptions, AutoOutcome, AwsLambdaOptions, BuildEnvironment, BuildOptions,
-    BuildOutcome, CommandOverrides, ConfigDifference, DeployOptions, DeployOutcome, DeployTarget,
-    DeploymentPlatform, DockerOptions, FlyOptions, GenerateOptions, GeneratedAnybuild,
-    GenerationCheck, GenerationCheckStatus, GenerationPolicy, LambdaArchitecture, PlanOptions,
-    ProjectPlan, ProviderConfigSnapshot, RunOptions, RunOutcome, RuntimeEnvironment, WasmerOptions,
+    is_valid_env_name, Anybuild, AutoOptions, AutoOutcome, AwsLambdaOptions, BuildEnvironment,
+    BuildOptions, BuildOutcome, CommandOverrides, ConfigDifference, DeployOptions, DeployOutcome,
+    DeployTarget, DeploymentPlatform, DockerOptions, FlyOptions, GenerateOptions,
+    GeneratedAnybuild, GenerationCheck, GenerationCheckStatus, GenerationPolicy,
+    LambdaArchitecture, PlanOptions, ProjectPlan, ProviderConfigSnapshot, RunOptions, RunOutcome,
+    RuntimeEnvironment, WasmerOptions,
 };
 
 /// Version of the Anybuild SDK and CLI.

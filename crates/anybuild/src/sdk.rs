@@ -363,6 +363,18 @@ pub struct Anybuild {
     reporter: Reporter,
 }
 
+/// Whether a name may be used as a build variable.
+///
+/// Names are rendered into generated build definitions where whitespace is
+/// structural, so only the POSIX shape `[A-Za-z_][A-Za-z0-9_]*` is accepted.
+pub fn is_valid_env_name(name: &str) -> bool {
+    let mut characters = name.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
+}
+
 impl Anybuild {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self {
@@ -705,6 +717,7 @@ impl Anybuild {
             context.build_backend.borrow_mut().build(
                 &context.serve.name,
                 &env,
+                &self.env_overrides,
                 context.serve.mounts.as_deref().unwrap_or(&[]),
                 &build_steps,
             )?;

@@ -49,6 +49,9 @@ pub(crate) fn client_with_render_options(
     if let Some(subdir) = &shared.subdir {
         client = client.with_subdir(subdir);
     }
+    for (name, value) in &shared.env {
+        client = client.with_env(name, value);
+    }
     Ok(client)
 }
 

@@ -17,6 +17,7 @@ pub trait BuildBackend {
         &mut self,
         name: &str,
         env: &IndexMap<String, String>,
+        build_env: &IndexMap<String, String>,
         mounts: &[Mount],
         steps: &[Step],
     ) -> Result<()>;

@@ -49,6 +49,12 @@ struct SharedProjectArgs {
     /// The JSON content to use as input.
     #[arg(long)]
     config: Option<String>,
+    /// Set a build variable, repeatable (`--env KEY=VALUE`).
+    ///
+    /// A containerized build receives these and nothing else; Anybuild does not
+    /// forward its own environment into the build.
+    #[arg(long = "env", value_name = "KEY=VALUE", value_parser = args::parse_env_pair)]
+    env: Vec<(String, String)>,
 }
 
 #[derive(Subcommand)]

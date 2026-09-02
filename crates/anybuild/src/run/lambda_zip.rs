@@ -307,6 +307,7 @@ mod tests {
             &mut self,
             _name: &str,
             _env: &IndexMap<String, String>,
+            _build_env: &IndexMap<String, String>,
             _mounts: &[Mount],
             _steps: &[Step],
         ) -> Result<()> {
