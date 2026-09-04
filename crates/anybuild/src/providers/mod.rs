@@ -40,6 +40,8 @@ const SNAPSHOT_EXCLUDED_FIELDS: &[&str] = &[
     "python_install_inputs",
     "static_redirects_config",
     "node_package_name",
+    // Compatibility-only alias; new files persist the common service.
+    "python_database",
 ];
 
 pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Sized {
@@ -544,7 +546,14 @@ fn finish_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
     config
 }
 
-pub(crate) fn finalize_config(path: &Path, config: ProviderConfig) -> ProviderConfig {
+pub(crate) fn finalize_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
+    if let ProviderConfig::Python(python) = &mut config {
+        if let Some(database) = python.database {
+            python
+                .base
+                .set_database_service(database.into_database_engine());
+        }
+    }
     finish_config(path, config)
 }
 
@@ -819,7 +828,7 @@ mod selection_tests {
 mod config_inheritance_tests {
     use super::*;
 
-    const BASE_FIELDS: &[&str] = &["name", "port", "commands", "app_subdir"];
+    const BASE_FIELDS: &[&str] = &["name", "port", "commands", "services", "app_subdir"];
     const NODE_BUILD_FIELDS: &[&str] = &[
         "node_package_manager",
         "node_extra_dependencies",

@@ -79,6 +79,12 @@ def _override_serve_commands(config, commands):
             result[key] = result[key].replace("$PORT", str(config.port))
     return result
 
+def _configured_services(config):
+    return [
+        service(name = item.name, provider = item.engine)
+        for item in config.services
+    ]
+
 def serve(
         config,
         build,
@@ -90,7 +96,7 @@ def serve(
         cwd = None,
         mounts = [],
         volumes = [],
-        services = [],
+        services = None,
         serve_deps = [],
         # Uniform user-facing override surface (same for every provider):
         build_pre = [],
@@ -117,5 +123,5 @@ def serve(
         commands = _override_serve_commands(config, merged(commands, extra_commands)),
         mounts = list(build.mounts) + list(mounts),
         volumes = volumes,
-        services = services,
+        services = _configured_services(config) if services == None else services,
     )

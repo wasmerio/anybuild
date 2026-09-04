@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::operation::OperationContext;
-use crate::providers::base::{env_bool, env_enum, env_json, env_str, BaseConfig, HasBase};
+use crate::providers::base::{
+    env_bool, env_enum, env_json, env_str, BaseConfig, DatabaseEngine, HasBase,
+};
 use crate::providers::install_context::{discover_js_install_context, read_json_object};
 use crate::providers::{humanize, workspace, Provider};
 
@@ -832,6 +834,9 @@ pub(crate) const NODE_DEPENDENCIES: &[&str] = &[
     "@mastra/core",
 ];
 
+const POSTGRES_DEPS: &[&str] = &["pg", "postgres", "pg-promise", "slonik", "@databases/pg"];
+const MYSQL_DEPS: &[&str] = &["mysql", "mysql2", "mariadb", "@databases/mysql"];
+
 const HYDROGEN_CONFIG_FILES: &[&str] = &["hydrogen.config.js", "hydrogen.config.ts"];
 
 const COMMON_ENTRY_FILES: &[&str] = &[
@@ -1151,6 +1156,16 @@ pub(crate) fn check_package_json_deps(
         }
     }
     found
+}
+
+fn detect_database(package_json: Option<&JsonMap>) -> Option<DatabaseEngine> {
+    if !check_package_json_deps(package_json, MYSQL_DEPS).is_empty() {
+        Some(DatabaseEngine::Mysql)
+    } else if !check_package_json_deps(package_json, POSTGRES_DEPS).is_empty() {
+        Some(DatabaseEngine::Postgres)
+    } else {
+        None
+    }
 }
 
 /// `_script_commands`: preferred script names first (exact), otherwise
@@ -1651,6 +1666,9 @@ pub fn load_config(
     if config.runtime.server.is_none() {
         config.runtime.server = Some(detect_server(&found_deps));
     }
+    if let Some(database) = detect_database(package_json.as_ref()) {
+        config.base.set_database_service(database);
+    }
 
     if non_empty(&config.build_command).is_none() {
         config.build_command = get_build_command(
@@ -1719,7 +1737,7 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    use crate::providers::base::BaseConfig;
+    use crate::providers::base::{BaseConfig, DatabaseEngine};
 
     fn load_config(path: &Path, base: BaseConfig) -> NodeConfig {
         super::load_config(path, base, &OperationContext::for_test()).unwrap()
@@ -1820,6 +1838,53 @@ mod tests {
             check_package_json_deps(package_json.as_ref(), &["express", "elysia", "hono"]);
 
         assert_eq!(found_deps, BTreeSet::from(["express", "hono"]));
+    }
+
+    #[test]
+    fn test_node_detects_database_clients() {
+        for (dependency, expected) in [
+            ("pg", DatabaseEngine::Postgres),
+            ("postgres", DatabaseEngine::Postgres),
+            ("pg-promise", DatabaseEngine::Postgres),
+            ("slonik", DatabaseEngine::Postgres),
+            ("@databases/pg", DatabaseEngine::Postgres),
+            ("mysql", DatabaseEngine::Mysql),
+            ("mysql2", DatabaseEngine::Mysql),
+            ("mariadb", DatabaseEngine::Mysql),
+            ("@databases/mysql", DatabaseEngine::Mysql),
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            write(
+                &tmp.path().join("package.json"),
+                &format!(
+                    "{{\"scripts\":{{\"start\":\"node server.js\"}},\
+                     \"dependencies\":{{\"{dependency}\":\"latest\"}}}}"
+                ),
+            );
+
+            let config = load_config(tmp.path(), BaseConfig::default());
+
+            assert_eq!(
+                config.base.services,
+                vec![crate::providers::base::ServiceConfig::database(expected)],
+                "{dependency}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_node_database_detection_prefers_mysql() {
+        let package_json = json_map(serde_json::json!({
+            "dependencies": {
+                "pg": "latest",
+                "mysql2": "latest"
+            }
+        }));
+
+        assert_eq!(
+            detect_database(Some(&package_json)),
+            Some(DatabaseEngine::Mysql)
+        );
     }
 
     #[test]

@@ -5,6 +5,12 @@ load("//anybuild/tools:wordpress.bzl", "wordpress_build", "wordpress_config", "w
 
 config = wordpress_config(
     schema = 1,
+    services = [
+        {
+            "name": "database",
+            "engine": "mysql",
+        },
+    ],
     php_version = "8.3.29",
     wp_version = "latest",
     wp_extension_kind = "theme",

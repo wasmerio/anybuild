@@ -16,6 +16,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "go_version": "1.25.5",
     "go_build_file": "server/server.go",
@@ -37,6 +38,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "go_version": "1.25.5",
     "go_build_file": "server.go",
@@ -58,6 +60,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -81,6 +84,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": null,
     "python_server": null,
@@ -122,6 +126,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": null,
     "python_server": null,
@@ -162,6 +167,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": null,
     "python_server": null,
@@ -203,6 +209,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": null,
     "python_server": null,
@@ -243,6 +250,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -280,6 +288,7 @@
      "start": "node ./dist/server/entry.mjs",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -317,6 +326,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -354,6 +364,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -391,6 +402,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -428,6 +440,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -465,6 +478,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -502,6 +516,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -539,6 +554,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -576,6 +592,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -613,6 +630,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -650,6 +668,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -687,6 +706,7 @@
      "start": "node .next-bundle/server.mjs",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -724,6 +744,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -761,6 +782,7 @@
      "start": "node dist/server/entry.mjs",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": "apps/dashboard",
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -798,6 +820,7 @@
      "start": "node dist/server/entry.mjs",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": "apps/dashboard",
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -835,6 +858,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -872,6 +896,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -909,6 +934,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -946,6 +972,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -983,6 +1010,7 @@
      "start": "node server.js",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "edgejs_enable": false,
     "edgejs_precompile": null,
@@ -1020,6 +1048,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1061,6 +1090,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1102,6 +1132,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1143,6 +1174,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1184,6 +1216,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1225,6 +1258,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1266,6 +1300,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1307,6 +1342,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1348,6 +1384,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1389,6 +1426,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1430,6 +1468,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1471,6 +1510,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1512,6 +1552,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1553,6 +1594,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1594,6 +1636,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1635,6 +1678,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1676,6 +1720,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1717,6 +1762,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1758,6 +1804,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1799,6 +1846,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1840,6 +1888,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1881,6 +1930,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1922,6 +1972,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -1963,6 +2014,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -2004,6 +2056,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -2045,6 +2098,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -2086,6 +2140,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -2127,6 +2182,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -2168,6 +2224,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -2209,6 +2266,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -2250,6 +2308,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -2291,6 +2350,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -2332,6 +2392,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "php_framework": null,
     "phpix": null,
@@ -2358,6 +2419,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "php_framework": null,
     "phpix": null,
@@ -2383,6 +2445,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "node_package_manager": "npm",
     "node_extra_dependencies": [],
@@ -2422,6 +2485,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "php_framework": null,
     "phpix": null,
@@ -2438,7 +2502,7 @@
    "name": "php-wordpress",
    "workspace": "examples/php-wordpress",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:wordpress.bzl\", \"wordpress_build\", \"wordpress_config\", \"wordpress_serve\")\n\nconfig = wordpress_config(\n    schema = 1,\n    php_version = \"8.3.29\",\n)\n\nbuild = wordpress_build(config)\n\nwordpress_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:wordpress.bzl\", \"wordpress_build\", \"wordpress_config\", \"wordpress_serve\")\n\nconfig = wordpress_config(\n    schema = 1,\n    services = [\n        {\n            \"name\": \"database\",\n            \"engine\": \"mysql\",\n        },\n    ],\n    php_version = \"8.3.29\",\n)\n\nbuild = wordpress_build(config)\n\nwordpress_serve(config, build)\n",
    "config": {
     "name": "php-wordpress",
     "port": 8080,
@@ -2448,6 +2512,12 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [
+     {
+      "name": "database",
+      "engine": "mysql"
+     }
+    ],
     "app_subdir": null,
     "php_framework": null,
     "phpix": null,
@@ -2470,7 +2540,7 @@
    "name": "php-wordpress-empty",
    "workspace": "examples/php-wordpress-empty",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:wordpress.bzl\", \"wordpress_build\", \"wordpress_config\", \"wordpress_serve\")\n\nconfig = wordpress_config(\n    schema = 1,\n    php_version = \"8.3.29\",\n)\n\nbuild = wordpress_build(config)\n\nwordpress_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:wordpress.bzl\", \"wordpress_build\", \"wordpress_config\", \"wordpress_serve\")\n\nconfig = wordpress_config(\n    schema = 1,\n    services = [\n        {\n            \"name\": \"database\",\n            \"engine\": \"mysql\",\n        },\n    ],\n    php_version = \"8.3.29\",\n)\n\nbuild = wordpress_build(config)\n\nwordpress_serve(config, build)\n",
    "config": {
     "name": "php-wordpress-empty",
     "port": 8080,
@@ -2480,6 +2550,12 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [
+     {
+      "name": "database",
+      "engine": "mysql"
+     }
+    ],
     "app_subdir": null,
     "php_framework": null,
     "phpix": true,
@@ -2502,7 +2578,7 @@
    "name": "php-wordpress-plugin",
    "workspace": "examples/php-wordpress-plugin",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:wordpress.bzl\", \"wordpress_build\", \"wordpress_config\", \"wordpress_serve\")\n\nconfig = wordpress_config(\n    schema = 1,\n    php_version = \"8.3.29\",\n    wp_version = \"latest\",\n    wp_extension_kind = \"plugin\",\n    wp_extension_slug = \"php-wordpress-plugin\",\n    wp_extension_activate_target = \"php-wordpress-plugin/anybuild-example-plugin.php\",\n)\n\nbuild = wordpress_build(config)\n\nwordpress_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:wordpress.bzl\", \"wordpress_build\", \"wordpress_config\", \"wordpress_serve\")\n\nconfig = wordpress_config(\n    schema = 1,\n    services = [\n        {\n            \"name\": \"database\",\n            \"engine\": \"mysql\",\n        },\n    ],\n    php_version = \"8.3.29\",\n    wp_version = \"latest\",\n    wp_extension_kind = \"plugin\",\n    wp_extension_slug = \"php-wordpress-plugin\",\n    wp_extension_activate_target = \"php-wordpress-plugin/anybuild-example-plugin.php\",\n)\n\nbuild = wordpress_build(config)\n\nwordpress_serve(config, build)\n",
    "config": {
     "name": "php-wordpress-plugin",
     "port": 8080,
@@ -2512,6 +2588,12 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [
+     {
+      "name": "database",
+      "engine": "mysql"
+     }
+    ],
     "app_subdir": null,
     "php_framework": null,
     "phpix": null,
@@ -2534,7 +2616,7 @@
    "name": "php-wordpress-theme",
    "workspace": "examples/php-wordpress-theme",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:wordpress.bzl\", \"wordpress_build\", \"wordpress_config\", \"wordpress_serve\")\n\nconfig = wordpress_config(\n    schema = 1,\n    php_version = \"8.3.29\",\n    wp_version = \"latest\",\n    wp_extension_kind = \"theme\",\n    wp_extension_slug = \"anybuild-example-theme\",\n    wp_extension_activate_target = \"anybuild-example-theme\",\n)\n\nbuild = wordpress_build(config)\n\nwordpress_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:wordpress.bzl\", \"wordpress_build\", \"wordpress_config\", \"wordpress_serve\")\n\nconfig = wordpress_config(\n    schema = 1,\n    services = [\n        {\n            \"name\": \"database\",\n            \"engine\": \"mysql\",\n        },\n    ],\n    php_version = \"8.3.29\",\n    wp_version = \"latest\",\n    wp_extension_kind = \"theme\",\n    wp_extension_slug = \"anybuild-example-theme\",\n    wp_extension_activate_target = \"anybuild-example-theme\",\n)\n\nbuild = wordpress_build(config)\n\nwordpress_serve(config, build)\n",
    "config": {
     "name": "php-wordpress-theme",
     "port": 8080,
@@ -2544,6 +2626,12 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [
+     {
+      "name": "database",
+      "engine": "mysql"
+     }
+    ],
     "app_subdir": null,
     "php_framework": null,
     "phpix": null,
@@ -2566,7 +2654,7 @@
    "name": "python-django",
    "workspace": "examples/python-django",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"django\",\n    python_server = \"uvicorn\",\n    python_migration_strategy = \"django\",\n    python_database = \"mysql\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    wsgi_application = \"mysite.wsgi:application\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nbuild = python_build(config)\n\npython_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port $PORT\",\n    },\n    services = [\n        {\n            \"name\": \"database\",\n            \"engine\": \"mysql\",\n        },\n    ],\n    python_framework = \"django\",\n    python_server = \"uvicorn\",\n    python_migration_strategy = \"django\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    wsgi_application = \"mysite.wsgi:application\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nbuild = python_build(config)\n\npython_serve(config, build)\n",
    "config": {
     "name": "python-django",
     "port": 8080,
@@ -2576,11 +2664,17 @@
      "start": "uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [
+     {
+      "name": "database",
+      "engine": "mysql"
+     }
+    ],
     "app_subdir": null,
     "python_framework": "django",
     "python_server": "uvicorn",
     "python_migration_strategy": "django",
-    "python_database": "mysql",
+    "python_database": null,
     "python_extra_dependencies": [
      "uvicorn"
     ],
@@ -2606,7 +2700,7 @@
    "name": "python-django__cross",
    "workspace": "examples/python-django",
    "subdir": null,
-   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port $PORT\",\n    },\n    python_framework = \"django\",\n    python_server = \"uvicorn\",\n    python_migration_strategy = \"django\",\n    python_database = \"mysql\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    wsgi_application = \"mysite.wsgi:application\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nbuild = python_build(config)\n\npython_serve(config, build)\n",
+   "anybuild": "# Generated by Anybuild v0.23.0 — https://anybuild.run\n# This file is yours to edit: add steps or override the serve below.\n\nload(\"//anybuild/tools:python.bzl\", \"python_build\", \"python_config\", \"python_serve\")\n\nconfig = python_config(\n    schema = 1,\n    commands = {\n        \"start\": \"uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port $PORT\",\n    },\n    services = [\n        {\n            \"name\": \"database\",\n            \"engine\": \"mysql\",\n        },\n    ],\n    python_framework = \"django\",\n    python_server = \"uvicorn\",\n    python_migration_strategy = \"django\",\n    python_extra_dependencies = [\n        \"uvicorn\",\n    ],\n    wsgi_application = \"mysite.wsgi:application\",\n    python_version = \"3.13\",\n    uv_version = \"0.8.15\",\n)\n\nbuild = python_build(config)\n\npython_serve(config, build)\n",
    "config": {
     "name": "python-django",
     "port": 8080,
@@ -2616,11 +2710,17 @@
      "start": "uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [
+     {
+      "name": "database",
+      "engine": "mysql"
+     }
+    ],
     "app_subdir": null,
     "python_framework": "django",
     "python_server": "uvicorn",
     "python_migration_strategy": "django",
-    "python_database": "mysql",
+    "python_database": null,
     "python_extra_dependencies": [
      "uvicorn"
     ],
@@ -2655,6 +2755,7 @@
      "start": "uvicorn src.main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "fastapi",
     "python_server": "uvicorn",
@@ -2693,6 +2794,7 @@
      "start": "uvicorn src.main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "fastapi",
     "python_server": "uvicorn",
@@ -2730,6 +2832,7 @@
      "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "python-fasthtml",
     "python_server": "uvicorn",
@@ -2766,6 +2869,7 @@
      "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "python-fasthtml",
     "python_server": "uvicorn",
@@ -2801,6 +2905,7 @@
      "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "fastapi",
     "python_server": "uvicorn",
@@ -2839,6 +2944,7 @@
      "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "fastapi",
     "python_server": "uvicorn",
@@ -2876,6 +2982,7 @@
      "start": "uvicorn main:app --interface=wsgi --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "flask",
     "python_server": "uvicorn",
@@ -2914,6 +3021,7 @@
      "start": "uvicorn main:app --interface=wsgi --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "flask",
     "python_server": "uvicorn",
@@ -2951,6 +3059,7 @@
      "start": "python main.py",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "mcp",
     "python_server": null,
@@ -2991,6 +3100,7 @@
      "start": "python main.py",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "mcp",
     "python_server": null,
@@ -3030,6 +3140,7 @@
      "start": "python main.py",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "mcp",
     "python_server": null,
@@ -3068,6 +3179,7 @@
      "start": "python main.py",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "mcp",
     "python_server": null,
@@ -3105,6 +3217,7 @@
      "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "fastapi",
     "python_server": "uvicorn",
@@ -3143,6 +3256,7 @@
      "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "fastapi",
     "python_server": "uvicorn",
@@ -3180,6 +3294,7 @@
      "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "fastapi",
     "python_server": "uvicorn",
@@ -3216,6 +3331,7 @@
      "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "fastapi",
     "python_server": "uvicorn",
@@ -3251,6 +3367,7 @@
      "start": "python -m http.server $PORT -d public",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": null,
     "python_server": null,
@@ -3285,6 +3402,7 @@
      "start": "python -m http.server $PORT -d public",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": null,
     "python_server": null,
@@ -3318,6 +3436,7 @@
      "start": "streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "streamlit",
     "python_server": null,
@@ -3354,6 +3473,7 @@
      "start": "streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "python_framework": "streamlit",
     "python_server": null,
@@ -3389,6 +3509,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -3411,6 +3532,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -3433,6 +3555,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -3455,6 +3578,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -3476,6 +3600,7 @@
      "start": "python main.py",
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": "apps/site",
     "python_framework": null,
     "python_server": null,
@@ -3511,6 +3636,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": "apps/site",
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -3532,6 +3658,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": "apps/site",
     "go_version": "1.25.5",
     "go_build_file": "main.go",
@@ -3552,6 +3679,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",
@@ -3575,6 +3703,7 @@
      "start": null,
      "after_deploy": null
     },
+    "services": [],
     "app_subdir": null,
     "static_convert_redirects": true,
     "sws_version": "2.38.0",

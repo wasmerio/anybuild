@@ -196,13 +196,6 @@ def python_prepare(config, site_packages, app_serve_path):
         run("python -m compileall -o 2 {} || true".format(app_serve_path)),
     ]
 
-def python_services(config):
-    if config.python_database == "mysql":
-        return [service(name = "database", provider = "mysql")]
-    if config.python_database == "postgresql":
-        return [service(name = "database", provider = "postgres")]
-    return []
-
 def python_serve(
         config,
         build,
@@ -226,7 +219,7 @@ def python_serve(
         prepare = prepare if prepare != None else python_prepare(config, site_packages, app.serve_path),
         env = python_env(config, app, venv, site_packages),
         commands = python_commands(config),
-        services = services if services != None else python_services(config),
+        services = services,
         mounts = [app, venv],
         **overrides
     )

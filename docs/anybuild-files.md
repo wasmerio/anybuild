@@ -148,16 +148,25 @@ that value. Every field can be overridden without touching the file:
   start command) in the evaluated plan.
 
 Notable fields per provider (see `crates/anybuild/src/providers/` for the full
-sets — common fields `name`, `port`, and `app_subdir` live on the base):
+sets — common fields `name`, `port`, `services`, and `app_subdir` live on the
+base):
 
 | Provider   | Fields                                                        |
 | ---------- | ------------------------------------------------------------- |
-| python     | `python_version`, `python_server`, `python_framework`, `asgi_application`, `wsgi_application`, `python_extra_dependencies`, `python_precompile`, `python_database`, `python_extra_index_url` |
+| python     | `python_version`, `python_server`, `python_framework`, `asgi_application`, `wsgi_application`, `python_extra_dependencies`, `python_precompile`, `python_extra_index_url` |
 | node       | `node_version`, `node_package_manager`, `node_framework`, `node_server`, `node_build_command`, `edgejs_enable`, `edgejs_precompile`, `optimize_node_dependencies` |
 | php        | `php_version`, `phpix`, `composer_enable`, `composer_build_script`, `php_public_dir` |
 | wordpress  | php fields plus `wp_version`, `wp_locale`, `wp_cli_version`    |
 | staticfile | `static_dir`, `sws_version`, `static_convert_redirects`               |
 | go         | `go_version`, `go_build_file`, `go_serve_binary`                  |
+
+The common `services` field configures typed services. A database service has
+the shape `{"name": "database", "engine": "postgres"}`, where the engine must
+be `mysql` or `postgres`. Python and Node runtime providers infer it from
+database client dependencies. Node recognizes `mysql`, `mysql2`, `mariadb`,
+`@databases/mysql`, `pg`, `postgres`, `pg-promise`, `slonik`, and
+`@databases/pg`. Wasmer deployments use the service to request the matching
+managed database capability.
 
 ## `load()` labels
 
