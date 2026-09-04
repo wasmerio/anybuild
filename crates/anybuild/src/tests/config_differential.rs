@@ -1,5 +1,5 @@
-//! Detection and config loading must produce the exact committed JSON.
-//! the committed expected output for every compatibility case.
+//! Detection and config loading must produce the exact committed,
+//! default-elided JSON for every compatibility case.
 //!
 //! Regeneration: `ANYBUILD_UPDATE_FIXTURES=1` rewrites each case's `config`
 //! in `fixtures/manifest.json` with the computed value instead of
@@ -189,7 +189,7 @@ fn compute_config(case: &Case) -> Result<serde_json::Value, String> {
         config.apply_workspace_config(&case.workspace);
     }
 
-    Ok(config.to_json())
+    Ok(crate::providers::exclude_defaults_json(&config))
 }
 
 fn diff_json(expected: &serde_json::Value, actual: &serde_json::Value) -> String {
