@@ -125,7 +125,10 @@ jobs:
             mode: docker_builder_and_runner
     services:
       mysql:
-        image: mysql:8.0
+        # The create_db fixtures only run in the PHP/Wasmer shard.
+        image: >-
+          ${{ matrix.suite == 'php' && matrix.mode == 'wasmer' &&
+              'mysql:8.0' || '' }}
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: test
@@ -164,11 +167,33 @@ jobs:
         with:
           bun-version: "1.3.14"
 
-      - name: Install MySQL client + hugo
+      - name: Restore npm download cache
+        id: npm-cache
+        if: >-
+          ${{ matrix.suite == 'node' ||
+              matrix.suite == 'staticnode1' ||
+              matrix.suite == 'staticnode2' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.npm
+          # Matrix modes write independently while restoring older suite caches.
+          key: >-
+            npm-${{ runner.os }}-${{ matrix.suite }}-${{ matrix.mode }}-${{
+              hashFiles('examples/**/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-${{ matrix.suite }}-${{ matrix.mode }}-
+            npm-${{ runner.os }}-${{ matrix.suite }}-
+            npm-${{ runner.os }}-
+
+      - name: Install hugo
         # hugo builds run the local binary even in wasmer mode.
         run: |
           sudo apt-get update
-          sudo apt-get install -y default-mysql-client hugo
+          sudo apt-get install -y hugo
+
+      - name: Install MySQL client
+        if: ${{ matrix.suite == 'php' && matrix.mode == 'wasmer' }}
+        run: sudo apt-get install -y default-mysql-client
 
       - name: Set up Wasmer
         uses: wasmerio/setup-wasmer@v3.1
@@ -226,3 +251,15 @@ jobs:
             --profile e2e --run-ignored all \
             --test-threads "$test_threads" \
             -E 'test(/^${{ matrix.suite }}__${{ matrix.mode }}__/) and not test(/cdn|python_streamlit/)'
+
+      - name: Save npm download cache
+        if: >-
+          ${{ always() &&
+              steps.npm-cache.outputs.cache-hit != 'true' &&
+              (matrix.suite == 'node' ||
+               matrix.suite == 'staticnode1' ||
+               matrix.suite == 'staticnode2') }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.npm
+          key: ${{ steps.npm-cache.outputs.cache-primary-key }}
