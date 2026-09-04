@@ -2,6 +2,8 @@
 
 use anyhow::{anyhow, Result};
 
+const SERVICES_MODULE: &str = "//anybuild:services.bzl";
+
 /// The workspace version (root Cargo.toml) is the single version source;
 /// release-please bumps it via the x-release-please-version marker.
 pub fn anybuild_version() -> &'static str {
@@ -114,6 +116,15 @@ pub fn generate_anybuild_loader(
         ));
         out.push(format!("load(\"{serve_module}\", \"{serve_function}\")"));
     }
+    let service_helpers = configured_service_helpers(config);
+    if !service_helpers.is_empty() {
+        let symbols = service_helpers
+            .iter()
+            .map(|symbol| format!("\"{symbol}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push(format!("load(\"{SERVICES_MODULE}\", {symbols})"));
+    }
     out.push(String::new());
     if let Some(subdir) = subdir {
         out.push(format!(
@@ -193,11 +204,73 @@ fn serialize_config(function: &str, schema: u32, config: &serde_json::Value) -> 
     ];
     if let Some(config) = config.as_object() {
         for (key, value) in config {
-            out.push(format!("    {key} = {},", starlark_literal(value, 1)));
+            let value = if key == "services" {
+                services_literal(value, 1)
+            } else {
+                starlark_literal(value, 1)
+            };
+            out.push(format!("    {key} = {value},"));
         }
     }
     out.push(")".to_owned());
     out
+}
+
+fn configured_service_helpers(config: &serde_json::Value) -> Vec<&'static str> {
+    let services = config.get("services").and_then(serde_json::Value::as_array);
+    ["mysql", "postgres"]
+        .into_iter()
+        .filter(|helper| {
+            services.is_some_and(|services| {
+                services
+                    .iter()
+                    .any(|service| service_helper(service) == Some(*helper))
+            })
+        })
+        .collect()
+}
+
+fn service_helper(value: &serde_json::Value) -> Option<&'static str> {
+    let value = value.as_object()?;
+    if value.len() != 2 || value.get("name")?.as_str()? != "database" {
+        return None;
+    }
+    match value.get("engine")?.as_str()? {
+        "mysql" => Some("mysql"),
+        "postgres" => Some("postgres"),
+        _ => None,
+    }
+}
+
+fn services_literal(value: &serde_json::Value, indent: usize) -> String {
+    let Some(values) = value.as_array().filter(|values| !values.is_empty()) else {
+        return starlark_literal(value, indent);
+    };
+    if let Some(helpers) = values
+        .iter()
+        .map(service_helper)
+        .collect::<Option<Vec<_>>>()
+    {
+        return format!(
+            "[{}]",
+            helpers
+                .into_iter()
+                .map(|helper| format!("{helper}()"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    let child = "    ".repeat(indent + 1);
+    let close = "    ".repeat(indent);
+    let values = values
+        .iter()
+        .map(|value| match service_helper(value) {
+            Some(helper) => format!("{child}{helper}(),"),
+            None => format!("{child}{},", starlark_literal(value, indent + 1)),
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("[\n{values}\n{close}]")
 }
 
 fn starlark_literal(value: &serde_json::Value, indent: usize) -> String {
@@ -281,6 +354,28 @@ mod tests {
         assert!(generated.contains(
             "python_serve(config, build, name = \"app\", extra_deps = runtime_dependencies)\n"
         ));
+    }
+
+    #[test]
+    fn database_services_are_rendered_as_helpers() {
+        for helper in ["mysql", "postgres"] {
+            let generated = generate_anybuild(
+                "node",
+                Some("app"),
+                None,
+                1,
+                &serde_json::json!({
+                    "services": [{"name": "database", "engine": helper}],
+                }),
+                &[],
+            )
+            .unwrap();
+
+            assert!(generated.contains(&format!(
+                "load(\"//anybuild:services.bzl\", \"{helper}\")\n"
+            )));
+            assert!(generated.contains(&format!("    services = [{helper}()],\n")));
+        }
     }
 
     #[test]

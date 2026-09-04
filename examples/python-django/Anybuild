@@ -2,18 +2,14 @@
 # This file is yours to edit: add steps or override the serve below.
 
 load("//anybuild/tools:python.bzl", "python_build", "python_config", "python_serve")
+load("//anybuild:services.bzl", "mysql")
 
 config = python_config(
     schema = 1,
     commands = {
         "start": "uvicorn mysite.wsgi:application --interface=wsgi --host 0.0.0.0 --port $PORT",
     },
-    services = [
-        {
-            "name": "database",
-            "engine": "mysql",
-        },
-    ],
+    services = [mysql()],
     python_framework = "django",
     python_server = "uvicorn",
     python_migration_strategy = "django",

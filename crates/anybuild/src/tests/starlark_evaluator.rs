@@ -136,6 +136,7 @@ fn configured_database_services_flow_through_common_serve() {
         let source = format!(
             r#"
 load("//anybuild:serve.bzl", "build", "serve")
+load("//anybuild:services.bzl", "{provider}")
 config = struct(
     name = "app",
     provider = "node",
@@ -146,7 +147,7 @@ config = struct(
         start = None,
         after_deploy = None,
     ),
-    services = [struct(name = "database", engine = "{provider}")],
+    services = [{provider}()],
 )
 serve(
     config,

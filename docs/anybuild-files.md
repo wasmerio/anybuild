@@ -160,13 +160,13 @@ base):
 | staticfile | `static_dir`, `sws_version`, `static_convert_redirects`               |
 | go         | `go_version`, `go_build_file`, `go_serve_binary`                  |
 
-The common `services` field configures typed services. A database service has
-the shape `{"name": "database", "engine": "postgres"}`, where the engine must
-be `mysql` or `postgres`. Python and Node runtime providers infer it from
-database client dependencies. Node recognizes `mysql`, `mysql2`, `mariadb`,
-`@databases/mysql`, `pg`, `postgres`, `pg-promise`, `slonik`, and
-`@databases/pg`. Wasmer deployments use the service to request the matching
-managed database capability.
+The common `services` field configures typed services. Generated files load
+`mysql` or `postgres` from `//anybuild:services.bzl` and render database
+services as `services = [mysql()]` or `services = [postgres()]`. Python and
+Node runtime providers infer the service from database client dependencies.
+Node recognizes `mysql`, `mysql2`, `mariadb`, `@databases/mysql`, `pg`,
+`postgres`, `pg-promise`, `slonik`, and `@databases/pg`. Wasmer deployments
+use the service to request the matching managed database capability.
 
 ## `load()` labels
 
