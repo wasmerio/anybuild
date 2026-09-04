@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
 use crate::providers::base::{
-    env_bool, env_enum, env_json, env_str, is_blank, BaseConfig, HasBase,
+    env_bool, env_enum, env_json, env_str, is_blank, BaseConfig, DatabaseEngine, HasBase,
 };
 use crate::providers::install_context::{
     discover_python_dependency_files, discover_python_install_context,
@@ -112,6 +112,13 @@ impl DatabaseType {
             "mysql" => Some(Self::MySql),
             "postgresql" => Some(Self::PostgreSql),
             _ => None,
+        }
+    }
+
+    pub(crate) fn into_database_engine(self) -> DatabaseEngine {
+        match self {
+            Self::MySql => DatabaseEngine::Mysql,
+            Self::PostgreSql => DatabaseEngine::Postgres,
         }
     }
 }
@@ -449,8 +456,12 @@ pub fn load_config_with_deps(
         }
     }
 
-    if config.database.is_none() {
-        config.database = detect_database(&found_deps);
+    let detected_database = config
+        .database
+        .map(DatabaseType::into_database_engine)
+        .or_else(|| detect_database(&found_deps));
+    if let Some(database) = detected_database {
+        config.base.set_database_service(database);
     }
 
     config.install_inputs = compute_install_inputs(path);
@@ -834,14 +845,14 @@ fn find_first(path: &Path, name: &str) -> Option<PathBuf> {
 }
 
 /// Port of `_detect_database`.
-fn detect_database(found_deps: &BTreeSet<String>) -> Option<DatabaseType> {
+fn detect_database(found_deps: &BTreeSet<String>) -> Option<DatabaseEngine> {
     if MYSQL_DEPS.iter().any(|dep| found_deps.contains(*dep)) {
-        return Some(DatabaseType::MySql);
+        Some(DatabaseEngine::Mysql)
+    } else if PG_DEPS.iter().any(|dep| found_deps.contains(*dep)) {
+        Some(DatabaseEngine::Postgres)
+    } else {
+        None
     }
-    if PG_DEPS.iter().any(|dep| found_deps.contains(*dep)) {
-        return Some(DatabaseType::PostgreSql);
-    }
-    None
 }
 
 /// Port of `_compute_install_inputs`.
@@ -1018,16 +1029,58 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_database_mysql_wins() {
+    fn test_detect_database_clients_with_mysql_precedence() {
         assert_eq!(
-            detect_database(&deps(&["pymysql", "psycopg"])),
-            Some(DatabaseType::MySql)
+            detect_database(&deps(&["pymysql"])),
+            Some(DatabaseEngine::Mysql)
         );
         assert_eq!(
             detect_database(&deps(&["asyncpg"])),
-            Some(DatabaseType::PostgreSql)
+            Some(DatabaseEngine::Postgres)
+        );
+        assert_eq!(
+            detect_database(&deps(&["pymysql", "psycopg"])),
+            Some(DatabaseEngine::Mysql)
         );
         assert_eq!(detect_database(&deps(&["flask"])), None);
+    }
+
+    #[test]
+    fn test_database_detection_populates_common_services() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("requirements.txt"), "psycopg\n").unwrap();
+
+        let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
+
+        assert_eq!(
+            config.base.services,
+            vec![crate::providers::base::ServiceConfig::database(
+                DatabaseEngine::Postgres
+            )]
+        );
+        assert_eq!(config.database, None);
+    }
+
+    #[test]
+    fn test_legacy_database_field_populates_common_services() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = crate::providers::finalize_config(
+            tmp.path(),
+            crate::providers::ProviderConfig::Python(PythonConfig {
+                database: Some(DatabaseType::PostgreSql),
+                ..PythonConfig::default()
+            }),
+        );
+        let crate::providers::ProviderConfig::Python(config) = config else {
+            panic!("expected python config");
+        };
+
+        assert_eq!(
+            config.base.services,
+            vec![crate::providers::base::ServiceConfig::database(
+                DatabaseEngine::Postgres
+            )]
+        );
     }
 
     #[test]

@@ -12,6 +12,25 @@ use serde::{Deserialize, Serialize};
 use crate::operation::OperationContext;
 use crate::providers::procfile::Procfile;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DatabaseEngine {
+    Mysql,
+    Postgres,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "name", rename_all = "lowercase", deny_unknown_fields)]
+pub enum ServiceConfig {
+    Database { engine: DatabaseEngine },
+}
+
+impl ServiceConfig {
+    pub fn database(engine: DatabaseEngine) -> Self {
+        Self::Database { engine }
+    }
+}
+
 fn env_value(operation: &OperationContext, field: &str) -> Option<(String, String)> {
     let field = field.to_uppercase();
     for prefix in ["ANYBUILD_", "SHIPIT_"] {
@@ -127,6 +146,7 @@ pub struct BaseConfig {
     pub name: Option<String>,
     pub port: Option<i64>,
     pub commands: CustomCommands,
+    pub services: Vec<ServiceConfig>,
     /// Subdirectory of the workspace the app lives in (set by the CLI
     /// after load; recorded in the generated Anybuild file).
     pub app_subdir: Option<String>,
@@ -145,9 +165,18 @@ impl Default for BaseConfig {
             name: None,
             port: Some(8080),
             commands: CustomCommands::default(),
+            services: Vec::new(),
             app_subdir: None,
             runtime_dependencies: Vec::new(),
         }
+    }
+}
+
+impl BaseConfig {
+    pub fn set_database_service(&mut self, engine: DatabaseEngine) {
+        self.services
+            .retain(|service| !matches!(service, ServiceConfig::Database { .. }));
+        self.services.push(ServiceConfig::database(engine));
     }
 }
 
@@ -155,4 +184,27 @@ impl Default for BaseConfig {
 pub trait HasBase {
     fn base(&self) -> &BaseConfig;
     fn base_mut(&mut self) -> &mut BaseConfig;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn service_config_serializes_with_the_plan_vocabulary() {
+        assert_eq!(
+            serde_json::to_value(ServiceConfig::database(DatabaseEngine::Postgres)).unwrap(),
+            serde_json::json!({"name": "database", "engine": "postgres"})
+        );
+    }
+
+    #[test]
+    fn service_config_rejects_invalid_names_and_engines() {
+        for value in [
+            serde_json::json!({"name": "cache", "engine": "postgres"}),
+            serde_json::json!({"name": "database", "engine": "redis"}),
+        ] {
+            assert!(serde_json::from_value::<ServiceConfig>(value).is_err());
+        }
+    }
 }

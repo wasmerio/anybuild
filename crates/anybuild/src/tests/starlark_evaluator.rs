@@ -7,7 +7,7 @@ use crate::plan::layout::LocalLayout;
 use crate::plan::{RunStep, Service, Step};
 use crate::starlark::ctx::{anybuild_builtins, Ctx};
 use crate::starlark::loader::{ModuleGraph, StdlibSource};
-use starlark::environment::{Globals, GlobalsBuilder};
+use starlark::environment::{Globals, GlobalsBuilder, LibraryExtension};
 
 /// Python's `_ctx`: file_exists and serve() never touch the layout
 /// (backend/runner in Python), so a throwaway layout is fine.
@@ -22,6 +22,12 @@ fn ctx(source_dir: Option<&Path>) -> Ctx {
 
 fn globals() -> Globals {
     GlobalsBuilder::standard().with(anybuild_builtins).build()
+}
+
+fn provider_globals() -> Globals {
+    GlobalsBuilder::extended_by(&[LibraryExtension::StructType])
+        .with(anybuild_builtins)
+        .build()
 }
 
 /// Evaluate one Anybuild source string against `ctx` (the Python tests call
@@ -118,4 +124,61 @@ serve(
             provider: "mysql".to_owned(),
         }])
     );
+}
+
+#[test]
+fn configured_database_services_flow_through_common_serve() {
+    let stdlib = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/starlib");
+
+    for provider in ["mysql", "postgres"] {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ctx(Some(tmp.path()));
+        let source = format!(
+            r#"
+load("//anybuild:serve.bzl", "build", "serve")
+load("//anybuild:services.bzl", "{provider}")
+config = struct(
+    name = "app",
+    provider = "node",
+    port = 8080,
+    commands = struct(
+        install = None,
+        build = None,
+        start = None,
+        after_deploy = None,
+    ),
+    services = [{provider}()],
+)
+serve(
+    config,
+    build(steps = []),
+    commands = {{"start": "node server.js"}},
+)
+"#
+        );
+        let mut graph = ModuleGraph::new(
+            tmp.path().to_path_buf(),
+            StdlibSource::Dir(stdlib.clone()),
+            provider_globals(),
+            &ctx,
+        );
+        graph
+            .eval_entry(
+                source,
+                &tmp.path().join("Anybuild"),
+                "Anybuild",
+                &provider_globals(),
+            )
+            .unwrap();
+
+        let serves = ctx.serves.borrow();
+        let serve = serves.get("app").expect("serve registered");
+        assert_eq!(
+            serve.services,
+            Some(vec![Service {
+                name: "database".to_owned(),
+                provider: provider.to_owned(),
+            }])
+        );
+    }
 }

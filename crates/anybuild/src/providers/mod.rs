@@ -40,6 +40,8 @@ const SNAPSHOT_EXCLUDED_FIELDS: &[&str] = &[
     "python_install_inputs",
     "static_redirects_config",
     "node_package_name",
+    // Compatibility-only alias; new files persist the common service.
+    "python_database",
 ];
 
 pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Sized {
@@ -544,7 +546,14 @@ fn finish_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
     config
 }
 
-pub(crate) fn finalize_config(path: &Path, config: ProviderConfig) -> ProviderConfig {
+pub(crate) fn finalize_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
+    if let ProviderConfig::Python(python) = &mut config {
+        if let Some(database) = python.database {
+            python
+                .base
+                .set_database_service(database.into_database_engine());
+        }
+    }
     finish_config(path, config)
 }
 
@@ -631,6 +640,9 @@ fn exclude_default_object(
 ) -> serde_json::Value {
     let mut out = serde_json::Map::new();
     for (key, value) in dumped {
+        if value.as_array().is_some_and(Vec::is_empty) {
+            continue;
+        }
         match defaults.get(&key) {
             Some(default) if *default == value => {}
             Some(serde_json::Value::Object(default_child)) => {
@@ -819,7 +831,7 @@ mod selection_tests {
 mod config_inheritance_tests {
     use super::*;
 
-    const BASE_FIELDS: &[&str] = &["name", "port", "commands", "app_subdir"];
+    const BASE_FIELDS: &[&str] = &["name", "port", "commands", "services", "app_subdir"];
     const NODE_BUILD_FIELDS: &[&str] = &[
         "node_package_manager",
         "node_extra_dependencies",
@@ -922,6 +934,21 @@ mod config_inheritance_tests {
             assert_eq!(keys(&round_trip), keys(&json));
             assert_eq!(round_trip, json);
         }
+    }
+
+    #[test]
+    fn default_elision_omits_empty_collections_and_null_commands() {
+        let mut config = ProviderConfig::Node(node::NodeConfig::default());
+        config.base_mut().commands.start = Some("node server.js".to_owned());
+        let ProviderConfig::Node(node) = &mut config else {
+            unreachable!();
+        };
+        node.node.build.install_inputs = Some(Vec::new());
+
+        assert_eq!(
+            exclude_defaults_json(&config),
+            serde_json::json!({"commands": {"start": "node server.js"}})
+        );
     }
 
     #[test]

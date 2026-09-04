@@ -237,7 +237,14 @@ def node_build(config, build_mount = None, app = None):
         assets = assets,
     )
 
-def node_serve(config, build, name = None, provider = None, prepare = None, **overrides):
+def node_serve(
+        config,
+        build,
+        name = None,
+        provider = None,
+        prepare = None,
+        services = None,
+        **overrides):
     """Serve the exported app with the start command detected at load time."""
     app = build.app
     commands = {}
@@ -256,5 +263,6 @@ def node_serve(config, build, name = None, provider = None, prepare = None, **ov
         cwd = app.serve_path,
         prepare = prepare,
         commands = commands,
+        services = services,
         **overrides
     )

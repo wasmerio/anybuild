@@ -842,10 +842,19 @@ impl WasmerRunner {
                 "capabilities",
                 "capabilities must be a dictionary",
             )?;
-            let has_mysql = services.iter().any(|service| service.provider == "mysql");
-            if has_mysql {
+            let database_engine = if services.iter().any(|service| service.provider == "mysql") {
+                Some("mysql")
+            } else if services
+                .iter()
+                .any(|service| service.provider == "postgres")
+            {
+                Some("postgres")
+            } else {
+                None
+            };
+            if let Some(engine) = database_engine {
                 let mut database = serde_yaml::Mapping::new();
-                database.insert(yaml_str("engine"), yaml_str("mysql"));
+                database.insert(yaml_str("engine"), yaml_str(engine));
                 capabilities.insert(yaml_str("database"), YamlValue::Mapping(database));
             }
             yaml_config.insert(yaml_str("capabilities"), YamlValue::Mapping(capabilities));
@@ -2199,5 +2208,33 @@ mod tests {
             annotations.get(yaml_str("wasmer.io/app-kind")),
             Some(&yaml_str("wordpress"))
         );
+    }
+
+    #[test]
+    fn test_wasmer_app_yaml_sets_postgres_database_capability() {
+        let tmp = tempfile::tempdir().unwrap();
+        let runner = make_runner(tmp.path());
+        let mut serve = serve(
+            "node-postgres",
+            "node",
+            vec![package("node", Some("24"), None)],
+            Some("/app"),
+            &[("start", "node server.js")],
+        );
+        serve.services = Some(vec![crate::plan::Service {
+            name: "database".to_owned(),
+            provider: "postgres".to_owned(),
+        }]);
+
+        runner.build_serve(&serve).unwrap();
+
+        let app_yaml = read_yaml(&runner.wasmer_dir_path.join("app.yaml"));
+        let engine = app_yaml
+            .get(yaml_str("capabilities"))
+            .and_then(YamlValue::as_mapping)
+            .and_then(|capabilities| capabilities.get(yaml_str("database")))
+            .and_then(YamlValue::as_mapping)
+            .and_then(|database| database.get(yaml_str("engine")));
+        assert_eq!(engine, Some(&yaml_str("postgres")));
     }
 }

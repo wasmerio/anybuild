@@ -16,6 +16,10 @@ const STARLIB_FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../resources/starlib/serve.bzl"),
     ),
     (
+        "services.bzl",
+        include_bytes!("../../resources/starlib/services.bzl"),
+    ),
+    (
         "tools/go.bzl",
         include_bytes!("../../resources/starlib/tools/go.bzl"),
     ),

@@ -11,7 +11,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::operation::OperationContext;
-use crate::providers::base::{env_enum, env_str, is_blank, BaseConfig, HasBase};
+use crate::providers::base::{env_enum, env_str, is_blank, BaseConfig, DatabaseEngine, HasBase};
 use crate::providers::php::{self, PhpConfig};
 use crate::providers::{humanize, Provider};
 
@@ -102,6 +102,9 @@ pub fn load_config(
         config.wp_extension_slug = Some(extension.slug);
         config.wp_extension_activate_target = Some(extension.activate_target);
     }
+    config
+        .base_mut()
+        .set_database_service(DatabaseEngine::Mysql);
     Ok(config)
 }
 
@@ -268,6 +271,7 @@ mod tests {
 
     use std::path::{Path, PathBuf};
 
+    use crate::providers::base::{DatabaseEngine, ServiceConfig};
     use crate::providers::{
         load_provider_config_for_test as load_provider_config,
         load_provider_for_test as load_provider, BaseConfig, ProviderConfig,
@@ -320,6 +324,10 @@ mod tests {
         // These feed the plugin copy target and WP_PLUGINS_ACTIVATE.
         assert_eq!(config.wp_extension_kind.as_deref(), Some("plugin"));
         assert_eq!(config.wp_extension_slug.as_deref(), Some("my-plugin"));
+        assert_eq!(
+            config.php.base.services,
+            vec![ServiceConfig::database(DatabaseEngine::Mysql)]
+        );
         assert_eq!(
             config.wp_extension_activate_target.as_deref(),
             Some("my-plugin/my-plugin.php")

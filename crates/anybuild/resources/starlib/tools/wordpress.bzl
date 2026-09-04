@@ -153,6 +153,5 @@ def wordpress_serve(config, build, name = None, provider = None, **overrides):
         env = wordpress_env(config, wpcontent_base),
         commands = wordpress_commands(config, app, assets),
         volumes = [wp_content],
-        services = [service(name = "database", provider = "mysql")],
         **overrides
     )
