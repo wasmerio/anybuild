@@ -9,7 +9,6 @@ use crate::args::{
     LambdaArchitectureArg, ProjectArgs, WasmerConnArgs,
 };
 use crate::commands::client;
-use crate::SharedProjectArgs;
 
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct DeployArgs {
@@ -34,11 +33,7 @@ pub struct DeployArgs {
 }
 
 pub fn run(args: DeployArgs) -> Result<()> {
-    let shared = SharedProjectArgs {
-        path: args.project.path,
-        subdir: args.project.subdir,
-        ..Default::default()
-    };
+    let shared = args.project.shared();
     if args.platform != DeploymentPlatformArg::Wasmer && args.target.wasmer_deploy_config.is_some()
     {
         bail!("--wasmer-deploy-config can only be used with --platform=wasmer");

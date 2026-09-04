@@ -65,13 +65,12 @@ impl BuildArgs {
 pub fn run(args: BuildArgs) -> Result<()> {
     let skip_docker_if_safe = args.effective_skip_docker_if_safe_build();
     let shared = SharedProjectArgs {
-        path: args.project.path,
-        subdir: args.project.subdir,
         install_command: args.install_command,
         build_command: args.build_command,
         start_command: args.start_command,
         provider: args.provider,
         config: args.config,
+        ..args.project.shared()
     };
     let (build_environment, runtime_environment) = execution(
         args.targets,
