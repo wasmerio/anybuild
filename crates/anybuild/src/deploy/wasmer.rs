@@ -10,6 +10,7 @@ use crate::artifact::{ArtifactKind, RuntimeArtifact};
 use crate::build::report::console_print;
 use crate::deploy::Deployer;
 use crate::operation::OperationContext;
+use crate::run::wasmer::WASMER_ENV_FILENAME;
 use crate::sdk::{DeployOutcome, DeployTarget, WasmerOptions};
 use crate::wasmer::{dump_yaml_sorted, path_str, yaml_str};
 
@@ -111,6 +112,13 @@ impl WasmerDeployer {
             "--dir".to_owned(),
             path_str(artifact_dir),
         ];
+        let env_file_path = artifact_dir.join(WASMER_ENV_FILENAME);
+        if env_file_path.is_file() {
+            args.extend([
+                "--env-file".to_owned(),
+                path_str(&absolute_path(&env_file_path)),
+            ]);
+        }
         if app_owner.is_some() && app_name.is_some() {
             args.push("--non-interactive".to_owned());
         }
@@ -148,6 +156,7 @@ impl WasmerDeployer {
     fn write_deploy_config(&mut self, artifact_dir: &Path, config_path: &Path) -> Result<()> {
         let package_webc_path = artifact_dir.join("package.webc");
         let app_yaml_path = artifact_dir.join("app.yaml");
+        let env_file_path = artifact_dir.join(WASMER_ENV_FILENAME);
         if let Some(parent) = package_webc_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -165,13 +174,13 @@ impl WasmerDeployer {
         let contents = std::fs::read(&package_webc_path)
             .with_context(|| format!("reading {}", package_webc_path.display()))?;
         let sha256 = format!("{:x}", sha2::Sha256::digest(&contents));
-        let payload = format!(
-            "{{\"app_yaml_path\": {}, \"package_webc_path\": {}, \"package_webc_size\": {}, \"package_webc_sha256\": {}}}",
-            serde_json::to_string(&path_str(&absolute_path(&app_yaml_path)))?,
-            serde_json::to_string(&path_str(&absolute_path(&package_webc_path)))?,
-            contents.len(),
-            serde_json::to_string(&sha256)?,
-        );
+        let payload = serde_json::to_string(&serde_json::json!({
+            "app_yaml_path": path_str(&absolute_path(&app_yaml_path)),
+            "env_file_path": path_str(&absolute_path(&env_file_path)),
+            "package_webc_path": path_str(&absolute_path(&package_webc_path)),
+            "package_webc_size": contents.len(),
+            "package_webc_sha256": sha256,
+        }))?;
         std::fs::write(config_path, payload)?;
         console_print(
             &self.operation,
@@ -316,6 +325,58 @@ mod tests {
                 "--app-name",
                 "blog",
             ]
+        );
+    }
+
+    #[test]
+    fn deploy_passes_generated_env_file() {
+        let temporary = tempfile::tempdir().unwrap();
+        let artifact = artifact(temporary.path());
+        let artifact_dir = artifact.wasmer_directory().unwrap();
+        std::fs::create_dir_all(artifact_dir).unwrap();
+        let env_file_path = artifact_dir.join(WASMER_ENV_FILENAME);
+        std::fs::write(&env_file_path, "TOKEN=secret\n").unwrap();
+        let mut deployer =
+            WasmerDeployer::new(WasmerOptions::default(), OperationContext::for_test());
+
+        deployer
+            .deploy(
+                &artifact,
+                DeployTarget::Publish {
+                    owner: None,
+                    name: None,
+                },
+            )
+            .unwrap();
+
+        let captured = deployer.captured_commands.last().unwrap();
+        assert!(captured.extra_args.windows(2).any(|args| {
+            args[0] == "--env-file" && args[1] == path_str(&absolute_path(&env_file_path))
+        }));
+    }
+
+    #[test]
+    fn deploy_config_includes_generated_env_file_path() {
+        let temporary = tempfile::tempdir().unwrap();
+        let artifact_dir = temporary.path().join("wasmer");
+        std::fs::create_dir_all(&artifact_dir).unwrap();
+        std::fs::write(artifact_dir.join("package.webc"), "package").unwrap();
+        std::fs::write(artifact_dir.join("app.yaml"), "package: .\n").unwrap();
+        std::fs::write(artifact_dir.join(WASMER_ENV_FILENAME), "TOKEN=secret\n").unwrap();
+        let config_path = temporary.path().join("result.json");
+        let mut deployer =
+            WasmerDeployer::new(WasmerOptions::default(), OperationContext::for_test());
+
+        deployer
+            .write_deploy_config(&artifact_dir, &config_path)
+            .unwrap();
+
+        let payload: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(config_path).unwrap()).unwrap();
+        let expected_env_path = path_str(&absolute_path(&artifact_dir.join(WASMER_ENV_FILENAME)));
+        assert_eq!(
+            payload["env_file_path"].as_str(),
+            Some(expected_env_path.as_str())
         );
     }
 
