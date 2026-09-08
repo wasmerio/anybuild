@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.4](https://github.com/wasmerio/anybuild/compare/v0.28.3...v0.28.4) (2026-09-08)
+
+
+### Bug Fixes
+
+* **wasmer:** pass application env via dotenv file ([#113](https://github.com/wasmerio/anybuild/issues/113)) ([7b08d7b](https://github.com/wasmerio/anybuild/commit/7b08d7b1696945ab5c60c2c0f118ee2b6c80690b))
+
 ## [0.28.3](https://github.com/wasmerio/anybuild/compare/v0.28.2...v0.28.3) (2026-09-01)
 
 
