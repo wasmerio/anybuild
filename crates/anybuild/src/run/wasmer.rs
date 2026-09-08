@@ -39,6 +39,7 @@ pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
 pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.2.0";
 pub const PHPIX_VERSION: &str = "0.3.0-rc.5";
 pub const WASIX_PYTHON_INDEX_URL: &str = "https://python-registry.wasix.org/simple";
+pub(crate) const WASMER_ENV_FILENAME: &str = ".env";
 const PREPARE_COMMAND_PREFIX: &str = "__anybuild_prepare_";
 
 /// The workspace package version is embedded in every Rust crate and kept in
@@ -295,6 +296,15 @@ fn command_requires_shell(command: &str) -> bool {
     })
 }
 
+fn dotenv_value(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "\\$")
+        .replace('\n', "\\n");
+    format!("\"{escaped}\"")
+}
+
 fn host_mount_arg(host_path: &Path, guest_path: &str) -> Result<String> {
     let host_path = absolute_path(host_path);
     std::fs::create_dir_all(&host_path)
@@ -498,7 +508,7 @@ impl WasmerRunner {
         let prepare_dir = self.wasmer_dir_path.join("prepare");
         std::fs::create_dir_all(&prepare_dir)?;
 
-        let mut env: IndexMap<String, String> = serve.env.clone().unwrap_or_default();
+        let mut env: IndexMap<String, String> = IndexMap::new();
         for dep in &serve.deps {
             if let Some(item) = mapper().get(dep.name.as_str()) {
                 if let Some(dep_env) = item.env {
@@ -535,6 +545,25 @@ impl WasmerRunner {
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))?;
+        }
+        Ok(())
+    }
+
+    fn write_env_file(&self, serve: &Serve) -> Result<()> {
+        std::fs::create_dir_all(&self.wasmer_dir_path)?;
+        let path = self.wasmer_dir_path.join(WASMER_ENV_FILENAME);
+        let contents = serve
+            .env
+            .as_ref()
+            .into_iter()
+            .flatten()
+            .map(|(key, value)| format!("{key}={}\n", dotenv_value(value)))
+            .collect::<String>();
+        std::fs::write(&path, contents)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
         }
         Ok(())
     }
@@ -777,11 +806,6 @@ impl WasmerRunner {
                     main_args_for_module(&command_module, &parts[1..])
                 };
                 wasi_args.insert("main-args", value(multiline_array(&main_args)));
-                if let Some(serve_env) = &serve.env {
-                    for (key, value) in serve_env {
-                        command_env.insert(key.clone(), value.clone());
-                    }
-                }
                 if !command_env.is_empty() {
                     let env_items: Vec<String> = command_env
                         .iter()
@@ -1129,6 +1153,7 @@ impl Runner for WasmerRunner {
 
     fn build(&mut self, serve: &Serve) -> Result<RuntimeArtifact> {
         self.write_build_annotations()?;
+        self.write_env_file(serve)?;
         self.build_prepare(serve)?;
         self.build_serve(serve)?;
         Ok(RuntimeArtifact::Wasmer {
@@ -1218,6 +1243,17 @@ impl Runner for WasmerRunner {
         args.push(path_str(&absolute_path(&self.wasmer_dir_path)));
         args.push("--net".to_owned());
         args.push("--forward-host-env".to_owned());
+        let env_file = self.wasmer_dir_path.join(WASMER_ENV_FILENAME);
+        if env_file.is_file() {
+            args.push("--env-file".to_owned());
+            args.push(path_str(&absolute_path(&env_file)));
+        }
+        if let Some(env) = env {
+            for (key, value) in env {
+                args.push("--env".to_owned());
+                args.push(format!("{key}={value}"));
+            }
+        }
         args.push(format!("--command={command_name}"));
         args.extend(volume_mapdir_args(
             &*self.build_backend.borrow(),
@@ -1741,6 +1777,77 @@ mod tests {
     }
 
     #[test]
+    fn test_wasmer_environment_is_written_to_file_not_manifest() {
+        let tmp = tempfile::tempdir().unwrap();
+        let runner = make_runner(tmp.path());
+        let mut serve = serve(
+            "node",
+            "node",
+            vec![package("node", Some("22"), None)],
+            Some("/app"),
+            &[("start", "node server.js")],
+        );
+        serve.env = Some(
+            [
+                ("PORT".to_owned(), "5000".to_owned()),
+                ("MONGO_URI".to_owned(), "mongodb://example".to_owned()),
+                (
+                    "COMPLEX".to_owned(),
+                    "spaces # quotes \" slash \\ newline\n$VALUE".to_owned(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        serve.prepare = Some(vec![RunStep {
+            command: "node prepare.js".to_owned(),
+            inputs: None,
+            outputs: None,
+            group: None,
+        }]);
+
+        runner.write_env_file(&serve).unwrap();
+        runner.build_prepare(&serve).unwrap();
+        runner.build_serve(&serve).unwrap();
+
+        let env: IndexMap<String, String> =
+            dotenvy::from_path_iter(runner.wasmer_dir_path.join(WASMER_ENV_FILENAME))
+                .unwrap()
+                .collect::<std::result::Result<_, _>>()
+                .unwrap();
+        assert_eq!(env.get("PORT").map(String::as_str), Some("5000"));
+        assert_eq!(
+            env.get("MONGO_URI").map(String::as_str),
+            Some("mongodb://example")
+        );
+        assert_eq!(
+            env.get("COMPLEX").map(String::as_str),
+            Some("spaces # quotes \" slash \\ newline\n$VALUE")
+        );
+
+        let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
+        let command = manifest["command"]
+            .as_array_of_tables()
+            .unwrap()
+            .get(0)
+            .unwrap();
+        let wasi = command
+            .get("annotations")
+            .and_then(Item::as_table_like)
+            .and_then(|annotations| annotations.get("wasi"))
+            .and_then(Item::as_table_like)
+            .unwrap();
+        assert!(wasi.get("env").is_none());
+
+        let prepare =
+            std::fs::read_to_string(runner.wasmer_dir_path.join("prepare").join("prepare.sh"))
+                .unwrap();
+        assert!(!prepare.contains("PORT="));
+        assert!(!prepare.contains("MONGO_URI="));
+        assert!(!prepare.contains("COMPLEX="));
+    }
+
+    #[test]
     fn test_wasmer_phpix_manifest_maps_php_versions() {
         let cases: &[(Option<&str>, Option<&str>, &str)] = &[
             (None, None, "phpix/phpix-84-32bit"),
@@ -2002,6 +2109,12 @@ mod tests {
     fn test_wasmer_run_command_passes_runtime_env() {
         let tmp = tempfile::tempdir().unwrap();
         let mut runner = make_runner(tmp.path());
+        let mut serve = serve("node", "node", vec![], None, &[]);
+        serve.env = Some(IndexMap::from([(
+            "MONGO_URI".to_owned(),
+            "mongodb://example".to_owned(),
+        )]));
+        runner.write_env_file(&serve).unwrap();
 
         let mut env = IndexMap::new();
         env.insert("PORT".to_owned(), "45678".to_owned());
@@ -2019,6 +2132,14 @@ mod tests {
             .extra_args
             .iter()
             .any(|arg| arg == "--command=start"));
+        assert!(captured.extra_args.windows(2).any(|args| {
+            args[0] == "--env-file"
+                && args[1] == path_str(&runner.wasmer_dir_path.join(WASMER_ENV_FILENAME))
+        }));
+        assert!(captured
+            .extra_args
+            .windows(2)
+            .any(|args| args == ["--env", "PORT=45678"]));
     }
 
     #[test]
