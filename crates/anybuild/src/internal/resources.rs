@@ -67,6 +67,14 @@ const STARLIB_FILES: &[(&str, &[u8])] = &[
 
 const ASSET_FILES: &[(&str, &[u8])] = &[
     (
+        "python/sitecustomize.py",
+        include_bytes!("../../resources/assets/python/sitecustomize.py"),
+    ),
+    (
+        "python/run-mcp.py",
+        include_bytes!("../../resources/assets/python/run-mcp.py"),
+    ),
+    (
         "node/optimize-node-modules.sh",
         include_bytes!("../../resources/assets/node/optimize-node-modules.sh"),
     ),

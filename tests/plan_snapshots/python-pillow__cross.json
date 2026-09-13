@@ -34,29 +34,18 @@
   },
   {
    "__type__": "RunStep",
+   "command": "uvx pip install -r requirements.txt  --target 'opt/venv/lib/python3.13/site-packages' --platform 'wasix_wasm32' --only-binary=:all: --python-version=3.13 --ignore-installed --index-url=https://pypi.org/simple",
+   "inputs": [
+    "requirements.txt"
+   ]
+  },
+  {
+   "__type__": "RunStep",
    "command": "uv add -r requirements.txt ",
    "group": "install",
    "inputs": [
     "requirements.txt"
    ]
-  },
-  {
-   "__type__": "RunStep",
-   "command": "uv pip compile requirements.txt --python-version=3.13 --universal --extra-index-url None --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt",
-   "inputs": [
-    "requirements.txt"
-   ],
-   "outputs": [
-    "cross-requirements.txt"
-   ]
-  },
-  {
-   "__type__": "RunStep",
-   "command": "uvx pip install -r cross-requirements.txt  --target opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile"
-  },
-  {
-   "__type__": "RunStep",
-   "command": "rm cross-requirements.txt"
   },
   {
    "__type__": "PathStep",
@@ -65,9 +54,10 @@
   {
    "__type__": "CopyStep",
    "base": "source",
+   "gitignore": true,
    "ignore": [
-    ".venv",
     ".git",
+    ".venv",
     "__pycache__"
    ],
    "source": ".",

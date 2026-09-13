@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -144,6 +144,8 @@ pub struct PythonConfig {
     pub wsgi_application: Option<String>,
     #[serde(rename = "python_install_requires_all_files")]
     pub install_requires_all_files: bool,
+    #[serde(rename = "python_copy_gitignore")]
+    pub copy_gitignore: bool,
     #[serde(rename = "python_main_file")]
     pub main_file: Option<String>,
     pub python_version: Option<String>,
@@ -152,6 +154,9 @@ pub struct PythonConfig {
     pub precompile_python: bool,
     #[serde(rename = "python_cross_platform")]
     pub cross_platform: Option<String>,
+    /// Unset lets the runner choose: enabled by default for Wasmer.
+    #[serde(rename = "python_fix_wasix_imports")]
+    pub fix_wasix_imports: Option<bool>,
     pub python_extra_index_url: Option<String>,
     /// Derived install inputs for the Starlark provider (None => all files).
     #[serde(rename = "python_install_inputs")]
@@ -176,11 +181,13 @@ impl Default for PythonConfig {
             asgi_application: None,
             wsgi_application: None,
             install_requires_all_files: false,
+            copy_gitignore: true,
             main_file: None,
             python_version: Some("3.13".to_owned()),
             uv_version: Some("0.8.15".to_owned()),
             precompile_python: true,
             cross_platform: None,
+            fix_wasix_imports: None,
             python_extra_index_url: None,
             install_inputs: None,
             mcp_self_running: false,
@@ -225,12 +232,14 @@ impl PythonConfig {
             wsgi_application: env_str(operation, "wsgi_application"),
             install_requires_all_files: env_bool(operation, "python_install_requires_all_files")?
                 .unwrap_or(false),
+            copy_gitignore: env_bool(operation, "python_copy_gitignore")?.unwrap_or(true),
             main_file: env_str(operation, "python_main_file"),
             python_version: env_str(operation, "python_version")
                 .or_else(|| Some("3.13".to_owned())),
             uv_version: env_str(operation, "uv_version").or_else(|| Some("0.8.15".to_owned())),
             precompile_python: env_bool(operation, "python_precompile")?.unwrap_or(true),
             cross_platform: env_str(operation, "python_cross_platform"),
+            fix_wasix_imports: env_bool(operation, "python_fix_wasix_imports")?,
             python_extra_index_url: env_str(operation, "python_extra_index_url"),
             install_inputs: env_json(operation, "python_install_inputs")?,
             mcp_self_running: env_bool(operation, "python_mcp_self_running")?.unwrap_or(false),
@@ -344,6 +353,29 @@ impl Provider for PythonConfig {
 
     fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
         load_config(path, base, operation)
+    }
+
+    fn validate(&self, path: &Path) -> Result<()> {
+        let manifest = path.join("pyproject.toml");
+        if self.cross_platform.is_none() || !manifest.is_file() {
+            return Ok(());
+        }
+        let data: toml::Value = std::fs::read_to_string(manifest)?.parse()?;
+        if let Some(uv) = data.get("tool").and_then(|tool| tool.get("uv")) {
+            // Hatch exports project metadata, which cannot express uv overrides.
+            if uv
+                .get("sources")
+                .is_some_and(|value| value.as_table().is_none_or(|sources| !sources.is_empty()))
+                || uv.get("override-dependencies").is_some_and(|value| {
+                    value
+                        .as_array()
+                        .is_none_or(|overrides| !overrides.is_empty())
+                })
+            {
+                bail!("target resolution cannot apply tool.uv source/dependency overrides; use explicit target wheel requirements");
+            }
+        }
+        Ok(())
     }
 }
 
@@ -581,10 +613,7 @@ pub(crate) fn infer_start_command(
         return if config.mcp_self_running {
             Some(format!("python {main_file}"))
         } else {
-            Some(format!(
-                "python $VIRTUAL_ENV/bin/mcp run {main_file} \
-                 --transport=streamable-http"
-            ))
+            Some(format!("python -m anybuild_mcp {main_file}"))
         };
     } else if config.framework == Some(PythonFramework::Django) {
         return Some("python manage.py runserver 0.0.0.0:$PORT".to_owned());
@@ -1179,10 +1208,7 @@ mod tests {
         config.main_file = Some("main.py".to_owned());
         assert_eq!(
             infer_start_command(&config, false).as_deref(),
-            Some(
-                "python $VIRTUAL_ENV/bin/mcp run main.py \
-                 --transport=streamable-http"
-            )
+            Some("python -m anybuild_mcp main.py")
         );
 
         config.framework = Some(PythonFramework::Django);

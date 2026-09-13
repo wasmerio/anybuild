@@ -543,6 +543,66 @@ mod tests {
     }
 
     #[test]
+    fn python_staging_respects_gitignore_in_every_copy_branch() {
+        for subdir in [false, true] {
+            for all_files in [false, true] {
+                for gitignore in [false, true] {
+                    let project = tempfile::tempdir().unwrap();
+                    let root = project.path();
+                    let app = if subdir {
+                        root.join("web")
+                    } else {
+                        root.to_owned()
+                    };
+                    std::fs::create_dir_all(&app).unwrap();
+                    write(&root.join(".gitignore"), ".env\nprivate/\n");
+                    write(&app.join("main.py"), "print('hello')\n");
+                    write(&app.join("requirements.txt"), "");
+                    write(&app.join(".env"), "DUMMY=not-a-secret\n");
+                    write(&app.join("private/scratch"), "scratch\n");
+                    let mut client = crate::Anybuild::new(root).with_config(serde_json::json!({
+                        "python_install_requires_all_files": all_files,
+                        "python_copy_gitignore": gitignore,
+                    }));
+                    if subdir {
+                        client = client.with_subdir("web");
+                    }
+                    let plan = client.plan(crate::PlanOptions::default()).unwrap();
+                    // Execute the real provider's source staging without installing tools.
+                    let steps: Vec<_> = plan.serve.build.into_iter().filter(|step| {
+                        matches!(step, Step::Copy(_) | Step::Workdir(_))
+                            || matches!(step, Step::Run(run) if run.command.starts_with("cp -R . "))
+                    }).collect();
+                    let state = if subdir {
+                        root.join(".anybuild/web")
+                    } else {
+                        root.join(".anybuild")
+                    };
+                    let mut backend = LocalBuildBackend::new(
+                        root.to_owned(),
+                        root.join("assets"),
+                        Some(state),
+                        OperationContext::for_test(),
+                    );
+                    backend.build("app", &IndexMap::new(), &[], &steps).unwrap();
+                    let artifact = backend.get_mount_path("app");
+                    assert!(
+                        artifact.join("main.py").is_file(),
+                        "subdir={subdir}, all_files={all_files}, gitignore={gitignore}: {steps:?}"
+                    );
+                    for private in [".env", "private/scratch"] {
+                        assert_eq!(
+                            artifact.join(private).exists(),
+                            !gitignore,
+                            "subdir={subdir}, all_files={all_files}, gitignore={gitignore}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn copy_tree_uses_root_nested_and_negated_gitignore_rules() {
         let tmp = tempfile::tempdir().unwrap();
         let src = tmp.path().join("src");

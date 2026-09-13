@@ -1,14 +1,11 @@
-"""
-FastMCP quickstart example.
+"""MCP v2 MCPServer quickstart: tools, resources, and prompts."""
 
-cd to the `examples/snippets/clients` directory and run:
-    uv run server fastmcp_quickstart stdio
-"""
+import os
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 # Create an MCP server
-mcp = FastMCP("Demo")
+mcp = MCPServer("Demo")
 
 
 # Add an addition tool
@@ -39,4 +36,9 @@ def greet_user(name: str, style: str = "friendly") -> str:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    mcp.run(
+        transport="streamable-http",
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", "8080")),
+        stateless_http=True,
+    )

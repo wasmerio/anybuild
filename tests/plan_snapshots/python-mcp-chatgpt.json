@@ -34,7 +34,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "uv add -r requirements.txt mcp[cli]",
+   "command": "uv add -r requirements.txt ",
    "group": "install",
    "inputs": [
     "requirements.txt"
@@ -47,9 +47,10 @@
   {
    "__type__": "CopyStep",
    "base": "source",
+   "gitignore": true,
    "ignore": [
-    ".venv",
     ".git",
+    ".venv",
     "__pycache__"
    ],
    "source": ".",
@@ -67,6 +68,8 @@
   "FASTMCP_HOST": "0.0.0.0",
   "FASTMCP_PORT": "8080",
   "HOME": "app",
+  "HOST": "0.0.0.0",
+  "PORT": "8080",
   "PYTHONPATH": "app:opt/venv/lib/python3.13/site-packages"
  },
  "mounts": [
