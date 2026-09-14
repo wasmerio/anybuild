@@ -152,12 +152,6 @@ def python_build(
         steps.append(run("python manage.py collectstatic --noinput", group = "build"))
     if serving and in_subdir:
         steps.append(run("cp -R . {}".format(app.path)))
-    if serving and config.python_fix_wasix_imports:
-        runtime_dir = venv.path + "/anybuild-python"
-        steps += [
-            run("mkdir -p " + _quote(runtime_dir)),
-            copy("python/sitecustomize.py", runtime_dir + "/sitecustomize.py", base = "assets"),
-        ]
 
     return build(
         steps = steps,
@@ -187,8 +181,6 @@ def python_env(config, app, venv, site_packages):
         pythonpath = "{}:{}/src:{}".format(app_path, app_path, site_packages)
     else:
         pythonpath = "{}:{}".format(app_path, site_packages)
-    if config.python_fix_wasix_imports:
-        pythonpath = venv.serve_path + "/anybuild-python:" + pythonpath
     env_vars = {"PYTHONPATH": pythonpath, "HOME": app_path}
     if config.python_framework == "streamlit":
         env_vars["STREAMLIT_SERVER_HEADLESS"] = "true"

@@ -23,34 +23,11 @@ does not relax that pin. The host environment continues to use `uv.lock`
 when present. Target versions may differ from that host lock.
 
 The default Wasmer Python package, including Python 3.13, is
-`python/python@=3.13.20`. Some published CPython 3.13 WASIX wheels still use
-the old `.cpython-313-wasm32-wasi-threads.so` extension filename. A temporary
-[fallback importer][wasix-importer] loads these files through Python's
-standard extension loader after normal import lookup fails. Current
-extensions and `abi3` wheels use normal import lookup.
+`python/python@=3.13.20`. Native extensions from the updated WASIX wheels
+load through Python's standard import mechanism.
 
-The single `sitecustomize.py` file is added to the serving environment only
-when `python_fix_wasix_imports` is true. Wasmer defaults this setting to true
-when it is unset; other runners leave it disabled. To opt out in an
-`Anybuild` file, set:
-
-```python
-config = python_config(
-    python_fix_wasix_imports = False,
-    # Other generated settings...
-)
-```
-
-The equivalent environment setting is
-`ANYBUILD_PYTHON_FIX_WASIX_IMPORTS=false`. An explicit true or false overrides
-the runner default. The importer itself activates only on WASIX CPython
-3.13. It lives in a separate directory and chains any application
-`sitecustomize.py`. Installed wheel files and `RECORD` metadata remain
-untouched; no CFFI constraint is added. This handles the legacy filename,
-not arbitrary binary incompatibility. The fallback can be removed once
-supported wheels all use the current suffix.
-
-[wasix-importer]: ../crates/anybuild/resources/assets/python/sitecustomize.py
+If Docker reuses an install layer containing older WASIX wheels, rebuild
+once with `--docker-opts=--no-cache` to fetch the updated wheels.
 
 Requirement-file includes (`-r`) and constraints (`-c`) are passed to pip.
 For pyproject-based builds, `[tool.uv].constraint-dependencies` is ignored

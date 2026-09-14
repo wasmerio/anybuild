@@ -154,9 +154,6 @@ pub struct PythonConfig {
     pub precompile_python: bool,
     #[serde(rename = "python_cross_platform")]
     pub cross_platform: Option<String>,
-    /// Unset lets the runner choose: enabled by default for Wasmer.
-    #[serde(rename = "python_fix_wasix_imports")]
-    pub fix_wasix_imports: Option<bool>,
     pub python_extra_index_url: Option<String>,
     /// Derived install inputs for the Starlark provider (None => all files).
     #[serde(rename = "python_install_inputs")]
@@ -187,7 +184,6 @@ impl Default for PythonConfig {
             uv_version: Some("0.8.15".to_owned()),
             precompile_python: true,
             cross_platform: None,
-            fix_wasix_imports: None,
             python_extra_index_url: None,
             install_inputs: None,
             mcp_self_running: false,
@@ -239,7 +235,6 @@ impl PythonConfig {
             uv_version: env_str(operation, "uv_version").or_else(|| Some("0.8.15".to_owned())),
             precompile_python: env_bool(operation, "python_precompile")?.unwrap_or(true),
             cross_platform: env_str(operation, "python_cross_platform"),
-            fix_wasix_imports: env_bool(operation, "python_fix_wasix_imports")?,
             python_extra_index_url: env_str(operation, "python_extra_index_url"),
             install_inputs: env_json(operation, "python_install_inputs")?,
             mcp_self_running: env_bool(operation, "python_mcp_self_running")?.unwrap_or(false),

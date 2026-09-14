@@ -361,7 +361,6 @@ fn apply_python_runner_flips(config: &mut PythonConfig) {
         config.python_extra_index_url = Some(WASIX_PYTHON_INDEX_URL.to_owned());
     }
     config.cross_platform = Some("wasix_wasm32".to_owned());
-    config.fix_wasix_imports.get_or_insert(true);
     config.precompile_python = true;
 }
 
@@ -1632,11 +1631,10 @@ mod tests {
     }
 
     #[test]
-    fn test_config_annotation_includes_wasmer_python_defaults() {
+    fn test_config_annotation_matches_python_byte_for_byte() {
         // Golden captured from the compatibility fixture (PythonConfig with
         // python_framework=django through prepare_config + serialize), dumped as
-        // sorted JSON, with the Wasmer import fix enabled. Pins exclude_none
-        // semantics and enum/default values.
+        // sorted JSON. Pins exclude_none semantics and enum/default values.
         let tmp = tempfile::tempdir().unwrap();
         let mut runner = make_runner(tmp.path());
         prepare_config(
@@ -1654,7 +1652,7 @@ mod tests {
         let json = serde_json::to_string(&sorted).unwrap();
         assert_eq!(
             json,
-            "{\"python_cross_platform\":\"wasix_wasm32\",\"python_extra_index_url\":\"https://python-registry.wasix.org/simple\",\"python_fix_wasix_imports\":true,\"python_framework\":\"django\"}"
+            "{\"python_cross_platform\":\"wasix_wasm32\",\"python_extra_index_url\":\"https://python-registry.wasix.org/simple\",\"python_framework\":\"django\"}"
         );
     }
 

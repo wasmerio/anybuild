@@ -1,9 +1,6 @@
 """Offline packaging tests (requires Hatch, pip and a built Anybuild binary)."""
 
-import importlib
-from importlib.machinery import ExtensionFileLoader, EXTENSION_SUFFIXES
 from importlib.metadata import distributions
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -12,16 +9,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
 ANYBUILD = os.environ.get("ANYBUILD_BIN", str(ROOT / "target/debug/anybuild"))
-IMPORTER = ROOT / "crates/anybuild/resources/assets/python/sitecustomize.py"
-spec = importlib.util.spec_from_file_location("anybuild_sitecustomize", IMPORTER)
-wasix_importer = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(wasix_importer)
 
 
 class CrossRequirementsTests(unittest.TestCase):
@@ -205,103 +197,6 @@ class CrossRequirementsTests(unittest.TestCase):
             'build-backend = "unavailable_backend"\n'
         )
         self.assertIn("unavailable_backend", self.install(manifest, success=False))
-
-
-class WasixImporterTests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="anybuild importer ")
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
-        self.finder = wasix_importer.LegacyWasixExtensionFinder()
-
-    def test_registration_is_scoped_idempotent_and_after_normal_importers(self):
-        suffix = ".cpython-313-wasm32-wasi.so"
-        for version, suffixes, enabled in [
-            ((3, 13), [suffix], True),
-            ((3, 14), [suffix], False),
-            ((3, 13), [".cpython-313-x86_64-linux-gnu.so"], False),
-            ((3, 13), [suffix, wasix_importer.LEGACY_SUFFIX], False),
-        ]:
-            original = list(sys.meta_path)
-            with (
-                self.subTest(version=version, suffixes=suffixes),
-                patch.object(sys, "version_info", version),
-                patch.object(sys, "meta_path", original.copy()),
-                patch.object(wasix_importer, "EXTENSION_SUFFIXES", suffixes),
-            ):
-                wasix_importer.install()
-                wasix_importer.install()
-                self.assertEqual(sys.meta_path[:len(original)], original)
-                self.assertEqual(len(sys.meta_path), len(original) + enabled)
-
-    def test_legacy_extension_uses_original_file_and_standard_loader(self):
-        path = self.root / ("native" + wasix_importer.LEGACY_SUFFIX)
-        path.touch()
-        spec = self.finder.find_spec("package.native", [str(self.root)])
-        self.assertEqual(spec.origin, str(path))
-        self.assertIsInstance(spec.loader, ExtensionFileLoader)
-        self.assertEqual(list(self.root.iterdir()), [path])
-
-    def test_submodule_lookup_stays_within_its_package_path(self):
-        (self.root / ("native" + wasix_importer.LEGACY_SUFFIX)).touch()
-        with patch.object(sys, "path", [str(self.root)]):
-            self.assertIsNotNone(self.finder.find_spec("native"))
-            self.assertIsNone(self.finder.find_spec("package.native", []))
-            self.assertIsNone(self.finder.find_spec("package.native", [None]))
-            self.assertIsNone(self.finder.find_spec("missing"))
-
-    def test_normal_source_and_extension_imports_take_priority(self):
-        legacy = self.root / "legacy"
-        current = self.root / "current"
-        legacy.mkdir()
-        current.mkdir()
-        name = "anybuild_test_native"
-        (legacy / (name + wasix_importer.LEGACY_SUFFIX)).touch()
-        for suffix in [".py", EXTENSION_SUFFIXES[0]]:
-            with self.subTest(suffix=suffix):
-                expected = current / (name + suffix)
-                expected.touch()
-                with (
-                    patch.object(sys, "path", [str(legacy), str(current), *sys.path]),
-                    patch.object(sys, "meta_path", [*sys.meta_path, self.finder]),
-                ):
-                    importlib.invalidate_caches()
-                    self.assertEqual(
-                        importlib.util.find_spec(name).origin, str(expected)
-                    )
-                expected.unlink()
-
-    def test_native_loader_errors_are_not_hidden(self):
-        name = "anybuild_test_broken_native"
-        (self.root / (name + wasix_importer.LEGACY_SUFFIX)).touch()
-        with (
-            patch.object(sys, "path", [str(self.root)]),
-            patch.object(sys, "meta_path", [*sys.meta_path, self.finder]),
-            self.assertRaises(ImportError) as error,
-        ):
-            importlib.import_module(name)
-        self.assertNotIsInstance(error.exception, ModuleNotFoundError)
-
-    def test_startup_preserves_application_sitecustomize(self):
-        hooks = self.root / "hooks"
-        app = self.root / "app"
-        hooks.mkdir()
-        app.mkdir()
-        shutil.copyfile(IMPORTER, hooks / IMPORTER.name)
-        customization = app / "sitecustomize.py"
-        customization.write_text("value = 'application hook ran'\n")
-        result = subprocess.run(
-            [sys.executable, "-B", "-c",
-             "import sitecustomize; "
-             "print(sitecustomize.value); print(sitecustomize.__file__)"],
-            cwd=self.root, text=True, capture_output=True,
-            env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, [hooks, app]))},
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stderr, "")
-        self.assertEqual(
-            result.stdout.splitlines(), ["application hook ran", str(customization)]
-        )
 
 
 if __name__ == "__main__":

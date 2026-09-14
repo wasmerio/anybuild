@@ -4,8 +4,7 @@ use anybuild::plan::Step;
 use anybuild::{
     Anybuild, AutoOptions, AwsLambdaOptions, BuildOptions, DeployOptions, DeployOutcome,
     DeployTarget, DeploymentPlatform, Event, FlyOptions, GenerateOptions, GenerationCheckStatus,
-    GenerationPolicy, PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, RuntimeEnvironment,
-    WasmerOptions,
+    GenerationPolicy, PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, WasmerOptions,
 };
 
 fn static_project() -> tempfile::TempDir {
@@ -43,117 +42,6 @@ fn mcp_plan_exposes_port_and_both_sdk_generation_settings() {
         .build
         .iter()
         .any(|step| { matches!(step, Step::Copy(copy) if copy.source == "python/run-mcp.py") }));
-}
-
-#[test]
-fn python_importer_setting_controls_runtime_files_and_search_path() {
-    for (manifest, contents) in [
-        ("requirements.txt", "pydantic>=2\n"),
-        (
-            "pyproject.toml",
-            "[project]\nname = 'demo'\nversion = '1.0'\ndependencies = ['pydantic>=2']\n",
-        ),
-        ("main.py", "print('hello')\n"),
-    ] {
-        for (wasmer, platform, setting, needs_importer) in [
-            (false, None, None, false),
-            (false, Some("wasix_wasm32"), None, false),
-            (false, None, Some(false), false),
-            (false, None, Some(true), true),
-            (true, None, None, true),
-            (true, None, Some(false), false),
-            (true, None, Some(true), true),
-        ] {
-            let project = tempfile::tempdir().unwrap();
-            std::fs::write(project.path().join(manifest), contents).unwrap();
-            std::fs::write(project.path().join("main.py"), "print('hello')\n").unwrap();
-            let plan = Anybuild::new(project.path())
-                .with_config(serde_json::json!({
-                    "python_cross_platform": platform,
-                    "python_fix_wasix_imports": setting,
-                }))
-                .plan(PlanOptions {
-                    runtime_environment: if wasmer {
-                        RuntimeEnvironment::Wasmer(WasmerOptions::default())
-                    } else {
-                        RuntimeEnvironment::Local
-                    },
-                    ..PlanOptions::default()
-                })
-                .unwrap();
-            let steps = &plan.serve.build;
-            let copies = steps
-                .iter()
-                .filter(|step| {
-                    matches!(step, Step::Copy(copy)
-                    if copy.target.contains("/anybuild-python/"))
-                })
-                .count();
-            assert_eq!(copies, usize::from(needs_importer));
-            assert_eq!(
-                steps.iter().any(|step| {
-                    matches!(step, Step::Copy(copy)
-                    if copy.source == "python/sitecustomize.py"
-                        && copy.target.ends_with("/anybuild-python/sitecustomize.py"))
-                }),
-                needs_importer
-            );
-            let pythonpath = &plan.serve.env.as_ref().unwrap()["PYTHONPATH"];
-            assert_eq!(
-                pythonpath
-                    .split(':')
-                    .next()
-                    .unwrap()
-                    .ends_with("/anybuild-python"),
-                needs_importer
-            );
-            for step in steps {
-                if let Step::Run(run) = step {
-                    assert!(
-                        !run.command.contains("--constraint"),
-                        "{manifest}, {wasmer}, {setting:?}: {}",
-                        run.command
-                    );
-                }
-            }
-        }
-    }
-}
-
-#[test]
-fn python_importer_respects_file_setting_and_environment_override() {
-    let project = tempfile::tempdir().unwrap();
-    std::fs::write(project.path().join("main.py"), "print('hello')\n").unwrap();
-    let generated = Anybuild::new(project.path())
-        .generate(GenerateOptions::default())
-        .unwrap();
-    std::fs::write(
-        generated.path,
-        generated.content.replace(
-            "schema = 1,",
-            "schema = 1,\n    python_fix_wasix_imports = False,",
-        ),
-    )
-    .unwrap();
-    for (environment, enabled) in [(None, false), (Some("false"), false), (Some("true"), true)] {
-        let mut builder = Anybuild::new(project.path()).inherit_process_env(false);
-        if let Some(value) = environment {
-            builder = builder.with_env("ANYBUILD_PYTHON_FIX_WASIX_IMPORTS", value);
-        }
-        let plan = builder
-            .plan(PlanOptions {
-                runtime_environment: RuntimeEnvironment::Wasmer(WasmerOptions::default()),
-                ..PlanOptions::default()
-            })
-            .unwrap();
-        assert_eq!(plan.config["python_fix_wasix_imports"], enabled);
-        assert_eq!(
-            plan.serve.build.iter().any(|step| {
-                matches!(step, Step::Copy(copy) if copy.source == "python/sitecustomize.py")
-            }),
-            enabled
-        );
-    }
 }
 
 #[test]
