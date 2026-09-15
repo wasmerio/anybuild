@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.5](https://github.com/wasmerio/anybuild/compare/v0.28.4...v0.28.5) (2026-09-15)
+
+
+### Bug Fixes
+
+* **python:** improve WASIX packaging, MCP support, and source staging ([#115](https://github.com/wasmerio/anybuild/issues/115)) ([46b93f3](https://github.com/wasmerio/anybuild/commit/46b93f3e8d220a1c37aa2087ca51eca756cdc690))
+
 ## [0.28.4](https://github.com/wasmerio/anybuild/compare/v0.28.3...v0.28.4) (2026-09-08)
 
 
