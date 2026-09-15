@@ -209,6 +209,7 @@ pub fn load_config(
         .package_manager
         .unwrap_or_else(|| node::detect_package_manager(path));
     config.package_manager = Some(package_manager);
+    node::resolve_manager_version(&mut config, package_manager, path);
 
     let package_json = node::parse_package_json(path);
     let found_deps =
@@ -765,8 +766,7 @@ impl Provider for NodeStaticConfig {
         workspace::apply_node_workspace_config(
             workspace_root,
             self.base.app_subdir.as_deref(),
-            &mut self.node.build.package_manager,
-            &mut self.node.build.build_command,
+            &mut self.node.build,
             &mut self.base.commands,
         );
     }
