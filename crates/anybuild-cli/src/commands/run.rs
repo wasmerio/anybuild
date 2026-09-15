@@ -4,7 +4,6 @@ use anyhow::Result;
 use crate::args::{ExecutionTargetArgs, ProjectArgs, RunSelectionArgs};
 use crate::commands::{client, execution};
 use crate::context::EnvironmentOptions;
-use crate::SharedProjectArgs;
 
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct RunArgs {
@@ -35,11 +34,7 @@ pub struct RunArgs {
 pub fn run(args: RunArgs) -> Result<()> {
     let start = args.selection.effective_start();
     let after_deploy = args.selection.effective_after_deploy();
-    let shared = SharedProjectArgs {
-        path: args.project.path,
-        subdir: args.project.subdir,
-        ..Default::default()
-    };
+    let shared = args.project.shared();
     let (build_environment, runtime_environment) = execution(
         args.targets,
         EnvironmentOptions {
