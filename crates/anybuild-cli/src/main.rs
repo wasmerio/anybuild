@@ -49,6 +49,9 @@ struct SharedProjectArgs {
     /// The JSON content to use as input.
     #[arg(long)]
     config: Option<String>,
+    /// Set a build variable, repeatable (`--env NAME` or `--env NAME=VALUE`).
+    #[arg(long = "env", value_name = "NAME[=VALUE]", value_parser = args::parse_env_arg)]
+    env: Vec<(String, Option<String>)>,
 }
 
 #[derive(Subcommand)]

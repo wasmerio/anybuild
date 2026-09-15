@@ -450,6 +450,9 @@ impl BuildBackend for LocalBuildBackend {
         &mut self,
         _name: &str,
         env: &IndexMap<String, String>,
+        // Already merged into `env` by `Anybuild::effective_env`, and this
+        // backend runs on the caller's own machine.
+        _build_env: &IndexMap<String, String>,
         mounts: &[Mount],
         steps: &[Step],
     ) -> Result<()> {
@@ -584,7 +587,9 @@ mod tests {
                         Some(state),
                         OperationContext::for_test(),
                     );
-                    backend.build("app", &IndexMap::new(), &[], &steps).unwrap();
+                    backend
+                        .build("app", &IndexMap::new(), &IndexMap::new(), &[], &steps)
+                        .unwrap();
                     let artifact = backend.get_mount_path("app");
                     assert!(
                         artifact.join("main.py").is_file(),

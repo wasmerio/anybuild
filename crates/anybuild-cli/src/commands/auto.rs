@@ -63,13 +63,12 @@ pub fn run(args: AutoArgs) -> Result<()> {
     let mut execution_targets = args.build.targets.clone();
     apply_platform_targets(&mut execution_targets, platform);
     let shared = SharedProjectArgs {
-        path: args.build.project.path.clone(),
-        subdir: args.build.project.subdir.clone(),
         install_command: args.build.install_command.clone(),
         build_command: args.build.build_command.clone(),
         start_command: args.build.start_command.clone(),
         provider: args.build.provider.clone(),
         config: args.build.config.clone(),
+        ..args.build.project.shared()
     };
     let (build_environment, runtime_environment) = execution(
         execution_targets,

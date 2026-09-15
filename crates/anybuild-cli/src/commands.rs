@@ -49,6 +49,19 @@ pub(crate) fn client_with_render_options(
     if let Some(subdir) = &shared.subdir {
         client = client.with_subdir(subdir);
     }
+    for (name, value) in &shared.env {
+        // `--env NAME` names a variable to take from our own environment,
+        // which keeps a secret out of the command line that carried the name.
+        let value = match value {
+            Some(value) => value.clone(),
+            None => std::env::var(name).with_context(|| {
+                format!(
+                    "--env {name}: not set in this process's environment; pass --env {name}=VALUE to give it inline"
+                )
+            })?,
+        };
+        client = client.with_env(name, value);
+    }
     Ok(client)
 }
 
