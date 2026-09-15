@@ -356,6 +356,126 @@ fn nitro_projects_build_and_start_with_the_node_server_preset() {
     }));
 }
 
+/// A monorepo declares its toolchain once, in the root package.json. The subdir
+/// app declares nothing, so the root is the only place its version can come
+/// from — including when the root does not change which manager it uses.
+#[test]
+fn subdir_app_takes_the_version_the_workspace_root_declares() {
+    let project = workspace_with_subdir_app("npm@11.6.2");
+
+    let plan = Anybuild::new(project.path())
+        .with_subdir("apps/site")
+        .plan(PlanOptions::default())
+        .unwrap();
+
+    assert_eq!(manager_dependency(&plan.serve.build, "npm"), Some("11.6.2"));
+}
+
+/// An override is an override even when it happens to read like our default.
+/// The workspace root declares a different version and must not win over it.
+#[test]
+fn subdir_app_keeps_an_override_that_matches_our_default() {
+    let project = workspace_with_subdir_app("pnpm@9.15.9");
+
+    let plan = Anybuild::new(project.path())
+        .with_subdir("apps/site")
+        .with_env("ANYBUILD_PNPM_VERSION", "10")
+        .plan(PlanOptions::default())
+        .unwrap();
+
+    assert_eq!(manager_dependency(&plan.serve.build, "pnpm"), Some("10"));
+}
+
+/// A workspace root declaring `declaration` (`"npm@11.6.2"`), and a subdir app
+/// with neither a lockfile nor a declaration of its own.
+fn workspace_with_subdir_app(declaration: &str) -> tempfile::TempDir {
+    let project = tempfile::tempdir().unwrap();
+    let app = project.path().join("apps/site");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        project.path().join("package.json"),
+        format!(r#"{{"private": true, "packageManager": "{declaration}"}}"#),
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("package.json"),
+        r#"{
+  "name": "site",
+  "private": true,
+  "scripts": {"build": "vite build", "start": "node server.js"},
+  "dependencies": {"express": "5.1.0"}
+}"#,
+    )
+    .unwrap();
+    project
+}
+
+fn manager_dependency<'a>(steps: &'a [Step], name: &str) -> Option<&'a str> {
+    steps.iter().find_map(|step| match step {
+        Step::Use(use_step) => use_step
+            .dependencies
+            .iter()
+            .find(|dep| dep.name == name)
+            .map(|dep| dep.version.as_deref().unwrap_or("<unpinned>")),
+        _ => None,
+    })
+}
+
+/// A pnpm Next.js build shells out to `pnpm dlx next-bundle`, whose tree
+/// contains esbuild. pnpm skips esbuild's build script, and pnpm 12 turned that
+/// skip into a failed install, so the setting has to be in scope by the time
+/// the build step runs — dlx does not honour dangerously_allow_all_builds.
+#[test]
+fn pnpm_next_build_survives_a_skipped_dependency_build_script() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project.path().join("package.json"),
+        r#"{
+  "name": "next-site",
+  "private": true,
+  "scripts": {"build": "next build", "start": "next start"},
+  "dependencies": {"next": "16.1.7", "react": "19.2.3", "react-dom": "19.2.3"}
+}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        project.path().join("pnpm-lock.yaml"),
+        "lockfileVersion: '9.0'\n",
+    )
+    .unwrap();
+
+    let sdk = Anybuild::new(project.path());
+    sdk.generate(GenerateOptions::default()).unwrap();
+    let plan = sdk.plan(PlanOptions::default()).unwrap();
+    let steps = &plan.serve.build;
+
+    let strict_index = steps
+        .iter()
+        .position(|step| {
+            matches!(
+                step,
+                Step::Env(env)
+                    if env.variables.get("pnpm_config_strict_dep_builds")
+                        .is_some_and(|value| value == "false")
+            )
+        })
+        .expect("pnpm build-script setting");
+    let bundle_index = steps
+        .iter()
+        .position(
+            |step| matches!(step, Step::Run(run) if run.command.contains("pnpm dlx next-bundle")),
+        )
+        .expect("next-bundle step");
+    assert!(strict_index < bundle_index);
+
+    // An unpinned pnpm is how pnpm 12 arrived in the first place.
+    assert!(steps.iter().any(|step| {
+        matches!(step, Step::Use(use_step) if use_step.dependencies.iter().any(|dep| {
+            dep.name == "pnpm" && dep.version.as_deref() == Some("10")
+        }))
+    }));
+}
+
 #[test]
 fn pnpm_next_subdir_deploys_from_the_app_and_preserves_the_bundle() {
     let project = tempfile::tempdir().unwrap();

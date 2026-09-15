@@ -3,7 +3,10 @@
 use std::path::Path;
 
 use crate::providers::base::CustomCommands;
-use crate::providers::node::{detect_package_manager, PackageManager};
+use crate::providers::node::{
+    detect_package_manager, resolve_workspace_manager_version, NodeBuildConfigFields,
+    PackageManager,
+};
 use crate::providers::ProviderConfig;
 
 /// Port of `apply_subdir_provider_config`: every provider config has
@@ -18,8 +21,7 @@ pub fn apply_subdir_provider_config(config: &mut ProviderConfig, subdir: Option<
 pub(crate) fn apply_node_workspace_config(
     workspace_root: &Path,
     subdir: Option<&str>,
-    package_manager: &mut Option<PackageManager>,
-    build_command: &mut Option<String>,
+    build: &mut NodeBuildConfigFields,
     commands: &mut CustomCommands,
 ) {
     let Some(subdir) = subdir.filter(|subdir| !subdir.is_empty()) else {
@@ -38,17 +40,20 @@ pub(crate) fn apply_node_workspace_config(
     }
 
     let workspace_manager = detect_package_manager(workspace_root);
-    let current_manager = *package_manager;
+    let current_manager = build.package_manager;
+    // The root declares the toolchain for the whole workspace, so it gets a say
+    // on the version even when it does not change the manager itself.
+    resolve_workspace_manager_version(build, workspace_manager, current_manager, workspace_root);
     if current_manager == Some(workspace_manager) {
         return;
     }
 
-    *package_manager = Some(workspace_manager);
+    build.package_manager = Some(workspace_manager);
     // load_config always sets package_manager; a None here would raise in
     // Python's _rewrite_package_manager_command for non-empty commands.
     if let Some(current_manager) = current_manager {
-        *build_command = rewrite_package_manager_command(
-            build_command.take(),
+        build.build_command = rewrite_package_manager_command(
+            build.build_command.take(),
             current_manager,
             workspace_manager,
         );

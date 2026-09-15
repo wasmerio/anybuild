@@ -123,6 +123,11 @@ def node_install_steps(config):
         if config.app_subdir:
             pnpm_env["pnpm_config_inject_workspace_packages"] = "true"
         pnpm_env["pnpm_config_dangerously_allow_all_builds"] = "true"
+
+        # A dependency whose build script we skipped is a warning, not a build
+        # failure. pnpm 12 made it fatal by default, which broke every Next.js
+        # build: `pnpm dlx next-bundle` pulls esbuild, and dlx does not honour
+        # dangerously_allow_all_builds above.
         steps.append(env(**pnpm_env))
     elif manager == "npm":
         steps.append(env(CI = "true", NPM_CONFIG_FUND = "false"))

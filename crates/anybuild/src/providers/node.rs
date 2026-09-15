@@ -594,6 +594,7 @@ pub(crate) fn load_build_config(
         .package_manager
         .unwrap_or_else(|| detect_package_manager(path));
     config.package_manager = Some(package_manager);
+    resolve_manager_version(&mut config, package_manager, path);
 
     let package_json = parse_package_json(path);
     let install_context = discover_js_install_context(path);
@@ -960,8 +961,7 @@ impl Provider for NodeConfig {
         workspace::apply_node_workspace_config(
             workspace_root,
             self.base.app_subdir.as_deref(),
-            &mut self.node.build.package_manager,
-            &mut self.node.build.build_command,
+            &mut self.node.build,
             &mut self.base.commands,
         );
     }
@@ -1081,6 +1081,81 @@ fn looks_like_node_entry(entry_path: &Path) -> bool {
     NODE_MODULE_REF_PATTERNS
         .iter()
         .any(|pattern| pattern.is_match(&source))
+}
+
+fn default_manager_version(manager: PackageManager) -> Option<&'static str> {
+    match manager {
+        // What Node 24 bundles. npm's own latest is already a major ahead.
+        PackageManager::Npm => Some("11"),
+        PackageManager::Pnpm => Some("10"),
+        PackageManager::Bun => Some("1"),
+        PackageManager::Yarn => None,
+    }
+}
+
+/// The version out of `"pnpm@10.4.1+sha512.<hash>"`, when the app declares one
+/// for `manager`. Corepack's `+<hash>` suffix is dropped.
+fn declared_manager_version(path: &Path, manager: PackageManager) -> Option<String> {
+    let package_json = parse_package_json(path)?;
+    let field = package_json.get("packageManager")?.as_str()?;
+    let (name, version) = field.split_once('@')?;
+    if PackageManager::from_name(&name.to_lowercase()) != Some(manager) {
+        return None;
+    }
+    let version = version.split('+').next().unwrap_or(version).trim();
+    (!version.is_empty()).then(|| version.to_owned())
+}
+
+/// Decide which version of `manager` the build installs.
+///
+/// Precedence: an explicit `ANYBUILD_<MANAGER>_VERSION` (already on the config)
+/// wins, then the app's `packageManager` declaration, then our pinned default.
+pub(crate) fn resolve_manager_version(
+    config: &mut NodeBuildConfigFields,
+    manager: PackageManager,
+    path: &Path,
+) {
+    // Yarn keeps floating; see default_manager_version.
+    if manager == PackageManager::Yarn {
+        return;
+    }
+    let version = declared_manager_version(path, manager)
+        .or_else(|| default_manager_version(manager).map(str::to_owned));
+    let slot = version_slot(config, manager);
+    if slot.is_none() {
+        *slot = version;
+    }
+}
+
+pub(crate) fn resolve_workspace_manager_version(
+    config: &mut NodeBuildConfigFields,
+    manager: PackageManager,
+    previous: Option<PackageManager>,
+    workspace_root: &Path,
+) {
+    let mut clear_if_defaulted = |manager| {
+        let slot = version_slot(config, manager);
+        if slot.as_deref() == default_manager_version(manager) {
+            *slot = None;
+        }
+    };
+    if let Some(previous) = previous.filter(|previous| *previous != manager) {
+        clear_if_defaulted(previous);
+    }
+    clear_if_defaulted(manager);
+    resolve_manager_version(config, manager, workspace_root);
+}
+
+fn version_slot(
+    config: &mut NodeBuildConfigFields,
+    manager: PackageManager,
+) -> &mut Option<String> {
+    match manager {
+        PackageManager::Npm => &mut config.npm_version,
+        PackageManager::Pnpm => &mut config.pnpm_version,
+        PackageManager::Yarn => &mut config.yarn_version,
+        PackageManager::Bun => &mut config.bun_version,
+    }
 }
 
 pub fn detect_package_manager(path: &Path) -> PackageManager {
@@ -1652,6 +1727,7 @@ pub fn load_config(
         .package_manager
         .unwrap_or_else(|| detect_package_manager(path));
     config.package_manager = Some(package_manager);
+    resolve_manager_version(&mut config, package_manager, path);
 
     let package_json = parse_package_json(path);
     let install_context = discover_js_install_context(path);
@@ -2126,6 +2202,94 @@ mod tests {
                 "{lockfile}"
             );
         }
+    }
+
+    #[test]
+    fn test_package_manager_version_is_pinned_by_default() {
+        for (lockfile, manager, version) in [
+            ("package-lock.json", PackageManager::Npm, "11"),
+            ("pnpm-lock.yaml", PackageManager::Pnpm, "10"),
+            ("bun.lock", PackageManager::Bun, "1"),
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            write(&tmp.path().join("package.json"), "{}\n");
+            write(&tmp.path().join(lockfile), "\n");
+
+            let config = load_config(tmp.path(), BaseConfig::default());
+
+            assert_eq!(config.package_manager, Some(manager), "{lockfile}");
+            let pinned = match manager {
+                PackageManager::Npm => &config.npm_version,
+                PackageManager::Pnpm => &config.pnpm_version,
+                PackageManager::Bun => &config.bun_version,
+                PackageManager::Yarn => unreachable!(),
+            };
+            assert_eq!(pinned.as_deref(), Some(version), "{lockfile}");
+        }
+    }
+
+    #[test]
+    fn test_yarn_version_is_left_floating() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"packageManager\": \"yarn@1.22.22\"\n}\n",
+        );
+        write(&tmp.path().join("yarn.lock"), "\n");
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.package_manager, Some(PackageManager::Yarn));
+        // Pinning yarn would decide between four mise backends that disagree,
+        // and a yarn 1 pin cannot run the Berry-only commands the preset emits.
+        assert_eq!(config.yarn_version, None);
+    }
+
+    #[test]
+    fn test_declared_package_manager_version_wins_over_default() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"packageManager\": \"pnpm@9.15.9+sha512.deadbeef\"\n}\n",
+        );
+
+        let config = load_config(tmp.path(), BaseConfig::default());
+
+        assert_eq!(config.package_manager, Some(PackageManager::Pnpm));
+        assert_eq!(config.pnpm_version.as_deref(), Some("9.15.9"));
+        assert_eq!(config.npm_version, None);
+    }
+
+    /// A subdir app is detected before the workspace root has had its say, so
+    /// resolution runs twice against two different managers. Only a version we
+    /// put there ourselves is ours to take back.
+    #[test]
+    fn test_workspace_resolution_keeps_a_version_it_did_not_infer() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            &tmp.path().join("package.json"),
+            "{\n  \"packageManager\": \"pnpm@10.9.2\"\n}\n",
+        );
+        let mut config = NodeBuildConfigFields {
+            pnpm_version: Some("9.15.9".to_owned()),
+            ..NodeBuildConfigFields::default()
+        };
+
+        // The app directory looked like npm on its own.
+        resolve_manager_version(&mut config, PackageManager::Npm, tmp.path());
+        assert_eq!(config.npm_version.as_deref(), Some("11"));
+        assert_eq!(config.pnpm_version.as_deref(), Some("9.15.9"));
+
+        // The workspace root says pnpm, and declares a version we ignore
+        // because this config already carries one we did not infer.
+        resolve_workspace_manager_version(
+            &mut config,
+            PackageManager::Pnpm,
+            Some(PackageManager::Npm),
+            tmp.path(),
+        );
+        assert_eq!(config.pnpm_version.as_deref(), Some("9.15.9"));
+        assert_eq!(config.npm_version, None, "default for an unused manager");
     }
 
     #[test]

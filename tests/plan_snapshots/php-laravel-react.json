@@ -15,7 +15,8 @@
      "version": "24"
     },
     {
-     "name": "npm"
+     "name": "npm",
+     "version": "11"
     }
    ]
   },
