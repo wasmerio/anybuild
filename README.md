@@ -218,6 +218,16 @@ See [docs/anybuild-files.md](docs/anybuild-files.md) for the full format
 reference: builtins, `file_exists()`, load labels, the serve override
 surface, and composition examples.
 
+Python MCP examples cover both SDK generations:
+
+- SDK 2: [MCPServer quickstart](examples/python-mcp) and
+  [ChatGPT search/fetch](examples/python-mcp-chatgpt), using Streamable HTTP.
+- SDK 1: [FastMCP quickstart](examples/python-mcp-v1) and
+  [ChatGPT search/fetch over SSE](examples/python-mcp-chatgpt-v1).
+
+See [Python packaging and MCP](docs/python.md) for target dependency
+resolution, source exclusions, and host/port configuration.
+
 ## Supported Technologies
 
 Anybuild detects the following frameworks and tools. The configuration column

@@ -1,6 +1,8 @@
 import json
+import os
 from pathlib import Path
-from mcp.server.fastmcp import FastMCP
+
+from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel
 
 RECORDS = json.loads(Path(__file__).with_name("records.json").read_text())
@@ -26,7 +28,7 @@ class FetchResult(BaseModel):
 
 
 def create_server():
-    mcp = FastMCP(name="Cupcake MCP", instructions="Search cupcake orders")
+    mcp = MCPServer(name="Cupcake MCP", instructions="Search cupcake orders")
 
     @mcp.tool()
     async def search(query: str) -> SearchResultPage:
@@ -80,4 +82,9 @@ def create_server():
 app = create_server()
 
 if __name__ == "__main__":
-    app.run(transport="sse")
+    app.run(
+        transport="streamable-http",
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", "8080")),
+        stateless_http=True,
+    )

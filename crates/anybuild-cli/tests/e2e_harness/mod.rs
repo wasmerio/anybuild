@@ -427,6 +427,33 @@ fn serve_time_checks(
             );
         }
     }
+    if let Some(transport) = case.mcp_transport {
+        let root = workspace_root();
+        let command = vec![
+            "uv".to_owned(),
+            "run".to_owned(),
+            "--no-project".to_owned(),
+            "--with".to_owned(),
+            "mcp>=2.1.1,<3".to_owned(),
+            "--python".to_owned(),
+            "3.13".to_owned(),
+            "python".to_owned(),
+            root.join("scripts/check_mcp.py").display().to_string(),
+            "--url".to_owned(),
+            format!("http://127.0.0.1:{port}"),
+            "--project".to_owned(),
+            project_path.display().to_string(),
+            "--transport".to_owned(),
+            transport.to_owned(),
+        ];
+        let result = run_completed_command(&command, &root, &[], Duration::from_secs(90))?;
+        ensure!(
+            result.returncode == Some(0),
+            "MCP protocol check failed:\n{}\nServer output:\n{}",
+            result.output(),
+            output.lock().unwrap(),
+        );
+    }
     Ok(())
 }
 
@@ -937,6 +964,15 @@ fn materialize_case(case: &Case, repo_root: &Path) -> Result<MaterializedCase> {
             .context("E2E fixture path must have a final component")?;
         let destination = temp.path().join(name);
         copy_fixture_dir(&source, &destination)?;
+        if case.mcp_managed {
+            let main = destination.join("main.py");
+            let text = fs::read_to_string(&main)?;
+            let (definition, _) = text
+                .split_once("if __name__ == \"__main__\":")
+                .context("managed MCP fixture needs a main guard")?;
+            fs::write(main, definition)?;
+            fs::remove_file(destination.join("Anybuild"))?;
+        }
         return Ok(MaterializedCase {
             path: destination,
             _temp: temp,

@@ -27,6 +27,15 @@
   },
   {
    "__type__": "RunStep",
+   "command": "bash -o pipefail -c 'uvx --from '\"'\"'hatch==1.18.0'\"'\"' hatch dep show requirements --project-only | uvx pip install -r /dev/stdin '\"'\"'uvicorn'\"'\"' --target '\"'\"'opt/venv/lib/python3.13/site-packages'\"'\"' --platform '\"'\"'wasix_wasm32'\"'\"' --only-binary=:all: --python-version=3.13 --ignore-installed --index-url=https://pypi.org/simple'",
+   "inputs": [
+    "pyproject.toml",
+    "uv.lock",
+    "README.md"
+   ]
+  },
+  {
+   "__type__": "RunStep",
    "command": "uv sync --locked",
    "group": "install",
    "inputs": [
@@ -43,23 +52,8 @@
   },
   {
    "__type__": "RunStep",
-   "command": "uv add uvicorn",
+   "command": "uv add 'uvicorn'",
    "group": "install"
-  },
-  {
-   "__type__": "RunStep",
-   "command": "uv pip compile pyproject.toml --universal --extra-index-url None --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt",
-   "outputs": [
-    "cross-requirements.txt"
-   ]
-  },
-  {
-   "__type__": "RunStep",
-   "command": "uvx pip install -r cross-requirements.txt uvicorn --target opt/venv/lib/python3.13/site-packages --platform wasix_wasm32 --only-binary=:all: --python-version=3.13 --compile"
-  },
-  {
-   "__type__": "RunStep",
-   "command": "rm cross-requirements.txt"
   },
   {
    "__type__": "PathStep",
@@ -68,9 +62,10 @@
   {
    "__type__": "CopyStep",
    "base": "source",
+   "gitignore": true,
    "ignore": [
-    ".venv",
     ".git",
+    ".venv",
     "__pycache__"
    ],
    "source": ".",

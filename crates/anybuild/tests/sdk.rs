@@ -14,6 +14,120 @@ fn static_project() -> tempfile::TempDir {
 }
 
 #[test]
+fn mcp_plan_exposes_port_and_both_sdk_generation_settings() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(project.path().join("requirements.txt"), "mcp[cli]>=2,<3\n").unwrap();
+    std::fs::write(
+        project.path().join("main.py"),
+        "from mcp.server.mcpserver import MCPServer\napp = MCPServer('demo')\n",
+    )
+    .unwrap();
+    let plan = Anybuild::new(project.path())
+        .plan(PlanOptions {
+            serve_port: Some(34567),
+            ..PlanOptions::default()
+        })
+        .unwrap();
+    let env = plan.serve.env.unwrap();
+    assert_eq!(env["HOST"], "0.0.0.0");
+    assert_eq!(env["PORT"], "34567");
+    assert_eq!(env["FASTMCP_HOST"], "0.0.0.0");
+    assert_eq!(env["FASTMCP_PORT"], "34567");
+    assert_eq!(
+        plan.serve.commands["start"],
+        "python -m anybuild_mcp main.py"
+    );
+    assert!(plan
+        .serve
+        .build
+        .iter()
+        .any(|step| { matches!(step, Step::Copy(copy) if copy.source == "python/run-mcp.py") }));
+}
+
+#[test]
+#[cfg(unix)]
+fn python_target_pipeline_preserves_requirements_and_propagates_export_failure() {
+    let project = tempfile::tempdir().unwrap();
+    let dependency = "parent[binary,pool]>=1; python_version >= '3.10'";
+    let constraint = "parent<2; python_version >= '3.10'";
+    let extra = "server>=1; python_version >= '3.10'";
+    std::fs::write(
+        project.path().join("pyproject.toml"),
+        format!(
+            "[project]\nname = 'demo'\nversion = '1.0'\ndependencies = {}\n\
+             [tool.uv]\nconstraint-dependencies = {}\n",
+            serde_json::json!([dependency]),
+            serde_json::json!([constraint]),
+        ),
+    )
+    .unwrap();
+    std::fs::write(project.path().join("main.py"), "print('hello')\n").unwrap();
+    let plan = Anybuild::new(project.path())
+        .with_config(serde_json::json!({
+            "python_cross_platform": "wasix_wasm32",
+            "python_extra_dependencies": [extra],
+        }))
+        .plan(PlanOptions::default())
+        .unwrap();
+    let command = plan
+        .serve
+        .build
+        .iter()
+        .find_map(|step| match step {
+            Step::Run(run) if run.command.contains("uvx pip install ") => Some(&run.command),
+            _ => None,
+        })
+        .unwrap();
+    let commands: Vec<_> = plan
+        .serve
+        .build
+        .iter()
+        .filter_map(|step| match step {
+            Step::Run(run) => Some(run.command.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        commands.iter().position(|run| *run == command).unwrap()
+            < commands
+                .iter()
+                .position(|run| run.starts_with("uv add "))
+                .unwrap()
+    );
+    // Exercise the generated shell pipeline without downloading build tools.
+    // The pip stand-in accepts empty input, so only pipefail catches an error.
+    let script = format!(
+        r#"
+uvx() {{
+    if [ "$1" = "--from" ]; then
+        printf '%s\n' "$EXPORTED_REQUIREMENT"
+        return "$EXPORT_STATUS"
+    fi
+    printf '%s\n' "$@"
+    cat
+}}
+export -f uvx
+{command}
+"#
+    );
+    for export_status in [0, 23] {
+        let output = std::process::Command::new("bash")
+            .arg("-c")
+            .arg(&script)
+            .env("EXPORTED_REQUIREMENT", dependency)
+            .env("EXPORT_STATUS", export_status.to_string())
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(export_status));
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let args: Vec<_> = stdout.lines().collect();
+        assert_eq!(&args[..5], &["pip", "install", "-r", "/dev/stdin", extra]);
+        assert_eq!(args.last(), Some(&dependency));
+        assert!(!args.contains(&"--constraint"));
+    }
+}
+
+#[test]
 fn generate_and_plan_return_structured_data() {
     let project = static_project();
     let events = Arc::new(Mutex::new(Vec::new()));

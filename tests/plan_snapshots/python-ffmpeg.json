@@ -34,7 +34,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "uv add -r requirements.txt uvicorn",
+   "command": "uv add -r requirements.txt 'uvicorn'",
    "group": "install",
    "inputs": [
     "requirements.txt"
@@ -47,9 +47,10 @@
   {
    "__type__": "CopyStep",
    "base": "source",
+   "gitignore": true,
    "ignore": [
-    ".venv",
     ".git",
+    ".venv",
     "__pycache__"
    ],
    "source": ".",

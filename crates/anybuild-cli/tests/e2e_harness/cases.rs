@@ -153,6 +153,8 @@ pub struct Case {
     pub expected_memory_limit: Option<&'static str>,
     pub expect_no_memory_limit: bool,
     pub build_modes: Option<&'static [BuildMode]>,
+    pub mcp_transport: Option<&'static str>,
+    pub mcp_managed: bool,
 }
 
 impl Case {
@@ -200,6 +202,8 @@ const BASE: Case = Case {
     expected_memory_limit: None,
     expect_no_memory_limit: false,
     build_modes: None,
+    mcp_transport: None,
+    mcp_managed: false,
 };
 
 const PHPIX_LISTENING: &str = r"listening addr";
@@ -952,6 +956,65 @@ pub static CASES: &[Case] = &[
         serve_pattern: SWS_LISTENING,
         http: &[body("/", r"Storybook Example")],
         build_modes: Some(WASMER_ONLY),
+        ..BASE
+    },
+    // Retain v1 (including SSE) alongside v2 Streamable HTTP examples.
+    Case {
+        test_id: "python_mcp_v1",
+        suite: Suite::Python,
+        path: Some("examples/python-mcp-v1"),
+        serve_pattern: UVICORN,
+        mcp_transport: Some("streamable-http"),
+        build_modes: Some(PYTHON_MODES),
+        ..BASE
+    },
+    Case {
+        test_id: "python_mcp",
+        suite: Suite::Python,
+        path: Some("examples/python-mcp"),
+        serve_pattern: UVICORN,
+        mcp_transport: Some("streamable-http"),
+        build_modes: Some(PYTHON_MODES),
+        ..BASE
+    },
+    Case {
+        test_id: "python_mcp_chatgpt_v1",
+        suite: Suite::Python,
+        path: Some("examples/python-mcp-chatgpt-v1"),
+        serve_pattern: UVICORN,
+        mcp_transport: Some("sse"),
+        build_modes: Some(PYTHON_MODES),
+        ..BASE
+    },
+    Case {
+        test_id: "python_mcp_chatgpt",
+        suite: Suite::Python,
+        path: Some("examples/python-mcp-chatgpt"),
+        serve_pattern: UVICORN,
+        mcp_transport: Some("streamable-http"),
+        build_modes: Some(PYTHON_MODES),
+        ..BASE
+    },
+    Case {
+        test_id: "python_mcp_v1_managed",
+        name: Some("python_mcp_v1_managed"),
+        suite: Suite::Python,
+        path: Some("examples/python-mcp-v1"),
+        serve_pattern: UVICORN,
+        mcp_transport: Some("streamable-http"),
+        mcp_managed: true,
+        build_modes: Some(&[BuildMode::Local, BuildMode::Wasmer]),
+        ..BASE
+    },
+    Case {
+        test_id: "python_mcp_managed",
+        name: Some("python_mcp_managed"),
+        suite: Suite::Python,
+        path: Some("examples/python-mcp"),
+        serve_pattern: UVICORN,
+        mcp_transport: Some("streamable-http"),
+        mcp_managed: true,
+        build_modes: Some(&[BuildMode::Local, BuildMode::Wasmer]),
         ..BASE
     },
     // Python FastAPI app on Uvicorn

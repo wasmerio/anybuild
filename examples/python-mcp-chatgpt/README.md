@@ -1,26 +1,16 @@
-# Cupcake MCP for Deep Research
+# MCP SDK 2: MCPServer
 
-This is a minimal example of a Deep Research style MCP server for searching and fetching cupcake orders.
+This server exposes `search` and `fetch` tools for cupcake orders stored in
+`records.json`. Keep that file beside `main.py` when copying the example.
 
-## Set up & run
+This example uses MCP SDK 2.x and serves Streamable HTTP at `/mcp`.
+It listens on `HOST` (default `0.0.0.0`) and `PORT` (default `8080`).
 
-Python setup:
-
-```shell
-python -m venv env
-source env/bin/activate
-pip install -r requirements.txt
+```sh
+anybuild . --start
+anybuild . --runner=wasmer --start
 ```
 
-Run the server:
-
-```shell
-python sample_mcp.py
-```
-
-The server will start on `http://127.0.0.1:8000` using SSE transport.
-
-## Files
-
-- `sample_mcp.py`: Main server code
-- `records.json`: Cupcake order data (must be present in the same directory)
+The `-v1` examples retain the original FastMCP API, including the ChatGPT
+example's SSE transport. The examples without that suffix use MCPServer
+and stateless Streamable HTTP with SDK 2.x. Both versions remain supported.

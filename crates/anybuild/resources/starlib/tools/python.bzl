@@ -26,23 +26,30 @@ def python_runtime_deps(toolchain):
     """Packages the serve environment needs."""
     return [toolchain.python]
 
+def _quote(value):
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+def _copy_source(config):
+    return copy(".", ".", ignore = [".git", ".venv", "__pycache__"], gitignore = config.python_copy_gitignore)
+
 def _stage_steps(config, source):
     """Enter the build context (and the app subdirectory when present)."""
     if not config.app_subdir:
         return [workdir(source.path)]
     return [
         workdir(source.path),
-        copy(".", ".", ignore = [".git", ".venv", "__pycache__"]),
+        _copy_source(config),
         workdir("{}/{}".format(source.path, config.app_subdir)),
     ]
 
-def _install_steps(config, venv, local_venv):
+def _install_steps(config, venv, local_venv, serving):
     python_version = config.python_version
     cross = config.python_cross_platform
-    extra = ", ".join(config.python_extra_dependencies)
+    extra = " ".join([_quote(dep) for dep in config.python_extra_dependencies])
     all_files = config.python_install_requires_all_files
     in_subdir = config.app_subdir != None
     inputs = None if (in_subdir or all_files) else config.python_install_inputs
+    cross_steps = _cross_wheel_steps(config, venv) if serving else []
 
     steps = []
     if file_exists("pyproject.toml"):
@@ -53,7 +60,11 @@ def _install_steps(config, venv, local_venv):
                 UV_PYTHON_PREFERENCE = "only-system",
                 UV_PYTHON = f"python{python_version}",
             ),
-            copy(".", ".") if all_files and not in_subdir else None,
+            _copy_source(config) if all_files and not in_subdir else None,
+        ]
+        # Export the original manifest before uv add can tighten its bounds.
+        steps += cross_steps
+        steps += [
             run("uv sync" + lock, inputs = inputs, group = "install"),
             copy("pyproject.toml") if not in_subdir and not all_files else None,
             run("uv add {}".format(extra), group = "install") if extra else None,
@@ -62,43 +73,42 @@ def _install_steps(config, venv, local_venv):
         steps += [
             env(UV_PROJECT_ENVIRONMENT = local_venv.path if cross else venv.path),
             run("uv init", inputs = [], outputs = ["uv.lock"], group = "install"),
-            copy(".", ".", ignore = [".venv", ".git", "__pycache__"]) if all_files and not in_subdir else None,
+            _copy_source(config) if all_files and not in_subdir else None,
         ]
+        steps += cross_steps
         if file_exists("requirements.txt"):
             steps.append(run("uv add -r requirements.txt {}".format(extra), inputs = inputs, group = "install"))
         else:
             steps.append(run("uv add {}".format(extra), group = "install"))
     return steps
 
-def _cross_wheel_steps(config, venv, local_venv):
-    """Cross-install site-packages for the serve platform (cross_platform only)."""
+def _cross_wheel_steps(config, venv):
+    """Resolve the entire dependency graph against target wheel availability."""
     cross = config.python_cross_platform
     if not cross:
         return []
     python_version = config.python_version
-    extra = ", ".join(config.python_extra_dependencies)
-    index = config.python_extra_index_url
-    all_files = config.python_install_requires_all_files
-    in_subdir = config.app_subdir != None
+    extra = " ".join([_quote(dep) for dep in config.python_extra_dependencies])
     cross_packages = "{}/lib/python{}/site-packages".format(venv.path, python_version)
-
-    if file_exists("pyproject.toml"):
-        compile_step = run(
-            "uv pip compile pyproject.toml --universal --extra-index-url {} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt".format(index),
-            outputs = ["cross-requirements.txt"],
-        )
-    else:
-        inputs = None if (in_subdir or all_files) else config.python_install_inputs
-        compile_step = run(
-            "uv pip compile requirements.txt --python-version={} --universal --extra-index-url {} --index-url=https://pypi.org/simple --emit-index-url --no-deps -o cross-requirements.txt".format(python_version, index),
-            inputs = inputs,
-            outputs = ["cross-requirements.txt"],
-        )
-    return [
-        compile_step,
-        run("uvx pip install -r cross-requirements.txt {} --target {} --platform {} --only-binary=:all: --python-version={} --compile".format(extra, cross_packages, cross, python_version)),
-        run("rm cross-requirements.txt"),
-    ]
+    requirements = ""
+    pyproject = file_exists("pyproject.toml")
+    inputs = None if (config.app_subdir or config.python_install_requires_all_files) else config.python_install_inputs
+    if pyproject:
+        requirements = "-r /dev/stdin"
+    elif file_exists("requirements.txt"):
+        requirements = "-r requirements.txt"
+    elif not extra:
+        return []
+    index = " --extra-index-url " + _quote(config.python_extra_index_url) if config.python_extra_index_url else ""
+    command = "uvx pip install {} {} --target {} --platform {} --only-binary=:all: --python-version={} --ignore-installed --index-url=https://pypi.org/simple{}".format(
+        requirements, extra, _quote(cross_packages), _quote(cross),
+        python_version, index,
+    )
+    if pyproject:
+        pipeline = "uvx --from 'hatch==1.18.0' hatch dep show requirements --project-only | " + command
+        # An exporter failure must fail the build, even if pip accepts empty input.
+        command = "bash -o pipefail -c " + _quote(pipeline)
+    return [run(command, inputs = inputs)]
 
 def python_build(
         config,
@@ -127,20 +137,16 @@ def python_build(
 
     steps = [use(tc.python, tc.uv)]
     steps += _stage_steps(config, source)
-    steps += _install_steps(config, venv, local_venv)
-    # Cross wheels only make sense when an install branch ran (pyproject,
-    # requirements, or extra deps) — a bare script app has nothing to compile.
-    has_install = file_exists("pyproject.toml") or file_exists("requirements.txt") or len(config.python_extra_dependencies) > 0
-    if serving and has_install:
-        steps += _cross_wheel_steps(config, venv, local_venv)
+    steps += _install_steps(config, venv, local_venv, serving)
     steps += [
         path((local_venv.path if cross else venv.path) + "/bin"),
-        copy(".", ".", ignore = [".venv", ".git", "__pycache__"]) if not in_subdir and not config.python_install_requires_all_files else None,
+        _copy_source(config) if not in_subdir and not config.python_install_requires_all_files else None,
     ]
-    if config.python_framework == "mcp":
+    if config.python_framework == "mcp" and not config.python_mcp_self_running:
+        site_packages = "{}/lib/python{}/site-packages".format(venv.path, config.python_version)
         steps += [
-            run("mkdir -p {}/bin".format(venv.path)) if cross else None,
-            run("cp {}/bin/mcp {}/bin/mcp".format(local_venv.path, venv.path)) if cross else None,
+            run("mkdir -p " + _quote(site_packages)),
+            copy("python/run-mcp.py", site_packages + "/anybuild_mcp.py", base = "assets"),
         ]
     if config.python_framework == "django":
         steps.append(run("python manage.py collectstatic --noinput", group = "build"))
@@ -179,6 +185,8 @@ def python_env(config, app, venv, site_packages):
     if config.python_framework == "streamlit":
         env_vars["STREAMLIT_SERVER_HEADLESS"] = "true"
     elif config.python_framework == "mcp":
+        env_vars["HOST"] = "0.0.0.0"
+        env_vars["PORT"] = str(config.port)
         env_vars["FASTMCP_HOST"] = "0.0.0.0"
         env_vars["FASTMCP_PORT"] = str(config.port)
         if not config.python_mcp_self_running:

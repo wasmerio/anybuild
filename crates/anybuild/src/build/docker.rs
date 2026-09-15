@@ -191,7 +191,12 @@ impl DockerBuildBackend {
 
     /// Port of `build_dockerfile`: write the Dockerfile and run the
     /// selected docker client.
-    fn build_dockerfile(&self, image_name: &str, contents: &str) -> Result<()> {
+    fn build_dockerfile(
+        &self,
+        image_name: &str,
+        contents: &str,
+        contexts: &[(String, PathBuf)],
+    ) -> Result<()> {
         std::fs::write(&self.docker_file_path, contents)?;
         std::fs::write(&self.docker_name_path, image_name)?;
         self.print_dockerfile(contents);
@@ -214,6 +219,10 @@ impl DockerBuildBackend {
             .arg(".")
             .args(&extra_args)
             .current_dir(absolute_path(&self.src_dir));
+        for (name, path) in contexts {
+            cmd.arg("--build-context")
+                .arg(format!("{name}={}", absolute_path(path).display()));
+        }
         let status = self
             .operation
             .command_status(&mut cmd)
@@ -225,6 +234,29 @@ impl DockerBuildBackend {
             status.code()
         );
         Ok(())
+    }
+
+    fn filtered_copy_contexts(&self, steps: &[Step]) -> Result<Vec<(String, PathBuf)>> {
+        let mut contexts = Vec::new();
+        for (index, step) in steps.iter().enumerate() {
+            let Step::Copy(step) = step else {
+                continue;
+            };
+            if !step.gitignore || step.base != "source" || step.is_download() {
+                continue;
+            }
+            let source = self.src_dir.join(&step.source);
+            if !source.is_dir() {
+                continue;
+            }
+            let name = format!("anybuild_copy_{index}");
+            let target = self.docker_path.join("contexts").join(&name);
+            let mut patterns = step.ignore.clone().unwrap_or_default();
+            patterns.extend([".anybuild".to_owned(), "Anybuild".to_owned()]);
+            crate::build::local::copy_tree_with_gitignore(&source, &target, &patterns)?;
+            contexts.push((name, target));
+        }
+        Ok(contexts)
     }
 
     /// The Dockerfile synthesis from `build` (factored out so it is unit
@@ -245,7 +277,7 @@ impl DockerBuildBackend {
             ));
         }
 
-        for step in steps {
+        for (index, step) in steps.iter().enumerate() {
             match step {
                 Step::Workdir(step) => {
                     docker_file_contents.push_str(&format!(
@@ -301,6 +333,12 @@ impl DockerBuildBackend {
                         } else {
                             bail!("Asset {} does not exist", step.source);
                         }
+                    } else if step.gitignore && self.src_dir.join(&step.source).is_dir() {
+                        // Named contexts keep Git's nested/negated rules intact.
+                        let target = serde_json::to_string(&step.target)?;
+                        docker_file_contents.push_str(&format!(
+                            "COPY --from=anybuild_copy_{index} [\".\", {target}]\n"
+                        ));
                     } else {
                         let exclude = match step.ignore.as_deref() {
                             Some(ignore) if !ignore.is_empty() => {
@@ -388,6 +426,7 @@ impl BuildBackend for DockerBuildBackend {
         // dict. The only observable side channel is the runtime PATH,
         // surfaced through `get_runtime_path`.
         let mut env = env.clone();
+        let contexts = self.filtered_copy_contexts(steps)?;
         let docker_file_contents = self.dockerfile_contents(&mut env, mounts, steps)?;
 
         self.runtime_path = env.get("PATH").cloned();
@@ -398,7 +437,7 @@ impl BuildBackend for DockerBuildBackend {
         )?;
         crate::build::report::build_started(&self.operation);
         let started_at = std::time::Instant::now();
-        self.build_dockerfile(name, &docker_file_contents)?;
+        self.build_dockerfile(name, &docker_file_contents, &contexts)?;
         crate::build::report::success(
             &self.operation,
             format!(
@@ -470,6 +509,99 @@ mod tests {
             backend.get_volume_path("db"),
             backend.anybuild_dir.join("volumes").join("db")
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn gitignored_copies_use_filtered_named_contexts_and_rebuild_cleanly() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let mut backend = backend(tmp.path());
+        let source = &backend.src_dir;
+        std::fs::create_dir_all(source.join("nested")).unwrap();
+        std::fs::write(source.join(".gitignore"), ".env\n*.log\n!keep.log\n").unwrap();
+        std::fs::write(source.join(".env"), "DUMMY=not-a-secret").unwrap();
+        std::fs::write(source.join("main.py"), "print('hello')").unwrap();
+        std::fs::write(source.join("keep.log"), "keep").unwrap();
+        std::fs::write(source.join("nested/drop.log"), "drop").unwrap();
+        std::fs::write(source.join("nested/.gitignore"), "cache\n").unwrap();
+        std::fs::write(source.join("nested/cache"), "drop").unwrap();
+        let client = tmp.path().join("docker");
+        let log = tmp.path().join("args");
+        std::fs::write(
+            &client,
+            format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\n", log.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&client, std::fs::Permissions::from_mode(0o755)).unwrap();
+        backend.docker_client = client.display().to_string();
+        let steps = vec![
+            Step::Copy(CopyStep {
+                source: ".".into(),
+                target: "/app".into(),
+                base: "source".into(),
+                ignore: None,
+                gitignore: true,
+            }),
+            Step::Copy(CopyStep {
+                source: ".".into(),
+                target: "/raw".into(),
+                base: "source".into(),
+                ignore: None,
+                gitignore: false,
+            }),
+        ];
+        backend.build("app", &IndexMap::new(), &[], &steps).unwrap();
+        let context = backend.docker_path.join("contexts/anybuild_copy_0");
+        assert!(context.join("main.py").is_file());
+        assert!(context.join("keep.log").is_file());
+        for excluded in [".env", "nested/drop.log", "nested/cache", ".anybuild"] {
+            assert!(!context.join(excluded).exists(), "{excluded}");
+        }
+        let args = std::fs::read_to_string(&log).unwrap();
+        assert!(args.contains("--build-context\nanybuild_copy_0="));
+        let dockerfile = std::fs::read_to_string(&backend.docker_file_path).unwrap();
+        assert!(dockerfile.contains("COPY --from=anybuild_copy_0 [\".\", \"/app\"]"));
+        assert!(dockerfile.contains("COPY . /raw"));
+        std::fs::write(backend.src_dir.join(".gitignore"), "main.py\n").unwrap();
+        backend.build("app", &IndexMap::new(), &[], &steps).unwrap();
+        assert!(!context.join("main.py").exists());
+    }
+
+    #[test]
+    #[ignore = "requires a Docker engine"]
+    fn gitignored_named_context_builds_with_docker() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backend = backend(tmp.path());
+        std::fs::write(backend.src_dir.join(".gitignore"), ".env\n").unwrap();
+        std::fs::write(backend.src_dir.join(".env"), "DUMMY=not-a-secret").unwrap();
+        std::fs::write(backend.src_dir.join("main.py"), "print('hello')").unwrap();
+        let steps = [Step::Copy(CopyStep {
+            source: ".".into(),
+            target: "/app".into(),
+            base: "source".into(),
+            ignore: None,
+            gitignore: true,
+        })];
+        let contexts = backend.filtered_copy_contexts(&steps).unwrap();
+        let generated = backend
+            .dockerfile_contents(&mut IndexMap::new(), &[], &steps)
+            .unwrap();
+        // Exercise the generated COPY with Docker without downloading a toolchain.
+        let copies = generated
+            .lines()
+            .filter(|line| line.starts_with("COPY --from=anybuild_copy_"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        backend
+            .build_dockerfile(
+                "anybuild-gitignore-test",
+                &format!("FROM scratch\n{copies}\n"),
+                &contexts,
+            )
+            .unwrap();
+        assert!(backend.docker_out_path.join("app/main.py").is_file());
+        assert!(!backend.docker_out_path.join("app/.env").exists());
     }
 
     #[test]

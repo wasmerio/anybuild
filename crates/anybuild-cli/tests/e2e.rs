@@ -248,6 +248,26 @@ e2e_tests! {
     // examples/nodestatic-storybook (Wasmer only)
     staticnode2__wasmer__nodestatic_storybook => ("nodestatic_storybook", Wasmer);
     // examples/python-fastapi
+    python__local__python_mcp => ("python_mcp", Local);
+    python__wasmer__python_mcp => ("python_mcp", Wasmer);
+    python__wasmer_and_docker__python_mcp => ("python_mcp", WasmerAndDocker);
+    python__docker_builder_and_runner__python_mcp => ("python_mcp", DockerBuilderAndRunner);
+    python__local__python_mcp_v1 => ("python_mcp_v1", Local);
+    python__wasmer__python_mcp_v1 => ("python_mcp_v1", Wasmer);
+    python__wasmer_and_docker__python_mcp_v1 => ("python_mcp_v1", WasmerAndDocker);
+    python__docker_builder_and_runner__python_mcp_v1 => ("python_mcp_v1", DockerBuilderAndRunner);
+    python__local__python_mcp_chatgpt => ("python_mcp_chatgpt", Local);
+    python__wasmer__python_mcp_chatgpt => ("python_mcp_chatgpt", Wasmer);
+    python__wasmer_and_docker__python_mcp_chatgpt => ("python_mcp_chatgpt", WasmerAndDocker);
+    python__docker_builder_and_runner__python_mcp_chatgpt => ("python_mcp_chatgpt", DockerBuilderAndRunner);
+    python__local__python_mcp_chatgpt_v1 => ("python_mcp_chatgpt_v1", Local);
+    python__wasmer__python_mcp_chatgpt_v1 => ("python_mcp_chatgpt_v1", Wasmer);
+    python__wasmer_and_docker__python_mcp_chatgpt_v1 => ("python_mcp_chatgpt_v1", WasmerAndDocker);
+    python__docker_builder_and_runner__python_mcp_chatgpt_v1 => ("python_mcp_chatgpt_v1", DockerBuilderAndRunner);
+    python__local__python_mcp_managed => ("python_mcp_managed", Local);
+    python__wasmer__python_mcp_managed => ("python_mcp_managed", Wasmer);
+    python__local__python_mcp_v1_managed => ("python_mcp_v1_managed", Local);
+    python__wasmer__python_mcp_v1_managed => ("python_mcp_v1_managed", Wasmer);
     python__local__python_fastapi => ("python_fastapi", Local);
     python__wasmer__python_fastapi => ("python_fastapi", Wasmer);
     python__wasmer_and_docker__python_fastapi => ("python_fastapi", WasmerAndDocker);

@@ -6,9 +6,8 @@ name: Reusable Test + E2E
 # archives the e2e test binaries. The e2e matrix runs slices of the
 # CLI e2e test target against the debug binary.
 #
-# uv/Python appear in the e2e jobs only as the runtime toolchain of the
-# example apps being built (uv/python for python examples), not as a test
-# harness.
+# Python jobs also verify target dependency resolution and use an MCP
+# client to check initialization and tool calls against the example apps.
 
 on:
   workflow_call:
@@ -150,7 +149,7 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
-      # Toolchains for the example apps the suite builds (not a harness).
+      # Toolchains for the example apps and Python protocol checks.
       - name: Set up uv
         uses: astral-sh/setup-uv@v8.3.2
         with:
@@ -236,6 +235,14 @@ jobs:
       - name: Verify Bun
         if: ${{ matrix.suite == 'node' }}
         run: bun --version
+
+      - name: Test Python target packaging
+        if: ${{ matrix.suite == 'python' && matrix.mode == 'wasmer' }}
+        env:
+          ANYBUILD_BIN: ${{ github.workspace }}/anybuild-bin/anybuild
+        run: >-
+          uv run --no-project --python 3.13 --with pip --with hatch==1.18.0
+          python scripts/test_python_packaging.py
 
       - name: Run e2e tests (Rust binary)
         env:

@@ -42,20 +42,16 @@
    "target": "pyproject.toml"
   },
   {
-   "__type__": "RunStep",
-   "command": "uv add mcp[cli]",
-   "group": "install"
-  },
-  {
    "__type__": "PathStep",
    "path": "opt/venv/bin"
   },
   {
    "__type__": "CopyStep",
    "base": "source",
+   "gitignore": true,
    "ignore": [
-    ".venv",
     ".git",
+    ".venv",
     "__pycache__"
    ],
    "source": ".",
@@ -73,6 +69,8 @@
   "FASTMCP_HOST": "0.0.0.0",
   "FASTMCP_PORT": "8080",
   "HOME": "app",
+  "HOST": "0.0.0.0",
+  "PORT": "8080",
   "PYTHONPATH": "app:opt/venv/lib/python3.13/site-packages"
  },
  "mounts": [
