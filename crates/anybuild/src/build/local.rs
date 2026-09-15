@@ -587,7 +587,9 @@ mod tests {
                         Some(state),
                         OperationContext::for_test(),
                     );
-                    backend.build("app", &IndexMap::new(), &[], &steps).unwrap();
+                    backend
+                        .build("app", &IndexMap::new(), &IndexMap::new(), &[], &steps)
+                        .unwrap();
                     let artifact = backend.get_mount_path("app");
                     assert!(
                         artifact.join("main.py").is_file(),

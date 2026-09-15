@@ -611,7 +611,9 @@ mod tests {
                 gitignore: false,
             }),
         ];
-        backend.build("app", &IndexMap::new(), &[], &steps).unwrap();
+        backend
+            .build("app", &IndexMap::new(), &IndexMap::new(), &[], &steps)
+            .unwrap();
         let context = backend.docker_path.join("contexts/anybuild_copy_0");
         assert!(context.join("main.py").is_file());
         assert!(context.join("keep.log").is_file());
@@ -624,7 +626,9 @@ mod tests {
         assert!(dockerfile.contains("COPY --from=anybuild_copy_0 [\".\", \"/app\"]"));
         assert!(dockerfile.contains("COPY . /raw"));
         std::fs::write(backend.src_dir.join(".gitignore"), "main.py\n").unwrap();
-        backend.build("app", &IndexMap::new(), &[], &steps).unwrap();
+        backend
+            .build("app", &IndexMap::new(), &IndexMap::new(), &[], &steps)
+            .unwrap();
         assert!(!context.join("main.py").exists());
     }
 
@@ -645,7 +649,7 @@ mod tests {
         })];
         let contexts = backend.filtered_copy_contexts(&steps).unwrap();
         let generated = backend
-            .dockerfile_contents(&mut IndexMap::new(), &[], &steps)
+            .dockerfile_contents(&mut IndexMap::new(), &IndexMap::new(), &[], &steps)
             .unwrap();
         // Exercise the generated COPY with Docker without downloading a toolchain.
         let copies = generated
