@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.29.0](https://github.com/wasmerio/anybuild/compare/v0.28.5...v0.29.0) (2026-09-15)
+
+
+### Features
+
+* allow passing build env vars with --env ([#111](https://github.com/wasmerio/anybuild/issues/111)) ([93982ae](https://github.com/wasmerio/anybuild/commit/93982ae0f3ad3d91bc3bcfa1cdd30f24ea4812a2))
+
+
+### Bug Fixes
+
+* pin pnpm version if one is not explicitly specified ([#116](https://github.com/wasmerio/anybuild/issues/116)) ([a3bfbaf](https://github.com/wasmerio/anybuild/commit/a3bfbaf90d70d24448450b0b2aa5b1a63449c67d))
+
 ## [0.28.5](https://github.com/wasmerio/anybuild/compare/v0.28.4...v0.28.5) (2026-09-15)
 
 
