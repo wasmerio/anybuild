@@ -93,23 +93,7 @@ impl DockerRunner {
     }
 
     fn image_name(serve_name: &str) -> String {
-        let normalized: String = serve_name
-            .chars()
-            .map(|character| {
-                let character = character.to_ascii_lowercase();
-                if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-') {
-                    character
-                } else {
-                    '-'
-                }
-            })
-            .collect();
-        let normalized = normalized.trim_matches(['.', '_', '-']);
-        if normalized.is_empty() {
-            "anybuild-app".to_owned()
-        } else {
-            normalized.to_owned()
-        }
+        crate::build::docker::internal_image_name(serve_name)
     }
 
     fn context_path(&self, path: &Path) -> Result<String> {
@@ -559,7 +543,10 @@ mod tests {
         assert!(dockerfile.contains("ENTRYPOINT [\"/anybuild/bin/entrypoint\"]"));
         assert!(dockerfile.contains("EXPOSE 8080"));
         assert!(dockerfile.contains("CMD [\"start\"]"));
-        assert_eq!(DockerRunner::image_name(&serve.name), "acme-web");
+        assert_eq!(
+            DockerRunner::image_name(&serve.name),
+            crate::build::docker::internal_image_name("Acme Web")
+        );
     }
 
     #[test]
