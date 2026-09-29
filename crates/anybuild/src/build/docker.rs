@@ -11,11 +11,34 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, ensure, Context, Result};
 use base64::Engine as _;
 use indexmap::IndexMap;
+use sha2::{Digest, Sha256};
 
 use crate::operation::OperationContext;
 use crate::plan::{Mount, Package, Step};
 
 use crate::build::BuildBackend;
+
+/// Keep the Docker reference independent of the project's display name.
+/// The digest distinguishes names that normalize to the same ASCII slug.
+pub(crate) fn internal_image_name(name: &str) -> String {
+    let slug = name
+        .chars()
+        .map(|character| character.to_ascii_lowercase())
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    let slug = slug.trim_matches('-');
+    let slug = if slug.is_empty() { "app" } else { slug };
+    let slug = slug.chars().take(48).collect::<String>();
+    let slug = slug.trim_end_matches('-');
+    let digest = format!("{:x}", Sha256::digest(name.as_bytes()));
+    format!("anybuild-{slug}-{}", &digest[..12])
+}
 
 /// Port of `DockerBuildBackend.mise_mapper`.
 fn mise_source(dependency: &str) -> Option<&'static str> {
@@ -497,7 +520,7 @@ impl BuildBackend for DockerBuildBackend {
         )?;
         crate::build::report::build_started(&self.operation);
         let started_at = std::time::Instant::now();
-        self.build_dockerfile(name, &docker_file_contents, &contexts)?;
+        self.build_dockerfile(&internal_image_name(name), &docker_file_contents, &contexts)?;
         crate::build::report::success(
             &self.operation,
             format!(
@@ -568,6 +591,63 @@ mod tests {
         assert_eq!(
             backend.get_volume_path("db"),
             backend.anybuild_dir.join("volumes").join("db")
+        );
+    }
+
+    #[test]
+    fn image_names_are_valid_bounded_and_distinct_from_display_names() {
+        let names = [
+            "My Project",
+            "Chat",
+            "p2cj1 (1)",
+            "៥០០០-years",
+            &"Long Project Name ".repeat(30),
+            "!!!",
+        ];
+        for name in names {
+            let image = internal_image_name(name);
+            assert!(image.len() <= 128, "{image}");
+            assert!(image.starts_with("anybuild-"), "{image}");
+            assert!(
+                image
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+                "{image}"
+            );
+        }
+        assert_ne!(internal_image_name("Chat"), internal_image_name("chat"));
+        assert_ne!(internal_image_name("a b"), internal_image_name("a-b"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn docker_build_uses_internal_tag() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut backend = backend(tmp.path());
+        std::fs::create_dir_all(&backend.src_dir).unwrap();
+        let client = tmp.path().join("docker");
+        let log = tmp.path().join("args");
+        std::fs::write(
+            &client,
+            format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\n", log.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&client, std::fs::Permissions::from_mode(0o755)).unwrap();
+        backend.docker_client = client.display().to_string();
+
+        let project_name = "My Project (1)";
+        backend
+            .build(project_name, &IndexMap::new(), &IndexMap::new(), &[], &[])
+            .unwrap();
+        let args = std::fs::read_to_string(&log).unwrap();
+        let words = args.lines().collect::<Vec<_>>();
+        let tag = words.windows(2).find(|w| w[0] == "-t").unwrap()[1];
+        assert_eq!(tag, internal_image_name(project_name));
+        assert_eq!(
+            std::fs::read_to_string(&backend.docker_name_path).unwrap(),
+            tag
         );
     }
 
