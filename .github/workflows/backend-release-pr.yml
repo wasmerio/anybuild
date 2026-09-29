@@ -1,0 +1,87 @@
+name: Update Backend Anybuild
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        description: Published release tag with completed binary assets.
+        required: true
+        type: string
+    secrets:
+      BACKEND_PR_TOKEN:
+        description: Token that can update version pins and open backend PRs.
+        required: false
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Published release tag to retry or backfill.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-anybuild-${{ inputs.tag_name || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  backend_pr:
+    name: Open backend version update PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout release automation
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Verify published release and attached binaries
+        id: release
+        uses: actions/github-script@v8
+        env:
+          TAG_NAME: ${{ inputs.tag_name || github.event.release.tag_name }}
+        with:
+          script: |
+            const { validateRelease } = require(
+              './scripts/backend-release-pr.cjs'
+            );
+            const { data } = await github.rest.repos.getReleaseByTag({
+              ...context.repo, tag: process.env.TAG_NAME,
+            });
+            const release = validateRelease(data, process.env.TAG_NAME);
+            core.setOutput('version', release.version);
+            core.setOutput('url', release.releaseUrl);
+
+      - name: Check backend credential
+        env:
+          BACKEND_PR_TOKEN: ${{ secrets.BACKEND_PR_TOKEN }}
+        run: |
+          if [ -z "$BACKEND_PR_TOKEN" ]; then
+            echo "::error::Set BACKEND_PR_TOKEN with backend Contents, Pull requests, and Workflows write permissions; see docs/releases.md"
+            exit 1
+          fi
+
+      - name: Create backend update PR
+        uses: actions/github-script@v8
+        env:
+          TAG_NAME: ${{ inputs.tag_name || github.event.release.tag_name }}
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+        with:
+          github-token: ${{ secrets.BACKEND_PR_TOKEN }}
+          script: |
+            const { createBackendReleasePr } = require(
+              './scripts/backend-release-pr.cjs'
+            );
+            const result = await createBackendReleasePr(github, {
+              tag: process.env.TAG_NAME,
+              version: process.env.VERSION,
+              releaseUrl: process.env.RELEASE_URL,
+            });
+            core.info(JSON.stringify(result));
+            await core.summary.addHeading('Backend Anybuild update')
+              .addRaw(result.url || result.status).write();
