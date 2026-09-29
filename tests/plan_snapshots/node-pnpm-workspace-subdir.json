@@ -37,7 +37,6 @@
    "variables": {
     "CI": "true",
     "pnpm_config_dangerously_allow_all_builds": "true",
-    "pnpm_config_inject_workspace_packages": "true",
     "pnpm_config_minimum_release_age": "0",
     "pnpm_config_strict_dep_builds": "false"
    }
@@ -61,7 +60,7 @@
   },
   {
    "__type__": "RunStep",
-   "command": "pnpm deploy --filter @anybuild-example/dashboard --prod --config.node-linker=hoisted app"
+   "command": "pnpm deploy --filter @anybuild-example/dashboard --prod --config.node-linker=hoisted --config.force-legacy-deploy=true app"
   },
   {
    "__type__": "WorkdirStep",

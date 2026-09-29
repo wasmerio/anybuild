@@ -120,8 +120,6 @@ def node_install_steps(config):
             "pnpm_config_minimum_release_age": "0",
             "CI": "true",
         }
-        if config.app_subdir:
-            pnpm_env["pnpm_config_inject_workspace_packages"] = "true"
         pnpm_env["pnpm_config_dangerously_allow_all_builds"] = "true"
 
         # A dependency whose build script we skipped is a warning, not a build
@@ -201,9 +199,11 @@ def _uses_pnpm_deploy(config):
 def _export_steps(config, build_mount, app):
     """Move the built app from the build mount into the served app mount."""
     if _uses_pnpm_deploy(config):
+        # Legacy deploy packages symlinked workspace dependencies after build.
+        # Use a config flag so pnpm 9, which predates --legacy, still works.
         return [
             workdir("{}/{}".format(build_mount.path, config.app_subdir)),
-            run("pnpm deploy --filter {} --prod --config.node-linker=hoisted {}".format(config.node_package_name, app.path)),
+            run("pnpm deploy --filter {} --prod --config.node-linker=hoisted --config.force-legacy-deploy=true {}".format(config.node_package_name, app.path)),
             workdir(app.path),
         ]
     copy_source = ".next-bundle" if config.node_framework == "next" else "."
