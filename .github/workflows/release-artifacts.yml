@@ -12,6 +12,10 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      BACKEND_PR_TOKEN:
+        description: Credential for the backend version update PR.
+        required: false
   workflow_dispatch:
     inputs:
       tag_name:
@@ -140,3 +144,14 @@ jobs:
           gh release edit "$TAG_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false --latest
+
+  backend_pr:
+    name: Update backend after publication
+    needs: publish
+    uses: ./.github/workflows/backend-release-pr.yml
+    with:
+      tag_name: ${{ inputs.tag_name }}
+    secrets:
+      BACKEND_PR_TOKEN: ${{ secrets.BACKEND_PR_TOKEN }}
+    permissions:
+      contents: read
