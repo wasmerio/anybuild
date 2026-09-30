@@ -152,6 +152,11 @@ anybuild deploy --platform=aws-lambda \
   --aws-region=us-west-2
 ```
 
+Docker runtime images copy the adapter from the public Wasmer mirror at
+`ghcr.io/wasmerio/aws-lambda-adapter:1.0.0`, pinned to the upstream image
+digest. This avoids ECR Public's anonymous download quota during builds.
+The mirror preserves upstream's AMD64 and ARM64 images.
+
 `anybuild auto --platform=aws-lambda` selects the Docker builder and Lambda
 runner unless either is explicitly set. This makes Python and Node.js
 dependencies portable to Lambda's Linux environment. Supported managed

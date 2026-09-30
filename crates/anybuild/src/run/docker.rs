@@ -16,6 +16,11 @@ use crate::plan::{RunStep, Serve, Step};
 use crate::run::{HostMount, Runner};
 use crate::RuntimeArtifact;
 
+pub(crate) const LAMBDA_ADAPTER_IMAGE: &str = concat!(
+    "ghcr.io/wasmerio/aws-lambda-adapter:1.0.0@",
+    "sha256:b4da35991627bdac98a81c377d0cc28e6989687359576dfda9f0b64be835d648"
+);
+
 const TOOLCHAIN_STAGE: &str = r#"# syntax=docker/dockerfile:1.7-labs
 FROM debian:trixie-slim AS runtime-tools
 
@@ -47,7 +52,6 @@ ENV MISE_CONFIG_DIR="/mise"
 ENV PATH="/mise/shims:$PATH"
 
 COPY --from=runtime-tools /etc/ssl/certs /etc/ssl/certs
-COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0 /lambda-adapter /opt/extensions/lambda-adapter
 "#;
 
 pub struct DockerRunner {
@@ -157,6 +161,9 @@ impl DockerRunner {
             contents.push_str(&dependency_install_contents(dependency));
         }
         contents.push_str(RUNTIME_STAGE);
+        contents.push_str(&format!(
+            "COPY --from={LAMBDA_ADAPTER_IMAGE} /lambda-adapter /opt/extensions/lambda-adapter\n"
+        ));
         if uses_mise {
             contents.push_str(
                 "# Copy resolved toolchains and shared libraries without compilers or caches.\n",
@@ -532,7 +539,8 @@ mod tests {
             "RUN --mount=type=cache,target=/mise/cache,sharing=locked mise use --global \"node@22\""
         ));
         assert!(dockerfile.contains("FROM debian:trixie-slim AS runtime"));
-        assert!(dockerfile.contains("COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0"));
+        assert!(dockerfile.contains(&format!("COPY --from={LAMBDA_ADAPTER_IMAGE}")));
+        assert!(!dockerfile.contains("public.ecr.aws"));
         assert!(dockerfile.contains("COPY [\".anybuild/local/build/app\",\"/app\"]"));
         assert!(dockerfile.contains("ENV NODE_ENV=\"production\""));
         assert!(dockerfile.contains("ENV HOST=\"0.0.0.0\""));

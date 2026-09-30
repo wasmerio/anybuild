@@ -11,9 +11,10 @@ use serde::Deserialize;
 use crate::artifact::{ArtifactKind, RuntimeArtifact};
 use crate::deploy::Deployer;
 use crate::operation::OperationContext;
+use crate::run::docker::LAMBDA_ADAPTER_IMAGE;
 use crate::sdk::{AwsLambdaOptions, DeployOutcome, DeployTarget, LambdaArchitecture};
 
-const LAMBDA_ADAPTER_IMAGE: &str = "public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0";
+const LEGACY_LAMBDA_ADAPTER_IMAGE: &str = "public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0";
 const LAMBDA_ADAPTER_LAYER_VERSION: u32 = 28;
 
 #[derive(Debug, Default, Deserialize)]
@@ -592,7 +593,8 @@ impl Deployer for AwsLambdaDeployer {
                     "Docker artifact metadata is missing; rebuild with --runner=docker"
                 })?;
             anyhow::ensure!(
-                dockerfile.contains(LAMBDA_ADAPTER_IMAGE),
+                dockerfile.contains(LAMBDA_ADAPTER_IMAGE)
+                    || dockerfile.contains(LEGACY_LAMBDA_ADAPTER_IMAGE),
                 "Docker artifact predates AWS Lambda support; rebuild with --runner=docker"
             );
             let repository = self

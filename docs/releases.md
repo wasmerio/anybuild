@@ -49,4 +49,20 @@ Run the automation tests locally with:
 node --test scripts/backend-release-pr.test.cjs
 ```
 
+## Lambda adapter mirror
+
+Docker runtime images use the public
+`ghcr.io/wasmerio/aws-lambda-adapter:1.0.0` mirror, pinned to the upstream
+multi-architecture digest. The Mirror Lambda Adapter workflow copies the
+upstream image without rebuilding it, preserves AMD64 and ARM64, and checks
+that the mirrored digest matches. It uses the repository's `GITHUB_TOKEN`
+with `packages: write`; no extra publishing credential is required.
+
+To upgrade, update `ADAPTER_VERSION` and `ADAPTER_DIGEST` in
+`.github/workflows/mirror-lambda-adapter.yml`, publish the mirror, and update
+`LAMBDA_ADAPTER_IMAGE` in `crates/anybuild/src/run/docker.rs`. Run the workflow
+manually to retry a publication. Existing tags are never overwritten.
+If GitHub creates a new package, set its visibility to Public in package
+settings before using it in builds, and verify an unauthenticated pull.
+
 [gh-token]: https://docs.github.com/en/actions/concepts/security/github_token
