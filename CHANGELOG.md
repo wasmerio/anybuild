@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.30.0](https://github.com/wasmerio/anybuild/compare/v0.29.0...v0.30.0) (2026-09-30)
+
+
+### Features
+
+* open backend version update PRs after Anybuild releases ([#122](https://github.com/wasmerio/anybuild/issues/122)) ([ed4427a](https://github.com/wasmerio/anybuild/commit/ed4427a3b1e2a8a8774024d7acabd83cfb2a7305))
+
+
+### Bug Fixes
+
+* default Drupal to PHPix and export pnpm workspaces ([#121](https://github.com/wasmerio/anybuild/issues/121)) ([2729bb1](https://github.com/wasmerio/anybuild/commit/2729bb164e1bbf509b7fb5290e0f3cea0149d447))
+* generate safe internal Docker image names ([#119](https://github.com/wasmerio/anybuild/issues/119)) ([7502b17](https://github.com/wasmerio/anybuild/commit/7502b17de404c0ae7866e6376d7dbcc17d07ddfe))
+
 ## [0.29.0](https://github.com/wasmerio/anybuild/compare/v0.28.5...v0.29.0) (2026-09-15)
 
 
