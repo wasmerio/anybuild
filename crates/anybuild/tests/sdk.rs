@@ -4,13 +4,120 @@ use anybuild::plan::Step;
 use anybuild::{
     Anybuild, AutoOptions, AwsLambdaOptions, BuildOptions, DeployOptions, DeployOutcome,
     DeployTarget, DeploymentPlatform, Event, FlyOptions, GenerateOptions, GenerationCheckStatus,
-    GenerationPolicy, PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, WasmerOptions,
+    GenerationPolicy, PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, RuntimeEnvironment,
+    WasmerOptions,
 };
 
 fn static_project() -> tempfile::TempDir {
     let project = tempfile::tempdir().unwrap();
     std::fs::write(project.path().join("index.html"), "<h1>SDK</h1>\n").unwrap();
     project
+}
+
+#[test]
+fn drupal_defaults_to_phpix_on_wasmer_and_respects_overrides() {
+    for docroot in [".", "web"] {
+        let project = tempfile::tempdir().unwrap();
+        let public = project.path().join(docroot);
+        std::fs::create_dir_all(public.join("core/lib")).unwrap();
+        std::fs::write(public.join("index.php"), "<?php echo 'Drupal';\n").unwrap();
+        std::fs::write(public.join("core/lib/Drupal.php"), "<?php\n").unwrap();
+
+        for phpix in [None, Some(false), Some(true)] {
+            let mut sdk = Anybuild::new(project.path());
+            if let Some(enabled) = phpix {
+                sdk = sdk.with_env("ANYBUILD_PHPIX", enabled.to_string());
+            }
+            let plan = sdk
+                .plan(PlanOptions {
+                    temporary: true,
+                    runtime_environment: RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+                    ..PlanOptions::default()
+                })
+                .unwrap();
+            let engine = if phpix.unwrap_or(true) {
+                "phpix"
+            } else {
+                "php"
+            };
+            assert_eq!(plan.config["php_framework"], "drupal");
+            assert_eq!(plan.config["phpix"], phpix.unwrap_or(true));
+            assert!(plan.serve.commands["start"].starts_with(&format!("{engine} -S ")));
+            assert!(plan.serve.deps.iter().any(|dep| dep.name == engine));
+            if docroot == "web" {
+                assert!(plan.serve.commands["start"].ends_with("/web"));
+            }
+        }
+    }
+}
+
+#[test]
+fn pnpm_workspace_export_supports_noninjected_dependencies() {
+    let project = tempfile::tempdir().unwrap();
+    let app = project.path().join("apps/dashboard");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("package.json"),
+        r#"{
+  "name": "@example/dashboard",
+  "scripts": {"build": "astro build", "start": "node dist/server/entry.mjs"},
+  "dependencies": {"astro": "^6.4.4", "@astrojs/node": "^10.1.3"}
+}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("astro.config.mjs"),
+        "import node from '@astrojs/node';\n\
+         export default { output: 'server', adapter: node({ mode: 'standalone' }) };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        project.path().join("pnpm-workspace.yaml"),
+        "packages:\n  - apps/*\n  - packages/*\ninjectWorkspacePackages: false\n",
+    )
+    .unwrap();
+
+    for version in ["9.15.9", "10.34.5", "11.2.2"] {
+        std::fs::write(
+            project.path().join("package.json"),
+            serde_json::json!({"packageManager": format!("pnpm@{version}")}).to_string(),
+        )
+        .unwrap();
+        let plan = Anybuild::new(project.path())
+            .with_subdir("apps/dashboard")
+            .plan(PlanOptions {
+                temporary: true,
+                runtime_environment: RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+                ..PlanOptions::default()
+            })
+            .unwrap();
+        let steps = &plan.serve.build;
+        let deploy_index = steps
+            .iter()
+            .position(
+                |step| matches!(step, Step::Run(run) if run.command.starts_with("pnpm deploy ")),
+            )
+            .unwrap();
+        assert!(matches!(
+            &steps[deploy_index],
+            Step::Run(run) if run.command.contains("--config.force-legacy-deploy=true")
+                && run.command.contains("--filter @example/dashboard --prod")
+                && run.command.contains("--config.node-linker=hoisted")
+        ));
+        assert!(matches!(
+            &steps[deploy_index - 1],
+            Step::Workdir(step) if step.path.ends_with("apps/dashboard")
+        ));
+        assert!(!steps.iter().any(|step| {
+            matches!(step, Step::Env(env)
+                if env.variables.contains_key("pnpm_config_inject_workspace_packages"))
+        }));
+        assert!(!steps
+            .iter()
+            .any(|step| { matches!(step, Step::Run(run) if run.command == "pnpm prune --prod") }));
+        assert_eq!(plan.config["pnpm_version"], version);
+        assert_eq!(plan.serve.commands["start"], "node dist/server/entry.mjs");
+    }
 }
 
 #[test]

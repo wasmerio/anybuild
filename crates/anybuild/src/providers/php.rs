@@ -242,11 +242,6 @@ pub fn load_config(
     if config.framework.is_none() {
         config.framework = detect_framework(path, composer_config.as_ref());
     }
-    if config.framework == Some(PhpFramework::Drupal) {
-        // Drupal relies on Apache-style rewrite behavior that the built-in
-        // php server handles more predictably than phpix by default.
-        config.phpix = Some(false);
-    }
     config.public_dir =
         if config.framework == Some(PhpFramework::Drupal) && exists(path, &["web/index.php"]) {
             Some("web".to_owned())
@@ -431,13 +426,7 @@ mod tests {
         let config = load_php_config(&project_dir);
         assert_eq!(config.framework, Some(PhpFramework::Drupal));
         assert_eq!(config.public_dir.as_deref(), Some("web"));
-        // Drupal serves with plain php (phpix disabled) from the web/
-        // docroot. The Python test asserts the evaluated start command
-        // (`php -S localhost:… -t …/web`); the command rendering from
-        // `phpix`/`public_dir` is pinned byte-for-byte by the php-nobuild
-        // and php-api plan snapshots, so the config bits that drive it are
-        // asserted here.
-        assert_eq!(config.phpix, Some(false));
+        assert_eq!(config.phpix, None);
     }
 
     #[test]
