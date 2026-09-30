@@ -37,7 +37,7 @@ pub const WASMER_APP_KIND_ANNOTATION: &str = "wasmer.io/app-kind";
 pub const WASMER_VERSION_ANNOTATION: &str = "wasmer.io/version";
 pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
 pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.2.0";
-pub const PHPIX_VERSION: &str = "0.3.0-rc.5";
+pub const PHPIX_VERSION: &str = "0.3.0";
 pub const WASIX_PYTHON_INDEX_URL: &str = "https://python-registry.wasix.org/simple";
 pub(crate) const WASMER_ENV_FILENAME: &str = ".env";
 const PREPARE_COMMAND_PREFIX: &str = "__anybuild_prepare_";
@@ -1873,7 +1873,7 @@ mod tests {
             let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
             assert_eq!(
                 manifest["dependencies"][*expected_package].as_str(),
-                Some("=0.3.0-rc.5"),
+                Some("=0.3.0"),
                 "version={version:?} architecture={architecture:?}"
             );
             let command = manifest["command"]
