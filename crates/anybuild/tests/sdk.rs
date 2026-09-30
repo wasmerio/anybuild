@@ -685,6 +685,57 @@ serve(
 }
 
 #[test]
+fn edgejs_engine_is_optional_and_configurable() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project.path().join("package.json"),
+        r#"{"scripts":{"start":"node server.js"}}"#,
+    )
+    .unwrap();
+    let make_sdk = || {
+        Anybuild::new(project.path())
+            .inherit_process_env(false)
+            .with_provider("node")
+    };
+    let sdk = make_sdk();
+    let generated = sdk.generate(GenerateOptions::default()).unwrap();
+    assert!(!generated.content.contains("edgejs_engine"));
+    assert!(sdk.plan(PlanOptions::default()).unwrap().config["edgejs_engine"].is_null());
+
+    let persisted = generated.content.replace(
+        "config = node_config(\n",
+        "config = node_config(\n    edgejs_engine = \"external\",\n",
+    );
+    std::fs::write(&generated.path, persisted).unwrap();
+    assert_eq!(
+        sdk.plan(PlanOptions::default()).unwrap().config["edgejs_engine"],
+        "external"
+    );
+    for prefix in ["ANYBUILD", "SHIPIT"] {
+        let overridden = make_sdk().with_env(format!("{prefix}_EDGEJS_ENGINE"), "quickjs");
+        assert_eq!(
+            overridden.plan(PlanOptions::default()).unwrap().config["edgejs_engine"],
+            "quickjs"
+        );
+    }
+    for engine in [serde_json::Value::Null, serde_json::json!("quickjs")] {
+        let overridden = make_sdk().with_config(serde_json::json!({"edgejs_engine": engine}));
+        assert_eq!(
+            overridden.plan(PlanOptions::default()).unwrap().config["edgejs_engine"],
+            engine
+        );
+    }
+    for engine in ["napi", "v8"] {
+        let invalid = make_sdk().with_config(serde_json::json!({"edgejs_engine": engine}));
+        let error = invalid.plan(PlanOptions::default()).unwrap_err();
+        assert!(format!("{error:#}").contains(&format!("unknown variant `{engine}`")));
+        let invalid = make_sdk().with_env("ANYBUILD_EDGEJS_ENGINE", engine);
+        let error = invalid.plan(PlanOptions::default()).unwrap_err();
+        assert!(format!("{error:#}").contains("ANYBUILD_EDGEJS_ENGINE"));
+    }
+}
+
+#[test]
 fn environment_is_snapshotted_and_overrides_are_isolated() {
     let project = static_project();
     let sdk = Anybuild::new(project.path())

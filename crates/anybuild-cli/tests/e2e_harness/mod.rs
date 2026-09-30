@@ -1,7 +1,7 @@
 //! End-to-end harness for the Anybuild CLI, ported from
 //! `tests/test_e2e.py` (pytest). The case table lives in [`cases`];
-//! `../e2e.rs` materializes one `#[test]` per (case, build-mode) pair
-//! named `<suite>__<mode>__<example>` so nextest filter expressions can
+//! `../e2e.rs` materializes one `#[test]` per (case, build-mode, engine)
+//! named `<suite>__<mode>__[external__]<example>` so nextest filter expressions can
 //! slice per suite (`test(/^php__/)`) and per mode (`test(/__wasmer__/)`).
 //!
 //! The pytest harness's asyncio usage is incidental: this port uses
@@ -26,6 +26,11 @@ use anyhow::{bail, ensure, Context, Result};
 use regex::Regex;
 
 pub const BUILD_PHRASE: &str = "Build complete in ";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeJsEngine {
+    External,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BuildMode {
@@ -74,7 +79,11 @@ impl BuildMode {
 
 /// Entry point used by every generated test in `tests/e2e.rs`.
 /// Port of `test_end_to_end`.
-pub fn run_case(test_id: &str, build_mode: BuildMode) -> Result<()> {
+pub fn run_case(
+    test_id: &str,
+    build_mode: BuildMode,
+    edgejs_engine: Option<EdgeJsEngine>,
+) -> Result<()> {
     let case = CASES
         .iter()
         .find(|case| case.test_id == test_id)
@@ -83,6 +92,10 @@ pub fn run_case(test_id: &str, build_mode: BuildMode) -> Result<()> {
         case.structural_modes().contains(&build_mode),
         "case {test_id:?} is not structurally enabled for {build_mode:?}; \
          the generated test list is out of sync with the case table"
+    );
+    ensure!(
+        edgejs_engines(case, build_mode).contains(&edgejs_engine),
+        "case {test_id:?} is not enabled for {build_mode:?} with {edgejs_engine:?}"
     );
 
     let repo_root = workspace_root();
@@ -98,6 +111,9 @@ pub fn run_case(test_id: &str, build_mode: BuildMode) -> Result<()> {
     }
     for (key, value) in case.extra_env {
         envs.push((key.to_string(), value.to_string()));
+    }
+    if edgejs_engine == Some(EdgeJsEngine::External) {
+        envs.push(("ANYBUILD_EDGEJS_ENGINE".to_owned(), "external".to_owned()));
     }
 
     let mut created_db_name: Option<String> = None;
@@ -150,6 +166,18 @@ pub fn run_case(test_id: &str, build_mode: BuildMode) -> Result<()> {
     }
 
     result?;
+    if case.suite == Suite::Node && build_mode == BuildMode::Wasmer {
+        let manifest = fs::read_to_string(project_path.join(".anybuild/wasmer/wasmer.toml"))?;
+        let dependency = match edgejs_engine {
+            Some(EdgeJsEngine::External) => "wasmer/edgejs",
+            None => "wasmer/edgejs-quickjs",
+        };
+        ensure!(
+            manifest.contains(&format!("\"{dependency}\" = \"=0.2.5\""))
+                && manifest.contains(&format!("module = \"{dependency}:edge\"")),
+            "case {test_id:?} did not use the expected EdgeJS package {dependency}:\n{manifest}"
+        );
+    }
     if let Some(message) = drop_error {
         bail!(message);
     }
@@ -523,6 +551,9 @@ fn spawn_group(cmd: &[String], cwd: &Path, envs: &[(String, String)]) -> Result<
         .current_dir(cwd)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        // Keep the unset-engine cases independent of the invoking shell.
+        .env_remove("ANYBUILD_EDGEJS_ENGINE")
+        .env_remove("SHIPIT_EDGEJS_ENGINE")
         // New process group so SIGINT/SIGKILL reach every descendant
         // (equivalent of pytest's start_new_session for our purposes).
         .process_group(0);
@@ -1322,26 +1353,44 @@ fn which(binary: &str) -> Option<PathBuf> {
 // Structural parity: called by a non-ignored test in tests/e2e.rs
 // ---------------------------------------------------------------------------
 
-/// Asserts that the generated `#[test]` list matches the case table
-/// exactly: one test per (case, structurally-enabled build mode), named
-/// `<suite>__<mode>__<test_id>`.
-pub fn verify_test_list(generated: &[(&str, &str, BuildMode)]) {
+fn edgejs_engines(case: &Case, mode: BuildMode) -> &'static [Option<EdgeJsEngine>] {
+    if case.suite == Suite::Node && mode == BuildMode::Wasmer {
+        &[None, Some(EdgeJsEngine::External)]
+    } else {
+        &[None]
+    }
+}
+
+fn test_name(case: &Case, mode: BuildMode, engine: Option<EdgeJsEngine>) -> String {
+    let engine_slug = match engine {
+        Some(EdgeJsEngine::External) => "external__",
+        None => "",
+    };
+    format!(
+        "{}__{}__{}{}",
+        case.suite.slug(),
+        mode.slug(),
+        engine_slug,
+        case.test_id
+    )
+}
+
+/// Asserts that every enabled case/build-mode/engine combination has
+/// exactly one correctly named test, including both Node Wasmer engines.
+pub fn verify_test_list(generated: &[(&str, &str, BuildMode, Option<EdgeJsEngine>)]) {
     use std::collections::BTreeSet;
 
     let mut expected: BTreeSet<String> = BTreeSet::new();
     for case in CASES {
         for mode in case.structural_modes() {
-            expected.insert(format!(
-                "{}__{}__{}",
-                case.suite.slug(),
-                mode.slug(),
-                case.test_id
-            ));
+            for engine in edgejs_engines(case, mode) {
+                expected.insert(test_name(case, mode, *engine));
+            }
         }
     }
 
     let mut actual: BTreeSet<String> = BTreeSet::new();
-    for (name, test_id, mode) in generated {
+    for (name, test_id, mode, engine) in generated {
         let case = CASES
             .iter()
             .find(|case| case.test_id == *test_id)
@@ -1350,10 +1399,14 @@ pub fn verify_test_list(generated: &[(&str, &str, BuildMode)]) {
             case.structural_modes().contains(mode),
             "test {name}: case {test_id:?} is not structurally enabled for {mode:?}"
         );
-        let expected_name = format!("{}__{}__{}", case.suite.slug(), mode.slug(), case.test_id);
+        assert!(
+            edgejs_engines(case, *mode).contains(engine),
+            "test {name}: engine {engine:?} is not enabled for {test_id:?}/{mode:?}"
+        );
+        let expected_name = test_name(case, *mode, *engine);
         assert_eq!(
             *name, expected_name,
-            "test fn name must be <suite>__<mode>__<example> for case {test_id:?}"
+            "test fn name must match the case, build mode, and engine for {test_id:?}"
         );
         assert!(
             actual.insert(expected_name.clone()),

@@ -847,6 +847,7 @@ mod config_inheritance_tests {
     ];
     const NODE_RUNTIME_FIELDS: &[&str] = &[
         "edgejs_enable",
+        "edgejs_engine",
         "edgejs_precompile",
         "node_framework",
         "node_server",
@@ -855,6 +856,7 @@ mod config_inheritance_tests {
     ];
     const NODE_FIELDS: &[&str] = &[
         "edgejs_enable",
+        "edgejs_engine",
         "edgejs_precompile",
         "node_package_manager",
         "node_framework",
