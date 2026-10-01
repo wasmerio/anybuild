@@ -261,10 +261,10 @@ databases, uploads, themes, and plugins.
 
 Like WordPress, `after_deploy` seeds the volume with bundled files without
 replacing existing content. PHPix creates the `/app/config.inc.php` symlink to
-`usr/config.inc.php` at runtime, using the standard configuration template as
-its startup script. Plain PHP loads the persistent config through the root
-template. There is no separate runtime PHP file or startup shell wrapper, and
-Typecho's sources remain unchanged.
+`usr/config.inc.php` at runtime through a dedicated `start-typecho.php` startup
+script. The standard `typecho-config.inc.php` template contains only application
+and database configuration. Plain PHP loads the persistent config through a
+small root loader. Typecho's sources remain unchanged.
 
 Wasmer defaults to `Pdo_Mysql` and requests a managed MySQL database in
 `app.yaml`. The template reads Wasmer's `DB_HOST`, `DB_PORT`, `DB_USERNAME`,

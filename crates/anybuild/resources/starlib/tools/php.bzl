@@ -99,11 +99,14 @@ def php_build(
             steps.append(copy("config.inc.php", "{}/config.inc.php".format(usr_base.path)))
         elif not file_exists("usr/config.inc.php"):
             steps.append(copy("php/typecho-config.inc.php", "{}/config.inc.php".format(usr_base.path), base = "assets"))
-        steps.append(copy("php/typecho-config.inc.php", "{}/typecho-config.inc.php".format(assets.path), base = "assets"))
+        steps.append(copy("php/start-typecho.php", "{}/start-typecho.php".format(assets.path), base = "assets"))
         if not config.phpix:
-            steps.append(copy("php/typecho-config.inc.php", "{}/config.inc.php".format(app.path), base = "assets"))
+            steps.append(write(
+                "{}/config.inc.php".format(app.path),
+                "<?php\n$config = (getenv('TYPECHO_APP_PATH') ?: __DIR__) . '/usr/config.inc.php';\nif (is_file($config)) {\n    require_once $config;\n}\n",
+            ))
         env_vars["TYPECHO_APP_PATH"] = app.serve_path
-        env_vars["TYPECHO_CONFIG_TEMPLATE"] = "{}/typecho-config.inc.php".format(assets.serve_path)
+        env_vars["TYPECHO_STARTUP_SCRIPT"] = "{}/start-typecho.php".format(assets.serve_path)
         env_vars["TYPECHO_DB_ADAPTER"] = config.typecho_db_adapter or "Pdo_SQLite"
 
     serve_deps = php_runtime_deps(config, tc)
@@ -133,7 +136,7 @@ def php_commands(config, app, assets = None, typecho_usr = None):
     if config.php_framework == "typecho":
         assets = assets or mount("assets")
         if config.phpix:
-            commands["start"] = "phpix --startup-script={} -S 0.0.0.0:{} -t {}".format(_quote("{}/typecho-config.inc.php".format(assets.serve_path)), config.port, docroot)
+            commands["start"] = "phpix --startup-script={} -S 0.0.0.0:{} -t {}".format(_quote("{}/start-typecho.php".format(assets.serve_path)), config.port, docroot)
         typecho_usr = typecho_usr or mount("typecho_usr")
         initialize = "mkdir -p {} && cp -Rn {} {}".format(
             _quote("{}/usr/uploads".format(app.serve_path)),
@@ -143,7 +146,7 @@ def php_commands(config, app, assets = None, typecho_usr = None):
         commands["after_deploy"] = "bash -c " + _quote(initialize)
         install = "php " + _quote("{}/install.php".format(app.serve_path))
         if config.phpix:
-            install = "php -r " + _quote("require getenv('TYPECHO_CONFIG_TEMPLATE'); require getenv('TYPECHO_APP_PATH') . '/install.php';")
+            install = "php -r " + _quote("require getenv('TYPECHO_STARTUP_SCRIPT'); require getenv('TYPECHO_APP_PATH') . '/install.php';")
         commands["install"] = "bash -c " + _quote(initialize + " && " + install)
     return commands
 

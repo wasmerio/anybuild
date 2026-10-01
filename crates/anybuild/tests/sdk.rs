@@ -59,6 +59,13 @@ fn typecho_detects_source_and_plans_persistent_storage() {
         assert!(start.starts_with(&format!("{engine} ")));
         assert!(start.contains("-S 0.0.0.0:"));
         assert!(!start.contains("auto_prepend_file"));
+        if phpix.unwrap_or(true) {
+            assert!(start.contains("--startup-script='/opt/assets/start-typecho.php'"));
+            assert!(plan.serve.commands["install"].contains("TYPECHO_STARTUP_SCRIPT"));
+        } else {
+            assert!(!start.contains("--startup-script"));
+        }
+        assert!(!start.contains("typecho-config.inc.php"));
         assert!(!plan
             .serve
             .build

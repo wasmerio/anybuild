@@ -1,26 +1,6 @@
 <?php
 
-$root = getenv('TYPECHO_APP_PATH') ?: (basename(__DIR__) === 'usr' ? dirname(__DIR__) : __DIR__);
-$config = $root . '/config.inc.php';
-$persistentConfig = $root . '/usr/config.inc.php';
-
-// PHPix invokes this template at startup; PHP uses it as the root config.
-$currentConfig = realpath(__FILE__);
-if ($currentConfig !== realpath($persistentConfig)) {
-    if ($currentConfig !== realpath($config)) {
-        if ((is_file($config) || is_link($config)) && !unlink($config)) {
-            throw new \RuntimeException('Unable to replace the Typecho config link');
-        }
-        if (!symlink($persistentConfig, $config)) {
-            throw new \RuntimeException('Unable to link the persistent Typecho config');
-        }
-        clearstatcache();
-    }
-    if (is_file($persistentConfig)) {
-        require_once $persistentConfig;
-    }
-    return;
-}
+$root = getenv('TYPECHO_APP_PATH') ?: dirname(__DIR__);
 
 define('__TYPECHO_ROOT_DIR__', $root);
 define('__TYPECHO_PLUGIN_DIR__', '/usr/plugins');

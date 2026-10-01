@@ -265,7 +265,9 @@ const TYPECHO_SQLITE: Case = Case {
         run_stdout(
             concat!(
                 "php -r '",
-                r#"require getenv("TYPECHO_CONFIG_TEMPLATE"); "#,
+                r#"require getenv("TYPECHO_STARTUP_SCRIPT"); "#,
+                r#"if (defined("__TYPECHO_ROOT_DIR__")) { exit(1); } "#,
+                r#"require "/app/config.inc.php"; "#,
                 r#"if (!is_link("/app/config.inc.php")) { exit(1); } "#,
                 r#"$db = \Typecho\Db::get(); "#,
                 r#"if ($db->getAdapterName() !== getenv("TYPECHO_DB_ADAPTER")) { exit(1); } "#,
@@ -281,7 +283,9 @@ const TYPECHO_SQLITE: Case = Case {
         run_stdout(
             concat!(
                 "php -r '",
-                r#"require getenv("TYPECHO_CONFIG_TEMPLATE"); "#,
+                r#"require getenv("TYPECHO_STARTUP_SCRIPT"); "#,
+                r#"if (defined("__TYPECHO_ROOT_DIR__")) { exit(1); } "#,
+                r#"require "/app/config.inc.php"; "#,
                 r#"if (!is_link("/app/config.inc.php")) { exit(1); } "#,
                 r#"echo TYPECHO_PERSISTED_CONFIG;'"#,
             ),
