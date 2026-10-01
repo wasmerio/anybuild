@@ -75,6 +75,14 @@ const ASSET_FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../resources/assets/node/optimize-node-modules.sh"),
     ),
     (
+        "php/start-typecho.php",
+        include_bytes!("../../resources/assets/php/start-typecho.php"),
+    ),
+    (
+        "php/typecho-config.inc.php",
+        include_bytes!("../../resources/assets/php/typecho-config.inc.php"),
+    ),
+    (
         "php/php.ini",
         include_bytes!("../../resources/assets/php/php.ini"),
     ),

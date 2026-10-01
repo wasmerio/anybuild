@@ -81,6 +81,9 @@ e2e_tests! {
     php__wasmer__php_api => ("php_api", Wasmer);
     php__wasmer_and_docker__php_api => ("php_api", WasmerAndDocker);
     php__docker_builder_and_runner__php_api => ("php_api", DockerBuilderAndRunner);
+    // Typecho 1.3.0 release with MySQL or SQLite and persistent content
+    php__wasmer__typecho_1_3_0 => ("typecho_1_3_0", Wasmer);
+    php__wasmer__typecho_sqlite_1_3_0 => ("typecho_sqlite_1_3_0", Wasmer);
     // examples/php-wordpress
     php__local__php_wordpress0 => ("php_wordpress0", Local);
     php__docker_runner__php_wordpress0 => ("php_wordpress0", DockerRunner);

@@ -15,6 +15,121 @@ fn static_project() -> tempfile::TempDir {
 }
 
 #[test]
+fn typecho_detects_source_and_plans_persistent_storage() {
+    let project = tempfile::tempdir().unwrap();
+    for file in [
+        "index.php",
+        "install.php",
+        "var/Typecho/Common.php",
+        "var/Typecho/Db.php",
+    ] {
+        let path = project.path().join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "<?php\n").unwrap();
+    }
+    std::fs::create_dir_all(project.path().join("usr/themes/default")).unwrap();
+    for phpix in [None, Some(false), Some(true)] {
+        let mut sdk = Anybuild::new(project.path());
+        if let Some(enabled) = phpix {
+            sdk = sdk.with_env("ANYBUILD_PHPIX", enabled.to_string());
+        }
+        let plan = sdk
+            .plan(PlanOptions {
+                temporary: true,
+                runtime_environment: RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+                ..PlanOptions::default()
+            })
+            .unwrap();
+        assert_eq!(plan.provider, "php");
+        assert_eq!(plan.config["php_framework"], "typecho");
+        assert_eq!(plan.config["typecho_db_adapter"], "Pdo_Mysql");
+        let services = plan.serve.services.as_deref().unwrap_or_default();
+        assert_eq!(services.len(), 1);
+        assert_eq!(services[0].provider, "mysql");
+        assert_eq!(
+            plan.serve.env.as_ref().unwrap()["TYPECHO_DB_ADAPTER"],
+            "Pdo_Mysql"
+        );
+        let engine = if phpix.unwrap_or(true) {
+            "phpix"
+        } else {
+            "php"
+        };
+        let start = &plan.serve.commands["start"];
+        assert!(start.starts_with(&format!("{engine} ")));
+        assert!(start.contains("-S 0.0.0.0:"));
+        assert!(!start.contains("auto_prepend_file"));
+        if phpix.unwrap_or(true) {
+            assert!(start.contains("--startup-script='/opt/assets/start-typecho.php'"));
+            assert!(plan.serve.commands["install"].contains("TYPECHO_STARTUP_SCRIPT"));
+        } else {
+            assert!(!start.contains("--startup-script"));
+        }
+        assert!(!start.contains("typecho-config.inc.php"));
+        assert!(!plan
+            .serve
+            .build
+            .iter()
+            .any(|step| matches!(step, Step::Run(_))));
+        assert!(plan.serve.commands["install"].contains("/install.php"));
+        let after_deploy = &plan.serve.commands["after_deploy"];
+        assert!(after_deploy.contains("cp -Rn "));
+        assert!(after_deploy.contains("/opt/typecho_usr/."));
+        assert!(after_deploy.contains("/app/usr/"));
+        assert!(!after_deploy.contains("start-typecho"));
+        let volumes = plan.serve.volumes.as_ref().unwrap();
+        assert_eq!(volumes.len(), 1);
+        assert_eq!(volumes[0].name, "typecho-usr");
+        assert_eq!(volumes[0].serve_path.to_str(), Some("/app/usr"));
+        assert!(plan
+            .serve
+            .mounts
+            .as_ref()
+            .unwrap()
+            .iter()
+            .any(|mount| mount.name == "typecho_usr"));
+    }
+
+    for (runtime, adapter, engine) in [
+        (RuntimeEnvironment::Local, None, None),
+        (
+            RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+            Some("Pdo_SQLite"),
+            None,
+        ),
+        (
+            RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+            Some("Pdo_Pgsql"),
+            Some("postgres"),
+        ),
+    ] {
+        let mut sdk = Anybuild::new(project.path());
+        if let Some(adapter) = adapter {
+            sdk = sdk.with_env("TYPECHO_DB_ADAPTER", adapter);
+        }
+        let plan = sdk
+            .plan(PlanOptions {
+                temporary: true,
+                runtime_environment: runtime,
+                ..PlanOptions::default()
+            })
+            .unwrap();
+        assert_eq!(
+            plan.serve.env.as_ref().unwrap()["TYPECHO_DB_ADAPTER"],
+            adapter.unwrap_or("Pdo_SQLite")
+        );
+        let services = plan.serve.services.as_deref().unwrap_or_default();
+        assert_eq!(
+            services
+                .iter()
+                .map(|s| s.provider.as_str())
+                .collect::<Vec<_>>(),
+            engine.into_iter().collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
 fn drupal_defaults_to_phpix_on_wasmer_and_respects_overrides() {
     for docroot in [".", "web"] {
         let project = tempfile::tempdir().unwrap();

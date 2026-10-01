@@ -149,6 +149,10 @@ pub struct Case {
     pub create_db: bool,
     pub create_wp_content_volume: bool,
     pub run_after_deploy: bool,
+    pub before_serve: &'static [RunCommand],
+    pub initial_http: &'static [HttpRequest],
+    pub restart_http: &'static [HttpRequest],
+    pub persistent_files: &'static [&'static str],
     pub commands: &'static [RunCommand],
     pub expected_memory_limit: Option<&'static str>,
     pub expect_no_memory_limit: bool,
@@ -198,6 +202,10 @@ const BASE: Case = Case {
     create_db: false,
     create_wp_content_volume: false,
     run_after_deploy: false,
+    before_serve: &[],
+    initial_http: &[],
+    restart_http: &[],
+    persistent_files: &[],
     commands: &[],
     expected_memory_limit: None,
     expect_no_memory_limit: false,
@@ -231,6 +239,84 @@ const WORDPRESS_DB_ENV: &[(&str, &str)] = &[
 
 pub const BRO_BARBERSHOP_ARCHIVE_URL: &str =
     "https://github.com/motopress/bro-barbershop/archive/refs/heads/master.zip";
+
+const TYPECHO_SQLITE: Case = Case {
+    test_id: "typecho_sqlite_1_3_0",
+    name: Some("typecho_sqlite_1_3_0"),
+    suite: Suite::Php,
+    download: Some("https://github.com/typecho/typecho/archive/refs/tags/v1.3.0.zip"),
+    serve_pattern: PHPIX_LISTENING,
+    http: &[
+        body_status("/", 200, "Hello World"),
+        body_status("/admin/login.php", 200, "Typecho"),
+        body_status("/usr/themes/default/style.css", 200, "body"),
+    ],
+    env: &[
+        ("TYPECHO_DB_ADAPTER", "Pdo_SQLite"),
+        ("TYPECHO_DB_FILE", "/app/usr/typecho.db"),
+        ("TYPECHO_SITE_URL", "http://localhost"),
+        ("TYPECHO_USER_NAME", "admin"),
+        ("TYPECHO_USER_PASSWORD", "typecho-e2e-password"),
+        ("TYPECHO_USER_MAIL", "admin@example.com"),
+        ("TYPECHO_LANG", "en_US"),
+    ],
+    before_serve: &[run("after_deploy"), run("install")],
+    commands: &[
+        run_stdout(
+            concat!(
+                "php -r '",
+                r#"require getenv("TYPECHO_STARTUP_SCRIPT"); "#,
+                r#"if (defined("__TYPECHO_ROOT_DIR__")) { exit(1); } "#,
+                r#"require "/app/config.inc.php"; "#,
+                r#"if (!is_link("/app/config.inc.php")) { exit(1); } "#,
+                r#"$db = \Typecho\Db::get(); "#,
+                r#"if ($db->getAdapterName() !== getenv("TYPECHO_DB_ADAPTER")) { exit(1); } "#,
+                r#"$db->query($db->update("table.contents")->rows(["title" => "Hello World persisted"])->where("cid = ?", 1)); "#,
+                r#"file_put_contents("/app/usr/uploads/persisted.txt", "Typecho persisted upload"); "#,
+                r#"file_put_contents("/app/usr/themes/default/style.css", "/* Typecho customized theme */", FILE_APPEND); "#,
+                r#"file_put_contents("/app/usr/config.inc.php", "\ndefine(\"TYPECHO_PERSISTED_CONFIG\", \"kept\");\n", FILE_APPEND); "#,
+                r#"echo "Typecho content written";'"#,
+            ),
+            "Typecho content written",
+        ),
+        run("after_deploy"),
+        run_stdout(
+            concat!(
+                "php -r '",
+                r#"require getenv("TYPECHO_STARTUP_SCRIPT"); "#,
+                r#"if (defined("__TYPECHO_ROOT_DIR__")) { exit(1); } "#,
+                r#"require "/app/config.inc.php"; "#,
+                r#"if (!is_link("/app/config.inc.php")) { exit(1); } "#,
+                r#"echo TYPECHO_PERSISTED_CONFIG;'"#,
+            ),
+            "kept",
+        ),
+    ],
+    initial_http: &[
+        body_status("/install.php", 200, "Typecho"),
+        body_status("/install.php?step=2", 200, "dbAdapter"),
+    ],
+    restart_http: &[
+        body_status("/", 200, "Hello World persisted"),
+        body_status(
+            "/usr/uploads/persisted.txt",
+            200,
+            "Typecho persisted upload",
+        ),
+        body_status(
+            "/usr/themes/default/style.css",
+            200,
+            "Typecho customized theme",
+        ),
+    ],
+    persistent_files: &[
+        "typecho-usr/config.inc.php",
+        "typecho-usr/typecho.db",
+        "typecho-usr/uploads/persisted.txt",
+    ],
+    build_modes: Some(WASMER_ONLY),
+    ..BASE
+};
 
 pub static CASES: &[Case] = &[
     // CDN/static fixture
@@ -277,6 +363,29 @@ pub static CASES: &[Case] = &[
         ],
         ..BASE
     },
+    // MySQL uses Wasmer's default adapter and managed DB_* credentials.
+    Case {
+        test_id: "typecho_1_3_0",
+        name: Some("typecho_1_3_0"),
+        env: &[
+            ("DB_HOST", "127.0.0.1"),
+            ("DB_PORT", "3306"),
+            ("DB_USERNAME", "root"),
+            ("DB_PASSWORD", ""),
+            ("TYPECHO_SITE_URL", "http://localhost"),
+            ("TYPECHO_USER_NAME", "admin"),
+            ("TYPECHO_USER_PASSWORD", "typecho-e2e-password"),
+            ("TYPECHO_USER_MAIL", "admin@example.com"),
+            ("TYPECHO_LANG", "en_US"),
+        ],
+        create_db: true,
+        persistent_files: &[
+            "typecho-usr/config.inc.php",
+            "typecho-usr/uploads/persisted.txt",
+        ],
+        ..TYPECHO_SQLITE
+    },
+    TYPECHO_SQLITE,
     // WordPress skeleton that echoes a simple string
     Case {
         test_id: "php_wordpress0",

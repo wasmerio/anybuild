@@ -24,6 +24,7 @@ pub enum PhpFramework {
     Moodle,
     Symfony,
     Drupal,
+    Typecho,
 }
 
 impl PhpFramework {
@@ -33,6 +34,7 @@ impl PhpFramework {
             "moodle" => Some(PhpFramework::Moodle),
             "symfony" => Some(PhpFramework::Symfony),
             "drupal" => Some(PhpFramework::Drupal),
+            "typecho" => Some(PhpFramework::Typecho),
             _ => None,
         }
     }
@@ -57,6 +59,9 @@ pub struct PhpConfig {
     /// Docroot subdirectory ("web", "public", "app") or None for the root.
     #[serde(rename = "php_public_dir")]
     pub public_dir: Option<String>,
+    /// Unspecified uses SQLite locally and MySQL on Wasmer for Typecho.
+    #[serde(default)]
+    pub typecho_db_adapter: Option<String>,
 }
 
 impl Default for PhpConfig {
@@ -71,6 +76,7 @@ impl Default for PhpConfig {
             php_architecture: None,
             phpix_worker_threads: Some(4),
             public_dir: None,
+            typecho_db_adapter: None,
         }
     }
 }
@@ -108,6 +114,8 @@ impl PhpConfig {
             )?,
             phpix_worker_threads: env_int(operation, "phpix_worker_threads")?.or(Some(4)),
             public_dir: env_str(operation, "php_public_dir"),
+            typecho_db_adapter: env_str(operation, "typecho_db_adapter")
+                .or_else(|| operation.environment_var("TYPECHO_DB_ADAPTER")),
         })
     }
 }
@@ -165,6 +173,13 @@ pub(crate) fn detect_framework(
         }
     };
     let composer_packages = composer_packages(composer_config);
+
+    if path.join("var/Typecho/Common.php").exists()
+        && path.join("usr/themes").is_dir()
+        && path.join("var/Typecho/Db.php").exists()
+    {
+        return Some(PhpFramework::Typecho);
+    }
 
     let has_moodle_layout = path.join("version.php").exists()
         && path.join("lib/setup.php").exists()
@@ -295,7 +310,12 @@ impl Provider for PhpConfig {
         }
         if matches!(
             framework,
-            Some(PhpFramework::Drupal | PhpFramework::Moodle | PhpFramework::Symfony)
+            Some(
+                PhpFramework::Drupal
+                    | PhpFramework::Moodle
+                    | PhpFramework::Symfony
+                    | PhpFramework::Typecho
+            )
         ) && exists(path, &["index.php", "public/index.php", "web/index.php"])
         {
             return Some(DetectionEvidence::Framework);

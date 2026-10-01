@@ -155,7 +155,7 @@ base):
 | ---------- | ------------------------------------------------------------- |
 | python     | `python_version`, `python_server`, `python_framework`, `asgi_application`, `wsgi_application`, `python_extra_dependencies`, `python_precompile`, `python_extra_index_url` |
 | node       | `node_version`, `node_package_manager`, `node_framework`, `node_server`, `node_build_command`, `edgejs_enable`, `edgejs_engine`, `edgejs_precompile`, `optimize_node_dependencies` |
-| php        | `php_version`, `phpix`, `composer_enable`, `composer_build_script`, `php_public_dir` |
+| php        | `php_framework`, `php_version`, `phpix`, `composer_enable`, `composer_build_script`, `php_public_dir` |
 | wordpress  | php fields plus `wp_version`, `wp_locale`, `wp_cli_version`    |
 | staticfile | `static_dir`, `sws_version`, `static_convert_redirects`               |
 | go         | `go_version`, `go_build_file`, `go_serve_binary`                  |
@@ -251,3 +251,41 @@ fields downstream serves want — here the `static_app` mount that
 `staticfile_serve` reads. `serve()` from the same module is the generic
 assembler behind every `<provider>_serve`, with the override surface
 documented above.
+
+### Typecho
+
+Typecho source distributions are detected as PHP projects with `php_framework =
+"typecho"`. Wasmer uses PHPix by default. The generated serve explicitly mounts
+the `typecho-usr` volume at `/app/usr`, preserving configuration, SQLite
+databases, uploads, themes, and plugins.
+
+Like WordPress, `after_deploy` seeds the volume with bundled files without
+replacing existing content. PHPix creates the `/app/config.inc.php` symlink to
+`usr/config.inc.php` at runtime through a dedicated `start-typecho.php` startup
+script. The standard `typecho-config.inc.php` template contains only application
+and database configuration. Plain PHP loads the persistent config through a
+small root loader. Typecho's sources remain unchanged.
+
+Wasmer defaults to `Pdo_Mysql` and requests a managed MySQL database in
+`app.yaml`. The template reads Wasmer's `DB_HOST`, `DB_PORT`, `DB_USERNAME`,
+`DB_PASSWORD`, and `DB_NAME` variables; `TYPECHO_DB_*` variables override them.
+Local runs default to SQLite in `usr/typecho.db`. Set
+`TYPECHO_DB_ADAPTER=Pdo_SQLite` before building to use SQLite on Wasmer without
+requesting a managed database.
+
+The web installer creates the tables and site administrator. An existing
+`config.inc.php` is preserved in the volume and loaded as supplied. Custom
+configuration must set `__TYPECHO_ROOT_DIR__` to the application root, for
+example with `getenv('TYPECHO_APP_PATH')`, because PHP resolves `__FILE__`
+through symlinks.
+
+Wasmer runs `after_deploy` as a post-deployment job. For local setup, run
+`anybuild run --after-deploy --start` before opening the web installer at
+`/install.php`, or use `anybuild run --command=install` with Typecho's
+`TYPECHO_DB_*`, `TYPECHO_SITE_URL`, and `TYPECHO_USER_*` environment variables.
+The `install` command also seeds the volume before running the installer.
+
+For SQLite on Wasmer, set `TYPECHO_DB_ADAPTER=Pdo_SQLite` and optionally
+`TYPECHO_DB_FILE=/app/usr/typecho.db`. Locally, the persistent data lives under
+`.anybuild/volumes/typecho-usr`; Wasmer deployments declare the same volume in
+`app.yaml`.

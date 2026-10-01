@@ -298,6 +298,7 @@ let `anybuild generate` detect it for you.
 | PHP | Drupal | `php_framework = "drupal"` | `php` |
 | PHP | Laravel | `php_framework = "laravel"` | `laravel`, `php` |
 | PHP | Moodle | `php_framework = "moodle"` | `php` |
+| PHP | Typecho | `php_framework = "typecho"` | `php` |
 | PHP | Symfony | `php_framework = "symfony"` | `php` |
 | CMS | WordPress | Automatically detected | `wordpress` |
 | Static site | Hugo | Automatically detected | `hugo` |

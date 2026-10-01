@@ -80,40 +80,90 @@ def php_build(
         ignore.append("vendor")
     if config.php_framework == "symfony":
         ignore.append("var")
+    if config.php_framework == "typecho":
+        ignore += ["usr", "config.inc.php"]
     steps.append(copy(".", ignore = ignore))
 
     # Composer scripts are skipped at install time, so run the build script after.
     if config.composer_enable and config.composer_build_script:
         steps.append(run("composer run-script {}".format(config.composer_build_script), outputs = ["."], group = "build"))
     steps += after_build
+    mounts = [app, assets]
+    env_vars = php_env(config, assets)
+    usr_base = None
+    if config.php_framework == "typecho":
+        usr_base = mount("typecho_usr")
+        mounts.append(usr_base)
+        steps.append(copy("usr", usr_base.path))
+        if file_exists("config.inc.php"):
+            steps.append(copy("config.inc.php", "{}/config.inc.php".format(usr_base.path)))
+        elif not file_exists("usr/config.inc.php"):
+            steps.append(copy("php/typecho-config.inc.php", "{}/config.inc.php".format(usr_base.path), base = "assets"))
+        steps.append(copy("php/start-typecho.php", "{}/start-typecho.php".format(assets.path), base = "assets"))
+        if not config.phpix:
+            steps.append(write(
+                "{}/config.inc.php".format(app.path),
+                "<?php\n$config = (getenv('TYPECHO_APP_PATH') ?: __DIR__) . '/usr/config.inc.php';\nif (is_file($config)) {\n    require_once $config;\n}\n",
+            ))
+        env_vars["TYPECHO_APP_PATH"] = app.serve_path
+        env_vars["TYPECHO_STARTUP_SCRIPT"] = "{}/start-typecho.php".format(assets.serve_path)
+        env_vars["TYPECHO_DB_ADAPTER"] = config.typecho_db_adapter or "Pdo_SQLite"
 
+    serve_deps = php_runtime_deps(config, tc)
+    if config.php_framework == "typecho" and not config.composer_enable:
+        serve_deps.append(dep("bash"))
     return build(
         steps = steps,
-        serve_deps = php_runtime_deps(config, tc),
-        mounts = [app, assets],
-        env = php_env(config, assets),
+        serve_deps = serve_deps,
+        mounts = mounts,
+        env = env_vars,
         app = app,
         assets = assets,
         php = tc.php,
         composer = tc.composer,
+        typecho_usr = usr_base,
     )
 
-def php_commands(config, app):
+def _quote(value):
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+def php_commands(config, app, assets = None, typecho_usr = None):
     engine = "phpix" if config.phpix else "php"
     docroot = app.serve_path
     if config.php_public_dir:
         docroot = "{}/{}".format(app.serve_path, config.php_public_dir)
-    return {"start": "{} -S 0.0.0.0:{} -t {}".format(engine, config.port, docroot)}
+    commands = {"start": "{} -S 0.0.0.0:{} -t {}".format(engine, config.port, docroot)}
+    if config.php_framework == "typecho":
+        assets = assets or mount("assets")
+        if config.phpix:
+            commands["start"] = "phpix --startup-script={} -S 0.0.0.0:{} -t {}".format(_quote("{}/start-typecho.php".format(assets.serve_path)), config.port, docroot)
+        typecho_usr = typecho_usr or mount("typecho_usr")
+        initialize = "mkdir -p {} && cp -Rn {} {}".format(
+            _quote("{}/usr/uploads".format(app.serve_path)),
+            _quote("{}/.".format(typecho_usr.serve_path)),
+            _quote("{}/usr/".format(app.serve_path)),
+        )
+        commands["after_deploy"] = "bash -c " + _quote(initialize)
+        install = "php " + _quote("{}/install.php".format(app.serve_path))
+        if config.phpix:
+            install = "php -r " + _quote("require getenv('TYPECHO_STARTUP_SCRIPT'); require getenv('TYPECHO_APP_PATH') . '/install.php';")
+        commands["install"] = "bash -c " + _quote(initialize + " && " + install)
+    return commands
 
 def php_serve(config, build, name = None, provider = None, commands = None, **overrides):
     """Serve a PHP build with the php (or phpix) dev server."""
     app = build.app
+    volumes = []
+    if config.php_framework == "typecho":
+        usr = volume("typecho-usr", "{}/usr".format(app.serve_path))
+        volumes = [usr]
     return serve(
         config,
         build,
         provider = provider,
         name = name,
         cwd = app.serve_path,
-        commands = commands if commands != None else php_commands(config, app),
+        commands = commands if commands != None else php_commands(config, app, build.assets, build.typecho_usr),
+        volumes = volumes,
         **overrides
     )
