@@ -61,7 +61,7 @@ fn typecho_detects_source_and_plans_persistent_storage() {
         assert!(!start.contains("auto_prepend_file"));
         if phpix.unwrap_or(true) {
             assert!(start.contains("--startup-script='/opt/assets/start-typecho.php'"));
-            assert!(plan.serve.commands["install"].contains("TYPECHO_STARTUP_SCRIPT"));
+            assert!(plan.serve.commands["install"].ends_with(" --phpix"));
         } else {
             assert!(!start.contains("--startup-script"));
         }
@@ -71,12 +71,13 @@ fn typecho_detects_source_and_plans_persistent_storage() {
             .build
             .iter()
             .any(|step| matches!(step, Step::Run(_))));
-        assert!(plan.serve.commands["install"].contains("/install.php"));
         let after_deploy = &plan.serve.commands["after_deploy"];
-        assert!(after_deploy.contains("cp -Rn --no-preserve=mode "));
-        assert!(after_deploy.contains("/opt/typecho_usr/."));
-        assert!(after_deploy.contains("/app/usr/"));
-        assert!(!after_deploy.contains("start-typecho"));
+        assert!(after_deploy.contains("/opt/assets/setup-typecho.php"));
+        assert_eq!(
+            plan.serve.env.as_ref().unwrap()["TYPECHO_USR_BASE_PATH"],
+            "/opt/typecho_usr"
+        );
+        assert_eq!(after_deploy, &plan.serve.commands["install"]);
         let volumes = plan.serve.volumes.as_ref().unwrap();
         assert_eq!(volumes.len(), 1);
         assert_eq!(volumes[0].name, "typecho-usr");

@@ -100,18 +100,18 @@ def php_build(
         elif not file_exists("usr/config.inc.php"):
             steps.append(copy("php/typecho-config.inc.php", "{}/config.inc.php".format(usr_base.path), base = "assets"))
         steps.append(copy("php/start-typecho.php", "{}/start-typecho.php".format(assets.path), base = "assets"))
+        steps.append(copy("php/setup-typecho.php", "{}/setup-typecho.php".format(assets.path), base = "assets"))
         if not config.phpix:
             steps.append(write(
                 "{}/config.inc.php".format(app.path),
                 "<?php\n$config = (getenv('TYPECHO_APP_PATH') ?: __DIR__) . '/usr/config.inc.php';\nif (is_file($config)) {\n    require_once $config;\n}\n",
             ))
         env_vars["TYPECHO_APP_PATH"] = app.serve_path
+        env_vars["TYPECHO_USR_BASE_PATH"] = usr_base.serve_path
         env_vars["TYPECHO_STARTUP_SCRIPT"] = "{}/start-typecho.php".format(assets.serve_path)
         env_vars["TYPECHO_DB_ADAPTER"] = config.typecho_db_adapter or "Pdo_SQLite"
 
     serve_deps = php_runtime_deps(config, tc)
-    if config.php_framework == "typecho" and not config.composer_enable:
-        serve_deps.append(dep("bash"))
     return build(
         steps = steps,
         serve_deps = serve_deps,
@@ -127,7 +127,7 @@ def php_build(
 def _quote(value):
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
-def php_commands(config, app, assets = None, typecho_usr = None):
+def php_commands(config, app, assets = None):
     engine = "phpix" if config.phpix else "php"
     docroot = app.serve_path
     if config.php_public_dir:
@@ -137,17 +137,11 @@ def php_commands(config, app, assets = None, typecho_usr = None):
         assets = assets or mount("assets")
         if config.phpix:
             commands["start"] = "phpix --startup-script={} -S 0.0.0.0:{} -t {}".format(_quote("{}/start-typecho.php".format(assets.serve_path)), config.port, docroot)
-        typecho_usr = typecho_usr or mount("typecho_usr")
-        initialize = "mkdir -p {} && cp -Rn --no-preserve=mode {} {}".format(
-            _quote("{}/usr/uploads".format(app.serve_path)),
-            _quote("{}/.".format(typecho_usr.serve_path)),
-            _quote("{}/usr/".format(app.serve_path)),
-        )
-        commands["after_deploy"] = "bash -c " + _quote(initialize)
-        install = "php " + _quote("{}/install.php".format(app.serve_path))
+        install = "php " + _quote("{}/setup-typecho.php".format(assets.serve_path))
         if config.phpix:
-            install = "php -r " + _quote("require getenv('TYPECHO_STARTUP_SCRIPT'); require getenv('TYPECHO_APP_PATH') . '/install.php';")
-        commands["install"] = "bash -c " + _quote(initialize + " && " + install)
+            install += " --phpix"
+        commands["after_deploy"] = install
+        commands["install"] = install
     return commands
 
 def php_serve(config, build, name = None, provider = None, commands = None, **overrides):
@@ -163,7 +157,7 @@ def php_serve(config, build, name = None, provider = None, commands = None, **ov
         provider = provider,
         name = name,
         cwd = app.serve_path,
-        commands = commands if commands != None else php_commands(config, app, build.assets, build.typecho_usr),
+        commands = commands if commands != None else php_commands(config, app, build.assets),
         volumes = volumes,
         **overrides
     )
