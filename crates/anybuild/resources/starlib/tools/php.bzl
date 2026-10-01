@@ -94,15 +94,18 @@ def php_build(
         usr_base = mount("typecho_usr")
         mounts.append(usr_base)
         steps += [
-            copy("usr", usr_base.path, ignore = [".anybuild"]),
-            copy("php/typecho-runtime.php", "{}/typecho-runtime.php".format(assets.path), base = "assets"),
-        ]
+            copy("usr", usr_base.path),
+            copy("php/start-typecho.sh", "{}/start-typecho.sh".format(assets.path), base = "assets"),
+        ] + _typecho_config_steps(app)
         env_vars["TYPECHO_APP_PATH"] = app.serve_path
         env_vars["TYPECHO_USR_BASE_PATH"] = usr_base.serve_path
 
+    serve_deps = php_runtime_deps(config, tc)
+    if config.php_framework == "typecho" and not config.composer_enable:
+        serve_deps.append(dep("bash"))
     return build(
         steps = steps,
-        serve_deps = php_runtime_deps(config, tc),
+        serve_deps = serve_deps,
         mounts = mounts,
         env = env_vars,
         app = app,
@@ -111,19 +114,39 @@ def php_build(
         composer = tc.composer,
     )
 
+def _quote(value):
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+def _typecho_config_steps(app):
+    # PHP resolves __FILE__ through symlinks. Make the stock installer's
+    # generated config keep using the app root when it lives in usr.
+    script = """foreach (array_slice($argv, 1) as $file) {
+    if (!is_file($file)) { continue; }
+    $code = file_get_contents($file);
+    $code = str_replace(
+        "define('__TYPECHO_ROOT_DIR__', dirname(__FILE__));",
+        "define('__TYPECHO_ROOT_DIR__', getenv('TYPECHO_APP_PATH') ?: dirname(__FILE__));",
+        $code
+    );
+    if (file_put_contents($file, $code) === false) { exit(1); }
+}"""
+    return [run("php -r {} {} {}".format(
+        _quote(script),
+        _quote("{}/install.php".format(app.path)),
+        _quote("{}/config.inc.php".format(app.path)),
+    ))]
+
 def php_commands(config, app, assets = None):
     engine = "phpix" if config.phpix else "php"
     docroot = app.serve_path
     if config.php_public_dir:
         docroot = "{}/{}".format(app.serve_path, config.php_public_dir)
-    flags = ""
+    commands = {"start": "{} -S 0.0.0.0:{} -t {}".format(engine, config.port, docroot)}
     if config.php_framework == "typecho":
-        # Run on every PHP request, including the web installer, to persist
-        # its generated config alongside the database and user content.
-        flags = " -d auto_prepend_file={}/typecho-runtime.php".format((assets or mount("assets")).serve_path)
-    commands = {"start": "{}{} -S 0.0.0.0:{} -t {}".format(engine, flags, config.port, docroot)}
-    if config.php_framework == "typecho":
-        commands["install"] = "php{} {}/install.php".format(flags, app.serve_path)
+        assets = assets or mount("assets")
+        prefix = "bash {} ".format(_quote("{}/start-typecho.sh".format(assets.serve_path)))
+        commands["start"] = prefix + commands["start"]
+        commands["install"] = prefix + "php " + _quote("{}/install.php".format(app.serve_path))
     return commands
 
 def php_serve(config, build, name = None, provider = None, commands = None, **overrides):

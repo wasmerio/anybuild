@@ -258,8 +258,12 @@ Typecho source distributions are detected as PHP projects with
 `php_framework = "typecho"`. Wasmer uses PHPix by default. The generated serve
 mounts the `typecho-usr` volume at `/app/usr`, preserving SQLite databases,
 uploads, themes, and plugins. New volumes are seeded with the bundled `usr`
-files without replacing existing content. The web installer configuration is
-saved in that volume and restored when the application starts again.
+files without replacing existing content. `/app/config.inc.php` is a symlink
+to `usr/config.inc.php`, so the stock installer writes its configuration
+directly into the volume. Startup only seeds missing user files and creates
+the symlink. The build adjusts Typecho's generated root definition because
+PHP resolves `__FILE__` through the symlink. No custom PHP runtime or request
+hooks are used.
 
 Run the web installer at `/install.php`, or use `anybuild run --command=install`
 with Typecho's `TYPECHO_DB_*`, `TYPECHO_SITE_URL`, and `TYPECHO_USER_*`

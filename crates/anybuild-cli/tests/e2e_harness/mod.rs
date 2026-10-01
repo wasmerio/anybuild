@@ -166,6 +166,14 @@ pub fn run_case(
     }
 
     result?;
+    for file in case.persistent_files {
+        let path = project_path.join(".anybuild/volumes").join(file);
+        ensure!(
+            path.is_file(),
+            "persistent volume file is missing: {}",
+            path.display()
+        );
+    }
     if case.suite == Suite::Node && build_mode == BuildMode::Wasmer {
         let manifest = fs::read_to_string(project_path.join(".anybuild/wasmer/wasmer.toml"))?;
         let dependency = match edgejs_engine {

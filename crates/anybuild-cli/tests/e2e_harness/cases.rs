@@ -152,6 +152,7 @@ pub struct Case {
     pub before_serve: &'static [RunCommand],
     pub initial_http: &'static [HttpRequest],
     pub restart_http: &'static [HttpRequest],
+    pub persistent_files: &'static [&'static str],
     pub commands: &'static [RunCommand],
     pub expected_memory_limit: Option<&'static str>,
     pub expect_no_memory_limit: bool,
@@ -204,6 +205,7 @@ const BASE: Case = Case {
     before_serve: &[],
     initial_http: &[],
     restart_http: &[],
+    persistent_files: &[],
     commands: &[],
     expected_memory_limit: None,
     expect_no_memory_limit: false,
@@ -294,7 +296,6 @@ pub static CASES: &[Case] = &[
             body_status("/", 200, "Hello World"),
             body_status("/admin/login.php", 200, "Typecho"),
             body_status("/usr/themes/default/style.css", 200, "body"),
-            status("/usr/.anybuild/config.inc.php", 404),
         ],
         env: &[
             ("TYPECHO_DB_ADAPTER", "Pdo_SQLite"),
@@ -307,7 +308,15 @@ pub static CASES: &[Case] = &[
         ],
         before_serve: &[run("install")],
         commands: &[run_stdout(
-            r#"php -r 'require "/opt/assets/typecho-runtime.php"; require "/app/config.inc.php"; $db = \Typecho\Db::get(); $db->query($db->update("table.contents")->rows(["title" => "Hello World persisted"])->where("cid = ?", 1)); file_put_contents("/app/usr/uploads/persisted.txt", "Typecho persisted upload"); file_put_contents("/app/usr/themes/default/style.css", "/* Typecho customized theme */", FILE_APPEND); unlink("/app/usr/.anybuild/seeded"); echo "Typecho content written";'"#,
+            concat!(
+                "php -r '",
+                r#"require "/app/usr/config.inc.php"; "#,
+                r#"$db = \Typecho\Db::get(); "#,
+                r#"$db->query($db->update("table.contents")->rows(["title" => "Hello World persisted"])->where("cid = ?", 1)); "#,
+                r#"file_put_contents("/app/usr/uploads/persisted.txt", "Typecho persisted upload"); "#,
+                r#"file_put_contents("/app/usr/themes/default/style.css", "/* Typecho customized theme */", FILE_APPEND); "#,
+                r#"echo "Typecho content written";'"#,
+            ),
             "Typecho content written",
         )],
         initial_http: &[
@@ -326,6 +335,11 @@ pub static CASES: &[Case] = &[
                 200,
                 "Typecho customized theme",
             ),
+        ],
+        persistent_files: &[
+            "typecho-usr/config.inc.php",
+            "typecho-usr/typecho.db",
+            "typecho-usr/uploads/persisted.txt",
         ],
         build_modes: Some(WASMER_ONLY),
         ..BASE
