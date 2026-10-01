@@ -80,40 +80,63 @@ def php_build(
         ignore.append("vendor")
     if config.php_framework == "symfony":
         ignore.append("var")
+    if config.php_framework == "typecho":
+        ignore.append("usr")
     steps.append(copy(".", ignore = ignore))
 
     # Composer scripts are skipped at install time, so run the build script after.
     if config.composer_enable and config.composer_build_script:
         steps.append(run("composer run-script {}".format(config.composer_build_script), outputs = ["."], group = "build"))
     steps += after_build
+    mounts = [app, assets]
+    env_vars = php_env(config, assets)
+    if config.php_framework == "typecho":
+        usr_base = mount("typecho_usr")
+        mounts.append(usr_base)
+        steps += [
+            copy("usr", usr_base.path, ignore = [".anybuild"]),
+            copy("php/typecho-runtime.php", "{}/typecho-runtime.php".format(assets.path), base = "assets"),
+        ]
+        env_vars["TYPECHO_APP_PATH"] = app.serve_path
+        env_vars["TYPECHO_USR_BASE_PATH"] = usr_base.serve_path
 
     return build(
         steps = steps,
         serve_deps = php_runtime_deps(config, tc),
-        mounts = [app, assets],
-        env = php_env(config, assets),
+        mounts = mounts,
+        env = env_vars,
         app = app,
         assets = assets,
         php = tc.php,
         composer = tc.composer,
     )
 
-def php_commands(config, app):
+def php_commands(config, app, assets = None):
     engine = "phpix" if config.phpix else "php"
     docroot = app.serve_path
     if config.php_public_dir:
         docroot = "{}/{}".format(app.serve_path, config.php_public_dir)
-    return {"start": "{} -S 0.0.0.0:{} -t {}".format(engine, config.port, docroot)}
+    flags = ""
+    if config.php_framework == "typecho":
+        # Run on every PHP request, including the web installer, to persist
+        # its generated config alongside the database and user content.
+        flags = " -d auto_prepend_file={}/typecho-runtime.php".format((assets or mount("assets")).serve_path)
+    commands = {"start": "{}{} -S 0.0.0.0:{} -t {}".format(engine, flags, config.port, docroot)}
+    if config.php_framework == "typecho":
+        commands["install"] = "php{} {}/install.php".format(flags, app.serve_path)
+    return commands
 
 def php_serve(config, build, name = None, provider = None, commands = None, **overrides):
     """Serve a PHP build with the php (or phpix) dev server."""
     app = build.app
+    if config.php_framework == "typecho" and "volumes" not in overrides:
+        overrides["volumes"] = [volume("typecho-usr", "{}/usr".format(app.serve_path))]
     return serve(
         config,
         build,
         provider = provider,
         name = name,
         cwd = app.serve_path,
-        commands = commands if commands != None else php_commands(config, app),
+        commands = commands if commands != None else php_commands(config, app, build.assets),
         **overrides
     )

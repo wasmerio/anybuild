@@ -15,6 +15,55 @@ fn static_project() -> tempfile::TempDir {
 }
 
 #[test]
+fn typecho_detects_source_and_plans_persistent_storage() {
+    let project = tempfile::tempdir().unwrap();
+    for file in [
+        "index.php",
+        "install.php",
+        "var/Typecho/Common.php",
+        "var/Typecho/Db.php",
+    ] {
+        let path = project.path().join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "<?php\n").unwrap();
+    }
+    std::fs::create_dir_all(project.path().join("usr/themes/default")).unwrap();
+    for phpix in [None, Some(false), Some(true)] {
+        let mut sdk = Anybuild::new(project.path());
+        if let Some(enabled) = phpix {
+            sdk = sdk.with_env("ANYBUILD_PHPIX", enabled.to_string());
+        }
+        let plan = sdk
+            .plan(PlanOptions {
+                temporary: true,
+                runtime_environment: RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+                ..PlanOptions::default()
+            })
+            .unwrap();
+        assert_eq!(plan.provider, "php");
+        assert_eq!(plan.config["php_framework"], "typecho");
+        let engine = if phpix.unwrap_or(true) {
+            "phpix"
+        } else {
+            "php"
+        };
+        assert!(plan.serve.commands["start"].starts_with(&format!("{engine} -d ")));
+        assert!(plan.serve.commands["install"].ends_with("/app/install.php"));
+        let volumes = plan.serve.volumes.as_ref().unwrap();
+        assert_eq!(volumes.len(), 1);
+        assert_eq!(volumes[0].name, "typecho-usr");
+        assert_eq!(volumes[0].serve_path.to_str(), Some("/app/usr"));
+        assert!(plan
+            .serve
+            .mounts
+            .as_ref()
+            .unwrap()
+            .iter()
+            .any(|mount| mount.name == "typecho_usr"));
+    }
+}
+
+#[test]
 fn drupal_defaults_to_phpix_on_wasmer_and_respects_overrides() {
     for docroot in [".", "web"] {
         let project = tempfile::tempdir().unwrap();

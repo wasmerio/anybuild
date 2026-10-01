@@ -207,7 +207,13 @@ fn run_case_inner(
         volume_specs.push("wp-content:/app/wp-content".to_string());
     }
 
-    if case.download.is_some() || !case.commands.is_empty() || build_mode.uses_docker_runner() {
+    if case.download.is_some()
+        || !case.commands.is_empty()
+        || !case.before_serve.is_empty()
+        || !case.initial_http.is_empty()
+        || !case.restart_http.is_empty()
+        || build_mode.uses_docker_runner()
+    {
         // Build first, then serve via `anybuild run --start`, then execute
         // each RunCommand via `anybuild run --command=...`.
         let build_cmd =
@@ -237,22 +243,61 @@ fn run_case_inner(
             &volume_specs,
             port,
         )?;
-        run_server_and_check(case, &run_cmd, repo_root, envs, project_path, port, false)?;
+        if !case.initial_http.is_empty() {
+            let initial = Case {
+                http: case.initial_http,
+                ..*case
+            };
+            run_server_and_check(
+                &initial,
+                &run_cmd,
+                repo_root,
+                envs,
+                project_path,
+                port,
+                false,
+            )?;
+        }
 
-        for command in case.commands {
-            let cmd = anybuild_run_command(
+        for command in case.before_serve {
+            run_case_command(
+                command,
                 repo_root,
                 project_path,
                 build_mode,
-                false,
-                false,
-                Some(command.command),
                 &volume_specs,
                 port,
+                envs,
             )?;
-            let result = run_completed_command(&cmd, repo_root, envs, Duration::from_secs(180))?;
-            print_run_command_output(command, &cmd, &result);
-            assert_run_command(command, &cmd, &result)?;
+        }
+
+        run_server_and_check(case, &run_cmd, repo_root, envs, project_path, port, false)?;
+
+        for command in case.commands {
+            run_case_command(
+                command,
+                repo_root,
+                project_path,
+                build_mode,
+                &volume_specs,
+                port,
+                envs,
+            )?;
+        }
+        if !case.restart_http.is_empty() {
+            let restarted = Case {
+                http: case.restart_http,
+                ..*case
+            };
+            run_server_and_check(
+                &restarted,
+                &run_cmd,
+                repo_root,
+                envs,
+                project_path,
+                port,
+                false,
+            )?;
         }
         return Ok(());
     }
@@ -266,6 +311,31 @@ fn run_case_inner(
         case.provider,
     )?;
     run_server_and_check(case, &cmd, repo_root, envs, project_path, port, true)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_case_command(
+    command: &RunCommand,
+    repo_root: &Path,
+    project_path: &Path,
+    build_mode: BuildMode,
+    volume_specs: &[String],
+    port: u16,
+    envs: &[(String, String)],
+) -> Result<()> {
+    let cmd = anybuild_run_command(
+        repo_root,
+        project_path,
+        build_mode,
+        false,
+        false,
+        Some(command.command),
+        volume_specs,
+        port,
+    )?;
+    let result = run_completed_command(&cmd, repo_root, envs, Duration::from_secs(180))?;
+    print_run_command_output(command, &cmd, &result);
+    assert_run_command(command, &cmd, &result)
 }
 
 // ---------------------------------------------------------------------------
@@ -594,20 +664,16 @@ impl ProcessGroupGuard {
 
     fn shutdown(&mut self) -> Option<ExitStatus> {
         self.shut_down = true;
-        if self.reaped.is_some() {
-            // The leader already exited and was reaped. Mirror pytest,
-            // where os.getpgid() on the reaped pid raises and the group
-            // kill is skipped; also avoids signalling a recycled pgid.
-            return self.reaped;
-        }
         // Graceful shutdown first with Ctrl-C (SIGINT), then kill.
         unsafe {
             libc::killpg(self.pgid, libc::SIGINT);
         }
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
-            if let Ok(Some(status)) = self.child.try_wait() {
-                self.reaped = Some(status);
+            self.poll_exit();
+            // The CLI can exit before Wasmer. Wait for the entire group so
+            // a restart cannot accidentally reach the previous server.
+            if unsafe { libc::killpg(self.pgid, 0) } == -1 {
                 return self.reaped;
             }
             if Instant::now() >= deadline {
@@ -618,8 +684,10 @@ impl ProcessGroupGuard {
         unsafe {
             libc::killpg(self.pgid, libc::SIGKILL);
         }
-        if let Ok(status) = self.child.wait() {
-            self.reaped = Some(status);
+        if self.reaped.is_none() {
+            if let Ok(status) = self.child.wait() {
+                self.reaped = Some(status);
+            }
         }
         self.reaped
     }
@@ -1427,6 +1495,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn shutdown_kills_descendants_when_the_cli_exits_first() {
+        use std::io::BufRead;
+
+        let temp = tempfile::tempdir().unwrap();
+        let mut child = spawn_group(
+            &[
+                "sh".to_owned(),
+                "-c".to_owned(),
+                r#"trap 'exit 0' INT; sh -c 'trap "" INT; echo ready; exec sleep 60' & wait"#
+                    .to_owned(),
+            ],
+            temp.path(),
+            &[],
+        )
+        .unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let mut guard = ProcessGroupGuard::new(child);
+        let mut ready = String::new();
+        BufReader::new(stdout).read_line(&mut ready).unwrap();
+        assert_eq!(ready.trim(), "ready");
+        guard.shutdown();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < deadline && unsafe { libc::killpg(guard.pgid, 0) } == 0 {
+            thread::sleep(Duration::from_millis(50));
+        }
+        assert_eq!(unsafe { libc::killpg(guard.pgid, 0) }, -1);
+    }
+
+    #[test]
     fn case_test_ids_are_unique() {
         let mut seen = std::collections::BTreeSet::new();
         for case in CASES {
@@ -1512,7 +1609,10 @@ mod tests {
                     return Suite::Php;
                 }
             }
-            if identifier.starts_with("wordpress") || identifier.starts_with("examples/php-") {
+            if identifier.starts_with("wordpress")
+                || identifier.starts_with("typecho")
+                || identifier.starts_with("examples/php-")
+            {
                 return Suite::Php;
             }
             if identifier.starts_with("examples/python-") {

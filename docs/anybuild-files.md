@@ -155,7 +155,7 @@ base):
 | ---------- | ------------------------------------------------------------- |
 | python     | `python_version`, `python_server`, `python_framework`, `asgi_application`, `wsgi_application`, `python_extra_dependencies`, `python_precompile`, `python_extra_index_url` |
 | node       | `node_version`, `node_package_manager`, `node_framework`, `node_server`, `node_build_command`, `edgejs_enable`, `edgejs_engine`, `edgejs_precompile`, `optimize_node_dependencies` |
-| php        | `php_version`, `phpix`, `composer_enable`, `composer_build_script`, `php_public_dir` |
+| php        | `php_framework`, `php_version`, `phpix`, `composer_enable`, `composer_build_script`, `php_public_dir` |
 | wordpress  | php fields plus `wp_version`, `wp_locale`, `wp_cli_version`    |
 | staticfile | `static_dir`, `sws_version`, `static_convert_redirects`               |
 | go         | `go_version`, `go_build_file`, `go_serve_binary`                  |
@@ -251,3 +251,19 @@ fields downstream serves want — here the `static_app` mount that
 `staticfile_serve` reads. `serve()` from the same module is the generic
 assembler behind every `<provider>_serve`, with the override surface
 documented above.
+
+### Typecho
+
+Typecho source distributions are detected as PHP projects with
+`php_framework = "typecho"`. Wasmer uses PHPix by default. The generated serve
+mounts the `typecho-usr` volume at `/app/usr`, preserving SQLite databases,
+uploads, themes, and plugins. New volumes are seeded with the bundled `usr`
+files without replacing existing content. The web installer configuration is
+saved in that volume and restored when the application starts again.
+
+Run the web installer at `/install.php`, or use `anybuild run --command=install`
+with Typecho's `TYPECHO_DB_*`, `TYPECHO_SITE_URL`, and `TYPECHO_USER_*`
+environment variables. For SQLite, set `TYPECHO_DB_ADAPTER=Pdo_SQLite` and
+`TYPECHO_DB_FILE=/app/usr/typecho.db`. Locally, the persistent data lives under
+`.anybuild/volumes/typecho-usr`; Wasmer deployments declare the same volume in
+`app.yaml`.

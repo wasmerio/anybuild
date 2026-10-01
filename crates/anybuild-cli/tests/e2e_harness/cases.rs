@@ -149,6 +149,9 @@ pub struct Case {
     pub create_db: bool,
     pub create_wp_content_volume: bool,
     pub run_after_deploy: bool,
+    pub before_serve: &'static [RunCommand],
+    pub initial_http: &'static [HttpRequest],
+    pub restart_http: &'static [HttpRequest],
     pub commands: &'static [RunCommand],
     pub expected_memory_limit: Option<&'static str>,
     pub expect_no_memory_limit: bool,
@@ -198,6 +201,9 @@ const BASE: Case = Case {
     create_db: false,
     create_wp_content_volume: false,
     run_after_deploy: false,
+    before_serve: &[],
+    initial_http: &[],
+    restart_http: &[],
     commands: &[],
     expected_memory_limit: None,
     expect_no_memory_limit: false,
@@ -275,6 +281,53 @@ pub static CASES: &[Case] = &[
             body("/", r#""version"\s*:\s*"8\.3\.[0-9]+""#),
             body("/api/greet/Alice", r"Hello, Alice!"),
         ],
+        ..BASE
+    },
+    // Real Typecho release: install SQLite, write content, then restart.
+    Case {
+        test_id: "typecho_1_3_0",
+        name: Some("typecho_1_3_0"),
+        suite: Suite::Php,
+        download: Some("https://github.com/typecho/typecho/archive/refs/tags/v1.3.0.zip"),
+        serve_pattern: PHPIX_LISTENING,
+        http: &[
+            body_status("/", 200, "Hello World"),
+            body_status("/admin/login.php", 200, "Typecho"),
+            body_status("/usr/themes/default/style.css", 200, "body"),
+            status("/usr/.anybuild/config.inc.php", 404),
+        ],
+        env: &[
+            ("TYPECHO_DB_ADAPTER", "Pdo_SQLite"),
+            ("TYPECHO_DB_FILE", "/app/usr/typecho.db"),
+            ("TYPECHO_SITE_URL", "http://localhost"),
+            ("TYPECHO_USER_NAME", "admin"),
+            ("TYPECHO_USER_PASSWORD", "typecho-e2e-password"),
+            ("TYPECHO_USER_MAIL", "admin@example.com"),
+            ("TYPECHO_LANG", "en_US"),
+        ],
+        before_serve: &[run("install")],
+        commands: &[run_stdout(
+            r#"php -r 'require "/opt/assets/typecho-runtime.php"; require "/app/config.inc.php"; $db = \Typecho\Db::get(); $db->query($db->update("table.contents")->rows(["title" => "Hello World persisted"])->where("cid = ?", 1)); file_put_contents("/app/usr/uploads/persisted.txt", "Typecho persisted upload"); file_put_contents("/app/usr/themes/default/style.css", "/* Typecho customized theme */", FILE_APPEND); unlink("/app/usr/.anybuild/seeded"); echo "Typecho content written";'"#,
+            "Typecho content written",
+        )],
+        initial_http: &[
+            body_status("/install.php", 200, "Typecho"),
+            body_status("/install.php?step=2", 200, "dbAdapter"),
+        ],
+        restart_http: &[
+            body_status("/", 200, "Hello World persisted"),
+            body_status(
+                "/usr/uploads/persisted.txt",
+                200,
+                "Typecho persisted upload",
+            ),
+            body_status(
+                "/usr/themes/default/style.css",
+                200,
+                "Typecho customized theme",
+            ),
+        ],
+        build_modes: Some(WASMER_ONLY),
         ..BASE
     },
     // WordPress skeleton that echoes a simple string

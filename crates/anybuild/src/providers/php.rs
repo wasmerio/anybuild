@@ -24,6 +24,7 @@ pub enum PhpFramework {
     Moodle,
     Symfony,
     Drupal,
+    Typecho,
 }
 
 impl PhpFramework {
@@ -33,6 +34,7 @@ impl PhpFramework {
             "moodle" => Some(PhpFramework::Moodle),
             "symfony" => Some(PhpFramework::Symfony),
             "drupal" => Some(PhpFramework::Drupal),
+            "typecho" => Some(PhpFramework::Typecho),
             _ => None,
         }
     }
@@ -166,6 +168,13 @@ pub(crate) fn detect_framework(
     };
     let composer_packages = composer_packages(composer_config);
 
+    if path.join("var/Typecho/Common.php").exists()
+        && path.join("usr/themes").is_dir()
+        && path.join("var/Typecho/Db.php").exists()
+    {
+        return Some(PhpFramework::Typecho);
+    }
+
     let has_moodle_layout = path.join("version.php").exists()
         && path.join("lib/setup.php").exists()
         && (path.join("admin/cli/install.php").exists()
@@ -295,7 +304,12 @@ impl Provider for PhpConfig {
         }
         if matches!(
             framework,
-            Some(PhpFramework::Drupal | PhpFramework::Moodle | PhpFramework::Symfony)
+            Some(
+                PhpFramework::Drupal
+                    | PhpFramework::Moodle
+                    | PhpFramework::Symfony
+                    | PhpFramework::Typecho
+            )
         ) && exists(path, &["index.php", "public/index.php", "web/index.php"])
         {
             return Some(DetectionEvidence::Framework);
