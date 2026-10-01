@@ -18,11 +18,11 @@ $postgres = strpos($adapter, 'Pgsql') !== false;
 $db = new \Typecho\Db($adapter, $env('TYPECHO_DB_PREFIX', 'typecho_'));
 $db->addServer([
     'file' => $env('TYPECHO_DB_FILE', __TYPECHO_ROOT_DIR__ . '/usr/typecho.db'),
-    'host' => $env('TYPECHO_DB_HOST', 'localhost'),
-    'port' => (int) $env('TYPECHO_DB_PORT', $postgres ? '5432' : '3306'),
-    'user' => $env('TYPECHO_DB_USER'),
-    'password' => $env('TYPECHO_DB_PASSWORD'),
-    'database' => $env('TYPECHO_DB_DATABASE'),
+    'host' => $env('TYPECHO_DB_HOST', $env('DB_HOST', '127.0.0.1')),
+    'port' => (int) $env('TYPECHO_DB_PORT', $env('DB_PORT', $postgres ? '5432' : '3306')),
+    'user' => $env('TYPECHO_DB_USER', $env('DB_USERNAME', $postgres ? '' : 'root')),
+    'password' => $env('TYPECHO_DB_PASSWORD', $env('DB_PASSWORD')),
+    'database' => $env('TYPECHO_DB_DATABASE', $env('DB_NAME', 'typecho')),
     'charset' => $env('TYPECHO_DB_CHARSET', $postgres ? 'utf8' : 'utf8mb4'),
     'dsn' => $env('TYPECHO_DB_DSN'),
     'engine' => $env('TYPECHO_DB_ENGINE', 'InnoDB'),

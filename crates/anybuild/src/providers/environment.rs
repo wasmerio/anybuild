@@ -28,13 +28,14 @@ pub(crate) fn apply_environment(
                     .map(|value| (shipit, value))
             })
             .or_else(|| {
-                (field == "port")
-                    .then(|| {
-                        operation
-                            .environment_var("PORT")
-                            .map(|value| ("PORT".into(), value))
-                    })
-                    .flatten()
+                let name = match field.as_str() {
+                    "port" => "PORT",
+                    "typecho_db_adapter" => "TYPECHO_DB_ADAPTER",
+                    _ => return None,
+                };
+                operation
+                    .environment_var(name)
+                    .map(|value| (name.into(), value))
             })
         else {
             continue;

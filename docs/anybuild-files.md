@@ -264,10 +264,14 @@ reads database settings from the environment and sets the application root
 explicitly. Startup seeds missing user files and creates the symlink.
 Typecho's sources are kept unchanged, with no custom runtime or request hooks.
 
-The template defaults to SQLite at `/app/usr/typecho.db`. Use `TYPECHO_DB_*`
-environment variables to configure the database before running the installer;
-the web installer creates the tables and site administrator. An existing
-`config.inc.php` is used as supplied. Custom configuration must set
+Wasmer defaults to `Pdo_Mysql` and requests a managed MySQL database in
+`app.yaml`. The template reads Wasmer's `DB_HOST`, `DB_PORT`, `DB_USERNAME`,
+`DB_PASSWORD`, and `DB_NAME` variables; `TYPECHO_DB_*` variables override
+them. Local runs default to SQLite at `/app/usr/typecho.db`. Set
+`TYPECHO_DB_ADAPTER=Pdo_SQLite` before building to use SQLite on Wasmer
+without requesting a managed database. The web installer creates the tables
+and site administrator. An existing `config.inc.php` is used as supplied.
+Custom configuration must set
 `__TYPECHO_ROOT_DIR__` to the application root, for example with
 `getenv('TYPECHO_APP_PATH')`, because PHP resolves `__FILE__` through symlinks.
 

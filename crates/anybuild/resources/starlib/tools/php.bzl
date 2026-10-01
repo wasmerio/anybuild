@@ -101,6 +101,7 @@ def php_build(
             steps.append(copy("php/typecho-config.inc.php", "{}/config.inc.php".format(app.path), base = "assets"))
         env_vars["TYPECHO_APP_PATH"] = app.serve_path
         env_vars["TYPECHO_USR_BASE_PATH"] = usr_base.serve_path
+        env_vars["TYPECHO_DB_ADAPTER"] = config.typecho_db_adapter or "Pdo_SQLite"
 
     serve_deps = php_runtime_deps(config, tc)
     if config.php_framework == "typecho" and not config.composer_enable:

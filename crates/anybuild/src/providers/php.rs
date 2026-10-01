@@ -59,6 +59,9 @@ pub struct PhpConfig {
     /// Docroot subdirectory ("web", "public", "app") or None for the root.
     #[serde(rename = "php_public_dir")]
     pub public_dir: Option<String>,
+    /// Unspecified uses SQLite locally and MySQL on Wasmer for Typecho.
+    #[serde(default)]
+    pub typecho_db_adapter: Option<String>,
 }
 
 impl Default for PhpConfig {
@@ -73,6 +76,7 @@ impl Default for PhpConfig {
             php_architecture: None,
             phpix_worker_threads: Some(4),
             public_dir: None,
+            typecho_db_adapter: None,
         }
     }
 }
@@ -110,6 +114,8 @@ impl PhpConfig {
             )?,
             phpix_worker_threads: env_int(operation, "phpix_worker_threads")?.or(Some(4)),
             public_dir: env_str(operation, "php_public_dir"),
+            typecho_db_adapter: env_str(operation, "typecho_db_adapter")
+                .or_else(|| operation.environment_var("TYPECHO_DB_ADAPTER")),
         })
     }
 }

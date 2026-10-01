@@ -547,6 +547,18 @@ fn finish_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
 }
 
 pub(crate) fn finalize_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
+    if let ProviderConfig::Php(php) = &mut config {
+        if php.framework == Some(php::PhpFramework::Typecho) {
+            let engine = match php.typecho_db_adapter.as_deref() {
+                Some("Pdo_Mysql" | "Mysql" | "Mysqli") => Some(base::DatabaseEngine::Mysql),
+                Some("Pdo_Pgsql" | "Pgsql") => Some(base::DatabaseEngine::Postgres),
+                _ => None,
+            };
+            if let Some(engine) = engine {
+                php.base.set_database_service(engine);
+            }
+        }
+    }
     if let ProviderConfig::Python(python) = &mut config {
         if let Some(database) = python.database {
             python

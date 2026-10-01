@@ -24,6 +24,7 @@ use crate::event::{Event, WasmerPackageMapping};
 use crate::operation::OperationContext;
 use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
 use crate::providers::node::{NodeRuntimeConfigFields, NodeServer};
+use crate::providers::php::PhpFramework;
 use crate::providers::python::PythonConfig;
 use crate::providers::ProviderConfig;
 use crate::run::{HostMount, Runner};
@@ -390,6 +391,11 @@ pub(crate) fn apply_runner_flips(config: &mut ProviderConfig) {
         }
         ProviderConfig::Php(config) => {
             config.phpix.get_or_insert(true);
+            if config.framework == Some(PhpFramework::Typecho) {
+                config
+                    .typecho_db_adapter
+                    .get_or_insert_with(|| "Pdo_Mysql".to_owned());
+            }
         }
         ProviderConfig::NodeStatic(config) => {
             apply_node_runner_flips(&mut config.node.runtime);

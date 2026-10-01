@@ -42,6 +42,14 @@ fn typecho_detects_source_and_plans_persistent_storage() {
             .unwrap();
         assert_eq!(plan.provider, "php");
         assert_eq!(plan.config["php_framework"], "typecho");
+        assert_eq!(plan.config["typecho_db_adapter"], "Pdo_Mysql");
+        let services = plan.serve.services.as_deref().unwrap_or_default();
+        assert_eq!(services.len(), 1);
+        assert_eq!(services[0].provider, "mysql");
+        assert_eq!(
+            plan.serve.env.as_ref().unwrap()["TYPECHO_DB_ADAPTER"],
+            "Pdo_Mysql"
+        );
         let engine = if phpix.unwrap_or(true) {
             "phpix"
         } else {
@@ -69,6 +77,44 @@ fn typecho_detects_source_and_plans_persistent_storage() {
             .unwrap()
             .iter()
             .any(|mount| mount.name == "typecho_usr"));
+    }
+
+    for (runtime, adapter, engine) in [
+        (RuntimeEnvironment::Local, None, None),
+        (
+            RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+            Some("Pdo_SQLite"),
+            None,
+        ),
+        (
+            RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+            Some("Pdo_Pgsql"),
+            Some("postgres"),
+        ),
+    ] {
+        let mut sdk = Anybuild::new(project.path());
+        if let Some(adapter) = adapter {
+            sdk = sdk.with_env("TYPECHO_DB_ADAPTER", adapter);
+        }
+        let plan = sdk
+            .plan(PlanOptions {
+                temporary: true,
+                runtime_environment: runtime,
+                ..PlanOptions::default()
+            })
+            .unwrap();
+        assert_eq!(
+            plan.serve.env.as_ref().unwrap()["TYPECHO_DB_ADAPTER"],
+            adapter.unwrap_or("Pdo_SQLite")
+        );
+        let services = plan.serve.services.as_deref().unwrap_or_default();
+        assert_eq!(
+            services
+                .iter()
+                .map(|s| s.provider.as_str())
+                .collect::<Vec<_>>(),
+            engine.into_iter().collect::<Vec<_>>()
+        );
     }
 }
 
