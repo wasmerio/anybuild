@@ -269,6 +269,11 @@ small root loader. Typecho's sources remain unchanged.
 Wasmer defaults to `Pdo_Mysql` and requests a managed MySQL database in
 `app.yaml`. The template reads Wasmer's `DB_HOST`, `DB_PORT`, `DB_USERNAME`,
 `DB_PASSWORD`, and `DB_NAME` variables; `TYPECHO_DB_*` variables override them.
+Default MySQL connections using `DB_HOST` enable TLS with verification off,
+matching Wasmer's private database CA. `TYPECHO_DB_SSL_CA` overrides the bundled
+CA file and `TYPECHO_DB_SSL_VERIFY=on` enables certificate verification. Existing
+volumes keep their config files; for a template from an older build, set
+`TYPECHO_DB_SSL_CA=/etc/ssl/certs/ca-certificates.crt` to enable TLS.
 Local runs default to SQLite in `usr/typecho.db`. Set
 `TYPECHO_DB_ADAPTER=Pdo_SQLite` before building to use SQLite on Wasmer without
 requesting a managed database.

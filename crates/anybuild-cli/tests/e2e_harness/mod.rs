@@ -858,6 +858,17 @@ fn assert_run_command(
             );
         }
     }
+    if let Some(pattern) = command.stderr_not_match {
+        let re = Regex::new(pattern).expect("invalid stderr_not_match regex");
+        if re.is_match(&result.stderr) {
+            bail!(
+                "Run command stderr matched forbidden regex {pattern:?}.\n\
+                 command={}\n{}",
+                shell_join(cmd),
+                result.output(),
+            );
+        }
+    }
     Ok(())
 }
 
@@ -1559,11 +1570,14 @@ mod tests {
                     });
                 }
             }
-            for command in case.commands {
+            for command in case.commands.iter().chain(case.before_serve) {
                 if let Some(pattern) = command.stdout_match {
                     Regex::new(pattern).unwrap();
                 }
                 if let Some(pattern) = command.stderr_match {
+                    Regex::new(pattern).unwrap();
+                }
+                if let Some(pattern) = command.stderr_not_match {
                     Regex::new(pattern).unwrap();
                 }
             }

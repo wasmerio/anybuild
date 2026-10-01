@@ -138,7 +138,7 @@ def php_commands(config, app, assets = None, typecho_usr = None):
         if config.phpix:
             commands["start"] = "phpix --startup-script={} -S 0.0.0.0:{} -t {}".format(_quote("{}/start-typecho.php".format(assets.serve_path)), config.port, docroot)
         typecho_usr = typecho_usr or mount("typecho_usr")
-        initialize = "mkdir -p {} && cp -Rn {} {}".format(
+        initialize = "mkdir -p {} && cp -Rn --no-preserve=mode {} {}".format(
             _quote("{}/usr/uploads".format(app.serve_path)),
             _quote("{}/.".format(typecho_usr.serve_path)),
             _quote("{}/usr/".format(app.serve_path)),

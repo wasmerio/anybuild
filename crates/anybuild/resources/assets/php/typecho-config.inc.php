@@ -16,6 +16,9 @@ $env = static function (string $name, string $default = ''): string {
 };
 $adapter = $env('TYPECHO_DB_ADAPTER', 'Pdo_SQLite');
 $postgres = strpos($adapter, 'Pgsql') !== false;
+// Typecho enables PDO MySQL TLS only when sslCa is nonempty. Wasmer's private
+// database CA requires encryption without certificate chain verification.
+$managedMysql = $adapter === 'Pdo_Mysql' && getenv('DB_HOST') !== false;
 $db = new \Typecho\Db($adapter, $env('TYPECHO_DB_PREFIX', 'typecho_'));
 $connection = [
     'file' => $env('TYPECHO_DB_FILE', __TYPECHO_ROOT_DIR__ . '/usr/typecho.db'),
@@ -27,7 +30,7 @@ $connection = [
     'charset' => $env('TYPECHO_DB_CHARSET', $postgres ? 'utf8' : 'utf8mb4'),
     'dsn' => $env('TYPECHO_DB_DSN'),
     'engine' => $env('TYPECHO_DB_ENGINE', 'InnoDB'),
-    'sslCa' => $env('TYPECHO_DB_SSL_CA'),
+    'sslCa' => $env('TYPECHO_DB_SSL_CA', $managedMysql ? '/etc/ssl/certs/ca-certificates.crt' : ''),
     'sslVerify' => in_array(
         strtolower($env('TYPECHO_DB_SSL_VERIFY', 'off')),
         ['1', 'true', 'on', 'yes'],

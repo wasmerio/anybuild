@@ -73,7 +73,7 @@ fn typecho_detects_source_and_plans_persistent_storage() {
             .any(|step| matches!(step, Step::Run(_))));
         assert!(plan.serve.commands["install"].contains("/install.php"));
         let after_deploy = &plan.serve.commands["after_deploy"];
-        assert!(after_deploy.contains("cp -Rn "));
+        assert!(after_deploy.contains("cp -Rn --no-preserve=mode "));
         assert!(after_deploy.contains("/opt/typecho_usr/."));
         assert!(after_deploy.contains("/app/usr/"));
         assert!(!after_deploy.contains("start-typecho"));

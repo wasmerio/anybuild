@@ -109,6 +109,7 @@ pub struct RunCommand {
     pub command: &'static str,
     pub stdout_match: Option<&'static str>,
     pub stderr_match: Option<&'static str>,
+    pub stderr_not_match: Option<&'static str>,
     pub expected_returncode: i32,
 }
 
@@ -117,6 +118,7 @@ const fn run(command: &'static str) -> RunCommand {
         command,
         stdout_match: None,
         stderr_match: None,
+        stderr_not_match: None,
         expected_returncode: 0,
     }
 }
@@ -126,7 +128,15 @@ const fn run_stdout(command: &'static str, stdout_match: &'static str) -> RunCom
         command,
         stdout_match: Some(stdout_match),
         stderr_match: None,
+        stderr_not_match: None,
         expected_returncode: 0,
+    }
+}
+
+const fn run_without_stderr(command: &'static str, pattern: &'static str) -> RunCommand {
+    RunCommand {
+        stderr_not_match: Some(pattern),
+        ..run(command)
     }
 }
 
@@ -260,7 +270,10 @@ const TYPECHO_SQLITE: Case = Case {
         ("TYPECHO_USER_MAIL", "admin@example.com"),
         ("TYPECHO_LANG", "en_US"),
     ],
-    before_serve: &[run("after_deploy"), run("install")],
+    before_serve: &[
+        run_without_stderr("after_deploy", "cp:"),
+        run_without_stderr("install", "cp:"),
+    ],
     commands: &[
         run_stdout(
             concat!(
@@ -271,6 +284,9 @@ const TYPECHO_SQLITE: Case = Case {
                 r#"if (!is_link("/app/config.inc.php")) { exit(1); } "#,
                 r#"$db = \Typecho\Db::get(); "#,
                 r#"if ($db->getAdapterName() !== getenv("TYPECHO_DB_ADAPTER")) { exit(1); } "#,
+                r#"if ($db->getAdapterName() === "Pdo_Mysql") { "#,
+                r#"$tls = $db->fetchRow("SHOW SESSION STATUS LIKE \"Ssl_cipher\""); "#,
+                r#"if (empty($tls["Value"])) { exit(1); } } "#,
                 r#"$db->query($db->update("table.contents")->rows(["title" => "Hello World persisted"])->where("cid = ?", 1)); "#,
                 r#"file_put_contents("/app/usr/uploads/persisted.txt", "Typecho persisted upload"); "#,
                 r#"file_put_contents("/app/usr/themes/default/style.css", "/* Typecho customized theme */", FILE_APPEND); "#,
@@ -279,7 +295,7 @@ const TYPECHO_SQLITE: Case = Case {
             ),
             "Typecho content written",
         ),
-        run("after_deploy"),
+        run_without_stderr("after_deploy", "cp:"),
         run_stdout(
             concat!(
                 "php -r '",
