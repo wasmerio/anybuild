@@ -515,6 +515,19 @@ impl NodeServer {
 // ---------------------------------------------------------------------------
 // NodeConfig
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EdgeJsEngine {
+    External,
+    Quickjs,
+}
+
+impl EdgeJsEngine {
+    fn from_value(value: &str) -> Option<Self> {
+        serde_json::from_value(Value::String(value.to_owned())).ok()
+    }
+}
+
 /// Node toolchain and build fields shared by Node, Node Static, and Laravel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -627,6 +640,7 @@ pub(crate) fn load_build_config(
 pub struct NodeRuntimeConfigFields<F = NodeFramework> {
     #[serde(rename = "edgejs_enable")]
     pub use_edgejs: Option<bool>,
+    pub edgejs_engine: Option<EdgeJsEngine>,
     #[serde(rename = "edgejs_precompile")]
     pub precompile_edgejs: Option<bool>,
     #[serde(rename = "node_framework")]
@@ -644,6 +658,7 @@ impl<F> Default for NodeRuntimeConfigFields<F> {
     fn default() -> Self {
         Self {
             use_edgejs: Some(false),
+            edgejs_engine: None,
             precompile_edgejs: None,
             framework: None,
             server: None,
@@ -657,6 +672,12 @@ impl NodeRuntimeConfigFields<NodeFramework> {
     fn from_env(operation: &OperationContext) -> Result<Self> {
         Ok(Self {
             use_edgejs: env_bool(operation, "edgejs_enable")?.or(Some(false)),
+            edgejs_engine: env_enum(
+                operation,
+                "edgejs_engine",
+                "external or quickjs",
+                EdgeJsEngine::from_value,
+            )?,
             precompile_edgejs: env_bool(operation, "edgejs_precompile")?,
             framework: env_enum(
                 operation,
@@ -692,8 +713,9 @@ impl Serialize for NodeConfigFields {
     where
         S: serde::Serializer,
     {
-        let mut map = serializer.serialize_map(Some(17))?;
+        let mut map = serializer.serialize_map(Some(18))?;
         map.serialize_entry("edgejs_enable", &self.runtime.use_edgejs)?;
+        map.serialize_entry("edgejs_engine", &self.runtime.edgejs_engine)?;
         map.serialize_entry("edgejs_precompile", &self.runtime.precompile_edgejs)?;
         map.serialize_entry("node_package_manager", &self.build.package_manager)?;
         map.serialize_entry("node_framework", &self.runtime.framework)?;

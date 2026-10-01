@@ -152,6 +152,15 @@ anybuild deploy --platform=aws-lambda \
   --aws-region=us-west-2
 ```
 
+Docker runtime images copy the adapter from
+`public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0` by default. Set
+`ANYBUILD_LAMBDA_ADAPTER_IMAGE` to use another image reference, including
+a digest-pinned mirror. Docker E2E tests in CI use the Wasmer GHCR mirror
+at `ghcr.io/wasmerio/aws-lambda-adapter:1.0.0`, pinned to the upstream
+digest, to avoid ECR Public's anonymous download quota. The mirror
+preserves upstream's AMD64 and ARM64 images. CI authenticates to GHCR
+with its GitHub token, so the mirror can remain private.
+
 `anybuild auto --platform=aws-lambda` selects the Docker builder and Lambda
 runner unless either is explicitly set. This makes Python and Node.js
 dependencies portable to Lambda's Linux environment. Supported managed
@@ -353,6 +362,13 @@ real binary. Run a wasmer-mode slice with:
 cargo build && cargo nextest run --profile e2e -p anybuild-cli --test e2e \
   --run-ignored all -E 'test(/^node__wasmer__/)'
 ```
+
+Server-side Node.js cases run twice in Wasmer: with `edgejs_engine` unset
+(the default QuickJS engine), and with `edgejs_engine = "external"`.
+The external variants use names like `node__wasmer__external__node_hono`;
+the filter above includes both variants. To run only the external engine, use
+`-E 'test(/^node__wasmer__external__/)'`. Each case checks the selected runtime
+package in the manifest as well as the server's HTTP responses.
 
 Suites are sliced by test-name prefix (`static`, `staticpython`,
 `staticnode1`, `staticnode2`, `python`, `node`, `php`) and build mode

@@ -260,7 +260,7 @@ def node_serve(
         commands["start"] = config.commands.start
     if prepare == None:
         if config.edgejs_precompile:
-            prepare = [run("edgejs --precompile {}".format(app.serve_path))]
+            prepare = [run("edge --precompile {}".format(app.serve_path))]
         else:
             prepare = []
     return serve(

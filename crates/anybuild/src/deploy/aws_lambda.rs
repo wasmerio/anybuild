@@ -13,7 +13,6 @@ use crate::deploy::Deployer;
 use crate::operation::OperationContext;
 use crate::sdk::{AwsLambdaOptions, DeployOutcome, DeployTarget, LambdaArchitecture};
 
-const LAMBDA_ADAPTER_IMAGE: &str = "public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0";
 const LAMBDA_ADAPTER_LAYER_VERSION: u32 = 28;
 
 #[derive(Debug, Default, Deserialize)]
@@ -592,7 +591,7 @@ impl Deployer for AwsLambdaDeployer {
                     "Docker artifact metadata is missing; rebuild with --runner=docker"
                 })?;
             anyhow::ensure!(
-                dockerfile.contains(LAMBDA_ADAPTER_IMAGE),
+                includes_lambda_adapter(&dockerfile),
                 "Docker artifact predates AWS Lambda support; rebuild with --runner=docker"
             );
             let repository = self
@@ -650,9 +649,35 @@ fn repository_name(function: &str) -> String {
     }
 }
 
+fn includes_lambda_adapter(dockerfile: &str) -> bool {
+    // Saved artifacts may use an override absent from the deploy environment.
+    dockerfile.lines().any(|line| {
+        matches!(
+            line.split_ascii_whitespace().collect::<Vec<_>>().as_slice(),
+            ["COPY", from, "/lambda-adapter", "/opt/extensions/lambda-adapter"]
+                if from.strip_prefix("--from=").is_some_and(|image| !image.is_empty())
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adapter_detection_requires_the_extension_copy() {
+        for dockerfile in [
+            "FROM scratch",
+            "# COPY --from=mirror/adapter /lambda-adapter /opt/extensions/lambda-adapter",
+            "COPY --from= /lambda-adapter /opt/extensions/lambda-adapter",
+            "COPY --from=mirror/adapter /lambda-adapter /different-destination",
+        ] {
+            assert!(!includes_lambda_adapter(dockerfile));
+        }
+        assert!(includes_lambda_adapter(
+            "FROM scratch\nCOPY --from=mirror/adapter /lambda-adapter /opt/extensions/lambda-adapter\n"
+        ));
+    }
 
     #[test]
     fn repository_names_are_ecr_compatible() {

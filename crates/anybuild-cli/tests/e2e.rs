@@ -6,6 +6,8 @@
 //! CI slices with nextest filter expressions, e.g.
 //!   -E 'test(/^php__/)'            # one suite
 //!   -E 'test(/__wasmer__/)'        # one mode
+//! Server-side Node Wasmer cases also have `__wasmer__external__` variants;
+//! the original names leave the EdgeJS engine unset.
 //!
 //! Combinations pytest collects but always runtime-skips (case not enabled
 //! for the build mode; phpix memory checks outside Wasmer) are structural
@@ -21,14 +23,19 @@ mod e2e_harness;
 use e2e_harness::BuildMode::{
     DockerBuilderAndRunner, DockerRunner, Local, Wasmer, WasmerAndDocker,
 };
+use e2e_harness::EdgeJsEngine::External;
 
 macro_rules! e2e_tests {
-    ($($name:ident => ($id:literal, $mode:expr);)*) => {
+    (@engine) => { None };
+    (@engine $engine:expr) => { Some($engine) };
+    ($($name:ident => ($id:literal, $mode:expr $(, $engine:expr)?);)*) => {
         $(
             #[test]
             #[ignore = "e2e: needs wasmer/docker; run via nextest --run-ignored all"]
             fn $name() {
-                if let Err(err) = e2e_harness::run_case($id, $mode) {
+                if let Err(err) = e2e_harness::run_case(
+                    $id, $mode, e2e_tests!(@engine $($engine)?)
+                ) {
                     panic!("{err:#}");
                 }
             }
@@ -36,12 +43,13 @@ macro_rules! e2e_tests {
 
         /// Not ignored: cheap structural check that runs in plain
         /// `cargo test --workspace`. Ensures this file lists exactly one
-        /// test per (case, structurally-enabled build mode), correctly
-        /// named.
+        /// test per (case, structurally-enabled build mode, engine),
+        /// correctly named.
         #[test]
         fn e2e_test_list_matches_case_table() {
-            let generated: Vec<(&str, &str, e2e_harness::BuildMode)> = vec![
-                $( (stringify!($name), $id, $mode) ),*
+            let generated = vec![
+                $( (stringify!($name), $id, $mode,
+                    e2e_tests!(@engine $($engine)?)) ),*
             ];
             e2e_harness::verify_test_list(&generated);
         }
@@ -109,50 +117,69 @@ e2e_tests! {
     node__local__node => ("node", Local);
     node__docker_runner__node => ("node", DockerRunner);
     node__wasmer__node => ("node", Wasmer);
+    node__wasmer__external__node => ("node", Wasmer, External);
     // examples/node-hono
     node__local__node_hono => ("node_hono", Local);
     node__docker_runner__node_hono => ("node_hono", DockerRunner);
     node__wasmer__node_hono => ("node_hono", Wasmer);
+    node__wasmer__external__node_hono => ("node_hono", Wasmer, External);
     // examples/node-fastify
     node__local__node_fastify => ("node_fastify", Local);
     node__docker_runner__node_fastify => ("node_fastify", DockerRunner);
     node__wasmer__node_fastify => ("node_fastify", Wasmer);
+    node__wasmer__external__node_fastify => ("node_fastify", Wasmer, External);
     // examples/node-express (Wasmer only)
     node__wasmer__node_express => ("node_express", Wasmer);
+    node__wasmer__external__node_express => ("node_express", Wasmer, External);
     // examples/node-koa (Wasmer only)
     node__wasmer__node_koa => ("node_koa", Wasmer);
+    node__wasmer__external__node_koa => ("node_koa", Wasmer, External);
     // examples/node-h3 (Wasmer only)
     node__wasmer__node_h3 => ("node_h3", Wasmer);
+    node__wasmer__external__node_h3 => ("node_h3", Wasmer, External);
     // examples/node-elysia (Wasmer only)
     node__wasmer__node_elysia => ("node_elysia", Wasmer);
+    node__wasmer__external__node_elysia => ("node_elysia", Wasmer, External);
     // examples/node-nestjs (Wasmer only)
     node__wasmer__node_nestjs => ("node_nestjs", Wasmer);
+    node__wasmer__external__node_nestjs => ("node_nestjs", Wasmer, External);
     // examples/node-nitro (Wasmer only)
     node__wasmer__node_nitro => ("node_nitro", Wasmer);
+    node__wasmer__external__node_nitro => ("node_nitro", Wasmer, External);
     // examples/node-tanstack-start-nitro (Wasmer only)
     node__wasmer__node_tanstack_start_nitro => ("node_tanstack_start_nitro", Wasmer);
+    node__wasmer__external__node_tanstack_start_nitro => ("node_tanstack_start_nitro", Wasmer, External);
     // examples/node-hydrogen (Wasmer only)
     node__wasmer__node_hydrogen => ("node_hydrogen", Wasmer);
+    node__wasmer__external__node_hydrogen => ("node_hydrogen", Wasmer, External);
     // examples/node-react-router (Wasmer only)
     node__wasmer__node_react_router => ("node_react_router", Wasmer);
+    node__wasmer__external__node_react_router => ("node_react_router", Wasmer, External);
     // examples/node-remix (Wasmer only)
     node__wasmer__node_remix => ("node_remix", Wasmer);
+    node__wasmer__external__node_remix => ("node_remix", Wasmer, External);
     // examples/node-solidstart (Wasmer only)
     node__wasmer__node_solidstart => ("node_solidstart", Wasmer);
+    node__wasmer__external__node_solidstart => ("node_solidstart", Wasmer, External);
     // examples/node-tanstack-start (Wasmer only)
     node__wasmer__node_tanstack_start => ("node_tanstack_start", Wasmer);
+    node__wasmer__external__node_tanstack_start => ("node_tanstack_start", Wasmer, External);
     // examples/node-xmcp (Wasmer only)
     node__wasmer__node_xmcp => ("node_xmcp", Wasmer);
+    node__wasmer__external__node_xmcp => ("node_xmcp", Wasmer, External);
     // examples/node-mastra (Wasmer only)
     node__wasmer__node_mastra => ("node_mastra", Wasmer);
+    node__wasmer__external__node_mastra => ("node_mastra", Wasmer, External);
     // examples/node-next
     node__local__node_next => ("node_next", Local);
     node__docker_runner__node_next => ("node_next", DockerRunner);
     node__wasmer__node_next => ("node_next", Wasmer);
+    node__wasmer__external__node_next => ("node_next", Wasmer, External);
     // examples/node-astro
     node__local__node_astro => ("node_astro", Local);
     node__docker_runner__node_astro => ("node_astro", DockerRunner);
     node__wasmer__node_astro => ("node_astro", Wasmer);
+    node__wasmer__external__node_astro => ("node_astro", Wasmer, External);
     // examples/hugo
     static__local__hugo => ("hugo", Local);
     static__docker_runner__hugo => ("hugo", DockerRunner);

@@ -685,6 +685,57 @@ serve(
 }
 
 #[test]
+fn edgejs_engine_is_optional_and_configurable() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project.path().join("package.json"),
+        r#"{"scripts":{"start":"node server.js"}}"#,
+    )
+    .unwrap();
+    let make_sdk = || {
+        Anybuild::new(project.path())
+            .inherit_process_env(false)
+            .with_provider("node")
+    };
+    let sdk = make_sdk();
+    let generated = sdk.generate(GenerateOptions::default()).unwrap();
+    assert!(!generated.content.contains("edgejs_engine"));
+    assert!(sdk.plan(PlanOptions::default()).unwrap().config["edgejs_engine"].is_null());
+
+    let persisted = generated.content.replace(
+        "config = node_config(\n",
+        "config = node_config(\n    edgejs_engine = \"external\",\n",
+    );
+    std::fs::write(&generated.path, persisted).unwrap();
+    assert_eq!(
+        sdk.plan(PlanOptions::default()).unwrap().config["edgejs_engine"],
+        "external"
+    );
+    for prefix in ["ANYBUILD", "SHIPIT"] {
+        let overridden = make_sdk().with_env(format!("{prefix}_EDGEJS_ENGINE"), "quickjs");
+        assert_eq!(
+            overridden.plan(PlanOptions::default()).unwrap().config["edgejs_engine"],
+            "quickjs"
+        );
+    }
+    for engine in [serde_json::Value::Null, serde_json::json!("quickjs")] {
+        let overridden = make_sdk().with_config(serde_json::json!({"edgejs_engine": engine}));
+        assert_eq!(
+            overridden.plan(PlanOptions::default()).unwrap().config["edgejs_engine"],
+            engine
+        );
+    }
+    for engine in ["napi", "v8"] {
+        let invalid = make_sdk().with_config(serde_json::json!({"edgejs_engine": engine}));
+        let error = invalid.plan(PlanOptions::default()).unwrap_err();
+        assert!(format!("{error:#}").contains(&format!("unknown variant `{engine}`")));
+        let invalid = make_sdk().with_env("ANYBUILD_EDGEJS_ENGINE", engine);
+        let error = invalid.plan(PlanOptions::default()).unwrap_err();
+        assert!(format!("{error:#}").contains("ANYBUILD_EDGEJS_ENGINE"));
+    }
+}
+
+#[test]
 fn environment_is_snapshotted_and_overrides_are_isolated() {
     let project = static_project();
     let sdk = Anybuild::new(project.path())
@@ -988,6 +1039,25 @@ fn fly_deployment_uses_the_docker_artifact_and_redacts_its_token() {
 #[cfg(unix)]
 #[test]
 fn aws_lambda_deployment_creates_then_updates_a_container_function() {
+    assert_aws_lambda_image_deployment("public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0");
+}
+
+#[cfg(unix)]
+#[test]
+fn aws_lambda_deployment_accepts_saved_adapter_registry_overrides() {
+    for image in [
+        concat!(
+            "ghcr.io/wasmerio/aws-lambda-adapter:1.0.0@",
+            "sha256:b4da35991627bdac98a81c377d0cc28e6989687359576dfda9f0b64be835d648"
+        ),
+        "registry.example.com/custom-adapter:1.0.0",
+    ] {
+        assert_aws_lambda_image_deployment(image);
+    }
+}
+
+#[cfg(unix)]
+fn assert_aws_lambda_image_deployment(adapter_image: &str) {
     use std::os::unix::fs::PermissionsExt;
 
     let project = static_project();
@@ -996,7 +1066,9 @@ fn aws_lambda_deployment_creates_then_updates_a_container_function() {
     std::fs::create_dir_all(&artifact_dir).unwrap();
     std::fs::write(
         artifact_dir.join("Dockerfile"),
-        "FROM scratch\nCOPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0 /lambda-adapter /opt/extensions/lambda-adapter\n",
+        format!(
+            "FROM scratch\nCOPY --from={adapter_image} /lambda-adapter /opt/extensions/lambda-adapter\n"
+        ),
     )
     .unwrap();
     std::fs::write(

@@ -154,11 +154,18 @@ base):
 | Provider   | Fields                                                        |
 | ---------- | ------------------------------------------------------------- |
 | python     | `python_version`, `python_server`, `python_framework`, `asgi_application`, `wsgi_application`, `python_extra_dependencies`, `python_precompile`, `python_extra_index_url` |
-| node       | `node_version`, `node_package_manager`, `node_framework`, `node_server`, `node_build_command`, `edgejs_enable`, `edgejs_precompile`, `optimize_node_dependencies` |
+| node       | `node_version`, `node_package_manager`, `node_framework`, `node_server`, `node_build_command`, `edgejs_enable`, `edgejs_engine`, `edgejs_precompile`, `optimize_node_dependencies` |
 | php        | `php_version`, `phpix`, `composer_enable`, `composer_build_script`, `php_public_dir` |
 | wordpress  | php fields plus `wp_version`, `wp_locale`, `wp_cli_version`    |
 | staticfile | `static_dir`, `sws_version`, `static_convert_redirects`               |
 | go         | `go_version`, `go_build_file`, `go_serve_binary`                  |
+
+For Node apps targeting Wasmer, the optional `edgejs_engine` field accepts
+`"quickjs"` or `"external"`. Leaving it unset uses QuickJS by default.
+QuickJS uses `wasmer/edgejs-quickjs@0.2.5`, and the external engine uses
+`wasmer/edgejs@0.2.5`. Set it in `node_config(...)`, with
+`ANYBUILD_EDGEJS_ENGINE=external`, or through a JSON override:
+`anybuild build --config '{"edgejs_engine": "external"}'`.
 
 The common `services` field configures typed services. Generated files load
 `mysql` or `postgres` from `//anybuild:services.bzl` and render database

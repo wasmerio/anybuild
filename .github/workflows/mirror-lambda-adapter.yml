@@ -1,0 +1,54 @@
+name: Mirror Lambda Adapter
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/mirror-lambda-adapter.yml
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: mirror-lambda-adapter
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADAPTER_VERSION: 1.0.0
+      ADAPTER_DIGEST: sha256:b4da35991627bdac98a81c377d0cc28e6989687359576dfda9f0b64be835d648
+    steps:
+      - name: Install crane
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz \
+            --output crane.tar.gz
+          echo '0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0  crane.tar.gz' \
+            | sha256sum --check
+          tar -xzf crane.tar.gz crane
+          sudo install crane /usr/local/bin/crane
+
+      - name: Authenticate to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" \
+            | crane auth login ghcr.io --username "$GHCR_USER" --password-stdin
+
+      - name: Copy and verify all architectures
+        run: |
+          source="public.ecr.aws/awsguru/aws-lambda-adapter@$ADAPTER_DIGEST"
+          target="ghcr.io/wasmerio/aws-lambda-adapter:$ADAPTER_VERSION"
+          crane copy --no-clobber "$source" "$target"
+          test "$(crane digest "$target")" = "$ADAPTER_DIGEST"
+          crane manifest "$target" | jq --exit-status '
+            [.manifests[].platform | select(.os == "linux") | .architecture]
+            | sort == ["amd64", "arm64"]'
+          echo "Mirrored $target@$ADAPTER_DIGEST" >> "$GITHUB_STEP_SUMMARY"

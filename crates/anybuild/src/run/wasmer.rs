@@ -36,7 +36,8 @@ pub const ANYBUILD_VERSION_ANNOTATION: &str = "anybuild.run/version";
 pub const WASMER_APP_KIND_ANNOTATION: &str = "wasmer.io/app-kind";
 pub const WASMER_VERSION_ANNOTATION: &str = "wasmer.io/version";
 pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
-pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.2.0";
+pub const EDGEJS_EXTERNAL_DEPENDENCY: &str = "wasmer/edgejs@=0.2.5";
+pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.2.5";
 pub const PHPIX_VERSION: &str = "0.3.0";
 pub const WASIX_PYTHON_INDEX_URL: &str = "https://python-registry.wasix.org/simple";
 pub(crate) const WASMER_ENV_FILENAME: &str = ".env";
@@ -640,6 +641,18 @@ impl WasmerRunner {
             let Some(mapped_dependency) = mapped_dependencies.get(version.as_str()) else {
                 bail!("Dependency {}@{} not found in Wasmer", dep.name, version);
             };
+            let mapped_dependency = if dep.name == "node"
+                && self
+                    .provider_config
+                    .as_ref()
+                    .and_then(|config| config.get("edgejs_engine"))
+                    .and_then(JsonValue::as_str)
+                    == Some("external")
+            {
+                EDGEJS_EXTERNAL_DEPENDENCY
+            } else {
+                mapped_dependency.as_str()
+            };
             let source = dep
                 .version
                 .as_deref()
@@ -650,22 +663,21 @@ impl WasmerRunner {
                 );
             package_mappings.push(WasmerPackageMapping {
                 source,
-                target: (*mapped_dependency).to_owned(),
+                target: mapped_dependency.to_owned(),
             });
             let (package_name, package_version) = mapped_dependency
                 .split_once('@')
                 .ok_or_else(|| anyhow!("invalid mapped dependency {mapped_dependency}"))?;
             dependencies.insert(package_name, value(package_version));
             dependency_names.push(package_name.to_owned());
-            for script in item.scripts {
+            for (binary, script) in item
+                .scripts
+                .iter()
+                .map(|script| (*script, *script))
+                .chain(item.aliases.iter().copied())
+            {
                 binaries.insert(
-                    (*script).to_owned(),
-                    (format!("{package_name}:{script}"), item.env),
-                );
-            }
-            for (alias, script) in item.aliases {
-                binaries.insert(
-                    (*alias).to_owned(),
+                    binary.to_owned(),
                     (format!("{package_name}:{script}"), item.env),
                 );
             }
@@ -1036,10 +1048,9 @@ impl WasmerRunner {
         Ok(())
     }
 
-    /// Port of `command_uses_edgejs`. (The `--experimental-napi` flag it
-    /// used to gate is currently commented out, as in Python.)
-    #[cfg(test)]
-    fn command_uses_edgejs(&self, command: &str) -> bool {
+    /// NAPI imports need host support even when EdgeJS runs as a subprocess
+    /// of a preparation script. Read the manifest so saved artifacts work too.
+    fn uses_external_edgejs(&self) -> bool {
         let wasmer_toml_path = self.wasmer_dir_path.join("wasmer.toml");
         let Ok(text) = std::fs::read_to_string(&wasmer_toml_path) else {
             return false;
@@ -1047,24 +1058,10 @@ impl WasmerRunner {
         let Ok(manifest) = text.parse::<DocumentMut>() else {
             return false;
         };
-        let Some(commands) = manifest.get("command").and_then(Item::as_array_of_tables) else {
-            return false;
-        };
-        for item in commands.iter() {
-            if item.get("name").and_then(Item::as_str) != Some(command) {
-                continue;
-            }
-            let module = item.get("module").and_then(Item::as_str).unwrap_or("");
-            let atom = item
-                .get("annotations")
-                .and_then(Item::as_table_like)
-                .and_then(|annotations| annotations.get("wasi"))
-                .and_then(Item::as_table_like)
-                .and_then(|wasi| wasi.get("atom"))
-                .and_then(Item::as_str);
-            return module.contains("edgejs") || atom == Some("edgejs");
-        }
-        false
+        manifest
+            .get("dependencies")
+            .and_then(Item::as_table_like)
+            .is_some_and(|dependencies| dependencies.contains_key("wasmer/edgejs"))
     }
 
     /// Port of `run_command`: `subprocess.run(check=True)`.
@@ -1225,10 +1222,6 @@ impl Runner for WasmerRunner {
         let command_args = &parsed_command[1..];
         let mut extra_args: Vec<String> = Vec::new();
 
-        // if self.command_uses_edgejs(&command_name) {
-        //     run_args.push("--experimental-napi");
-        // }
-
         if let Some(registry) = &self.wasmer_registry {
             extra_args.insert(0, format!("--registry={registry}"));
         }
@@ -1240,6 +1233,9 @@ impl Runner for WasmerRunner {
         }
         let empty = IndexMap::new();
         let mut args: Vec<String> = vec!["run".to_owned()];
+        if self.uses_external_edgejs() {
+            args.push("--experimental-napi".to_owned());
+        }
         args.push(path_str(&absolute_path(&self.wasmer_dir_path)));
         args.push("--net".to_owned());
         args.push("--forward-host-env".to_owned());
@@ -1749,7 +1745,7 @@ mod tests {
         let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
         assert_eq!(
             manifest["dependencies"]["wasmer/edgejs-quickjs"].as_str(),
-            Some("=0.2.0")
+            Some("=0.2.5")
         );
         let command = manifest["command"]
             .as_array_of_tables()
@@ -1775,6 +1771,63 @@ mod tests {
             .collect();
         assert_eq!(main_args, vec!["--bytecode-cache", "server.js"]);
         assert!(wasi.get("env").is_none());
+    }
+
+    #[test]
+    fn test_wasmer_edgejs_engine_selects_runtime_and_prepare_modules() {
+        for (engine, package_name) in [
+            (JsonValue::Null, "wasmer/edgejs-quickjs"),
+            (serde_json::json!("quickjs"), "wasmer/edgejs-quickjs"),
+            (serde_json::json!("external"), "wasmer/edgejs"),
+        ] {
+            for version in [None, Some("latest"), Some("22"), Some("24")] {
+                let tmp = tempfile::tempdir().unwrap();
+                let (mut runner, events) = make_runner_with_events(tmp.path());
+                let mut json = crate::providers::defaults_json("node").unwrap();
+                json["edgejs_engine"] = engine.clone();
+                let config = crate::providers::config_from_json("node", json).unwrap();
+                let config = prepare_config(&mut runner, config);
+                assert_eq!(config.to_json()["edgejs_engine"], engine);
+
+                let mut serve = serve(
+                    "node",
+                    "node",
+                    vec![package("node", version, None)],
+                    Some("/app"),
+                    &[
+                        ("start", "node server.js"),
+                        ("alias", "edgejs server.js"),
+                        ("direct", "edge server.js"),
+                    ],
+                );
+                serve.prepare = Some(vec![RunStep {
+                    command: "edge --precompile /app".to_owned(),
+                    inputs: None,
+                    outputs: None,
+                    group: None,
+                }]);
+                runner.build_serve(&serve).unwrap();
+
+                let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
+                assert_eq!(
+                    manifest["dependencies"][package_name].as_str(),
+                    Some("=0.2.5")
+                );
+                let commands = manifest["command"].as_array_of_tables().unwrap();
+                assert_eq!(commands.len(), 4);
+                for command in commands {
+                    assert_eq!(
+                        command.get("module").and_then(Item::as_str),
+                        Some(format!("{package_name}:edge").as_str())
+                    );
+                }
+                assert!(events.lock().unwrap().iter().any(|event| {
+                    matches!(event, Event::WasmerPackageMappings { mappings }
+                        if mappings.iter().any(|mapping|
+                            mapping.target == format!("{package_name}@=0.2.5")))
+                }));
+            }
+        }
     }
 
     #[test]
@@ -2080,30 +2133,43 @@ mod tests {
     }
 
     #[test]
-    fn test_wasmer_run_command_enables_napi_for_edgejs() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut runner = make_runner(tmp.path());
-        std::fs::create_dir_all(&runner.wasmer_dir_path).unwrap();
-        std::fs::write(
-            runner.wasmer_dir_path.join("wasmer.toml"),
-            concat!(
-                "\n[[command]]\n",
-                "name = \"start\"\n",
-                "module = \"sadhbh-c0d3/edgejs-quickjs:edge\"\n",
-                "runner = \"wasi\"\n",
-            ),
-        )
-        .unwrap();
+    fn test_wasmer_run_command_enables_napi_only_for_external_edgejs() {
+        for package in ["wasmer/edgejs-quickjs", "wasmer/edgejs"] {
+            let tmp = tempfile::tempdir().unwrap();
+            let mut runner = make_runner(tmp.path());
+            assert!(!runner.uses_external_edgejs());
+            std::fs::create_dir_all(&runner.wasmer_dir_path).unwrap();
+            std::fs::write(
+                runner.wasmer_dir_path.join("wasmer.toml"),
+                format!(
+                    "[dependencies]\n\
+                     \"{package}\" = \"=0.2.5\"\n\n\
+                     [[command]]\n\
+                     name = \"start\"\n\
+                     module = \"{package}:edge\"\n\
+                     runner = \"wasi\"\n",
+                ),
+            )
+            .unwrap();
 
-        runner.run_serve_command("start", None, &[], None).unwrap();
-
-        let captured = runner.captured_commands.last().unwrap();
-        assert_eq!(captured.command, "wasmer");
-        assert_eq!(captured.extra_args[0], "run");
-        // assert_eq!(captured.extra_args[1], "--experimental-napi");
-        assert!(runner.command_uses_edgejs("start"));
-        assert!(runner.has_serve_command("start"));
-        assert!(!runner.has_serve_command("missing"));
+            // Saved artifacts and shell preparation must also enable NAPI,
+            // without relying on a provider-config snapshot in memory.
+            for command in ["start", "bash /prepare/prepare.sh"] {
+                runner.run_serve_command(command, None, &[], None).unwrap();
+                let captured = runner.captured_commands.last().unwrap();
+                assert_eq!(captured.command, "wasmer");
+                assert_eq!(captured.extra_args[0], "run");
+                assert_eq!(
+                    captured
+                        .extra_args
+                        .iter()
+                        .any(|arg| arg == "--experimental-napi"),
+                    package == "wasmer/edgejs"
+                );
+            }
+            assert!(runner.has_serve_command("start"));
+            assert!(!runner.has_serve_command("missing"));
+        }
     }
 
     #[test]
@@ -2178,7 +2244,7 @@ mod tests {
             &[("start", "node server.js")],
         );
         serve.prepare = Some(vec![RunStep {
-            command: "edgejs --precompile /app".to_owned(),
+            command: "edge --precompile /app".to_owned(),
             inputs: None,
             outputs: None,
             group: None,
@@ -2220,7 +2286,7 @@ mod tests {
              [package]\n\
              entrypoint = \"start\"\n\n\
              [dependencies]\n\
-             \"wasmer/edgejs-quickjs\" = \"=0.2.0\"\n\n\
+             \"wasmer/edgejs-quickjs\" = \"=0.2.5\"\n\n\
              [fs]\n\
              [[command]]\n\
              name = \"start\"\n\

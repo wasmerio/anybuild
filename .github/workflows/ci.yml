@@ -33,6 +33,9 @@ jobs:
   test_and_e2e:
     name: Test + E2E
     uses: ./.github/workflows/reusable-test-e2e.yml
+    permissions:
+      contents: read
+      packages: read
 
   release_binaries:
     name: Release binary preflight
