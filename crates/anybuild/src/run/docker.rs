@@ -16,10 +16,7 @@ use crate::plan::{RunStep, Serve, Step};
 use crate::run::{HostMount, Runner};
 use crate::RuntimeArtifact;
 
-pub(crate) const LAMBDA_ADAPTER_IMAGE: &str = concat!(
-    "ghcr.io/wasmerio/aws-lambda-adapter:1.0.0@",
-    "sha256:b4da35991627bdac98a81c377d0cc28e6989687359576dfda9f0b64be835d648"
-);
+const LAMBDA_ADAPTER_IMAGE: &str = "public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0";
 
 const TOOLCHAIN_STAGE: &str = r#"# syntax=docker/dockerfile:1.7-labs
 FROM debian:trixie-slim AS runtime-tools
@@ -147,6 +144,15 @@ impl DockerRunner {
     }
 
     fn dockerfile_contents(&self, serve: &Serve) -> Result<String> {
+        let adapter_image = self
+            .operation
+            .environment_var("ANYBUILD_LAMBDA_ADAPTER_IMAGE")
+            .filter(|image| !image.is_empty())
+            .unwrap_or_else(|| LAMBDA_ADAPTER_IMAGE.to_owned());
+        ensure!(
+            !adapter_image.chars().any(char::is_whitespace),
+            "ANYBUILD_LAMBDA_ADAPTER_IMAGE must be an image reference without whitespace"
+        );
         let mut contents = String::from(TOOLCHAIN_STAGE);
         let uses_mise = serve.deps.iter().any(|dependency| {
             !matches!(
@@ -162,7 +168,7 @@ impl DockerRunner {
         }
         contents.push_str(RUNTIME_STAGE);
         contents.push_str(&format!(
-            "COPY --from={LAMBDA_ADAPTER_IMAGE} /lambda-adapter /opt/extensions/lambda-adapter\n"
+            "COPY --from={adapter_image} /lambda-adapter /opt/extensions/lambda-adapter\n"
         ));
         if uses_mise {
             contents.push_str(
@@ -474,9 +480,16 @@ fn set_executable(path: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use crate::build::local::LocalBuildBackend;
+    use crate::event::{ProcessIo, Reporter};
     use crate::plan::{Mount, Package};
 
     fn runner(root: &Path) -> DockerRunner {
+        runner_with_env(root, IndexMap::new())
+    }
+
+    fn runner_with_env(root: &Path, environment: IndexMap<String, String>) -> DockerRunner {
+        let operation =
+            OperationContext::new(environment, false, ProcessIo::Inherit, Reporter::default());
         let source = root.join("src");
         let anybuild_dir = source.join(".anybuild");
         std::fs::create_dir_all(&source).unwrap();
@@ -484,17 +497,10 @@ mod tests {
             source.clone(),
             root.join("assets"),
             Some(anybuild_dir.clone()),
-            OperationContext::for_test(),
+            operation.clone(),
         )));
         std::fs::create_dir_all(backend.borrow().get_artifact_mount_path("app")).unwrap();
-        DockerRunner::new(
-            backend,
-            source,
-            None,
-            None,
-            Some(anybuild_dir),
-            OperationContext::for_test(),
-        )
+        DockerRunner::new(backend, source, None, None, Some(anybuild_dir), operation)
     }
 
     fn serve() -> Serve {
@@ -540,7 +546,7 @@ mod tests {
         ));
         assert!(dockerfile.contains("FROM debian:trixie-slim AS runtime"));
         assert!(dockerfile.contains(&format!("COPY --from={LAMBDA_ADAPTER_IMAGE}")));
-        assert!(!dockerfile.contains("public.ecr.aws"));
+        assert!(!dockerfile.contains("ghcr.io"));
         assert!(dockerfile.contains("COPY [\".anybuild/local/build/app\",\"/app\"]"));
         assert!(dockerfile.contains("ENV NODE_ENV=\"production\""));
         assert!(dockerfile.contains("ENV HOST=\"0.0.0.0\""));
@@ -555,6 +561,54 @@ mod tests {
             DockerRunner::image_name(&serve.name),
             crate::build::docker::internal_image_name("Acme Web")
         );
+    }
+
+    #[test]
+    fn dockerfile_uses_the_adapter_image_from_the_operation_environment() {
+        let temporary = tempfile::tempdir().unwrap();
+        let image = concat!(
+            "ghcr.io/wasmerio/aws-lambda-adapter:1.0.0@",
+            "sha256:b4da35991627bdac98a81c377d0cc28e6989687359576dfda9f0b64be835d648"
+        );
+        let runner = runner_with_env(
+            temporary.path(),
+            IndexMap::from([("ANYBUILD_LAMBDA_ADAPTER_IMAGE".to_owned(), image.to_owned())]),
+        );
+
+        let dockerfile = runner.dockerfile_contents(&serve()).unwrap();
+        assert!(dockerfile.contains(&format!(
+            "COPY --from={image} /lambda-adapter /opt/extensions/lambda-adapter"
+        )));
+        assert!(!dockerfile.contains("public.ecr.aws"));
+    }
+
+    #[test]
+    fn dockerfile_uses_the_default_adapter_for_an_empty_override() {
+        let temporary = tempfile::tempdir().unwrap();
+        let runner = runner_with_env(
+            temporary.path(),
+            IndexMap::from([("ANYBUILD_LAMBDA_ADAPTER_IMAGE".to_owned(), String::new())]),
+        );
+
+        let dockerfile = runner.dockerfile_contents(&serve()).unwrap();
+        assert!(dockerfile.contains(&format!("COPY --from={LAMBDA_ADAPTER_IMAGE}")));
+    }
+
+    #[test]
+    fn dockerfile_rejects_adapter_overrides_with_whitespace() {
+        for image in [
+            "mirror/adapter:1.0.0 extra",
+            "mirror/adapter:1.0.0\nRUN false",
+        ] {
+            let temporary = tempfile::tempdir().unwrap();
+            let runner = runner_with_env(
+                temporary.path(),
+                IndexMap::from([("ANYBUILD_LAMBDA_ADAPTER_IMAGE".to_owned(), image.to_owned())]),
+            );
+
+            let error = runner.dockerfile_contents(&serve()).unwrap_err();
+            assert!(error.to_string().contains("ANYBUILD_LAMBDA_ADAPTER_IMAGE"));
+        }
     }
 
     #[test]

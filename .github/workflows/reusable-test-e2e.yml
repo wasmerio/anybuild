@@ -81,6 +81,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs: test
+    permissions:
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix:
@@ -244,12 +247,24 @@ jobs:
           uv run --no-project --python 3.13 --with pip --with hatch==1.18.0
           python scripts/test_python_packaging.py
 
+      - name: Authenticate to the Lambda adapter mirror
+        if: ${{ contains(matrix.mode, 'docker') }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: >-
+          printf '%s' "$GHCR_TOKEN" |
+          docker login ghcr.io --username "$GHCR_USER" --password-stdin
+
       - name: Run e2e tests (Rust binary)
         env:
           ANYBUILD_BIN: ${{ github.workspace }}/anybuild-bin/anybuild
+          ANYBUILD_LAMBDA_ADAPTER_IMAGE: >-
+            ghcr.io/wasmerio/aws-lambda-adapter:1.0.0@sha256:b4da35991627bdac98a81c377d0cc28e6989687359576dfda9f0b64be835d648
+          TEST_MODE: ${{ matrix.mode }}
         run: |
           test_threads=4
-          if [[ "${{ matrix.mode }}" == docker* ]]; then
+          if [[ "$TEST_MODE" == docker* ]]; then
             test_threads=1
           fi
           cargo nextest run \

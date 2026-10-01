@@ -152,10 +152,14 @@ anybuild deploy --platform=aws-lambda \
   --aws-region=us-west-2
 ```
 
-Docker runtime images copy the adapter from the public Wasmer mirror at
-`ghcr.io/wasmerio/aws-lambda-adapter:1.0.0`, pinned to the upstream image
-digest. This avoids ECR Public's anonymous download quota during builds.
-The mirror preserves upstream's AMD64 and ARM64 images.
+Docker runtime images copy the adapter from
+`public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0` by default. Set
+`ANYBUILD_LAMBDA_ADAPTER_IMAGE` to use another image reference, including
+a digest-pinned mirror. Docker E2E tests in CI use the Wasmer GHCR mirror
+at `ghcr.io/wasmerio/aws-lambda-adapter:1.0.0`, pinned to the upstream
+digest, to avoid ECR Public's anonymous download quota. The mirror
+preserves upstream's AMD64 and ARM64 images. CI authenticates to GHCR
+with its GitHub token, so the mirror can remain private.
 
 `anybuild auto --platform=aws-lambda` selects the Docker builder and Lambda
 runner unless either is explicitly set. This makes Python and Node.js

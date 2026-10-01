@@ -1039,16 +1039,21 @@ fn fly_deployment_uses_the_docker_artifact_and_redacts_its_token() {
 #[cfg(unix)]
 #[test]
 fn aws_lambda_deployment_creates_then_updates_a_container_function() {
-    assert_aws_lambda_image_deployment(concat!(
-        "ghcr.io/wasmerio/aws-lambda-adapter:1.0.0@",
-        "sha256:b4da35991627bdac98a81c377d0cc28e6989687359576dfda9f0b64be835d648"
-    ));
+    assert_aws_lambda_image_deployment("public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0");
 }
 
 #[cfg(unix)]
 #[test]
-fn aws_lambda_deployment_accepts_saved_ecr_adapter_images() {
-    assert_aws_lambda_image_deployment("public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0");
+fn aws_lambda_deployment_accepts_saved_adapter_registry_overrides() {
+    for image in [
+        concat!(
+            "ghcr.io/wasmerio/aws-lambda-adapter:1.0.0@",
+            "sha256:b4da35991627bdac98a81c377d0cc28e6989687359576dfda9f0b64be835d648"
+        ),
+        "registry.example.com/custom-adapter:1.0.0",
+    ] {
+        assert_aws_lambda_image_deployment(image);
+    }
 }
 
 #[cfg(unix)]
