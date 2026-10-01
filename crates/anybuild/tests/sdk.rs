@@ -52,6 +52,11 @@ fn typecho_detects_source_and_plans_persistent_storage() {
         assert!(start.contains("/start-typecho.sh"));
         assert!(start.contains(&format!(" {engine} -S ")));
         assert!(!start.contains("auto_prepend_file"));
+        assert!(!plan
+            .serve
+            .build
+            .iter()
+            .any(|step| matches!(step, Step::Run(_))));
         assert!(plan.serve.commands["install"].ends_with("/app/install.php'"));
         let volumes = plan.serve.volumes.as_ref().unwrap();
         assert_eq!(volumes.len(), 1);

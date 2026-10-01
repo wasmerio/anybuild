@@ -259,11 +259,17 @@ Typecho source distributions are detected as PHP projects with
 mounts the `typecho-usr` volume at `/app/usr`, preserving SQLite databases,
 uploads, themes, and plugins. New volumes are seeded with the bundled `usr`
 files without replacing existing content. `/app/config.inc.php` is a symlink
-to `usr/config.inc.php`, so the stock installer writes its configuration
-directly into the volume. Startup only seeds missing user files and creates
-the symlink. The build adjusts Typecho's generated root definition because
-PHP resolves `__FILE__` through the symlink. No custom PHP runtime or request
-hooks are used.
+to `usr/config.inc.php`. Like WordPress, a default configuration template
+reads database settings from the environment and sets the application root
+explicitly. Startup seeds missing user files and creates the symlink.
+Typecho's sources are kept unchanged, with no custom runtime or request hooks.
+
+The template defaults to SQLite at `/app/usr/typecho.db`. Use `TYPECHO_DB_*`
+environment variables to configure the database before running the installer;
+the web installer creates the tables and site administrator. An existing
+`config.inc.php` is used as supplied. Custom configuration must set
+`__TYPECHO_ROOT_DIR__` to the application root, for example with
+`getenv('TYPECHO_APP_PATH')`, because PHP resolves `__FILE__` through symlinks.
 
 Run the web installer at `/install.php`, or use `anybuild run --command=install`
 with Typecho's `TYPECHO_DB_*`, `TYPECHO_SITE_URL`, and `TYPECHO_USER_*`

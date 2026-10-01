@@ -96,7 +96,9 @@ def php_build(
         steps += [
             copy("usr", usr_base.path),
             copy("php/start-typecho.sh", "{}/start-typecho.sh".format(assets.path), base = "assets"),
-        ] + _typecho_config_steps(app)
+        ]
+        if not file_exists("config.inc.php"):
+            steps.append(copy("php/typecho-config.inc.php", "{}/config.inc.php".format(app.path), base = "assets"))
         env_vars["TYPECHO_APP_PATH"] = app.serve_path
         env_vars["TYPECHO_USR_BASE_PATH"] = usr_base.serve_path
 
@@ -116,25 +118,6 @@ def php_build(
 
 def _quote(value):
     return "'" + value.replace("'", "'\"'\"'") + "'"
-
-def _typecho_config_steps(app):
-    # PHP resolves __FILE__ through symlinks. Make the stock installer's
-    # generated config keep using the app root when it lives in usr.
-    script = """foreach (array_slice($argv, 1) as $file) {
-    if (!is_file($file)) { continue; }
-    $code = file_get_contents($file);
-    $code = str_replace(
-        "define('__TYPECHO_ROOT_DIR__', dirname(__FILE__));",
-        "define('__TYPECHO_ROOT_DIR__', getenv('TYPECHO_APP_PATH') ?: dirname(__FILE__));",
-        $code
-    );
-    if (file_put_contents($file, $code) === false) { exit(1); }
-}"""
-    return [run("php -r {} {} {}".format(
-        _quote(script),
-        _quote("{}/install.php".format(app.path)),
-        _quote("{}/config.inc.php".format(app.path)),
-    ))]
 
 def php_commands(config, app, assets = None):
     engine = "phpix" if config.phpix else "php"
