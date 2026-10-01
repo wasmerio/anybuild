@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/wasmerio/anybuild/compare/v0.31.0...v0.32.0) (2026-10-01)
+
+
+### Features
+
+* support Typecho with persistent Wasmer storage ([#126](https://github.com/wasmerio/anybuild/issues/126)) ([839939e](https://github.com/wasmerio/anybuild/commit/839939e63f11702ee21e736b7e6ed527ab4107de))
+
 ## [0.31.0](https://github.com/wasmerio/anybuild/compare/v0.30.0...v0.31.0) (2026-10-01)
 
 
