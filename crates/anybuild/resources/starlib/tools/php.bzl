@@ -81,7 +81,7 @@ def php_build(
     if config.php_framework == "symfony":
         ignore.append("var")
     if config.php_framework == "typecho":
-        ignore.append("usr")
+        ignore += ["usr", "config.inc.php"]
     steps.append(copy(".", ignore = ignore))
 
     # Composer scripts are skipped at install time, so run the build script after.
@@ -90,17 +90,20 @@ def php_build(
     steps += after_build
     mounts = [app, assets]
     env_vars = php_env(config, assets)
+    usr_base = None
     if config.php_framework == "typecho":
         usr_base = mount("typecho_usr")
         mounts.append(usr_base)
-        steps += [
-            copy("usr", usr_base.path),
-            copy("php/start-typecho.sh", "{}/start-typecho.sh".format(assets.path), base = "assets"),
-        ]
-        if not file_exists("config.inc.php"):
+        steps.append(copy("usr", usr_base.path))
+        if file_exists("config.inc.php"):
+            steps.append(copy("config.inc.php", "{}/config.inc.php".format(usr_base.path)))
+        elif not file_exists("usr/config.inc.php"):
+            steps.append(copy("php/typecho-config.inc.php", "{}/config.inc.php".format(usr_base.path), base = "assets"))
+        steps.append(copy("php/typecho-config.inc.php", "{}/typecho-config.inc.php".format(assets.path), base = "assets"))
+        if not config.phpix:
             steps.append(copy("php/typecho-config.inc.php", "{}/config.inc.php".format(app.path), base = "assets"))
         env_vars["TYPECHO_APP_PATH"] = app.serve_path
-        env_vars["TYPECHO_USR_BASE_PATH"] = usr_base.serve_path
+        env_vars["TYPECHO_CONFIG_TEMPLATE"] = "{}/typecho-config.inc.php".format(assets.serve_path)
         env_vars["TYPECHO_DB_ADAPTER"] = config.typecho_db_adapter or "Pdo_SQLite"
 
     serve_deps = php_runtime_deps(config, tc)
@@ -115,12 +118,13 @@ def php_build(
         assets = assets,
         php = tc.php,
         composer = tc.composer,
+        typecho_usr = usr_base,
     )
 
 def _quote(value):
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
-def php_commands(config, app, assets = None):
+def php_commands(config, app, assets = None, typecho_usr = None):
     engine = "phpix" if config.phpix else "php"
     docroot = app.serve_path
     if config.php_public_dir:
@@ -128,9 +132,19 @@ def php_commands(config, app, assets = None):
     commands = {"start": "{} -S 0.0.0.0:{} -t {}".format(engine, config.port, docroot)}
     if config.php_framework == "typecho":
         assets = assets or mount("assets")
-        prefix = "bash {} ".format(_quote("{}/start-typecho.sh".format(assets.serve_path)))
-        commands["start"] = prefix + commands["start"]
-        commands["install"] = prefix + "php " + _quote("{}/install.php".format(app.serve_path))
+        if config.phpix:
+            commands["start"] = "phpix --startup-script={} -S 0.0.0.0:{} -t {}".format(_quote("{}/typecho-config.inc.php".format(assets.serve_path)), config.port, docroot)
+        typecho_usr = typecho_usr or mount("typecho_usr")
+        initialize = "mkdir -p {} && cp -Rn {} {}".format(
+            _quote("{}/usr/uploads".format(app.serve_path)),
+            _quote("{}/.".format(typecho_usr.serve_path)),
+            _quote("{}/usr/".format(app.serve_path)),
+        )
+        commands["after_deploy"] = "bash -c " + _quote(initialize)
+        install = "php " + _quote("{}/install.php".format(app.serve_path))
+        if config.phpix:
+            install = "php -r " + _quote("require getenv('TYPECHO_CONFIG_TEMPLATE'); require getenv('TYPECHO_APP_PATH') . '/install.php';")
+        commands["install"] = "bash -c " + _quote(initialize + " && " + install)
     return commands
 
 def php_serve(config, build, name = None, provider = None, commands = None, **overrides):
@@ -146,7 +160,7 @@ def php_serve(config, build, name = None, provider = None, commands = None, **ov
         provider = provider,
         name = name,
         cwd = app.serve_path,
-        commands = commands if commands != None else php_commands(config, app, build.assets),
+        commands = commands if commands != None else php_commands(config, app, build.assets, build.typecho_usr),
         volumes = volumes,
         **overrides
     )

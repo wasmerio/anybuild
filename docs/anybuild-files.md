@@ -254,30 +254,38 @@ documented above.
 
 ### Typecho
 
-Typecho source distributions are detected as PHP projects with
-`php_framework = "typecho"`. Wasmer uses PHPix by default. The generated serve
-mounts the `typecho-usr` volume at `/app/usr`, preserving SQLite databases,
-uploads, themes, and plugins. New volumes are seeded with the bundled `usr`
-files without replacing existing content. `/app/config.inc.php` is a symlink
-to `usr/config.inc.php`. Like WordPress, a default configuration template
-reads database settings from the environment and sets the application root
-explicitly. Startup seeds missing user files and creates the symlink.
-Typecho's sources are kept unchanged, with no custom runtime or request hooks.
+Typecho source distributions are detected as PHP projects with `php_framework =
+"typecho"`. Wasmer uses PHPix by default. The generated serve explicitly mounts
+the `typecho-usr` volume at `/app/usr`, preserving configuration, SQLite
+databases, uploads, themes, and plugins.
+
+Like WordPress, `after_deploy` seeds the volume with bundled files without
+replacing existing content. PHPix creates the `/app/config.inc.php` symlink to
+`usr/config.inc.php` at runtime, using the standard configuration template as
+its startup script. Plain PHP loads the persistent config through the root
+template. There is no separate runtime PHP file or startup shell wrapper, and
+Typecho's sources remain unchanged.
 
 Wasmer defaults to `Pdo_Mysql` and requests a managed MySQL database in
 `app.yaml`. The template reads Wasmer's `DB_HOST`, `DB_PORT`, `DB_USERNAME`,
-`DB_PASSWORD`, and `DB_NAME` variables; `TYPECHO_DB_*` variables override
-them. Local runs default to SQLite at `/app/usr/typecho.db`. Set
-`TYPECHO_DB_ADAPTER=Pdo_SQLite` before building to use SQLite on Wasmer
-without requesting a managed database. The web installer creates the tables
-and site administrator. An existing `config.inc.php` is used as supplied.
-Custom configuration must set
-`__TYPECHO_ROOT_DIR__` to the application root, for example with
-`getenv('TYPECHO_APP_PATH')`, because PHP resolves `__FILE__` through symlinks.
+`DB_PASSWORD`, and `DB_NAME` variables; `TYPECHO_DB_*` variables override them.
+Local runs default to SQLite in `usr/typecho.db`. Set
+`TYPECHO_DB_ADAPTER=Pdo_SQLite` before building to use SQLite on Wasmer without
+requesting a managed database.
 
-Run the web installer at `/install.php`, or use `anybuild run --command=install`
-with Typecho's `TYPECHO_DB_*`, `TYPECHO_SITE_URL`, and `TYPECHO_USER_*`
-environment variables. For SQLite, set `TYPECHO_DB_ADAPTER=Pdo_SQLite` and
+The web installer creates the tables and site administrator. An existing
+`config.inc.php` is preserved in the volume and loaded as supplied. Custom
+configuration must set `__TYPECHO_ROOT_DIR__` to the application root, for
+example with `getenv('TYPECHO_APP_PATH')`, because PHP resolves `__FILE__`
+through symlinks.
+
+Wasmer runs `after_deploy` as a post-deployment job. For local setup, run
+`anybuild run --after-deploy --start` before opening the web installer at
+`/install.php`, or use `anybuild run --command=install` with Typecho's
+`TYPECHO_DB_*`, `TYPECHO_SITE_URL`, and `TYPECHO_USER_*` environment variables.
+The `install` command also seeds the volume before running the installer.
+
+For SQLite on Wasmer, set `TYPECHO_DB_ADAPTER=Pdo_SQLite` and optionally
 `TYPECHO_DB_FILE=/app/usr/typecho.db`. Locally, the persistent data lives under
 `.anybuild/volumes/typecho-usr`; Wasmer deployments declare the same volume in
 `app.yaml`.

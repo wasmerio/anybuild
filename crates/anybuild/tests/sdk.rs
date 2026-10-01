@@ -56,16 +56,20 @@ fn typecho_detects_source_and_plans_persistent_storage() {
             "php"
         };
         let start = &plan.serve.commands["start"];
-        assert!(start.starts_with("bash "));
-        assert!(start.contains("/start-typecho.sh"));
-        assert!(start.contains(&format!(" {engine} -S ")));
+        assert!(start.starts_with(&format!("{engine} ")));
+        assert!(start.contains("-S 0.0.0.0:"));
         assert!(!start.contains("auto_prepend_file"));
         assert!(!plan
             .serve
             .build
             .iter()
             .any(|step| matches!(step, Step::Run(_))));
-        assert!(plan.serve.commands["install"].ends_with("/app/install.php'"));
+        assert!(plan.serve.commands["install"].contains("/install.php"));
+        let after_deploy = &plan.serve.commands["after_deploy"];
+        assert!(after_deploy.contains("cp -Rn "));
+        assert!(after_deploy.contains("/opt/typecho_usr/."));
+        assert!(after_deploy.contains("/app/usr/"));
+        assert!(!after_deploy.contains("start-typecho"));
         let volumes = plan.serve.volumes.as_ref().unwrap();
         assert_eq!(volumes.len(), 1);
         assert_eq!(volumes[0].name, "typecho-usr");

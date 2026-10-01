@@ -260,20 +260,34 @@ const TYPECHO_SQLITE: Case = Case {
         ("TYPECHO_USER_MAIL", "admin@example.com"),
         ("TYPECHO_LANG", "en_US"),
     ],
-    before_serve: &[run("install")],
-    commands: &[run_stdout(
-        concat!(
-            "php -r '",
-            r#"require "/app/usr/config.inc.php"; "#,
-            r#"$db = \Typecho\Db::get(); "#,
-            r#"if ($db->getAdapterName() !== getenv("TYPECHO_DB_ADAPTER")) { exit(1); } "#,
-            r#"$db->query($db->update("table.contents")->rows(["title" => "Hello World persisted"])->where("cid = ?", 1)); "#,
-            r#"file_put_contents("/app/usr/uploads/persisted.txt", "Typecho persisted upload"); "#,
-            r#"file_put_contents("/app/usr/themes/default/style.css", "/* Typecho customized theme */", FILE_APPEND); "#,
-            r#"echo "Typecho content written";'"#,
+    before_serve: &[run("after_deploy"), run("install")],
+    commands: &[
+        run_stdout(
+            concat!(
+                "php -r '",
+                r#"require getenv("TYPECHO_CONFIG_TEMPLATE"); "#,
+                r#"if (!is_link("/app/config.inc.php")) { exit(1); } "#,
+                r#"$db = \Typecho\Db::get(); "#,
+                r#"if ($db->getAdapterName() !== getenv("TYPECHO_DB_ADAPTER")) { exit(1); } "#,
+                r#"$db->query($db->update("table.contents")->rows(["title" => "Hello World persisted"])->where("cid = ?", 1)); "#,
+                r#"file_put_contents("/app/usr/uploads/persisted.txt", "Typecho persisted upload"); "#,
+                r#"file_put_contents("/app/usr/themes/default/style.css", "/* Typecho customized theme */", FILE_APPEND); "#,
+                r#"file_put_contents("/app/usr/config.inc.php", "\ndefine(\"TYPECHO_PERSISTED_CONFIG\", \"kept\");\n", FILE_APPEND); "#,
+                r#"echo "Typecho content written";'"#,
+            ),
+            "Typecho content written",
         ),
-        "Typecho content written",
-    )],
+        run("after_deploy"),
+        run_stdout(
+            concat!(
+                "php -r '",
+                r#"require getenv("TYPECHO_CONFIG_TEMPLATE"); "#,
+                r#"if (!is_link("/app/config.inc.php")) { exit(1); } "#,
+                r#"echo TYPECHO_PERSISTED_CONFIG;'"#,
+            ),
+            "kept",
+        ),
+    ],
     initial_http: &[
         body_status("/install.php", 200, "Typecho"),
         body_status("/install.php?step=2", 200, "dbAdapter"),
