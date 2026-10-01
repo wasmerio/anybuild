@@ -136,8 +136,10 @@ def php_commands(config, app, assets = None):
 def php_serve(config, build, name = None, provider = None, commands = None, **overrides):
     """Serve a PHP build with the php (or phpix) dev server."""
     app = build.app
-    if config.php_framework == "typecho" and "volumes" not in overrides:
-        overrides["volumes"] = [volume("typecho-usr", "{}/usr".format(app.serve_path))]
+    volumes = []
+    if config.php_framework == "typecho":
+        usr = volume("typecho-usr", "{}/usr".format(app.serve_path))
+        volumes = [usr]
     return serve(
         config,
         build,
@@ -145,5 +147,6 @@ def php_serve(config, build, name = None, provider = None, commands = None, **ov
         name = name,
         cwd = app.serve_path,
         commands = commands if commands != None else php_commands(config, app, build.assets),
+        volumes = volumes,
         **overrides
     )
