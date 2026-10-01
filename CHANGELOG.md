@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.31.0](https://github.com/wasmerio/anybuild/compare/v0.30.0...v0.31.0) (2026-10-01)
+
+
+### Features
+
+* support external EdgeJS engine and test both runtimes ([#124](https://github.com/wasmerio/anybuild/issues/124)) ([fe6aca9](https://github.com/wasmerio/anybuild/commit/fe6aca9d91d4ea04675d8a1e158a1c600c5ecd79))
+
+
+### Bug Fixes
+
+* update phpix to 0.3.0 ([#123](https://github.com/wasmerio/anybuild/issues/123)) ([958463f](https://github.com/wasmerio/anybuild/commit/958463f1237ebec35d7eacb6f10a95de56f166b4))
+
 ## [0.30.0](https://github.com/wasmerio/anybuild/compare/v0.29.0...v0.30.0) (2026-09-30)
 
 
