@@ -730,15 +730,15 @@ fn format_app_import(application: &str) -> String {
     RE.replace(application, ":$1").into_owned()
 }
 
-/// Port of `file_to_python_path` (including the `str.rstrip(".py")`
-/// character-set quirk).
+/// Convert a Python file path to its application import.
 fn file_to_python_path(path: Option<&str>) -> Option<String> {
     let path = path?;
     if path.is_empty() {
         return None;
     }
     let file = path
-        .trim_end_matches(['.', 'p', 'y'])
+        .strip_suffix(".py")
+        .unwrap_or(path)
         .replace(['/', '\\'], ".");
     Some(format!("{file}:app"))
 }
@@ -1050,6 +1050,60 @@ mod tests {
         let (asgi, wsgi) =
             resolve_applications(path, Some(PythonFramework::Flask), Some("main.py"));
         assert_eq!((asgi.as_deref(), wsgi.as_deref()), (None, Some("main:app")));
+    }
+
+    #[test]
+    fn test_file_to_python_path_preserves_module_name() {
+        for (path, expected) in [
+            ("app.py", "app:app"),
+            ("happy.py", "happy:app"),
+            ("copy.py", "copy:app"),
+            ("src/app.py", "src.app:app"),
+            (r"src\app.py", "src.app:app"),
+            ("app", "app:app"),
+        ] {
+            assert_eq!(file_to_python_path(Some(path)).as_deref(), Some(expected));
+        }
+        assert_eq!(file_to_python_path(None), None);
+        assert_eq!(file_to_python_path(Some("")), None);
+    }
+
+    #[test]
+    fn test_python_provider_infers_app_py_start_command() {
+        for (dependency, framework, interface) in [
+            ("flask", PythonFramework::Flask, " --interface=wsgi"),
+            ("fastapi", PythonFramework::FastApi, ""),
+        ] {
+            for main_file in ["app.py", "src/app.py"] {
+                let tmp = tempfile::tempdir().unwrap();
+                std::fs::write(
+                    tmp.path().join("requirements.txt"),
+                    format!("{dependency}\n"),
+                )
+                .unwrap();
+                let app_path = tmp.path().join(main_file);
+                std::fs::create_dir_all(app_path.parent().unwrap()).unwrap();
+                std::fs::write(app_path, "app = None\n").unwrap();
+
+                let config = load_config(tmp.path(), BaseConfig::default()).unwrap();
+                let module = if main_file.starts_with("src/") {
+                    "src.app"
+                } else {
+                    "app"
+                };
+
+                assert_eq!(config.framework, Some(framework));
+                assert_eq!(config.main_file.as_deref(), Some(main_file));
+                assert_eq!(config.server, Some(PythonServer::Uvicorn));
+                assert!(config.extra_dependencies.contains("uvicorn"));
+                assert_eq!(
+                    config.base.commands.start,
+                    Some(format!(
+                        "uvicorn {module}:app{interface} --host 0.0.0.0 --port $PORT"
+                    ))
+                );
+            }
+        }
     }
 
     #[test]
