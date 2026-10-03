@@ -171,6 +171,9 @@ fn compute_config(case: &Case) -> Result<serde_json::Value, String> {
 
     let mut base = BaseConfig::default();
     base.commands.enrich_from_path(&app_path);
+    if !is_synthetic {
+        base.app_subdir = case.subdir.clone();
+    }
 
     let (_, mut config) = select_provider(&app_path, &base, None, &operation)
         .map_err(|e| format!("detection failed: {e:#}"))?;
@@ -186,9 +189,10 @@ fn compute_config(case: &Case) -> Result<serde_json::Value, String> {
         }
     } else {
         workspace::apply_subdir_provider_config(&mut config, case.subdir.as_deref());
-        config.apply_workspace_config(&case.workspace);
     }
 
+    crate::providers::infer_node_build_command(&app_path, &mut config)
+        .map_err(|e| format!("build command inference failed: {e:#}"))?;
     Ok(crate::providers::exclude_defaults_json(&config))
 }
 

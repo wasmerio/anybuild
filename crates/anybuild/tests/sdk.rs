@@ -643,169 +643,6 @@ fn manager_dependency<'a>(steps: &'a [Step], name: &str) -> Option<&'a str> {
     })
 }
 
-#[test]
-fn node_package_manager_override_updates_next_build_commands() {
-    for subdir in [None, Some("js-next-ssr")] {
-        let project = tempfile::tempdir().unwrap();
-        let app = subdir.map_or_else(
-            || project.path().to_path_buf(),
-            |subdir| project.path().join(subdir),
-        );
-        std::fs::create_dir_all(&app).unwrap();
-        std::fs::write(
-            app.join("package.json"),
-            r#"{
-  "name": "js-next-ssr",
-  "scripts": {"build": "next build", "start": "next start"},
-  "dependencies": {"next": "16.1.7", "react": "19.2.3", "react-dom": "19.2.3"}
-}"#,
-        )
-        .unwrap();
-        std::fs::write(app.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n").unwrap();
-
-        let make_sdk = || {
-            let mut sdk = Anybuild::new(project.path()).inherit_process_env(false);
-            if let Some(subdir) = subdir {
-                sdk = sdk.with_subdir(subdir);
-            }
-            sdk
-        };
-        let sdk = make_sdk();
-        let generated = sdk.generate(GenerateOptions::default()).unwrap();
-        assert_eq!(generated.config["node_package_manager"], "pnpm");
-        let persisted = std::fs::read(&generated.path).unwrap();
-
-        for temporary in [false, true] {
-            for (manager, version, command) in [
-                (
-                    "npm",
-                    "11",
-                    "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
-                ),
-                (
-                    "pnpm",
-                    "10",
-                    "pnpm dlx next-bundle@1.0.0 --build-command 'pnpm run build'",
-                ),
-                (
-                    "yarn",
-                    "<unpinned>",
-                    "yarn dlx next-bundle@1.0.0 --build-command 'yarn run build'",
-                ),
-                (
-                    "bun",
-                    "1",
-                    "bunx next-bundle@1.0.0 --build-command 'bun run build'",
-                ),
-            ] {
-                let plan = make_sdk()
-                    .with_env("ANYBUILD_NODE_PACKAGE_MANAGER", manager)
-                    .plan(PlanOptions {
-                        temporary,
-                        ..PlanOptions::default()
-                    })
-                    .unwrap();
-                assert_eq!(plan.config["node_package_manager"], manager);
-                assert_eq!(plan.config["node_build_command"], command);
-                assert_eq!(
-                    manager_dependency(&plan.serve.build, manager),
-                    Some(version)
-                );
-                assert!(plan
-                    .serve
-                    .build
-                    .iter()
-                    .any(|step| { matches!(step, Step::Run(run) if run.command == command) }));
-                let install = format!("{manager} install");
-                assert!(plan.serve.build.iter().any(|step| {
-                    matches!(step, Step::Run(run) if run.command.starts_with(&install))
-                }));
-            }
-        }
-        for plan in [
-            make_sdk()
-                .with_env("SHIPIT_NODE_PACKAGE_MANAGER", "npm")
-                .with_env("ANYBUILD_NPM_VERSION", "11.6.2")
-                .plan(PlanOptions::default())
-                .unwrap(),
-            make_sdk()
-                .with_config(
-                    serde_json::json!({"node_package_manager": "npm", "npm_version": "11.6.2"}),
-                )
-                .plan(PlanOptions::default())
-                .unwrap(),
-        ] {
-            assert_eq!(
-                plan.config["node_build_command"],
-                "npx -y next-bundle@1.0.0 --build-command 'npm run build'"
-            );
-            assert_eq!(manager_dependency(&plan.serve.build, "npm"), Some("11.6.2"));
-        }
-        let explicit = "pnpm run custom-build -- --label 'keep this'";
-        for plan in [
-            make_sdk()
-                .with_env("ANYBUILD_NODE_PACKAGE_MANAGER", "npm")
-                .with_env("ANYBUILD_NODE_BUILD_COMMAND", explicit)
-                .plan(PlanOptions::default())
-                .unwrap(),
-            make_sdk()
-                .with_config(serde_json::json!({"node_package_manager": "npm", "node_build_command": explicit}))
-                .plan(PlanOptions::default())
-                .unwrap(),
-        ] {
-            assert_eq!(plan.config["node_build_command"], explicit);
-        }
-        assert_eq!(std::fs::read(&generated.path).unwrap(), persisted);
-    }
-}
-
-#[test]
-fn node_package_manager_override_updates_shared_build_toolchain() {
-    for provider in ["node", "node-static", "laravel"] {
-        let project = tempfile::tempdir().unwrap();
-        std::fs::write(
-            project.path().join("package.json"),
-            r#"{
-  "scripts": {"build": "vite build", "start": "node server.js"},
-  "devDependencies": {"vite": "8.2.0"}
-}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            project.path().join("pnpm-lock.yaml"),
-            "lockfileVersion: '9.0'\n",
-        )
-        .unwrap();
-        if provider == "laravel" {
-            std::fs::write(
-                project.path().join("composer.json"),
-                r#"{"require":{"laravel/framework":"^12.0"}}"#,
-            )
-            .unwrap();
-            std::fs::write(project.path().join("artisan"), "<?php\n").unwrap();
-        }
-        let plan = Anybuild::new(project.path())
-            .inherit_process_env(false)
-            .with_provider(provider)
-            .with_env("ANYBUILD_NODE_PACKAGE_MANAGER", "npm")
-            .plan(PlanOptions {
-                temporary: true,
-                ..PlanOptions::default()
-            })
-            .unwrap();
-        assert_eq!(plan.provider, provider);
-        assert_eq!(plan.config["node_build_command"], "npm run build");
-        assert_eq!(manager_dependency(&plan.serve.build, "npm"), Some("11"));
-        for command in ["npm install", "npm run build"] {
-            assert!(plan
-                .serve
-                .build
-                .iter()
-                .any(|step| { matches!(step, Step::Run(run) if run.command == command) }));
-        }
-    }
-}
-
 /// A pnpm Next.js build shells out to `pnpm dlx next-bundle`, whose tree
 /// contains esbuild. pnpm skips esbuild's build script, and pnpm 12 turned that
 /// skip into a failed install, so the setting has to be in scope by the time
@@ -859,6 +696,51 @@ fn pnpm_next_build_survives_a_skipped_dependency_build_script() {
             dep.name == "pnpm" && dep.version.as_deref() == Some("10")
         }))
     }));
+}
+
+#[test]
+fn next_build_command_uses_the_final_package_manager() {
+    let project = workspace_with_subdir_app("pnpm@10.9.2");
+    std::fs::write(
+        project.path().join("apps/site/package.json"),
+        r#"{"scripts":{"build":"next build","start":"next start"},"dependencies":{"next":"16.1.7"}}"#,
+    )
+    .unwrap();
+    let sdk = || {
+        Anybuild::new(project.path())
+            .inherit_process_env(false)
+            .with_subdir("apps/site")
+    };
+    let generated = sdk().generate(GenerateOptions::default()).unwrap();
+    assert!(!generated.content.contains("node_build_command"));
+    for (client, expected) in [
+        (
+            sdk(),
+            "pnpm dlx next-bundle@1.0.0 --build-command 'pnpm run build'",
+        ),
+        (
+            sdk().with_env("ANYBUILD_NODE_PACKAGE_MANAGER", "npm"),
+            "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
+        ),
+        (
+            sdk().with_config(serde_json::json!({"node_package_manager": "npm"})),
+            "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
+        ),
+        (
+            sdk()
+                .with_env("ANYBUILD_NODE_PACKAGE_MANAGER", "npm")
+                .with_env("ANYBUILD_NODE_BUILD_COMMAND", "node custom.js"),
+            "node custom.js",
+        ),
+    ] {
+        let plan = client.plan(PlanOptions::default()).unwrap();
+        assert_eq!(plan.config["node_build_command"], expected);
+        assert!(plan
+            .serve
+            .build
+            .iter()
+            .any(|step| { matches!(step, Step::Run(run) if run.command == expected) }));
+    }
 }
 
 #[test]

@@ -219,7 +219,8 @@ pub fn load_project_config(
     overrides: &CommandOverrides,
     operation: &OperationContext,
 ) -> Result<(&'static str, ProviderConfig)> {
-    let base = base_config_for(&paths.app_path, overrides, operation)?;
+    let mut base = base_config_for(&paths.app_path, overrides, operation)?;
+    base.app_subdir = paths.subdir.clone();
     let clean_operation = operation.without_environment();
     let (provider, mut config) = select_provider(
         &paths.app_path,
@@ -229,7 +230,6 @@ pub fn load_project_config(
     )?;
     let provider = provider.name();
     workspace::apply_subdir_provider_config(&mut config, paths.subdir.as_deref());
-    config.apply_workspace_config(&paths.workspace_root);
     operation.provider_detected(provider, config.detection_details());
     Ok((provider, config))
 }

@@ -121,8 +121,6 @@ pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Si
         Ok(config)
     }
 
-    fn apply_workspace_config(&mut self, _workspace_root: &Path) {}
-
     fn validate(&self, _path: &Path) -> Result<()> {
         Ok(())
     }
@@ -192,12 +190,6 @@ macro_rules! provider_registry {
             pub(crate) fn detection_details(&self) -> Vec<ProviderDetail> {
                 match self {
                     $(Self::$variant(config) => config.detection_details()),+
-                }
-            }
-
-            pub(crate) fn apply_workspace_config(&mut self, workspace_root: &Path) {
-                match self {
-                    $(Self::$variant(config) => config.apply_workspace_config(workspace_root)),+
                 }
             }
 
@@ -567,6 +559,50 @@ pub(crate) fn finalize_config(path: &Path, mut config: ProviderConfig) -> Provid
         }
     }
     finish_config(path, config)
+}
+
+/// Build commands depend on the final package manager, after all overrides.
+pub(crate) fn infer_node_build_command(path: &Path, config: &mut ProviderConfig) -> Result<()> {
+    let (build, framework, commands, is_static) = match config {
+        ProviderConfig::Node(config) => (
+            &mut config.node.build,
+            config.node.runtime.framework,
+            &config.base.commands,
+            false,
+        ),
+        ProviderConfig::NodeStatic(config) => (
+            &mut config.node.build,
+            config.node.runtime.framework,
+            &config.base.commands,
+            true,
+        ),
+        ProviderConfig::Laravel(config) => {
+            let package_json = node::parse_package_json(path);
+            let deps =
+                node::check_package_json_deps(package_json.as_ref(), node::NODE_DEPENDENCIES);
+            let framework = node::detect_framework(package_json.as_ref(), &deps, Some(path));
+            (&mut config.node, framework, &config.base.commands, false)
+        }
+        _ => return Ok(()),
+    };
+    let Some(manager) = build.package_manager else {
+        return Ok(());
+    };
+    node::resolve_manager_version(build, manager, path);
+    if node::non_empty(&build.build_command).is_none() {
+        let package_json = node::parse_package_json(path);
+        build.build_command = if is_static {
+            node_static::get_build_command(package_json.as_ref(), manager, framework, None)
+        } else {
+            node::get_build_command(
+                package_json.as_ref(),
+                manager,
+                framework,
+                node::non_empty(&commands.build),
+            )?
+        };
+    }
+    Ok(())
 }
 
 /// The declared field defaults for a provider config (pydantic's notion

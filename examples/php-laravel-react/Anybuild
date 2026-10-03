@@ -6,7 +6,6 @@ load("//anybuild/tools:laravel.bzl", "laravel_build", "laravel_config", "laravel
 config = laravel_config(
     schema = 1,
     node_package_manager = "npm",
-    node_build_command = "npm run build",
     node_version = "24",
     npm_version = "11",
     php_framework = "laravel",
