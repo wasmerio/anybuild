@@ -23,7 +23,7 @@ use crate::providers::node::{
     self, JsonMap, NodeConfig, NodeConfigFields, NodeFramework, PackageManager,
 };
 use crate::providers::staticfile::compute_redirects_config;
-use crate::providers::{workspace, Provider};
+use crate::providers::Provider;
 
 // ---------------------------------------------------------------------------
 // Config
@@ -205,11 +205,10 @@ pub fn load_config(
     config.static_dir = static_parts.static_dir;
     config.redirects_config = static_parts.redirects_config;
 
-    let package_manager = config
-        .package_manager
-        .unwrap_or_else(|| node::detect_package_manager(path));
-    config.package_manager = Some(package_manager);
-    node::resolve_manager_version(&mut config, package_manager, path);
+    config
+        .node
+        .build
+        .resolve_package_manager(path, config.base.app_subdir.as_deref());
 
     let package_json = node::parse_package_json(path);
     let found_deps =
@@ -222,15 +221,6 @@ pub fn load_config(
     }
     if config.runtime.server.is_none() {
         config.runtime.server = Some(node::detect_server(&node_deps));
-    }
-
-    if node::non_empty(&config.build_command).is_none() {
-        config.build_command = get_build_command(
-            package_json.as_ref(),
-            package_manager,
-            config.runtime.framework,
-            None,
-        );
     }
 
     if node::non_empty(&config.static_dir).is_none() {
@@ -754,21 +744,21 @@ impl Provider for NodeStaticConfig {
         ("Output directory", "static_dir"),
     ];
 
+    fn resolve(&mut self, path: &Path) -> Result<()> {
+        let framework = self.node.runtime.framework;
+        self.node
+            .build
+            .infer_build_command(path, |package, manager| {
+                Ok(get_build_command(package, manager, framework, None))
+            })
+    }
+
     fn format_detection_detail(field: &str, value: &str) -> String {
         match field {
             "node_framework" => node::display_framework(value),
             "node_server" => node::display_server(value),
             _ => value.to_owned(),
         }
-    }
-
-    fn apply_workspace_config(&mut self, workspace_root: &Path) {
-        workspace::apply_node_workspace_config(
-            workspace_root,
-            self.base.app_subdir.as_deref(),
-            &mut self.node.build,
-            &mut self.base.commands,
-        );
     }
 
     fn detection_evidence(
@@ -957,7 +947,9 @@ mod tests {
     }
 
     fn load_config(path: &Path, base: BaseConfig) -> Result<NodeStaticConfig> {
-        super::load_config(path, base, &OperationContext::for_test())
+        let mut config = super::load_config(path, base, &OperationContext::for_test())?;
+        config.resolve(path)?;
+        Ok(config)
     }
 
     fn example(name: &str) -> PathBuf {

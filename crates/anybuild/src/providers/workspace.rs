@@ -2,11 +2,7 @@
 
 use std::path::Path;
 
-use crate::providers::base::CustomCommands;
-use crate::providers::node::{
-    detect_package_manager, resolve_workspace_manager_version, NodeBuildConfigFields,
-    PackageManager,
-};
+use crate::providers::node::PackageManager;
 use crate::providers::ProviderConfig;
 
 /// Port of `apply_subdir_provider_config`: every provider config has
@@ -16,70 +12,19 @@ pub fn apply_subdir_provider_config(config: &mut ProviderConfig, subdir: Option<
     config.base_mut().app_subdir = subdir.map(str::to_owned);
 }
 
-/// Subdirectory Node apps without their own lockfile inherit the workspace
-/// root's package manager, and `<pm> run …` commands are rewritten to match.
-pub(crate) fn apply_node_workspace_config(
-    workspace_root: &Path,
-    subdir: Option<&str>,
-    build: &mut NodeBuildConfigFields,
-    commands: &mut CustomCommands,
-) {
+/// Subdirectory apps without a lockfile inherit the workspace toolchain.
+pub(crate) fn node_package_manager_path<'a>(app: &'a Path, subdir: Option<&str>) -> &'a Path {
     let Some(subdir) = subdir.filter(|subdir| !subdir.is_empty()) else {
-        return;
+        return app;
     };
-    let app_path = workspace_root.join(subdir);
-    if !app_path.join("package.json").exists() {
-        return;
+    if !app.join("package.json").exists()
+        || PackageManager::ALL
+            .iter()
+            .any(|manager| manager.has_lockfile(app))
+    {
+        return app;
     }
-
-    let app_has_lockfile = PackageManager::ALL
-        .iter()
-        .any(|manager| manager.has_lockfile(&app_path));
-    if app_has_lockfile {
-        return;
-    }
-
-    let workspace_manager = detect_package_manager(workspace_root);
-    let current_manager = build.package_manager;
-    // The root declares the toolchain for the whole workspace, so it gets a say
-    // on the version even when it does not change the manager itself.
-    resolve_workspace_manager_version(build, workspace_manager, current_manager, workspace_root);
-    if current_manager == Some(workspace_manager) {
-        return;
-    }
-
-    build.package_manager = Some(workspace_manager);
-    // load_config always sets package_manager; a None here would raise in
-    // Python's _rewrite_package_manager_command for non-empty commands.
-    if let Some(current_manager) = current_manager {
-        build.build_command = rewrite_package_manager_command(
-            build.build_command.take(),
-            current_manager,
-            workspace_manager,
-        );
-        // `if provider_config.commands:` — pydantic models are always
-        // truthy, so the rewrite always runs.
-        commands.build = rewrite_package_manager_command(
-            commands.build.take(),
-            current_manager,
-            workspace_manager,
-        );
-    }
-}
-
-/// Port of cli.py's `_rewrite_package_manager_command`.
-fn rewrite_package_manager_command(
-    command: Option<String>,
-    old_manager: PackageManager,
-    new_manager: PackageManager,
-) -> Option<String> {
-    let command = command?;
-    if command.is_empty() {
-        return Some(command); // Python: falsy commands returned unchanged
-    }
-    let old_run = format!("{} run ", old_manager.value());
-    if let Some(rest) = command.strip_prefix(&old_run) {
-        return Some(format!("{} run {rest}", new_manager.value()));
-    }
-    Some(command)
+    app.ancestors()
+        .nth(Path::new(subdir).components().count())
+        .unwrap_or(app)
 }

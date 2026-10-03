@@ -88,12 +88,14 @@ impl ConfigResolutionOptions {
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("persisted provider config must be a dictionary"))?;
 
-        let mut base = BaseConfig::default();
+        let mut base = BaseConfig {
+            app_subdir: self.paths.subdir.clone(),
+            ..BaseConfig::default()
+        };
         base.commands.enrich_from_path(&self.paths.app_path);
         let mut config =
             load_explicit_provider(provider, &self.paths.app_path, &base, &self.operation)?;
         workspace::apply_subdir_provider_config(&mut config, self.paths.subdir.as_deref());
-        config.apply_workspace_config(&self.paths.workspace_root);
 
         validate_patch(&config.to_json(), &Json::Object(persisted.clone()), "")?;
         config = config.merge_json(&Json::Object(persisted.clone()))?;
@@ -102,6 +104,7 @@ impl ConfigResolutionOptions {
         if let Some(patch) = &self.overrides.config {
             config = config.merge_json(patch)?;
         }
+        config.resolve(&self.paths.app_path)?;
         if let Some(runner) = &self.runner {
             runner.borrow_mut().prepare_config(&mut config);
         }

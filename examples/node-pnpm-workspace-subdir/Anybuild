@@ -13,7 +13,6 @@ config = node_config(
     node_package_manager = "pnpm",
     node_framework = "astro",
     node_server = "node",
-    node_build_command = "pnpm run build",
     node_version = "24",
     pnpm_version = "11.2.2",
 )

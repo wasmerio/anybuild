@@ -699,6 +699,51 @@ fn pnpm_next_build_survives_a_skipped_dependency_build_script() {
 }
 
 #[test]
+fn next_build_command_uses_the_final_package_manager() {
+    let project = workspace_with_subdir_app("pnpm@10.9.2");
+    std::fs::write(
+        project.path().join("apps/site/package.json"),
+        r#"{"scripts":{"build":"next build","start":"next start"},"dependencies":{"next":"16.1.7"}}"#,
+    )
+    .unwrap();
+    let sdk = || {
+        Anybuild::new(project.path())
+            .inherit_process_env(false)
+            .with_subdir("apps/site")
+    };
+    let generated = sdk().generate(GenerateOptions::default()).unwrap();
+    assert!(!generated.content.contains("node_build_command"));
+    for (client, expected) in [
+        (
+            sdk(),
+            "pnpm dlx next-bundle@1.0.0 --build-command 'pnpm run build'",
+        ),
+        (
+            sdk().with_env("ANYBUILD_NODE_PACKAGE_MANAGER", "npm"),
+            "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
+        ),
+        (
+            sdk().with_config(serde_json::json!({"node_package_manager": "npm"})),
+            "npx -y next-bundle@1.0.0 --build-command 'npm run build'",
+        ),
+        (
+            sdk()
+                .with_env("ANYBUILD_NODE_PACKAGE_MANAGER", "npm")
+                .with_env("ANYBUILD_NODE_BUILD_COMMAND", "node custom.js"),
+            "node custom.js",
+        ),
+    ] {
+        let plan = client.plan(PlanOptions::default()).unwrap();
+        assert_eq!(plan.config["node_build_command"], expected);
+        assert!(plan
+            .serve
+            .build
+            .iter()
+            .any(|step| { matches!(step, Step::Run(run) if run.command == expected) }));
+    }
+}
+
+#[test]
 fn pnpm_next_subdir_deploys_from_the_app_and_preserves_the_bundle() {
     let project = tempfile::tempdir().unwrap();
     let app = project.path().join("apps/site");

@@ -59,6 +59,11 @@ pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Si
 
     fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self>;
 
+    /// Infer derived settings after configuration overrides have been applied.
+    fn resolve(&mut self, _path: &Path) -> Result<()> {
+        Ok(())
+    }
+
     fn copy_transient_fields_from(&mut self, source: &Self) {
         self.base_mut().runtime_dependencies = source.base().runtime_dependencies.clone();
     }
@@ -120,8 +125,6 @@ pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Si
         config.copy_transient_fields_from(self);
         Ok(config)
     }
-
-    fn apply_workspace_config(&mut self, _workspace_root: &Path) {}
 
     fn validate(&self, _path: &Path) -> Result<()> {
         Ok(())
@@ -195,15 +198,15 @@ macro_rules! provider_registry {
                 }
             }
 
-            pub(crate) fn apply_workspace_config(&mut self, workspace_root: &Path) {
-                match self {
-                    $(Self::$variant(config) => config.apply_workspace_config(workspace_root)),+
-                }
-            }
-
             pub(crate) fn validate(&self, path: &Path) -> Result<()> {
                 match self {
                     $(Self::$variant(config) => config.validate(path)),+
+                }
+            }
+
+            pub(crate) fn resolve(&mut self, path: &Path) -> Result<()> {
+                match self {
+                    $(Self::$variant(config) => config.resolve(path)),+
                 }
             }
 

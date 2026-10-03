@@ -11,7 +11,6 @@ config = node_config(
     node_package_manager = "bun",
     node_framework = "tanstack-start",
     node_server = "nitro",
-    node_build_command = "bun run build",
     node_version = "24",
     bun_version = "1",
 )

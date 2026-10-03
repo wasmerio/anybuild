@@ -571,6 +571,30 @@ impl Default for NodeBuildConfigFields {
 }
 
 impl NodeBuildConfigFields {
+    pub(crate) fn infer_build_command(
+        &mut self,
+        path: &Path,
+        infer: impl FnOnce(Option<&JsonMap>, PackageManager) -> Result<Option<String>>,
+    ) -> Result<()> {
+        let Some(manager) = self.package_manager else {
+            return Ok(());
+        };
+        resolve_manager_version(self, manager, path);
+        if non_empty(&self.build_command).is_none() {
+            self.build_command = infer(parse_package_json(path).as_ref(), manager)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn resolve_package_manager(&mut self, path: &Path, subdir: Option<&str>) {
+        let path = workspace::node_package_manager_path(path, subdir);
+        let manager = self
+            .package_manager
+            .unwrap_or_else(|| detect_package_manager(path));
+        self.package_manager = Some(manager);
+        resolve_manager_version(self, manager, path);
+    }
+
     fn from_env(operation: &OperationContext) -> Result<Self> {
         Ok(Self {
             package_manager: env_enum(
@@ -603,29 +627,12 @@ pub(crate) fn load_build_config(
     operation: &OperationContext,
 ) -> Result<NodeBuildConfigFields> {
     let mut config = NodeBuildConfigFields::from_env(operation)?;
-    let package_manager = config
-        .package_manager
-        .unwrap_or_else(|| detect_package_manager(path));
-    config.package_manager = Some(package_manager);
-    resolve_manager_version(&mut config, package_manager, path);
+    config.resolve_package_manager(path, base.app_subdir.as_deref());
 
     let package_json = parse_package_json(path);
     let install_context = discover_js_install_context(path);
     if install_context.requires_all_files {
         config.install_requires_all_files = true;
-    }
-
-    if non_empty(&config.build_command).is_none() {
-        let found_deps = check_package_json_deps(package_json.as_ref(), NODE_DEPENDENCIES);
-        let framework = detect_framework(package_json.as_ref(), &found_deps, Some(path));
-        config.build_command = get_build_command(
-            package_json.as_ref(),
-            package_manager,
-            framework,
-            non_empty(&base.commands.build)
-                .map(str::to_owned)
-                .as_deref(),
-        )?;
     }
 
     config.install_inputs = Some(install_context.inputs);
@@ -971,21 +978,22 @@ impl Provider for NodeConfig {
         ("Node version", "node_version"),
     ];
 
+    fn resolve(&mut self, path: &Path) -> Result<()> {
+        let framework = self.node.runtime.framework;
+        let command = non_empty(&self.base.commands.build);
+        self.node
+            .build
+            .infer_build_command(path, |package, manager| {
+                get_build_command(package, manager, framework, command)
+            })
+    }
+
     fn format_detection_detail(field: &str, value: &str) -> String {
         match field {
             "node_framework" => display_framework(value),
             "node_server" => display_server(value),
             _ => value.to_owned(),
         }
-    }
-
-    fn apply_workspace_config(&mut self, workspace_root: &Path) {
-        workspace::apply_node_workspace_config(
-            workspace_root,
-            self.base.app_subdir.as_deref(),
-            &mut self.node.build,
-            &mut self.base.commands,
-        );
     }
 
     fn detection_evidence(
@@ -1147,25 +1155,6 @@ pub(crate) fn resolve_manager_version(
     if slot.is_none() {
         *slot = version;
     }
-}
-
-pub(crate) fn resolve_workspace_manager_version(
-    config: &mut NodeBuildConfigFields,
-    manager: PackageManager,
-    previous: Option<PackageManager>,
-    workspace_root: &Path,
-) {
-    let mut clear_if_defaulted = |manager| {
-        let slot = version_slot(config, manager);
-        if slot.as_deref() == default_manager_version(manager) {
-            *slot = None;
-        }
-    };
-    if let Some(previous) = previous.filter(|previous| *previous != manager) {
-        clear_if_defaulted(previous);
-    }
-    clear_if_defaulted(manager);
-    resolve_manager_version(config, manager, workspace_root);
 }
 
 fn version_slot(
@@ -1654,7 +1643,7 @@ fn comparator_matches(version: (u64, u64, u64), token: &str) -> Option<bool> {
 // ---------------------------------------------------------------------------
 // Build/start command inference
 
-fn get_build_command(
+pub(crate) fn get_build_command(
     package_json: Option<&JsonMap>,
     package_manager: PackageManager,
     framework: Option<NodeFramework>,
@@ -1745,11 +1734,10 @@ pub fn load_config(
 ) -> Result<NodeConfig> {
     let mut config = NodeConfig::from_env(base, operation)?;
 
-    let package_manager = config
-        .package_manager
-        .unwrap_or_else(|| detect_package_manager(path));
-    config.package_manager = Some(package_manager);
-    resolve_manager_version(&mut config, package_manager, path);
+    config
+        .node
+        .build
+        .resolve_package_manager(path, config.base.app_subdir.as_deref());
 
     let package_json = parse_package_json(path);
     let install_context = discover_js_install_context(path);
@@ -1766,17 +1754,6 @@ pub fn load_config(
     }
     if let Some(database) = detect_database(package_json.as_ref()) {
         config.base.set_database_service(database);
-    }
-
-    if non_empty(&config.build_command).is_none() {
-        config.build_command = get_build_command(
-            package_json.as_ref(),
-            package_manager,
-            config.runtime.framework,
-            non_empty(&config.base.commands.build)
-                .map(str::to_owned)
-                .as_deref(),
-        )?;
     }
 
     // infer_start=True in the Python default path.
@@ -1799,13 +1776,6 @@ pub fn load_config(
             config.base.commands.start =
                 infer_start_command(path, package_json.as_ref(), true, operation)?;
         }
-    }
-
-    if config.runtime.framework.is_some()
-        && non_empty(&config.base.commands.build).is_some()
-        && non_empty(&config.build_command).is_some()
-    {
-        config.base.commands.build = config.build_command.clone();
     }
 
     // apply_static_snapshot
@@ -1838,7 +1808,9 @@ mod tests {
     use crate::providers::base::{BaseConfig, DatabaseEngine};
 
     fn load_config(path: &Path, base: BaseConfig) -> NodeConfig {
-        super::load_config(path, base, &OperationContext::for_test()).unwrap()
+        let mut config = super::load_config(path, base, &OperationContext::for_test()).unwrap();
+        config.resolve(path).unwrap();
+        config
     }
 
     fn detect(path: &Path, base: &BaseConfig) -> Option<i32> {
@@ -2282,38 +2254,6 @@ mod tests {
         assert_eq!(config.npm_version, None);
     }
 
-    /// A subdir app is detected before the workspace root has had its say, so
-    /// resolution runs twice against two different managers. Only a version we
-    /// put there ourselves is ours to take back.
-    #[test]
-    fn test_workspace_resolution_keeps_a_version_it_did_not_infer() {
-        let tmp = tempfile::tempdir().unwrap();
-        write(
-            &tmp.path().join("package.json"),
-            "{\n  \"packageManager\": \"pnpm@10.9.2\"\n}\n",
-        );
-        let mut config = NodeBuildConfigFields {
-            pnpm_version: Some("9.15.9".to_owned()),
-            ..NodeBuildConfigFields::default()
-        };
-
-        // The app directory looked like npm on its own.
-        resolve_manager_version(&mut config, PackageManager::Npm, tmp.path());
-        assert_eq!(config.npm_version.as_deref(), Some("11"));
-        assert_eq!(config.pnpm_version.as_deref(), Some("9.15.9"));
-
-        // The workspace root says pnpm, and declares a version we ignore
-        // because this config already carries one we did not infer.
-        resolve_workspace_manager_version(
-            &mut config,
-            PackageManager::Pnpm,
-            Some(PackageManager::Npm),
-            tmp.path(),
-        );
-        assert_eq!(config.pnpm_version.as_deref(), Some("9.15.9"));
-        assert_eq!(config.npm_version, None, "default for an unused manager");
-    }
-
     #[test]
     fn test_nextjs_build_command_wraps_explicit_build_command() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2330,7 +2270,10 @@ mod tests {
             config.build_command.as_deref(),
             Some("npx -y next-bundle@1.0.0 --build-command 'next build --debug'")
         );
-        assert_eq!(config.base.commands.build, config.build_command);
+        assert_eq!(
+            config.base.commands.build.as_deref(),
+            Some("next build --debug")
+        );
     }
 
     #[test]
@@ -2343,8 +2286,9 @@ mod tests {
         let mut base = BaseConfig::default();
         base.commands.build = Some("next build\0--debug".to_owned());
 
-        let error =
-            super::load_config(tmp.path(), base, &OperationContext::for_test()).unwrap_err();
+        let mut config =
+            super::load_config(tmp.path(), base, &OperationContext::for_test()).unwrap();
+        let error = config.resolve(tmp.path()).unwrap_err();
 
         assert!(
             error

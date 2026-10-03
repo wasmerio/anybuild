@@ -147,6 +147,11 @@ that value. Every field can be overridden without touching the file:
   `--start-command` replace the first step of the matching group (or the
   start command) in the evaluated plan.
 
+Node build commands are inferred from the resolved package manager after
+overrides. Generated files omit `node_build_command`; setting it supplies
+an explicit command. Regenerate older files to remove a previously inferred
+`node_build_command` before switching package managers.
+
 Notable fields per provider (see `crates/anybuild/src/providers/` for the full
 sets — common fields `name`, `port`, `services`, and `app_subdir` live on the
 base):
