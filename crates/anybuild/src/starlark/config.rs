@@ -97,11 +97,17 @@ impl ConfigResolutionOptions {
 
         validate_patch(&config.to_json(), &Json::Object(persisted.clone()), "")?;
         config = config.merge_json(&Json::Object(persisted.clone()))?;
+        let before_overrides = config.clone();
         config = apply_environment(config, &self.operation)?;
         config = apply_command_overrides(config, &self.overrides)?;
         if let Some(patch) = &self.overrides.config {
             config = config.merge_json(patch)?;
         }
+        workspace::apply_package_manager_override(
+            &mut config,
+            &before_overrides,
+            &self.paths.app_path,
+        );
         if let Some(runner) = &self.runner {
             runner.borrow_mut().prepare_config(&mut config);
         }
