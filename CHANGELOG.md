@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.1](https://github.com/wasmerio/anybuild/compare/v0.32.0...v0.32.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* preserve Python app module names ([#128](https://github.com/wasmerio/anybuild/issues/128)) ([5cc24bf](https://github.com/wasmerio/anybuild/commit/5cc24bfc40b80ee55b9a7c3de1515dc026687afe))
+
 ## [0.32.0](https://github.com/wasmerio/anybuild/compare/v0.31.0...v0.32.0) (2026-10-01)
 
 
