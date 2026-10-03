@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.2](https://github.com/wasmerio/anybuild/compare/v0.32.1...v0.32.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* infer Node build commands from the resolved package manager ([#130](https://github.com/wasmerio/anybuild/issues/130)) ([b455ed7](https://github.com/wasmerio/anybuild/commit/b455ed765aadaa8d43323f30488969980ec1e263))
+
 ## [0.32.1](https://github.com/wasmerio/anybuild/compare/v0.32.0...v0.32.1) (2026-10-03)
 
 
