@@ -744,6 +744,15 @@ impl Provider for NodeStaticConfig {
         ("Output directory", "static_dir"),
     ];
 
+    fn resolve(&mut self, path: &Path) -> Result<()> {
+        let framework = self.node.runtime.framework;
+        self.node
+            .build
+            .infer_build_command(path, |package, manager| {
+                Ok(get_build_command(package, manager, framework, None))
+            })
+    }
+
     fn format_detection_detail(field: &str, value: &str) -> String {
         match field {
             "node_framework" => node::display_framework(value),
@@ -863,7 +872,7 @@ impl Provider for NodeStaticConfig {
 // ---------------------------------------------------------------------------
 // Build command
 
-pub(crate) fn get_build_command(
+fn get_build_command(
     package_json: Option<&JsonMap>,
     package_manager: PackageManager,
     framework: Option<NodeFramework>,
@@ -938,15 +947,8 @@ mod tests {
     }
 
     fn load_config(path: &Path, base: BaseConfig) -> Result<NodeStaticConfig> {
-        let mut config = crate::providers::ProviderConfig::NodeStatic(super::load_config(
-            path,
-            base,
-            &OperationContext::for_test(),
-        )?);
-        crate::providers::infer_node_build_command(path, &mut config)?;
-        let crate::providers::ProviderConfig::NodeStatic(config) = config else {
-            unreachable!()
-        };
+        let mut config = super::load_config(path, base, &OperationContext::for_test())?;
+        config.resolve(path)?;
         Ok(config)
     }
 

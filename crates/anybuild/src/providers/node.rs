@@ -571,6 +571,21 @@ impl Default for NodeBuildConfigFields {
 }
 
 impl NodeBuildConfigFields {
+    pub(crate) fn infer_build_command(
+        &mut self,
+        path: &Path,
+        infer: impl FnOnce(Option<&JsonMap>, PackageManager) -> Result<Option<String>>,
+    ) -> Result<()> {
+        let Some(manager) = self.package_manager else {
+            return Ok(());
+        };
+        resolve_manager_version(self, manager, path);
+        if non_empty(&self.build_command).is_none() {
+            self.build_command = infer(parse_package_json(path).as_ref(), manager)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn resolve_package_manager(&mut self, path: &Path, subdir: Option<&str>) {
         let path = workspace::node_package_manager_path(path, subdir);
         let manager = self
@@ -962,6 +977,16 @@ impl Provider for NodeConfig {
         ("Package manager", "node_package_manager"),
         ("Node version", "node_version"),
     ];
+
+    fn resolve(&mut self, path: &Path) -> Result<()> {
+        let framework = self.node.runtime.framework;
+        let command = non_empty(&self.base.commands.build);
+        self.node
+            .build
+            .infer_build_command(path, |package, manager| {
+                get_build_command(package, manager, framework, command)
+            })
+    }
 
     fn format_detection_detail(field: &str, value: &str) -> String {
         match field {
@@ -1783,13 +1808,8 @@ mod tests {
     use crate::providers::base::{BaseConfig, DatabaseEngine};
 
     fn load_config(path: &Path, base: BaseConfig) -> NodeConfig {
-        let mut config = crate::providers::ProviderConfig::Node(
-            super::load_config(path, base, &OperationContext::for_test()).unwrap(),
-        );
-        crate::providers::infer_node_build_command(path, &mut config).unwrap();
-        let crate::providers::ProviderConfig::Node(config) = config else {
-            unreachable!()
-        };
+        let mut config = super::load_config(path, base, &OperationContext::for_test()).unwrap();
+        config.resolve(path).unwrap();
         config
     }
 
@@ -2266,11 +2286,9 @@ mod tests {
         let mut base = BaseConfig::default();
         base.commands.build = Some("next build\0--debug".to_owned());
 
-        let mut config = crate::providers::ProviderConfig::Node(
-            super::load_config(tmp.path(), base, &OperationContext::for_test()).unwrap(),
-        );
-        let error =
-            crate::providers::infer_node_build_command(tmp.path(), &mut config).unwrap_err();
+        let mut config =
+            super::load_config(tmp.path(), base, &OperationContext::for_test()).unwrap();
+        let error = config.resolve(tmp.path()).unwrap_err();
 
         assert!(
             error

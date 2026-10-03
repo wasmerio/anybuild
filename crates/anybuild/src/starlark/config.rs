@@ -19,8 +19,8 @@ use starlark::values::{Heap, NoSerialize, StarlarkValue, Value};
 use crate::internal::paths::ProjectPaths;
 use crate::operation::OperationContext;
 use crate::providers::{
-    apply_environment, finalize_config, infer_node_build_command, load_explicit_provider,
-    workspace, BaseConfig, ProviderConfig,
+    apply_environment, finalize_config, load_explicit_provider, workspace, BaseConfig,
+    ProviderConfig,
 };
 use crate::run::Runner;
 use crate::sdk::CommandOverrides;
@@ -104,7 +104,7 @@ impl ConfigResolutionOptions {
         if let Some(patch) = &self.overrides.config {
             config = config.merge_json(patch)?;
         }
-        infer_node_build_command(&self.paths.app_path, &mut config)?;
+        config.resolve(&self.paths.app_path)?;
         if let Some(runner) = &self.runner {
             runner.borrow_mut().prepare_config(&mut config);
         }

@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 
 use crate::operation::OperationContext;
 use crate::providers::base::{BaseConfig, HasBase};
-use crate::providers::node::NodeBuildConfigFields;
+use crate::providers::node::{self, NodeBuildConfigFields};
 use crate::providers::php::{self, PhpFramework};
 use crate::providers::Provider;
 
@@ -112,6 +112,15 @@ impl Provider for LaravelConfig {
         ("Package manager", "node_package_manager"),
         ("PHP version", "php_version"),
     ];
+
+    fn resolve(&mut self, path: &Path) -> Result<()> {
+        let command = node::non_empty(&self.base.commands.build);
+        self.node.infer_build_command(path, |package, manager| {
+            let deps = node::check_package_json_deps(package, node::NODE_DEPENDENCIES);
+            let framework = node::detect_framework(package, &deps, Some(path));
+            node::get_build_command(package, manager, framework, command)
+        })
+    }
 
     fn detection_evidence(
         path: &Path,
