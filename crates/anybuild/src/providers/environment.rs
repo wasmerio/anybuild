@@ -53,13 +53,12 @@ pub(crate) fn apply_environment(
         fields.insert(field, value);
         applied = Some((name, raw));
     }
-    let mut updated = config_from_json(provider, serde_json::Value::Object(fields.clone()))
-        .map_err(|error| match applied {
+    config_from_json(provider, serde_json::Value::Object(fields.clone())).map_err(|error| {
+        match applied {
             Some((name, raw)) => anyhow!("Invalid value for {name}: {raw:?}: {error}"),
             None => error,
-        })?;
-    updated.copy_transient_fields_from(&config);
-    Ok(updated)
+        }
+    })
 }
 
 fn parse_environment_value(

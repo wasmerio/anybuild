@@ -314,14 +314,16 @@ mod tests {
             None,
             1,
             &serde_json::json!({
-                "extra_dependencies": ["ffmpeg", "pandoc@3.6"],
+                "extra_dependencies": ["sendmail"],
+                "autodetected_extra_dependencies": ["ffmpeg", "pandoc@3.6"],
             }),
         )
         .unwrap();
 
         assert!(generated.contains(
-            "    extra_dependencies = [\n        \"ffmpeg\",\n        \"pandoc@3.6\",\n    ],\n"
+            "    autodetected_extra_dependencies = [\n        \"ffmpeg\",\n        \"pandoc@3.6\",\n    ],\n"
         ));
+        assert!(generated.contains("    extra_dependencies = [\n        \"sendmail\",\n    ],\n"));
         assert!(generated.contains("build = python_build(config)\n"));
         assert!(generated.contains("python_serve(config, build, name = \"app\")\n"));
         assert!(!generated.contains("extra_deps"));

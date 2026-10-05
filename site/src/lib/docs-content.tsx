@@ -520,6 +520,14 @@ node_serve(
             <InlineCode>php</InlineCode>, or <InlineCode>phpix</InlineCode>.
           </Paragraph>
           <CodeBlock>{`ANYBUILD_EXTRA_DEPENDENCIES='["sendmail"]' anybuild build --wasmer`}</CodeBlock>
+          <Paragraph>
+            Generated files keep inferred packages such as Pandoc and FFmpeg in{" "}
+            <InlineCode>autodetected_extra_dependencies</InlineCode>. Runtime planning merges this
+            list with <InlineCode>extra_dependencies</InlineCode>, so environment and JSON overrides
+            of user extras preserve the generated requirements. Explicit user version pins take
+            precedence when both lists name the same package. Regenerate older files to move
+            inferred packages into the separate field.
+          </Paragraph>
           <Callout title="Package availability depends on the environment">
             A package name and version must be resolvable by the selected local or Docker backend
             and by the selected runtime. Test the same build/runtime combination used in production.

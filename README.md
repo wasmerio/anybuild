@@ -231,6 +231,11 @@ config field, or a JSON array in an environment variable:
 ANYBUILD_EXTRA_DEPENDENCIES='["sendmail"]' anybuild build --wasmer
 ```
 
+Generated files keep inferred packages in `autodetected_extra_dependencies`.
+Runtime planning merges that list with user extras, so environment overrides
+preserve generated Pandoc/FFmpeg dependencies. Explicit user version pins win
+when both lists contain the same package.
+
 Wasmer maps `sendmail` to `sendmail/sendmail` and sets `enable_email: true`
 in `app.yaml` whenever `sendmail`, `php`, or `phpix` is a serve dependency.
 PHP and PHPix already include Sendmail in their Wasmer packages.

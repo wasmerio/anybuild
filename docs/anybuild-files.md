@@ -152,8 +152,8 @@ an explicit command. Regenerate older files to remove a previously inferred
 `node_build_command` before switching package managers.
 
 Notable fields per provider (see `crates/anybuild/src/providers/` for the full
-sets — common fields `name`, `port`, `services`, `app_subdir`, and
-`extra_dependencies` live on the base):
+sets — common fields `name`, `port`, `services`, `app_subdir`,
+`extra_dependencies`, and `autodetected_extra_dependencies` live on the base):
 
 | Provider   | Fields                                                        |
 | ---------- | ------------------------------------------------------------- |
@@ -196,10 +196,27 @@ does not guarantee that an MTA is installed. Docker uses Debian's
 keeps its configuration and libraries in the final runtime image. Native
 email delivery still requires configuring the MTA for the target environment.
 
+Generated files store detected runtime packages, such as FFmpeg and Pandoc
+for Python wrappers, in `autodetected_extra_dependencies`. This list stays
+separate from user-supplied `extra_dependencies` through configuration
+overrides. Serve assembly merges both lists by package name, with explicit
+user versions taking precedence:
+
+```python
+autodetected_extra_dependencies = ["pandoc"]
+extra_dependencies = ["sendmail", "pandoc@3.6"]
+```
+
+An environment or JSON override replaces only the user extras list, so
+`ANYBUILD_EXTRA_DEPENDENCIES='["sendmail"]'` preserves the generated Pandoc
+dependency even if it is no longer detected from the project files. An empty
+user list clears user additions while retaining detected packages. Regenerate
+older files to move inferred packages from `extra_dependencies` into
+`autodetected_extra_dependencies`.
+
 Use `extra_dependencies` instead of the former serve `extra_deps` argument.
-Detected runtime packages, such as FFmpeg and Pandoc for Python wrappers, are
-preserved when adding extras. Python packages continue to use
-`python_extra_dependencies`; Node build tools use `node_extra_dependencies`.
+Python packages continue to use `python_extra_dependencies`; Node build tools
+use `node_extra_dependencies`.
 For packages needed during the build, add `use(dep(...))` in `build_pre`.
 
 For Node apps targeting Wasmer, the optional `edgejs_engine` field accepts

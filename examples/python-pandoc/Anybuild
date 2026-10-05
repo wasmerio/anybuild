@@ -8,7 +8,7 @@ config = python_config(
     commands = {
         "start": "uvicorn main:app --host 0.0.0.0 --port $PORT",
     },
-    extra_dependencies = [
+    autodetected_extra_dependencies = [
         "pandoc",
     ],
     python_framework = "fastapi",

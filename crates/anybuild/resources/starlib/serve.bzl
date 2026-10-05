@@ -86,14 +86,20 @@ def _configured_services(config):
     ]
 
 def _configured_dependencies(config):
-    dependencies = []
-    for spec in getattr(config, "extra_dependencies", []):
+    dependencies = {}
+    # User specs come last so explicit pins win over detected defaults.
+    specs = (
+        list(getattr(config, "autodetected_extra_dependencies", [])) +
+        list(getattr(config, "extra_dependencies", []))
+    )
+    for spec in specs:
         parts = spec.rsplit("@", 1)
         if len(parts) == 2 and parts[0] and parts[1]:
-            dependencies.append(dep(parts[0], parts[1]))
+            dependency = dep(parts[0], parts[1])
         else:
-            dependencies.append(dep(spec))
-    return dependencies
+            dependency = dep(spec)
+        dependencies[dependency.name] = dependency
+    return dependencies.values()
 
 def serve(
         config,

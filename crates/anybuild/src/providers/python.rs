@@ -426,10 +426,16 @@ pub fn load_config_with_deps(
     }
 
     if found_deps.contains("ffmpeg") {
-        config.base.runtime_dependencies.push("ffmpeg".to_owned());
+        config
+            .base
+            .autodetected_extra_dependencies
+            .push("ffmpeg".to_owned());
     }
     if found_deps.contains("pandoc") {
-        config.base.runtime_dependencies.push("pandoc".to_owned());
+        config
+            .base
+            .autodetected_extra_dependencies
+            .push("pandoc".to_owned());
     }
 
     if config.framework.is_none() {

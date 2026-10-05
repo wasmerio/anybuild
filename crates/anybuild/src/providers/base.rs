@@ -152,13 +152,10 @@ pub struct BaseConfig {
     pub app_subdir: Option<String>,
     /// Additional runtime packages, using `name` or `name@version` specs.
     pub extra_dependencies: Vec<String>,
-    /// Native packages required by the built application at runtime.
-    ///
-    /// Providers contribute simple `name` or `name@version` specs during
-    /// detection. These are merged into `extra_dependencies` after overrides
-    /// so adding packages preserves the application's inferred requirements.
-    #[serde(skip)]
-    pub runtime_dependencies: Vec<String>,
+    /// Runtime packages detected by providers, persisted separately so user
+    /// overrides cannot replace the application's inferred requirements.
+    /// These are merged with `extra_dependencies` when assembling the serve.
+    pub autodetected_extra_dependencies: Vec<String>,
 }
 
 impl Default for BaseConfig {
@@ -170,7 +167,7 @@ impl Default for BaseConfig {
             services: Vec::new(),
             app_subdir: None,
             extra_dependencies: Vec::new(),
-            runtime_dependencies: Vec::new(),
+            autodetected_extra_dependencies: Vec::new(),
         }
     }
 }
