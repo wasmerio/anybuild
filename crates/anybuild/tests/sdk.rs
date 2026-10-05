@@ -896,6 +896,205 @@ fn edgejs_engine_is_optional_and_configurable() {
 }
 
 #[test]
+fn extra_dependencies_apply_to_python_and_node() {
+    for (provider, file, source) in [
+        ("python", "main.py", "print('hello')\n"),
+        ("node", "package.json", r#"{"main":"index.js"}"#),
+    ] {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join(file), source).unwrap();
+        let make_sdk = || {
+            Anybuild::new(project.path())
+                .inherit_process_env(false)
+                .with_provider(provider)
+        };
+        let sdk = make_sdk();
+        let generated = sdk.generate(GenerateOptions::default()).unwrap();
+        std::fs::write(
+            &generated.path,
+            generated.content.replace(
+                "schema = 1,",
+                "schema = 1,\n    extra_dependencies = [\"sendmail\"],",
+            ),
+        )
+        .unwrap();
+        let options = PlanOptions {
+            runtime_environment: RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+            ..PlanOptions::default()
+        };
+        let plan = sdk.plan(options.clone()).unwrap();
+        assert!(plan.serve.deps.iter().any(|dep| dep.name == "sendmail"));
+        for prefix in ["ANYBUILD", "SHIPIT"] {
+            let plan = make_sdk()
+                .with_env(
+                    format!("{prefix}_EXTRA_DEPENDENCIES"),
+                    r#"["sendmail@0.1.10", "pandoc@3.5", "@scope/package"]"#,
+                )
+                .plan(options.clone())
+                .unwrap();
+            for (name, version) in [
+                ("sendmail", Some("0.1.10")),
+                ("pandoc", Some("3.5")),
+                ("@scope/package", None),
+            ] {
+                assert!(plan
+                    .serve
+                    .deps
+                    .iter()
+                    .any(|dep| dep.name == name && dep.version.as_deref() == version));
+            }
+            assert!(!plan.serve.build.iter().any(|step| {
+                matches!(step, Step::Run(run) if run.command.contains("sendmail"))
+            }));
+        }
+        let plan = sdk
+            .with_env("ANYBUILD_EXTRA_DEPENDENCIES", r#"["sendmail"]"#)
+            .with_config(serde_json::json!({"extra_dependencies": ["ffmpeg"]}))
+            .plan(options)
+            .unwrap();
+        assert!(plan.serve.deps.iter().any(|dep| dep.name == "ffmpeg"));
+        assert!(!plan.serve.deps.iter().any(|dep| dep.name == "sendmail"));
+    }
+}
+
+#[test]
+fn extra_dependencies_preserve_autodetected_python_binaries() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(project.path().join("main.py"), "print('hello')\n").unwrap();
+    std::fs::write(
+        project.path().join("requirements.txt"),
+        "ffmpeg-python\npypandoc\n",
+    )
+    .unwrap();
+    let sdk = Anybuild::new(project.path())
+        .inherit_process_env(false)
+        .with_env(
+            "ANYBUILD_EXTRA_DEPENDENCIES",
+            r#"["sendmail", "ffmpeg@N-111519"]"#,
+        );
+    let generated = sdk.generate(GenerateOptions::default()).unwrap();
+    assert!(generated
+        .content
+        .contains("    autodetected_extra_dependencies = ["));
+    assert!(!generated.content.contains("    extra_dependencies = ["));
+    assert!(!generated.content.contains("extra_deps"));
+    std::fs::remove_file(project.path().join("requirements.txt")).unwrap();
+    let plan = sdk.plan(PlanOptions::default()).unwrap();
+    assert_eq!(
+        plan.config["autodetected_extra_dependencies"],
+        serde_json::json!(["ffmpeg", "pandoc"])
+    );
+    assert_eq!(
+        plan.config["extra_dependencies"],
+        serde_json::json!(["sendmail", "ffmpeg@N-111519"])
+    );
+    for name in ["sendmail", "ffmpeg", "pandoc"] {
+        assert_eq!(
+            plan.serve
+                .deps
+                .iter()
+                .filter(|dep| dep.name == name)
+                .count(),
+            1
+        );
+    }
+    assert_eq!(
+        plan.serve
+            .deps
+            .iter()
+            .find(|dep| dep.name == "ffmpeg")
+            .unwrap()
+            .version
+            .as_deref(),
+        Some("N-111519")
+    );
+}
+
+#[test]
+fn persisted_autodetected_dependencies_survive_user_overrides() {
+    for (provider, file, source) in [
+        ("python", "main.py", "print('hello')\n"),
+        ("node", "package.json", r#"{"main":"index.js"}"#),
+    ] {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join(file), source).unwrap();
+        let make_sdk = || {
+            Anybuild::new(project.path())
+                .inherit_process_env(false)
+                .with_provider(provider)
+        };
+        let generated = make_sdk().generate(GenerateOptions::default()).unwrap();
+        std::fs::write(
+            &generated.path,
+            generated.content.replace(
+                "schema = 1,",
+                concat!(
+                    "schema = 1,\n",
+                    "    autodetected_extra_dependencies = [\n",
+                    "        \"pandoc@3.5\", \"@scope/package\", \"sendmail\",\n",
+                    "        \"pandoc@3.5\",\n",
+                    "    ],\n",
+                    "    extra_dependencies = [\"ffmpeg\"],"
+                ),
+            ),
+        )
+        .unwrap();
+        for (mode, version, scoped_version) in [
+            ("environment", Some("3.6"), Some("2.1")),
+            ("json", Some("3.7"), Some("3.0")),
+            ("both", Some("3.7"), Some("3.0")),
+            ("empty", Some("3.5"), None),
+        ] {
+            let mut sdk = make_sdk();
+            if matches!(mode, "environment" | "both") {
+                sdk = sdk.with_env(
+                    "ANYBUILD_EXTRA_DEPENDENCIES",
+                    r#"["my-custom-package", "pandoc@3.6", "@scope/package@2.1", "sendmail@0.1.10", "sendmail@0.1.10"]"#,
+                );
+            }
+            if matches!(mode, "json" | "both") {
+                sdk = sdk.with_config(serde_json::json!({
+                    "extra_dependencies": [
+                        "my-custom-package", "pandoc@3.7", "@scope/package@3.0"
+                    ],
+                }));
+            }
+            if mode == "empty" {
+                sdk = sdk.with_env("ANYBUILD_EXTRA_DEPENDENCIES", "[]");
+            }
+            let plan = sdk.plan(PlanOptions::default()).unwrap();
+            for (name, expected_version) in [
+                ("pandoc", version),
+                ("@scope/package", scoped_version),
+                ("sendmail", (mode == "environment").then_some("0.1.10")),
+            ] {
+                let dependencies: Vec<_> = plan
+                    .serve
+                    .deps
+                    .iter()
+                    .filter(|dep| dep.name == name)
+                    .collect();
+                assert_eq!(dependencies.len(), 1, "{provider}: {mode}: {name}");
+                assert_eq!(dependencies[0].version.as_deref(), expected_version);
+            }
+            assert_eq!(
+                plan.serve
+                    .deps
+                    .iter()
+                    .filter(|dep| dep.name == "my-custom-package")
+                    .count(),
+                usize::from(mode != "empty")
+            );
+            assert!(!plan.serve.deps.iter().any(|dep| dep.name == "ffmpeg"));
+            assert_eq!(
+                plan.config["autodetected_extra_dependencies"],
+                serde_json::json!(["pandoc@3.5", "@scope/package", "sendmail", "pandoc@3.5"])
+            );
+        }
+    }
+}
+
+#[test]
 fn environment_is_snapshotted_and_overrides_are_isolated() {
     let project = static_project();
     let sdk = Anybuild::new(project.path())

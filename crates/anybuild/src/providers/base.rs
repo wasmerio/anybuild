@@ -150,13 +150,12 @@ pub struct BaseConfig {
     /// Subdirectory of the workspace the app lives in (set by the CLI
     /// after load; recorded in the generated Anybuild file).
     pub app_subdir: Option<String>,
-    /// Native packages required by the built application at runtime.
-    ///
-    /// Providers contribute simple `name` or `name@version` specs during
-    /// detection. This derived field is rendered into the generated
-    /// Anybuild file rather than persisted as provider configuration.
-    #[serde(skip)]
-    pub runtime_dependencies: Vec<String>,
+    /// Additional runtime packages, using `name` or `name@version` specs.
+    pub extra_dependencies: Vec<String>,
+    /// Runtime packages detected by providers, persisted separately so user
+    /// overrides cannot replace the application's inferred requirements.
+    /// These are merged with `extra_dependencies` when assembling the serve.
+    pub autodetected_extra_dependencies: Vec<String>,
 }
 
 impl Default for BaseConfig {
@@ -167,7 +166,8 @@ impl Default for BaseConfig {
             commands: CustomCommands::default(),
             services: Vec::new(),
             app_subdir: None,
-            runtime_dependencies: Vec::new(),
+            extra_dependencies: Vec::new(),
+            autodetected_extra_dependencies: Vec::new(),
         }
     }
 }

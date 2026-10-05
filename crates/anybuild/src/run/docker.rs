@@ -157,16 +157,25 @@ impl DockerRunner {
         let uses_mise = serve.deps.iter().any(|dependency| {
             !matches!(
                 dependency.name.as_str(),
-                "bash" | "composer" | "pie" | "static-web-server"
+                "bash" | "composer" | "pie" | "sendmail" | "static-web-server"
             )
         });
         if uses_mise {
             contents.push_str(MISE_SETUP);
         }
         for dependency in &serve.deps {
-            contents.push_str(&dependency_install_contents(dependency));
+            if dependency.name != "sendmail" {
+                contents.push_str(&dependency_install_contents(dependency));
+            }
         }
         contents.push_str(RUNTIME_STAGE);
+        // Sendmail needs its distro configuration and libraries in the final
+        // image, rather than a binary copied out of the toolchain stage.
+        for dependency in &serve.deps {
+            if dependency.name == "sendmail" {
+                contents.push_str(&dependency_install_contents(dependency));
+            }
+        }
         contents.push_str(&format!(
             "COPY --from={adapter_image} /lambda-adapter /opt/extensions/lambda-adapter\n"
         ));
@@ -561,6 +570,31 @@ mod tests {
             DockerRunner::image_name(&serve.name),
             crate::build::docker::internal_image_name("Acme Web")
         );
+    }
+
+    #[test]
+    fn dockerfile_installs_sendmail_in_the_final_runtime_without_mise() {
+        for with_node in [false, true] {
+            let temporary = tempfile::tempdir().unwrap();
+            let runner = runner(temporary.path());
+            let mut serve = serve();
+            if !with_node {
+                serve.deps.clear();
+            }
+            serve.deps.push(Package {
+                name: "sendmail".to_owned(),
+                version: None,
+                architecture: None,
+            });
+            let dockerfile = runner.dockerfile_contents(&serve).unwrap();
+            let runtime = dockerfile
+                .find("FROM debian:trixie-slim AS runtime\n")
+                .unwrap();
+            let install = dockerfile.find("install sendmail-bin").unwrap();
+            assert!(install > runtime);
+            assert!(!dockerfile.contains("mise use --global \"sendmail"));
+            assert_eq!(dockerfile.contains("RUN curl https://mise.run"), with_node);
+        }
     }
 
     #[test]

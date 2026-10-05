@@ -40,6 +40,7 @@ pub const BUILD_ANNOTATIONS_FILENAME: &str = "build-annotations.yaml";
 pub const EDGEJS_EXTERNAL_DEPENDENCY: &str = "wasmer/edgejs@=0.2.5";
 pub const EDGEJS_QUICKJS_DEPENDENCY: &str = "wasmer/edgejs-quickjs@=0.2.5";
 pub const PHPIX_VERSION: &str = "0.3.0";
+pub const SENDMAIL_DEPENDENCY: &str = "sendmail/sendmail@=0.1.10";
 pub const WASIX_PYTHON_INDEX_URL: &str = "https://python-registry.wasix.org/simple";
 pub(crate) const WASMER_ENV_FILENAME: &str = ".env";
 const PREPARE_COMMAND_PREFIX: &str = "__anybuild_prepare_";
@@ -185,6 +186,19 @@ pub fn mapper() -> &'static IndexMap<&'static str, MapperItem> {
                 ]),
                 scripts: &["ffmpeg"],
                 env: None,
+                aliases: &[],
+                architecture_dependencies: IndexMap::new(),
+            },
+        );
+        map.insert(
+            "sendmail",
+            MapperItem {
+                dependencies: deps(&[
+                    ("latest", SENDMAIL_DEPENDENCY),
+                    ("0.1.10", SENDMAIL_DEPENDENCY),
+                ]),
+                scripts: &["sendmail"],
+                env: Some(&[]),
                 aliases: &[],
                 architecture_dependencies: IndexMap::new(),
             },
@@ -932,6 +946,9 @@ impl WasmerRunner {
 
         let has_php = serve.deps.iter().any(|dep| dep.name == "php");
         let has_phpix = serve.deps.iter().any(|dep| dep.name == "phpix");
+        if has_php || has_phpix || serve.deps.iter().any(|dep| dep.name == "sendmail") {
+            yaml_config.insert(yaml_str("enable_email"), YamlValue::Bool(true));
+        }
         let build_deps: Vec<&Package> = serve
             .build
             .iter()
@@ -967,7 +984,6 @@ impl WasmerRunner {
             memory.insert(yaml_str("limit"), yaml_str("2Gb"));
             capabilities.insert(yaml_str("memory"), YamlValue::Mapping(memory));
             yaml_config.insert(yaml_str("capabilities"), YamlValue::Mapping(capabilities));
-            yaml_config.insert(yaml_str("enable_email"), YamlValue::Bool(true));
         }
 
         if has_phpix {
@@ -2402,6 +2418,72 @@ mod tests {
             annotations.get(yaml_str("wasmer.io/app-kind")),
             Some(&yaml_str("wordpress"))
         );
+    }
+
+    #[test]
+    fn test_wasmer_sendmail_dependency_and_command() {
+        for version in [None, Some("latest"), Some("0.1.10")] {
+            let tmp = tempfile::tempdir().unwrap();
+            let runner = make_runner(tmp.path());
+            let serve = serve(
+                "mail",
+                "node",
+                vec![package("sendmail", version, None)],
+                None,
+                &[("start", "sendmail -t")],
+            );
+            runner.build_serve(&serve).unwrap();
+            let manifest = std::fs::read_to_string(runner.wasmer_dir_path.join("wasmer.toml"))
+                .unwrap()
+                .parse::<DocumentMut>()
+                .unwrap();
+            assert_eq!(
+                manifest["dependencies"]["sendmail/sendmail"].as_str(),
+                Some("=0.1.10")
+            );
+            let command = manifest["command"].as_array_of_tables().unwrap();
+            assert_eq!(
+                command.get(0).unwrap()["module"].as_str(),
+                Some("sendmail/sendmail:sendmail")
+            );
+        }
+    }
+
+    #[test]
+    fn test_wasmer_email_capability_depends_on_serve_packages() {
+        for (provider, runtime, mail) in [
+            ("node", "node", false),
+            ("node", "node", true),
+            ("python", "python", false),
+            ("python", "python", true),
+            ("php", "php", false),
+            ("php", "phpix", false),
+            ("wordpress", "node", false),
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            let runner = make_runner(tmp.path());
+            let mut deps = vec![package(runtime, None, None)];
+            if mail {
+                deps.push(package("sendmail", None, None));
+                std::fs::write(
+                    runner.src_dir.join("app.yaml"),
+                    "kind: wasmer.io/App.v0\nenable_email: false\n",
+                )
+                .unwrap();
+            }
+            let mut serve = serve("mail", provider, deps, None, &[]);
+            serve.build.push(Step::Use(UseStep {
+                dependencies: vec![package("sendmail", None, None)],
+            }));
+            runner.build_serve(&serve).unwrap();
+            let app_yaml = read_yaml(&runner.wasmer_dir_path.join("app.yaml"));
+            let expected = if mail || matches!(runtime, "php" | "phpix") {
+                Some(&YamlValue::Bool(true))
+            } else {
+                None
+            };
+            assert_eq!(app_yaml.get(yaml_str("enable_email")), expected);
+        }
     }
 
     #[test]

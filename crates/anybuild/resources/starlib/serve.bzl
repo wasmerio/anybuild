@@ -85,6 +85,22 @@ def _configured_services(config):
         for item in config.services
     ]
 
+def _configured_dependencies(config):
+    dependencies = {}
+    # User specs come last so explicit pins win over detected defaults.
+    specs = (
+        list(getattr(config, "autodetected_extra_dependencies", [])) +
+        list(getattr(config, "extra_dependencies", []))
+    )
+    for spec in specs:
+        parts = spec.rsplit("@", 1)
+        if len(parts) == 2 and parts[0] and parts[1]:
+            dependency = dep(parts[0], parts[1])
+        else:
+            dependency = dep(spec)
+        dependencies[dependency.name] = dependency
+    return dependencies.values()
+
 def serve(
         config,
         build,
@@ -101,7 +117,6 @@ def serve(
         # Uniform user-facing override surface (same for every provider):
         build_pre = [],
         build_post = [],
-        extra_deps = [],
         extra_env = {},
         extra_commands = {}):
     """Assemble a serve() from a build struct plus the serve-side wiring.
@@ -117,7 +132,7 @@ def serve(
         runtime_port = config.port,
         cwd = cwd,
         build = _override_group_commands(config, steps),
-        deps = list(build.serve_deps) + list(serve_deps) + list(extra_deps),
+        deps = list(build.serve_deps) + list(serve_deps) + _configured_dependencies(config),
         prepare = compact(prepare) if prepare != None else None,
         env = merged(merged(build.env, env), extra_env),
         commands = _override_serve_commands(config, merged(commands, extra_commands)),

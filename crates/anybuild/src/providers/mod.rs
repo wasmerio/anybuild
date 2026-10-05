@@ -64,14 +64,6 @@ pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Si
         Ok(())
     }
 
-    fn copy_transient_fields_from(&mut self, source: &Self) {
-        self.base_mut().runtime_dependencies = source.base().runtime_dependencies.clone();
-    }
-
-    fn runtime_dependencies(&self) -> Vec<String> {
-        self.base().runtime_dependencies.clone()
-    }
-
     fn detect(
         path: &Path,
         base: &BaseConfig,
@@ -121,9 +113,7 @@ pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Si
             return Err(anyhow!("Config must be a dictionary"));
         }
         merge_json_value(&mut merged, patch);
-        let mut config = Self::from_json(merged)?;
-        config.copy_transient_fields_from(self);
-        Ok(config)
+        Self::from_json(merged)
     }
 
     fn validate(&self, _path: &Path) -> Result<()> {
@@ -225,21 +215,6 @@ macro_rules! provider_registry {
             pub(crate) fn persisted_json(&self) -> serde_json::Value {
                 match self {
                     $(Self::$variant(config) => config.persisted_json()),+
-                }
-            }
-
-            pub(crate) fn runtime_dependencies(&self) -> Vec<String> {
-                match self {
-                    $(Self::$variant(config) => config.runtime_dependencies()),+
-                }
-            }
-
-            pub(crate) fn copy_transient_fields_from(&mut self, source: &Self) {
-                match (self, source) {
-                    $((Self::$variant(target), Self::$variant(source)) => {
-                        target.copy_transient_fields_from(source);
-                    },)+
-                    _ => {}
                 }
             }
 
@@ -846,7 +821,15 @@ mod selection_tests {
 mod config_inheritance_tests {
     use super::*;
 
-    const BASE_FIELDS: &[&str] = &["name", "port", "commands", "services", "app_subdir"];
+    const BASE_FIELDS: &[&str] = &[
+        "name",
+        "port",
+        "commands",
+        "services",
+        "app_subdir",
+        "extra_dependencies",
+        "autodetected_extra_dependencies",
+    ];
     const NODE_BUILD_FIELDS: &[&str] = &[
         "node_package_manager",
         "node_extra_dependencies",

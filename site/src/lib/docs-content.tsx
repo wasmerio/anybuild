@@ -492,13 +492,14 @@ const additionalPackages: DocPage = {
         <>
           <Paragraph>
             In Starlark, <InlineCode>use(dep(...))</InlineCode> exposes a package to following build
-            steps. <InlineCode>extra_deps</InlineCode> adds packages needed by the running
-            application. Declare both when a tool is required in both phases.
+            steps. The config field <InlineCode>extra_dependencies</InlineCode> adds packages needed
+            by the running application. Declare both when a tool is required in both phases.
           </Paragraph>
           <CodeBlock label="Anybuild">{`load("//anybuild/tools:node.bzl", "node_build", "node_config", "node_serve")
 
 config = node_config(
     schema = 1,
+    extra_dependencies = ["ffmpeg"],
     node_server = "node",
     node_version = "24",
 )
@@ -509,8 +510,24 @@ node_serve(
     config,
     build,
     build_pre = [use(dep("ffmpeg"))],
-    extra_deps = [dep("ffmpeg")],
 )`}</CodeBlock>
+          <Paragraph>
+            Set <InlineCode>ANYBUILD_EXTRA_DEPENDENCIES</InlineCode> to a JSON array to attach
+            runtime packages to any provider. Wasmer maps Sendmail to{" "}
+            <InlineCode>sendmail/sendmail</InlineCode> and sets{" "}
+            <InlineCode>enable_email: true</InlineCode> in <InlineCode>app.yaml</InlineCode> when
+            the serve dependencies include <InlineCode>sendmail</InlineCode>,{" "}
+            <InlineCode>php</InlineCode>, or <InlineCode>phpix</InlineCode>.
+          </Paragraph>
+          <CodeBlock>{`ANYBUILD_EXTRA_DEPENDENCIES='["sendmail"]' anybuild build --wasmer`}</CodeBlock>
+          <Paragraph>
+            Generated files keep inferred packages such as Pandoc and FFmpeg in{" "}
+            <InlineCode>autodetected_extra_dependencies</InlineCode>. Runtime planning merges this
+            list with <InlineCode>extra_dependencies</InlineCode>, so environment and JSON overrides
+            of user extras preserve the generated requirements. Explicit user version pins take
+            precedence when both lists name the same package. Regenerate older files to move
+            inferred packages into the separate field.
+          </Paragraph>
           <Callout title="Package availability depends on the environment">
             A package name and version must be resolvable by the selected local or Docker backend
             and by the selected runtime. Test the same build/runtime combination used in production.
@@ -637,9 +654,8 @@ anybuild . --docker --wasmer --start`}</CodeBlock>
         <>
           <CodeBlock>{`anybuild . --wasmer-deploy`}</CodeBlock>
           <Paragraph>
-            Wasmer uses the publication identity in{" "}
-            <InlineCode>app.yaml</InlineCode>, or prompts for any missing values in an interactive
-            terminal. To skip the prompts, pass both{" "}
+            Wasmer uses the publication identity in <InlineCode>app.yaml</InlineCode>, or prompts
+            for any missing values in an interactive terminal. To skip the prompts, pass both{" "}
             <InlineCode>--wasmer-app-owner</InlineCode> and{" "}
             <InlineCode>--wasmer-app-name</InlineCode>.
           </Paragraph>
@@ -838,9 +854,9 @@ python_serve(config, build, name = "my-app")`}</CodeBlock>
         <Paragraph>
           All provider serve functions accept common overrides including{" "}
           <InlineCode>build_pre</InlineCode>, <InlineCode>build_post</InlineCode>,{" "}
-          <InlineCode>extra_deps</InlineCode>, <InlineCode>extra_env</InlineCode>,{" "}
-          <InlineCode>commands</InlineCode>, <InlineCode>prepare</InlineCode>,{" "}
-          <InlineCode>cwd</InlineCode>, mounts, volumes, and services.
+          <InlineCode>extra_env</InlineCode>, <InlineCode>commands</InlineCode>,{" "}
+          <InlineCode>prepare</InlineCode>, <InlineCode>cwd</InlineCode>, mounts, volumes, and
+          services.
         </Paragraph>
       ),
     },

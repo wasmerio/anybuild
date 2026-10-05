@@ -61,7 +61,6 @@ generic assembler in `//anybuild:serve.bzl`):
 | `provider`       | Deployment identity label (defaults per provider)       |
 | `build_pre`      | Steps to run before the build struct's steps            |
 | `build_post`     | Steps to run after the build struct's steps             |
-| `extra_deps`     | Additional runtime packages                             |
 | `extra_env`      | Additional serve-time env vars                          |
 | `extra_commands` | Additional command entries                              |
 | `commands`       | Base commands dict (`start`, `after_deploy`, ...)       |
@@ -153,8 +152,8 @@ an explicit command. Regenerate older files to remove a previously inferred
 `node_build_command` before switching package managers.
 
 Notable fields per provider (see `crates/anybuild/src/providers/` for the full
-sets — common fields `name`, `port`, `services`, and `app_subdir` live on the
-base):
+sets — common fields `name`, `port`, `services`, `app_subdir`,
+`extra_dependencies`, and `autodetected_extra_dependencies` live on the base):
 
 | Provider   | Fields                                                        |
 | ---------- | ------------------------------------------------------------- |
@@ -164,6 +163,61 @@ base):
 | wordpress  | php fields plus `wp_version`, `wp_locale`, `wp_cli_version`    |
 | staticfile | `static_dir`, `sws_version`, `static_convert_redirects`               |
 | go         | `go_version`, `go_build_file`, `go_serve_binary`                  |
+
+The common `extra_dependencies` field attaches runtime packages to any
+provider. Entries accept a package name or `name@version`:
+
+```python
+config = node_config(
+    schema = 1,
+    extra_dependencies = ["sendmail", "ffmpeg"],
+    node_version = "24",
+)
+```
+
+You can also set the field using JSON through an environment variable or
+`--config`:
+
+```bash
+ANYBUILD_EXTRA_DEPENDENCIES='["sendmail"]' anybuild build --wasmer
+anybuild build --wasmer --config '{"extra_dependencies": ["sendmail"]}'
+```
+
+Wasmer maps `sendmail` to `sendmail/sendmail@0.1.10`. When the serve
+dependencies include `sendmail`, `php`, or `phpix`, the generated `app.yaml`
+sets `enable_email: true`. PHP and PHPix already include Sendmail. The
+capability depends on runtime packages, so it also applies to Node and Python
+apps that attach Sendmail.
+
+The local backend uses the host's Sendmail without installing it; a
+Sendmail-compatible command must already be available and configured. Linux
+does not guarantee that an MTA is installed. Docker uses Debian's
+`sendmail-bin` package, installing it only when `sendmail` is missing, and
+keeps its configuration and libraries in the final runtime image. Native
+email delivery still requires configuring the MTA for the target environment.
+
+Generated files store detected runtime packages, such as FFmpeg and Pandoc
+for Python wrappers, in `autodetected_extra_dependencies`. This list stays
+separate from user-supplied `extra_dependencies` through configuration
+overrides. Serve assembly merges both lists by package name, with explicit
+user versions taking precedence:
+
+```python
+autodetected_extra_dependencies = ["pandoc"]
+extra_dependencies = ["sendmail", "pandoc@3.6"]
+```
+
+An environment or JSON override replaces only the user extras list, so
+`ANYBUILD_EXTRA_DEPENDENCIES='["sendmail"]'` preserves the generated Pandoc
+dependency even if it is no longer detected from the project files. An empty
+user list clears user additions while retaining detected packages. Regenerate
+older files to move inferred packages from `extra_dependencies` into
+`autodetected_extra_dependencies`.
+
+Use `extra_dependencies` instead of the former serve `extra_deps` argument.
+Python packages continue to use `python_extra_dependencies`; Node build tools
+use `node_extra_dependencies`.
+For packages needed during the build, add `use(dep(...))` in `build_pre`.
 
 For Node apps targeting Wasmer, the optional `edgejs_engine` field accepts
 `"quickjs"` or `"external"`. Leaving it unset uses QuickJS by default.
