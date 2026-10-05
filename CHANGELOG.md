@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/wasmerio/anybuild/compare/v0.32.2...v0.33.0) (2026-10-05)
+
+
+### Features
+
+* add shared runtime dependencies and Sendmail support ([#132](https://github.com/wasmerio/anybuild/issues/132)) ([a893d10](https://github.com/wasmerio/anybuild/commit/a893d1005135bad82d90530f1b9402eebf43cca2))
+
 ## [0.32.2](https://github.com/wasmerio/anybuild/compare/v0.32.1...v0.32.2) (2026-10-03)
 
 
