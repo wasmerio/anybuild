@@ -215,13 +215,25 @@ python_serve(config, build, name = "my-app")
 
 The generated values make detection explicit and reproducible. The file is
 yours: edit the config, add steps around the build (`build_pre` /
-`build_post`), extend the runtime (`extra_deps`, `extra_env`), attach services,
-or compose builds and serves from different providers (a Hugo build served by
-the shared static serve, a PHP build with a Node asset build folded in). Any
-config field can also be overridden without editing the file, via
+`build_post`), extend the runtime (`config.extra_dependencies`, `extra_env`),
+attach services, or compose builds and serves from different providers (a
+Hugo build served by the shared static serve, a PHP build with a Node asset
+build folded in). Any config field can also be overridden without editing
+the file, via
 `ANYBUILD_*` environment variables (e.g. `ANYBUILD_PHPIX=true`) or `--config`
 JSON. Legacy `SHIPIT_*` variables remain supported when the corresponding
 `ANYBUILD_*` variable is absent.
+
+Attach additional runtime packages through the common `extra_dependencies`
+config field, or a JSON array in an environment variable:
+
+```bash
+ANYBUILD_EXTRA_DEPENDENCIES='["sendmail"]' anybuild build --wasmer
+```
+
+Wasmer maps `sendmail` to `sendmail/sendmail` and sets `enable_email: true`
+in `app.yaml` whenever `sendmail`, `php`, or `phpix` is a serve dependency.
+PHP and PHPix already include Sendmail in their Wasmer packages.
 
 See [docs/anybuild-files.md](docs/anybuild-files.md) for the full format
 reference: builtins, `file_exists()`, load labels, the serve override

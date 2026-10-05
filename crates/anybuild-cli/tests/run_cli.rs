@@ -541,6 +541,8 @@ fn malformed_typed_env_overrides_are_reported_as_errors() {
         ("EDGEJS_ENABLE", "enabled"),
         ("NODE_FRAMEWORK", "not-a-framework"),
         ("NODE_EXTRA_DEPENDENCIES", "not-json"),
+        ("EXTRA_DEPENDENCIES", "not-json"),
+        ("EXTRA_DEPENDENCIES", "[42]"),
     ] {
         let generated = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
             .arg("generate")

@@ -68,10 +68,6 @@ pub(crate) trait Provider: HasBase + Serialize + DeserializeOwned + Default + Si
         self.base_mut().runtime_dependencies = source.base().runtime_dependencies.clone();
     }
 
-    fn runtime_dependencies(&self) -> Vec<String> {
-        self.base().runtime_dependencies.clone()
-    }
-
     fn detect(
         path: &Path,
         base: &BaseConfig,
@@ -225,12 +221,6 @@ macro_rules! provider_registry {
             pub(crate) fn persisted_json(&self) -> serde_json::Value {
                 match self {
                     $(Self::$variant(config) => config.persisted_json()),+
-                }
-            }
-
-            pub(crate) fn runtime_dependencies(&self) -> Vec<String> {
-                match self {
-                    $(Self::$variant(config) => config.runtime_dependencies()),+
                 }
             }
 
@@ -539,6 +529,17 @@ pub(crate) fn select_provider(
 }
 
 fn finish_config(path: &Path, mut config: ProviderConfig) -> ProviderConfig {
+    let base = config.base_mut();
+    for dependency in base.runtime_dependencies.clone() {
+        if !base.extra_dependencies.iter().any(|extra| {
+            extra
+                .split_once('@')
+                .map_or(extra.as_str(), |(name, _)| name)
+                == dependency
+        }) {
+            base.extra_dependencies.push(dependency);
+        }
+    }
     if base::is_blank(&config.base().name) {
         config.base_mut().name = Some(
             path.file_name()
@@ -846,7 +847,14 @@ mod selection_tests {
 mod config_inheritance_tests {
     use super::*;
 
-    const BASE_FIELDS: &[&str] = &["name", "port", "commands", "services", "app_subdir"];
+    const BASE_FIELDS: &[&str] = &[
+        "name",
+        "port",
+        "commands",
+        "services",
+        "app_subdir",
+        "extra_dependencies",
+    ];
     const NODE_BUILD_FIELDS: &[&str] = &[
         "node_package_manager",
         "node_extra_dependencies",

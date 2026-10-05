@@ -65,6 +65,12 @@ pub(crate) fn dependency_install_contents(dependency: &Package) -> String {
     if dependency.name == "bash" {
         return contents;
     }
+    if dependency.name == "sendmail" {
+        contents.push_str(
+            "RUN --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt/lists,sharing=locked if ! command -v sendmail >/dev/null 2>&1; then rm -f /etc/apt/apt.conf.d/docker-clean && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install sendmail-bin; fi\n",
+        );
+        return contents;
+    }
     if dependency.name == "pie" {
         contents.push_str(
             "RUN --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt/lists,sharing=locked rm -f /etc/apt/apt.conf.d/docker-clean && apt-get update && apt-get -y --no-install-recommends install gcc make autoconf libtool bison re2c pkg-config libpq-dev\n",
@@ -746,6 +752,55 @@ mod tests {
             .unwrap();
         assert!(backend.docker_out_path.join("app/main.py").is_file());
         assert!(!backend.docker_out_path.join("app/.env").exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn sendmail_install_skips_existing_binary_and_installs_when_missing() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dependency = Package {
+            name: "sendmail".to_owned(),
+            version: None,
+            architecture: None,
+        };
+        let contents = dependency_install_contents(&dependency);
+        let script = &contents[contents.find("if ! command").unwrap()..];
+        for installed in [false, true] {
+            let temporary = tempfile::tempdir().unwrap();
+            let bin = temporary.path().join("bin");
+            std::fs::create_dir(&bin).unwrap();
+            let calls = temporary.path().join("apt-calls");
+            let mut commands = vec![
+                ("rm", "#!/bin/sh\nexit 0\n"),
+                (
+                    "apt-get",
+                    "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$INSTALL_LOG\"\n",
+                ),
+            ];
+            if installed {
+                commands.push(("sendmail", "#!/bin/sh\nexit 0\n"));
+            }
+            for (name, source) in commands {
+                let path = bin.join(name);
+                std::fs::write(&path, source).unwrap();
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            let output = std::process::Command::new("/bin/sh")
+                .args(["-c", script])
+                .env("PATH", &bin)
+                .env("INSTALL_LOG", &calls)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            let calls = std::fs::read_to_string(calls).unwrap_or_default();
+            let expected = if installed {
+                ""
+            } else {
+                "update\n-y --no-install-recommends install sendmail-bin\n"
+            };
+            assert_eq!(calls, expected);
+        }
     }
 
     #[test]
