@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.33.1](https://github.com/wasmerio/anybuild/compare/v0.33.0...v0.33.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* default to phpix 0.3.1 ([#135](https://github.com/wasmerio/anybuild/issues/135)) ([a282dac](https://github.com/wasmerio/anybuild/commit/a282dac7cc2463de7ccb27eb998e796fd041e7a2))
+* fail build instead of deploying 404 static app ([#134](https://github.com/wasmerio/anybuild/issues/134)) ([bc98107](https://github.com/wasmerio/anybuild/commit/bc98107605c7c1037b5f54f498b07233eabecb47))
+
 ## [0.33.0](https://github.com/wasmerio/anybuild/compare/v0.32.2...v0.33.0) (2026-10-05)
 
 
