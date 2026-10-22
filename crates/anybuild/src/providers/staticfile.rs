@@ -167,7 +167,6 @@ fn load_static_config(
 pub(crate) enum DetectionEvidence {
     Staticfile,
     Html,
-    Fallback,
     StartCommand,
     UnbuiltNodeSite,
 }
@@ -190,22 +189,21 @@ impl Provider for StaticFileConfig {
         if exists(path, &["Staticfile"]) {
             return Some(DetectionEvidence::Staticfile);
         }
-        if !is_python_js_project {
-            return Some(
-                if exists(
-                    path,
-                    &[
-                        "index.html",
-                        "index.htm",
-                        "public/index.html",
-                        "public/index.htm",
-                    ],
-                ) {
-                    DetectionEvidence::Html
-                } else {
-                    DetectionEvidence::Fallback
-                },
-            );
+        // Without an index document there is nothing to serve at `/`, so a
+        // project nothing else recognises must fail detection rather than
+        // deploy as a static site that answers 404 everywhere.
+        let has_index = exists(
+            path,
+            &[
+                "index.html",
+                "index.htm",
+                "public/index.html",
+                "public/index.htm",
+            ],
+        ) || env_str(operation, "static_dir")
+            .is_some_and(|dir| exists(&path.join(dir), &["index.html", "index.htm"]));
+        if !is_python_js_project && has_index {
+            return Some(DetectionEvidence::Html);
         }
         if base
             .commands
@@ -653,6 +651,44 @@ mod tests {
                 .unwrap(),
             "staticfile"
         );
+    }
+
+    #[test]
+    fn test_staticfile_does_not_claim_project_without_index_document() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("README.md"), "# readme\n").unwrap();
+        std::fs::write(tmp.path().join("tool.ps1"), "Write-Host hi\n").unwrap();
+
+        assert_eq!(detect(tmp.path(), &BaseConfig::default()), None);
+        let error =
+            crate::providers::load_provider_for_test(tmp.path(), &BaseConfig::default(), None)
+                .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("could not detect a provider for this project"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn test_staticfile_detects_index_in_configured_static_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("dist")).unwrap();
+        std::fs::write(tmp.path().join("dist/index.html"), "<h1>Dist</h1>\n").unwrap();
+        let operation = crate::operation::OperationContext::new(
+            indexmap::IndexMap::from([("ANYBUILD_STATIC_DIR".to_owned(), "dist".to_owned())]),
+            false,
+            crate::event::ProcessIo::Inherit,
+            crate::event::Reporter::default(),
+        );
+
+        let (kind, config) =
+            crate::providers::select_provider(tmp.path(), &BaseConfig::default(), None, &operation)
+                .unwrap();
+
+        assert_eq!(kind.name(), "staticfile");
+        assert_eq!(config.to_json()["static_dir"], "dist");
     }
 
     #[test]

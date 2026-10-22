@@ -447,7 +447,6 @@ impl ProviderKind {
                     staticfile::DetectionEvidence::Staticfile => 50,
                     staticfile::DetectionEvidence::Html
                     | staticfile::DetectionEvidence::UnbuiltNodeSite => 15,
-                    staticfile::DetectionEvidence::Fallback => 10,
                     staticfile::DetectionEvidence::StartCommand => 70,
                 }
             }
