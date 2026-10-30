@@ -541,6 +541,79 @@ nodestatic_serve(config, build, name = "web")
 }
 
 #[test]
+fn node_dependency_optimization_replaces_pruning() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project.path().join("package.json"),
+        r#"{"scripts":{"start":"node server.js"},"dependencies":{"express":"5.1.0"}}"#,
+    )
+    .unwrap();
+
+    for (manager, dlx, prune) in [
+        ("npm", "npx -y", "npm prune --omit=dev --ignore-scripts"),
+        ("pnpm", "pnpm dlx", "pnpm prune --prod"),
+        (
+            "yarn",
+            "yarn dlx",
+            "yarn workspaces focus --all --production",
+        ),
+        (
+            "bun",
+            "bunx",
+            "rm -rf node_modules && bun install --omit=dev --ignore-scripts",
+        ),
+    ] {
+        for (framework, server, build, enabled, optimize_path) in [
+            (Some("astro"), "node", true, true, Some("dist")),
+            (None, "nitro", true, true, Some(".output/server")),
+            (Some("astro"), "node", true, false, None),
+            (Some("astro"), "node", false, true, None),
+            (None, "node", true, true, None),
+        ] {
+            let plan = Anybuild::new(project.path())
+                .inherit_process_env(false)
+                .with_config(serde_json::json!({
+                    "node_package_manager": manager,
+                    "node_framework": framework,
+                    "node_server": server,
+                    "node_build_command": if build { "node build.js" } else { "" },
+                    "optimize_node_dependencies": enabled,
+                    "node_remove_native_binaries": true,
+                }))
+                .plan(PlanOptions {
+                    temporary: true,
+                    ..PlanOptions::default()
+                })
+                .unwrap();
+            let commands = plan
+                .serve
+                .build
+                .iter()
+                .filter_map(|step| match step {
+                    Step::Run(run) => Some(run.command.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                commands.contains(&prune),
+                optimize_path.is_none(),
+                "{manager}, {framework:?}, {server}, build={build}, enabled={enabled}"
+            );
+            let optimization = commands
+                .iter()
+                .find(|command| command.contains("optimize-deps@"));
+            let expected =
+                optimize_path.map(|path| format!("{dlx} optimize-deps@0.1.2 {path} --replace"));
+            assert_eq!(optimization.copied(), expected.as_deref());
+            assert!(commands.iter().any(|command| {
+                command.starts_with("bash ")
+                    && command.ends_with("/optimize-node-modules.sh node_modules")
+            }));
+        }
+    }
+}
+
+#[test]
 fn nitro_projects_build_and_start_with_the_node_server_preset() {
     let project = tempfile::tempdir().unwrap();
     std::fs::write(
