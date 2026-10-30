@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.2](https://github.com/wasmerio/anybuild/compare/v0.33.1...v0.33.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* skip pruning when optimizing Node dependencies ([#137](https://github.com/wasmerio/anybuild/issues/137)) ([f0b462e](https://github.com/wasmerio/anybuild/commit/f0b462e787ce97992abe4985fef4a9603abbd9f0))
+
 ## [0.33.1](https://github.com/wasmerio/anybuild/compare/v0.33.0...v0.33.1) (2026-10-22)
 
 
