@@ -170,12 +170,10 @@ def node_build_step(
     return steps
 
 def node_optimize_steps(config, assets = None, include_prune = True, serving = True):
-    """Prune dev deps and shrink node_modules for the serve environment."""
+    """Trace runtime deps or prune dev deps, then shrink native binaries."""
     if not file_exists("package.json") or not config.node_package_manager:
         return []
     steps = []
-    if include_prune:
-        steps.append(run(_PRUNE_COMMANDS[config.node_package_manager], group = "prune"))
     optimize_paths = []
     if config.node_build_command:
         optimize_paths = _FRAMEWORK_OPTIMIZE_DEPS_PATHS.get(
@@ -184,6 +182,8 @@ def node_optimize_steps(config, assets = None, include_prune = True, serving = T
         )
     if optimize_paths and config.optimize_node_dependencies:
         steps.append(run(_DLX_PREFIXES[config.node_package_manager] + "optimize-deps@{} {} --replace".format(OPTIMIZE_DEPS_VERSION, ", ".join(optimize_paths))))
+    elif include_prune:
+        steps.append(run(_PRUNE_COMMANDS[config.node_package_manager], group = "prune"))
     if serving and config.node_remove_native_binaries:
         node_modules_path = ".next-bundle/node_modules" if config.node_framework == "next" else "node_modules"
         steps += [

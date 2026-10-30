@@ -54,11 +54,6 @@
   },
   {
    "__type__": "RunStep",
-   "command": "npm prune --omit=dev --ignore-scripts",
-   "group": "prune"
-  },
-  {
-   "__type__": "RunStep",
    "command": "npx -y optimize-deps@0.1.2 dist --replace"
   },
   {
