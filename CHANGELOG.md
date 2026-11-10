@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.3](https://github.com/wasmerio/anybuild/compare/v0.33.2...v0.33.3) (2026-11-10)
+
+
+### Bug Fixes
+
+* use dirent type in glob_at_depth to avoid stat per entry ([#139](https://github.com/wasmerio/anybuild/issues/139)) ([07ef2f7](https://github.com/wasmerio/anybuild/commit/07ef2f7a928ed15707c4ea3c1267b557670f6257))
+
 ## [0.33.2](https://github.com/wasmerio/anybuild/compare/v0.33.1...v0.33.2) (2026-10-30)
 
 
