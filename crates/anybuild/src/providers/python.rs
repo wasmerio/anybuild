@@ -683,28 +683,30 @@ fn detect_main_file(root_path: &Path) -> Option<String> {
 /// First match for `*/.../<name_pattern>` (`depth` directory wildcards),
 /// scanning directories in sorted order.
 fn glob_at_depth(dir: &Path, depth: usize, name_pattern: &str, rel: &str) -> Option<String> {
-    let mut entries: Vec<(String, PathBuf)> = std::fs::read_dir(dir)
+    let mut entries: Vec<(String, PathBuf, bool)> = std::fs::read_dir(dir)
         .ok()?
         .filter_map(|entry| entry.ok())
         .map(|entry| {
+            let is_dir = dir_entry_is_dir(&entry);
             (
                 entry.file_name().to_string_lossy().into_owned(),
                 entry.path(),
+                is_dir,
             )
         })
         .collect();
     entries.sort_by(|a, b| a.0.cmp(&b.0));
 
     if depth == 0 {
-        for (name, _) in &entries {
+        for (name, _, _) in &entries {
             if matches_name(name_pattern, name) {
                 return Some(join_rel(rel, name));
             }
         }
         return None;
     }
-    for (name, path) in &entries {
-        if path.is_dir() {
+    for (name, path, is_dir) in &entries {
+        if *is_dir {
             if let Some(found) = glob_at_depth(path, depth - 1, name_pattern, &join_rel(rel, name))
             {
                 return Some(found);
@@ -712,6 +714,15 @@ fn glob_at_depth(dir: &Path, depth: usize, name_pattern: &str, rel: &str) -> Opt
         }
     }
     None
+}
+
+/// Uses the type `readdir` already returned and only stats symlinks. On lazy
+/// filesystems such as artifact-fs, a `stat` downloads the file's contents.
+fn dir_entry_is_dir(entry: &std::fs::DirEntry) -> bool {
+    match entry.file_type() {
+        Ok(file_type) if !file_type.is_symlink() => file_type.is_dir(),
+        _ => entry.path().is_dir(),
+    }
 }
 
 fn join_rel(rel: &str, name: &str) -> String {
@@ -949,6 +960,32 @@ mod tests {
             Some(PythonServer::Daphne)
         );
         assert_eq!(detect_server(&deps(&["flask"])), None);
+    }
+
+    #[test]
+    fn test_glob_at_depth_descends_into_dirs_and_dir_symlinks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("a_app.py"), "").unwrap();
+        std::fs::create_dir_all(root.join("pkg/inner")).unwrap();
+        std::fs::write(root.join("pkg/inner/web_app.py"), "").unwrap();
+        // A root-level match is not depth 1.
+        assert_eq!(glob_at_depth(root, 1, "*_app.py", ""), None);
+        assert_eq!(
+            glob_at_depth(root, 2, "*_app.py", ""),
+            Some("pkg/inner/web_app.py".to_owned())
+        );
+
+        #[cfg(unix)]
+        {
+            let linked = tempfile::tempdir().unwrap();
+            std::fs::write(linked.path().join("linked_app.py"), "").unwrap();
+            std::os::unix::fs::symlink(linked.path(), root.join("link")).unwrap();
+            assert_eq!(
+                glob_at_depth(root, 1, "*_app.py", ""),
+                Some("link/linked_app.py".to_owned())
+            );
+        }
     }
 
     #[test]
