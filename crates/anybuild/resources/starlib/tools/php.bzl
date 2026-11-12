@@ -40,11 +40,24 @@ def php_env(config, assets):
         env_vars["PHPIX_PHP_THREADS"] = str(config.phpix_worker_threads)
     return env_vars
 
+def php_source_path(config, path):
+    """Resolve an app-relative source against the workspace build context."""
+    if not config.app_subdir:
+        return path
+    if path == ".":
+        return config.app_subdir
+    return "{}/{}".format(config.app_subdir, path)
+
 def php_ini_steps(config, assets):
     """Stage php.ini into the assets mount (project's own or the default)."""
     if file_exists("php.ini"):
-        return [copy("php.ini", "{}/php.ini".format(assets.path))]
+        return [copy(php_source_path(config, "php.ini"), "{}/php.ini".format(assets.path))]
     return [copy("php/php.ini", "{}/php.ini".format(assets.path), base = "assets")]
+
+def _composer_steps(app, subdir, step):
+    if not subdir:
+        return [step]
+    return [workdir("{}/{}".format(app.path, subdir)), step, workdir(app.path)]
 
 def php_build(
         config,
@@ -59,15 +72,36 @@ def php_build(
     tc = php_toolchain(config)
     app = app or mount("app")
     assets = assets or mount("assets")
+    composer_path = getattr(config, "composer_path", "composer.json")
+    composer_subdir = None
+    if config.composer_enable and "/" in composer_path:
+        composer_subdir = composer_path.rsplit("/", 1)[0]
+    copy_before_install = config.app_subdir or composer_subdir
+
+    ignore = [".git"] + list(extra_ignore)
+    if config.composer_enable:
+        ignore.append("vendor")
+    if composer_subdir:
+        ignore.append("{}/vendor".format(composer_subdir))
+    if config.php_framework == "symfony":
+        ignore.append("var")
+    if config.php_framework == "typecho":
+        ignore += ["usr", "config.inc.php"]
+    source_copy = copy(php_source_path(config, "."), ".", ignore = ignore)
 
     steps = [use(*(php_use_deps(tc) + list(extra_use_deps)))] + list(build_pre) + [workdir(app.path)]
     steps += php_ini_steps(config, assets)
+    if copy_before_install:
+        # Nested Composer projects need the source tree in place before install.
+        steps.append(source_copy)
     if config.composer_enable:
         steps.append(env(COMPOSER_HOME = "/tmp", COMPOSER_FUND = "0", COMPOSER_ALLOW_SUPERUSER = "1"))
-        composer_inputs = ["composer.json"]
-        if file_exists("composer.lock"):
-            composer_inputs.append("composer.lock")
-        steps.append(run(
+        composer_inputs = None
+        if not copy_before_install:
+            composer_inputs = [composer_path]
+            if file_exists("composer.lock"):
+                composer_inputs.append("composer.lock")
+        steps += _composer_steps(app, composer_subdir, run(
             "composer install --optimize-autoloader --ignore-platform-reqs --no-scripts --no-interaction",
             inputs = composer_inputs,
             outputs = ["."],
@@ -75,18 +109,16 @@ def php_build(
         ))
     steps += after_install
 
-    ignore = [".git"] + list(extra_ignore)
-    if config.composer_enable:
-        ignore.append("vendor")
-    if config.php_framework == "symfony":
-        ignore.append("var")
-    if config.php_framework == "typecho":
-        ignore += ["usr", "config.inc.php"]
-    steps.append(copy(".", ignore = ignore))
+    if not copy_before_install:
+        steps.append(source_copy)
 
     # Composer scripts are skipped at install time, so run the build script after.
     if config.composer_enable and config.composer_build_script:
-        steps.append(run("composer run-script {}".format(config.composer_build_script), outputs = ["."], group = "build"))
+        steps += _composer_steps(app, composer_subdir, run(
+            "composer run-script {}".format(config.composer_build_script),
+            outputs = ["."],
+            group = "build",
+        ))
     steps += after_build
     mounts = [app, assets]
     env_vars = php_env(config, assets)
@@ -94,9 +126,9 @@ def php_build(
     if config.php_framework == "typecho":
         usr_base = mount("typecho_usr")
         mounts.append(usr_base)
-        steps.append(copy("usr", usr_base.path))
+        steps.append(copy(php_source_path(config, "usr"), usr_base.path))
         if file_exists("config.inc.php"):
-            steps.append(copy("config.inc.php", "{}/config.inc.php".format(usr_base.path)))
+            steps.append(copy(php_source_path(config, "config.inc.php"), "{}/config.inc.php".format(usr_base.path)))
         elif not file_exists("usr/config.inc.php"):
             steps.append(copy("php/typecho-config.inc.php", "{}/config.inc.php".format(usr_base.path), base = "assets"))
         steps.append(copy("php/start-typecho.php", "{}/start-typecho.php".format(assets.path), base = "assets"))

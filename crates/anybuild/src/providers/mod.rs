@@ -36,6 +36,7 @@ const SNAPSHOT_EXCLUDED_FIELDS: &[&str] = &[
     "name",
     "port",
     "app_subdir",
+    "composer_path",
     "node_install_inputs",
     "python_install_inputs",
     "static_redirects_config",

@@ -157,6 +157,74 @@ fn new_anybuild_output_flows_from_detection_to_generation_to_packages() {
 }
 
 #[test]
+#[cfg(unix)]
+fn auto_builds_a_php_subdirectory_at_the_wasmer_document_root() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let workspace = tmp.path().join("workspace");
+    let app = workspace.join("nested/php app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(app.join("composer.json"), r#"{"require":{}}"#).unwrap();
+    std::fs::write(app.join("index.php"), "<?php echo 'PHP site';").unwrap();
+
+    let docker = tmp.path().join("fake-docker");
+    std::fs::write(
+        &docker,
+        "#!/bin/sh\nset -e\npwd -P > docker-invocation\n\
+         printf '%s\\n' \"$@\" >> docker-invocation\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&docker, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_anybuild"))
+        .arg("auto")
+        .arg(&workspace)
+        .args([
+            "--subdir",
+            "nested/php app",
+            "--builder=docker",
+            "--runner=wasmer",
+            "--start-command=phpix -S 0.0.0.0:9090 -t /app",
+            "--docker-client",
+        ])
+        .arg(&docker)
+        .arg("--wasmer-bin")
+        .arg(fake_wasmer(tmp.path()))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let invocation = std::fs::read_to_string(workspace.join("docker-invocation")).unwrap();
+    let arguments: Vec<_> = invocation.lines().collect();
+    assert_eq!(
+        arguments[0],
+        workspace.canonicalize().unwrap().to_str().unwrap()
+    );
+    assert_eq!(arguments.last(), Some(&"."));
+    let state = workspace.join(".anybuild/nested-php-app");
+    let dockerfile = std::fs::read_to_string(state.join("docker/Dockerfile")).unwrap();
+    let workdir = dockerfile.find("WORKDIR /app\n").unwrap();
+    let sources = dockerfile.find(r#"["nested/php app","."]"#).unwrap();
+    let composer = dockerfile
+        .find("composer install --optimize-autoloader")
+        .unwrap();
+    assert!(workdir < sources && sources < composer, "{dockerfile}");
+    assert!(!dockerfile.contains("source=composer.json"), "{dockerfile}");
+
+    let manifest = std::fs::read_to_string(state.join("wasmer/wasmer.toml")).unwrap();
+    assert!(manifest.contains("cwd = \"/app\""), "{manifest}");
+    assert!(
+        manifest.contains("\"0.0.0.0:9090\",\n    \"-t\",\n    \"/app\""),
+        "{manifest}"
+    );
+}
+
+#[test]
 fn plan_reports_the_declared_provider_and_its_details() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(
