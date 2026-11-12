@@ -14,6 +14,7 @@ load(
     "php_env",
     "php_ini_steps",
     "php_runtime_deps",
+    "php_source_path",
     "php_toolchain",
     "php_use_deps",
 )
@@ -53,7 +54,7 @@ def _wp_content_seed_steps(config, app, wpcontent_base):
     if config.wp_version:
         steps.append(run("cp -R {}/wp-content/* {}".format(app.path, wpcontent_base.path)))
     if file_exists("wp-content"):
-        steps.append(copy("wp-content", wpcontent_base.path))
+        steps.append(copy(php_source_path(config, "wp-content"), wpcontent_base.path))
     return steps
 
 def _wp_extension_steps(config, app, assets, wpcontent_base):
@@ -67,7 +68,7 @@ def _wp_extension_steps(config, app, assets, wpcontent_base):
     steps += [workdir(app.path)]
     steps += php_ini_steps(config, assets)
     steps += _wp_content_seed_steps(config, app, wpcontent_base)
-    steps.append(copy(".", target, ignore = ignore))
+    steps.append(copy(php_source_path(config, "."), target, ignore = ignore))
 
     if config.composer_enable:
         steps += [

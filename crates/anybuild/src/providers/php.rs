@@ -17,6 +17,13 @@ use crate::operation::OperationContext;
 use crate::providers::base::{env_bool, env_enum, env_int, env_str, BaseConfig, HasBase};
 use crate::providers::{detection_details_from_fields, humanize, Provider};
 
+const COMPOSER_FILENAME: &str = "composer.json";
+const APP_COMPOSER_PATH: &str = "app/composer.json";
+
+fn default_composer_path() -> String {
+    COMPOSER_FILENAME.to_owned()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PhpFramework {
@@ -50,6 +57,9 @@ pub struct PhpConfig {
     pub phpix: Option<bool>,
     #[serde(rename = "composer_enable")]
     pub use_composer: bool,
+    /// Composer manifest relative to the selected PHP source root.
+    #[serde(default = "default_composer_path")]
+    composer_path: String,
     #[serde(rename = "composer_build_script")]
     pub composer_build_script: Option<String>,
     pub php_version: Option<String>,
@@ -71,6 +81,7 @@ impl Default for PhpConfig {
             framework: None,
             phpix: None,
             use_composer: false,
+            composer_path: default_composer_path(),
             composer_build_script: None,
             php_version: Some("8.3.29".to_owned()),
             php_architecture: None,
@@ -104,6 +115,7 @@ impl PhpConfig {
             )?,
             phpix: env_bool(operation, "phpix")?,
             use_composer: env_bool(operation, "composer_enable")?.unwrap_or(false),
+            composer_path: default_composer_path(),
             composer_build_script: env_str(operation, "composer_build_script"),
             php_version: env_str(operation, "php_version").or_else(|| Some("8.3.29".to_owned())),
             php_architecture: env_enum(
@@ -134,12 +146,45 @@ fn has_root_php_file(path: &Path) -> bool {
 }
 
 /// Port of `PhpProvider.load_composer_config`.
-pub(crate) fn load_composer_config(path: &Path) -> Option<Map<String, Value>> {
-    let contents = std::fs::read_to_string(path.join("composer.json")).ok()?;
+fn load_composer_config(path: &Path) -> Option<Map<String, Value>> {
+    let contents = std::fs::read_to_string(path).ok()?;
     match serde_json::from_str::<Value>(&contents) {
         Ok(Value::Object(map)) => Some(map),
         _ => None,
     }
+}
+
+fn composer_build_script(config: &Map<String, Value>) -> Option<String> {
+    let scripts = config.get("scripts")?.as_object()?;
+    ["post-update-cmd", "post-install-cmd"]
+        .into_iter()
+        .find(|name| scripts.contains_key(*name))
+        .map(str::to_owned)
+}
+
+fn app_composer_config(path: &Path, config: &PhpConfig) -> Option<Map<String, Value>> {
+    if config.public_dir.as_deref() != Some("app")
+        || config.framework.is_some()
+        || exists(
+            path,
+            &[
+                "composer.json",
+                "composer.lock",
+                "index.php",
+                "web/index.php",
+            ],
+        )
+        || has_root_php_file(path)
+    {
+        return None;
+    }
+    let app = path.join("app");
+    if !std::fs::symlink_metadata(&app).is_ok_and(|metadata| metadata.is_dir())
+        || !app.join("index.php").is_file()
+    {
+        return None;
+    }
+    load_composer_config(&path.join(APP_COMPOSER_PATH))
 }
 
 /// Port of `PhpProvider.composer_packages`.
@@ -168,7 +213,7 @@ pub(crate) fn detect_framework(
     let composer_config = match composer_config {
         Some(config) => Some(config),
         None => {
-            loaded = load_composer_config(path);
+            loaded = load_composer_config(&path.join(COMPOSER_FILENAME));
             loaded.as_ref()
         }
     };
@@ -228,31 +273,18 @@ pub fn load_config(
     base: BaseConfig,
     operation: &OperationContext,
 ) -> Result<PhpConfig> {
-    let composer_config = load_composer_config(path);
+    let composer_config = load_composer_config(&path.join(COMPOSER_FILENAME));
     let use_composer = exists(path, &["composer.json", "composer.lock"])
         || base
             .commands
             .install
             .as_deref()
             .is_some_and(|install| install.starts_with("composer "));
-    let mut composer_build_script = None;
-    if let Some(config) = &composer_config {
-        if let Some(Value::Object(scripts)) = config.get("scripts") {
-            composer_build_script = if scripts.contains_key("post-update-cmd") {
-                Some("post-update-cmd".to_owned())
-            } else if scripts.contains_key("post-install-cmd") {
-                Some("post-install-cmd".to_owned())
-            } else {
-                None
-            };
-        }
-    }
-
     let mut config = PhpConfig::from_env(base, operation)?;
     // use_composer / composer_build_script are init kwargs in Python, so
     // they never come from the env.
     config.use_composer = use_composer;
-    config.composer_build_script = composer_build_script;
+    config.composer_build_script = composer_config.as_ref().and_then(composer_build_script);
 
     if config.framework.is_none() {
         config.framework = detect_framework(path, composer_config.as_ref());
@@ -362,7 +394,13 @@ impl Provider for PhpConfig {
     }
 
     fn load(path: &Path, base: BaseConfig, operation: &OperationContext) -> Result<Self> {
-        load_config(path, base, operation)
+        let mut config = load_config(path, base, operation)?;
+        if let Some(composer) = app_composer_config(path, &config) {
+            config.use_composer = true;
+            config.composer_path = APP_COMPOSER_PATH.to_owned();
+            config.composer_build_script = composer_build_script(&composer);
+        }
+        Ok(config)
     }
 
     fn detection_details(&self) -> Vec<ProviderDetail> {

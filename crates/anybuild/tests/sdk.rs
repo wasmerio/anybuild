@@ -2,10 +2,10 @@ use std::sync::{Arc, Mutex};
 
 use anybuild::plan::Step;
 use anybuild::{
-    Anybuild, AutoOptions, AwsLambdaOptions, BuildOptions, DeployOptions, DeployOutcome,
-    DeployTarget, DeploymentPlatform, Event, FlyOptions, GenerateOptions, GenerationCheckStatus,
-    GenerationPolicy, PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, RuntimeEnvironment,
-    WasmerOptions,
+    Anybuild, AutoOptions, AwsLambdaOptions, BuildEnvironment, BuildOptions, DeployOptions,
+    DeployOutcome, DeployTarget, DeploymentPlatform, DockerOptions, Event, FlyOptions,
+    GenerateOptions, GenerationCheckStatus, GenerationPolicy, PlanOptions, ProcessIo, RunOptions,
+    RuntimeArtifact, RuntimeEnvironment, WasmerOptions,
 };
 
 fn static_project() -> tempfile::TempDir {
@@ -164,6 +164,92 @@ fn drupal_defaults_to_phpix_on_wasmer_and_respects_overrides() {
             }
         }
     }
+}
+
+#[test]
+fn php_root_uses_composer_in_the_app_docroot() {
+    let project = tempfile::tempdir().unwrap();
+    let app = project.path().join("app");
+    std::fs::create_dir(&app).unwrap();
+    std::fs::write(app.join("index.php"), "<?php echo 'PHP';\n").unwrap();
+
+    let sdk = Anybuild::new(project.path()).inherit_process_env(false);
+    // Cover a definition generated before the app adopted Composer.
+    sdk.generate(GenerateOptions::default()).unwrap();
+    std::fs::write(
+        app.join("composer.json"),
+        r#"{"require":{"nesbot/carbon":"^3.0"},"scripts":{"post-install-cmd":"@php -v"}}"#,
+    )
+    .unwrap();
+
+    let options = |temporary| PlanOptions {
+        temporary,
+        build_environment: BuildEnvironment::Docker(DockerOptions::default()),
+        runtime_environment: RuntimeEnvironment::Wasmer(WasmerOptions::default()),
+        ..PlanOptions::default()
+    };
+    for temporary in [true, false] {
+        let plan = sdk.plan(options(temporary)).unwrap();
+        assert_eq!(plan.provider, "php");
+        assert_eq!(plan.config["composer_enable"], true);
+        assert_eq!(plan.config["composer_path"], "app/composer.json");
+        assert!(plan.config["app_subdir"].is_null());
+        assert!(plan.serve.commands["start"].ends_with("-t /app/app"));
+
+        let steps = &plan.serve.build;
+        let stage = steps
+            .iter()
+            .position(
+                |step| matches!(step, Step::Copy(copy) if copy.source == "." && copy.target == "."),
+            )
+            .unwrap();
+        let workdir_at = |index: usize| {
+            steps[..index].iter().rev().find_map(|step| match step {
+                Step::Workdir(workdir) => workdir.path.to_str(),
+                _ => None,
+            })
+        };
+        for command in ["composer install ", "composer run-script post-install-cmd"] {
+            let index = steps
+                .iter()
+                .position(|step| {
+                    matches!(step, Step::Run(run) if run.command.starts_with(command)
+                        && run.inputs.is_none())
+                })
+                .unwrap();
+            assert!(stage < index);
+            assert_eq!(workdir_at(index), Some("/app/app"));
+        }
+        assert_eq!(workdir_at(steps.len()), Some("/app"));
+    }
+
+    let selected_app = Anybuild::new(project.path())
+        .with_subdir("app")
+        .inherit_process_env(false)
+        .plan(options(true))
+        .unwrap();
+    assert_eq!(selected_app.config["composer_enable"], true);
+    assert!(selected_app.serve.commands["start"].ends_with("-t /app"));
+    let selected_workdirs: Vec<_> = selected_app
+        .serve
+        .build
+        .iter()
+        .filter_map(|step| match step {
+            Step::Workdir(workdir) => workdir.path.to_str(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(selected_workdirs, ["/app"]);
+
+    std::fs::write(project.path().join("composer.json"), "{}").unwrap();
+    let plan = sdk.plan(options(true)).unwrap();
+    assert!(plan.serve.build.iter().any(|step| {
+        matches!(step, Step::Run(run) if run.command.starts_with("composer install ")
+            && run.inputs.as_deref().is_some_and(|inputs| inputs == ["composer.json"]))
+    }));
+    assert!(!plan.serve.build.iter().any(|step| {
+        matches!(step, Step::Run(run) if run.command.starts_with("composer run-script "))
+    }));
 }
 
 #[test]

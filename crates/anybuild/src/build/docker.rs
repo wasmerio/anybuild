@@ -438,8 +438,8 @@ impl DockerBuildBackend {
                             }
                             _ => String::new(),
                         };
-                        docker_file_contents
-                            .push_str(&format!("COPY{exclude} {} {}\n", step.source, step.target));
+                        let paths = serde_json::to_string(&[&step.source, &step.target])?;
+                        docker_file_contents.push_str(&format!("COPY{exclude} {paths}\n"));
                     }
                 }
                 Step::Env(step) => {
@@ -710,7 +710,7 @@ mod tests {
         assert!(args.contains("--build-context\nanybuild_copy_0="));
         let dockerfile = std::fs::read_to_string(&backend.docker_file_path).unwrap();
         assert!(dockerfile.contains("COPY --from=anybuild_copy_0 [\".\", \"/app\"]"));
-        assert!(dockerfile.contains("COPY . /raw"));
+        assert!(dockerfile.contains(r#"COPY [".","/raw"]"#));
         std::fs::write(backend.src_dir.join(".gitignore"), "main.py\n").unwrap();
         backend
             .build("app", &IndexMap::new(), &IndexMap::new(), &[], &steps)
@@ -907,7 +907,7 @@ mod tests {
         assert!(contents.contains(
             "RUN \\\n  --mount=type=bind,source=package.json,target=package.json \\\n  --mount=type=bind,source=web/app.json,target=web/app.json \\\n  npm install\n"
         ));
-        assert!(contents.contains("COPY \\\n  --exclude=node_modules \\\n  . /app\n"));
+        assert!(contents.contains("COPY \\\n  --exclude=node_modules \\\n  [\".\",\"/app\"]\n"));
         // Asset copy is inlined as base64.
         let expected_b64 = b64(b"hi");
         assert!(contents.contains(&format!(
