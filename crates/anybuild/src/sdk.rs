@@ -871,6 +871,9 @@ impl Anybuild {
                 self.deploy_inner(options, &context)
             })
             .transpose()?;
+        if let Some(DeployOutcome::ConfigWritten { path }) = &deploy {
+            record_plan_in_deploy_config(path, &build.plan.provider, &build.plan.config)?;
+        }
         Ok(AutoOutcome {
             generated: definition.generated,
             build,
@@ -1052,6 +1055,21 @@ fn diff_values(
     }
 }
 
+/// Adds the provider and config the build resolved to a written deploy
+/// config, so whoever deploys it can see what was built. Configs that are not
+/// a JSON object (another platform's format) are left alone.
+fn record_plan_in_deploy_config(path: &Path, provider: &str, config: &Value) -> AnyResult<()> {
+    let Ok(Value::Object(mut written)) = serde_json::from_slice(&std::fs::read(path)?) else {
+        return Ok(());
+    };
+    written.insert(
+        "plan".to_owned(),
+        serde_json::json!({ "provider": provider, "config": config }),
+    );
+    std::fs::write(path, serde_json::to_vec(&written)?)?;
+    Ok(())
+}
+
 fn project_plan(context: &ProjectContext) -> ProjectPlan {
     let mut config = context.provider_config.clone();
     let collect_group = |group: &str| -> Option<String> {
@@ -1218,4 +1236,33 @@ fn build_process_env(environment: &IndexMap<String, String>) -> IndexMap<String,
     }
     result.entry("COLORTERM".to_owned()).or_default();
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::record_plan_in_deploy_config;
+    use serde_json::json;
+
+    #[test]
+    fn deploy_config_records_the_built_plan() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("deploy.json");
+        std::fs::write(&path, r#"{"app_yaml_path":"/a/app.yaml"}"#).unwrap();
+        let config = json!({"node_framework": "astro"});
+        record_plan_in_deploy_config(&path, "node", &config).unwrap();
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(
+            written,
+            json!({
+                "app_yaml_path": "/a/app.yaml",
+                "plan": {"provider": "node", "config": {"node_framework": "astro"}},
+            })
+        );
+
+        let other = dir.path().join("fly.toml");
+        std::fs::write(&other, "app = \"x\"\n").unwrap();
+        record_plan_in_deploy_config(&other, "node", &config).unwrap();
+        assert_eq!(std::fs::read_to_string(&other).unwrap(), "app = \"x\"\n");
+    }
 }
