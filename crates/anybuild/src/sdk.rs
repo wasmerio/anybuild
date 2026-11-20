@@ -5,9 +5,9 @@ use indexmap::IndexMap;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::plan::{Serve, Service, Step};
+use crate::plan::{DependencyBackend, Serve, Service, Step};
 
-use crate::artifact::RuntimeArtifact;
+use crate::artifact::{ArtifactKind, RuntimeArtifact};
 use crate::deploy::resolve_deployer;
 use crate::error::{Error, ErrorKind, Result};
 pub use crate::event::ProcessIo;
@@ -115,6 +115,42 @@ pub enum RuntimeEnvironment {
     Docker(DockerOptions),
     Lambda(DockerOptions),
     Wasmer(WasmerOptions),
+}
+
+impl RuntimeEnvironment {
+    fn runner_name(&self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Docker(_) => "docker",
+            Self::Lambda(_) => "lambda",
+            Self::Wasmer(_) => "wasmer",
+        }
+    }
+
+    fn artifact_kinds(&self) -> &'static [ArtifactKind] {
+        match self {
+            Self::Local => &[ArtifactKind::Local],
+            Self::Docker(_) => &[ArtifactKind::Docker],
+            Self::Lambda(_) => &[ArtifactKind::LambdaZip, ArtifactKind::Docker],
+            Self::Wasmer(_) => &[ArtifactKind::Wasmer],
+        }
+    }
+
+    fn validate_serve_dependencies(&self, serve: &Serve) -> AnyResult<()> {
+        for package in &serve.deps {
+            let (kind, required_runner) = match package.backend {
+                DependencyBackend::Default => continue,
+                DependencyBackend::Mise => (ArtifactKind::Docker, "a Docker runtime image"),
+                DependencyBackend::Wasmer => (ArtifactKind::Wasmer, "--runner=wasmer"),
+            };
+            anyhow::ensure!(
+                self.artifact_kinds().contains(&kind),
+                "serve_deps: {package} requires {required_runner}; selected runner is {}",
+                self.runner_name()
+            );
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -647,6 +683,9 @@ impl Anybuild {
             &environment_options(&options.build_environment, &options.runtime_environment),
             context,
         )?;
+        options
+            .runtime_environment
+            .validate_serve_dependencies(&project.serve)?;
         Ok(project_plan(&project))
     }
 
@@ -672,11 +711,14 @@ impl Anybuild {
             if skip_safe
                 && matches!(build_environment, BuildEnvironment::Docker(_))
                 && !context.serve.build.is_empty()
-                && !context
-                    .serve
-                    .build
-                    .iter()
-                    .any(|step| matches!(step, Step::Run(_)))
+                && !context.serve.build.iter().any(|step| match step {
+                    Step::Run(_) => true,
+                    Step::Use(step) => step
+                        .dependencies
+                        .iter()
+                        .any(|package| package.backend == DependencyBackend::Mise),
+                    _ => false,
+                })
             {
                 operation.emit(Event::Diagnostic {
                     level: DiagnosticLevel::Info,
@@ -689,6 +731,9 @@ impl Anybuild {
                 continue;
             }
 
+            options
+                .runtime_environment
+                .validate_serve_dependencies(&context.serve)?;
             let mut serve_env = context.serve.env.take().unwrap_or_default();
             load_env_files(&context.paths, options.env_name.as_deref(), &mut serve_env);
             context.serve.env = Some(serve_env);
@@ -848,6 +893,20 @@ impl Anybuild {
         mut options: AutoOptions,
         operation: &OperationContext,
     ) -> AnyResult<AutoOutcome> {
+        if let Some(deploy) = &options.deploy {
+            let deployer = resolve_deployer(deploy.platform.clone(), operation.clone());
+            let runner = &options.build.runtime_environment;
+            anyhow::ensure!(
+                runner
+                    .artifact_kinds()
+                    .iter()
+                    .any(|kind| deployer.artifact_kinds().contains(kind)),
+                "{} deployment requires a {} artifact; selected runner is {}",
+                deployer.platform_name(),
+                deployer.artifact_requirement(),
+                runner.runner_name()
+            );
+        }
         let paths = self.paths()?;
         let definition = self.prepare_definition(
             &paths,
@@ -1091,7 +1150,7 @@ fn build_plan_event(build: &[Step], serve: &Serve, include_prepare: bool) -> Eve
     let mut packages: IndexMap<PackageKey, (bool, bool)> = IndexMap::new();
     let mut mark_package = |package: &crate::plan::Package, build: bool, deploy: bool| {
         let key = (
-            package.name.clone(),
+            package.qualified_name(),
             package.version.clone(),
             package.architecture.clone(),
         );

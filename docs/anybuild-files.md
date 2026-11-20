@@ -219,6 +219,48 @@ Python packages continue to use `python_extra_dependencies`; Node build tools
 use `node_extra_dependencies`.
 For packages needed during the build, add `use(dep(...))` in `build_pre`.
 
+### Dependency backends
+
+An unprefixed name such as `node` uses the selected builder or runner's
+standard package mapping. A prefix selects a specific dependency backend.
+`dep()` stores the package's `backend` and `name` separately. For example,
+`dep("wasmer:wasmer/n8n").name` is `"wasmer/n8n"` and its `backend` is
+`"wasmer"`.
+
+| Prefix | Build dependencies in `use(...)` | Runtime dependencies in `serve_deps` or `extra_dependencies` |
+| ------ | --------------------------------- | ------------------------------------------------------------ |
+| `mise:` | Local and Docker builders | Docker runtime images, including Lambda container images |
+| `wasmer:` | Unsupported | Wasmer runner and Wasmer Edge |
+
+For mise, give either a short tool name or a qualified mise tool identifier.
+An omitted version selects `latest`. Local builds need `mise` on `PATH` and
+expose these tools to later build steps. A Docker build can use mise tools
+even when targeting Wasmer. A `mise:` runtime dependency requires a Docker
+image and makes a Lambda managed-runtime ZIP ineligible.
+
+```python
+use(dep("mise:aqua:BurntSushi/ripgrep", "14.1.1"))
+```
+
+For Wasmer, use `wasmer:namespace/name`. The generated `wasmer.toml` records
+the version requirement you supply, or `*` when omitted. Wasmer makes the
+dependency's filesystem available at runtime. This example uses the existing
+Node mapping to run a file from the prebuilt n8n package.
+
+```python
+serve(
+    config,
+    build(steps = []),
+    serve_deps = [dep("node", "24"), dep("wasmer:wasmer/n8n", "=2.48.4")],
+    commands = {"start": "node /n8n/wasmer-start.cjs"},
+)
+```
+
+The same syntax works in string configuration, for example
+`extra_dependencies = ["wasmer:wasmer/n8n@=2.48.4"]` with `--runner=wasmer`.
+
+### Node on Wasmer
+
 For Node apps targeting Wasmer, the optional `edgejs_engine` field accepts
 `"quickjs"` or `"external"`. Leaving it unset uses QuickJS by default.
 QuickJS uses `wasmer/edgejs-quickjs@0.2.5`, and the external engine uses

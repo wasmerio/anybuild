@@ -1,9 +1,10 @@
-use crate::plan::{snapshot, Package, RunStep, Serve, Step, UseStep};
+use crate::plan::{snapshot, DependencyBackend, Package, RunStep, Serve, Step, UseStep};
 use indexmap::IndexMap;
 
 fn package(name: &str, version: Option<&str>) -> Package {
     Package {
         name: name.to_owned(),
+        backend: DependencyBackend::Default,
         version: version.map(str::to_owned),
         architecture: None,
     }
@@ -26,10 +27,17 @@ fn serde_json_matches_the_plan_contract() {
         build: vec![
             Step::Run(run.clone()),
             Step::Use(UseStep {
-                dependencies: vec![package("node", Some("22"))],
+                dependencies: vec![
+                    package("node", Some("22")),
+                    Package::parse("mise:aqua:BurntSushi/ripgrep", Some("14.1.1"), None).unwrap(),
+                ],
             }),
         ],
-        deps: vec![package("node", Some("22")), package("bash", None)],
+        deps: vec![
+            package("node", Some("22")),
+            package("bash", None),
+            Package::parse("wasmer:wasmer/n8n", Some("=2.48.4"), None).unwrap(),
+        ],
         commands,
         cwd: None,
         prepare: Some(vec![RunStep {
@@ -61,10 +69,13 @@ fn serde_json_matches_the_plan_contract() {
                 },
                 {
                     "__type__": "UseStep",
-                    "dependencies": [{"name": "node", "version": "22"}],
+                    "dependencies": [
+                        {"name": "node", "version": "22"},
+                        {"name": "aqua:BurntSushi/ripgrep", "backend": "mise", "version": "14.1.1"},
+                    ],
                 },
             ],
-            "deps": ["node@22", "bash"],
+            "deps": ["node@22", "bash", "wasmer:wasmer/n8n@=2.48.4"],
             "commands": {"start": "node server.js"},
             "prepare": [
                 {"__type__": "RunStep", "command": "node prepare.js"},

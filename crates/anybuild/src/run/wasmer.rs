@@ -22,7 +22,7 @@ use crate::build::BuildBackend;
 use crate::common::volumes::load_volume_mappings;
 use crate::event::{Event, WasmerPackageMapping};
 use crate::operation::OperationContext;
-use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
+use crate::plan::{DependencyBackend, EnvStep, Package, RunStep, Serve, Step, UseStep};
 use crate::providers::node::{NodeRuntimeConfigFields, NodeServer};
 use crate::providers::php::PhpFramework;
 use crate::providers::python::PythonConfig;
@@ -531,6 +531,9 @@ impl WasmerRunner {
 
         let mut env: IndexMap<String, String> = IndexMap::new();
         for dep in &serve.deps {
+            if dep.backend != DependencyBackend::Default {
+                continue;
+            }
             if let Some(item) = mapper().get(dep.name.as_str()) {
                 if let Some(dep_env) = item.env {
                     for (key, value) in dep_env {
@@ -607,6 +610,40 @@ impl WasmerRunner {
         None
     }
 
+    fn map_dependency(&self, dep: &Package) -> Result<(&str, &MapperItem)> {
+        let item = mapper()
+            .get(dep.name.as_str())
+            .ok_or_else(|| anyhow!("Dependency {} not found in Wasmer", dep.name))?;
+        let version = dep
+            .version
+            .as_deref()
+            .filter(|v| !v.is_empty())
+            .unwrap_or("latest");
+        let mapped_dependencies = dep
+            .architecture
+            .as_deref()
+            .filter(|a| !a.is_empty())
+            .and_then(|arch| item.architecture_dependencies.get(arch))
+            .filter(|deps| !deps.is_empty())
+            .unwrap_or(&item.dependencies);
+        let mapped_dependency = mapped_dependencies
+            .get(version)
+            .ok_or_else(|| anyhow!("Dependency {}@{version} not found in Wasmer", dep.name))?;
+        let mapped_dependency = if dep.name == "node"
+            && self
+                .provider_config
+                .as_ref()
+                .and_then(|config| config.get("edgejs_engine"))
+                .and_then(JsonValue::as_str)
+                == Some("external")
+        {
+            EDGEJS_EXTERNAL_DEPENDENCY
+        } else {
+            mapped_dependency.as_str()
+        };
+        Ok((mapped_dependency, item))
+    }
+
     /// Port of `build_serve`: generate wasmer.toml + app.yaml.
     pub fn build_serve(&self, serve: &Serve) -> Result<()> {
         let mut doc = DocumentMut::new();
@@ -623,10 +660,11 @@ impl WasmerRunner {
             .prepare
             .as_ref()
             .is_some_and(|steps| !steps.is_empty())
-            && !deps.iter().any(|dep| dep.name == "bash")
+            && !deps.iter().any(|dep| dep.is_default_named("bash"))
         {
             deps.push(Package {
                 name: "bash".to_owned(),
+                backend: DependencyBackend::Default,
                 version: None,
                 architecture: None,
             });
@@ -640,56 +678,43 @@ impl WasmerRunner {
         let mut dependency_names: Vec<String> = Vec::new();
         let mut package_mappings = Vec::new();
         for dep in &deps {
-            let Some(item) = mapper().get(dep.name.as_str()) else {
-                bail!("Dependency {} not found in Wasmer", dep.name);
-            };
-            let version = dep
-                .version
-                .clone()
-                .filter(|v| !v.is_empty())
-                .unwrap_or_else(|| "latest".to_owned());
-            let mut mapped_dependencies = &item.dependencies;
-            if let Some(architecture) = dep.architecture.as_deref().filter(|a| !a.is_empty()) {
-                if let Some(architecture_dependencies) =
-                    item.architecture_dependencies.get(architecture)
-                {
-                    if !architecture_dependencies.is_empty() {
-                        mapped_dependencies = architecture_dependencies;
-                    }
+            let (package_name, package_version, item) = match dep.backend {
+                DependencyBackend::Default => {
+                    let (mapped, item) = self.map_dependency(dep)?;
+                    let (name, version) = mapped
+                        .split_once('@')
+                        .ok_or_else(|| anyhow!("invalid mapped dependency {mapped}"))?;
+                    (name, version, Some(item))
                 }
-            }
-            let Some(mapped_dependency) = mapped_dependencies.get(version.as_str()) else {
-                bail!("Dependency {}@{} not found in Wasmer", dep.name, version);
+                // The registry package contributes its filesystem at runtime.
+                DependencyBackend::Wasmer => (
+                    dep.name.as_str(),
+                    dep.version.as_deref().unwrap_or("*"),
+                    None,
+                ),
+                DependencyBackend::Mise => {
+                    bail!("serve_deps: {dep} requires a Docker runtime image; selected runner is wasmer")
+                }
             };
-            let mapped_dependency = if dep.name == "node"
-                && self
-                    .provider_config
-                    .as_ref()
-                    .and_then(|config| config.get("edgejs_engine"))
-                    .and_then(JsonValue::as_str)
-                    == Some("external")
-            {
-                EDGEJS_EXTERNAL_DEPENDENCY
-            } else {
-                mapped_dependency.as_str()
-            };
-            let source = dep
-                .version
-                .as_deref()
-                .filter(|version| !version.is_empty())
-                .map_or_else(
-                    || dep.name.clone(),
-                    |version| format!("{}@{version}", dep.name),
+            if let Some(existing) = dependencies.get(package_name).and_then(Item::as_str) {
+                ensure!(
+                    existing == package_version,
+                    "Conflicting requirements for Wasmer package {package_name}: {existing} and {package_version} (from {dep})"
                 );
+            } else {
+                dependencies.insert(package_name, value(package_version));
+                dependency_names.push(package_name.to_owned());
+            }
+            let mut source = dep.qualified_name();
+            if let Some(version) = dep.version.as_deref().filter(|version| !version.is_empty()) {
+                source.push('@');
+                source.push_str(version);
+            }
             package_mappings.push(WasmerPackageMapping {
                 source,
-                target: mapped_dependency.to_owned(),
+                target: format!("{package_name}@{package_version}"),
             });
-            let (package_name, package_version) = mapped_dependency
-                .split_once('@')
-                .ok_or_else(|| anyhow!("invalid mapped dependency {mapped_dependency}"))?;
-            dependencies.insert(package_name, value(package_version));
-            dependency_names.push(package_name.to_owned());
+            let Some(item) = item else { continue };
             for (binary, script) in item
                 .scripts
                 .iter()
@@ -944,9 +969,15 @@ impl WasmerRunner {
             yaml_config.insert(yaml_str("volumes"), YamlValue::Sequence(volumes_yaml));
         }
 
-        let has_php = serve.deps.iter().any(|dep| dep.name == "php");
-        let has_phpix = serve.deps.iter().any(|dep| dep.name == "phpix");
-        if has_php || has_phpix || serve.deps.iter().any(|dep| dep.name == "sendmail") {
+        let has_php = serve.deps.iter().any(|dep| dep.is_default_named("php"));
+        let has_phpix = serve.deps.iter().any(|dep| dep.is_default_named("phpix"));
+        if has_php
+            || has_phpix
+            || serve
+                .deps
+                .iter()
+                .any(|dep| dep.is_default_named("sendmail"))
+        {
             yaml_config.insert(yaml_str("enable_email"), YamlValue::Bool(true));
         }
         let build_deps: Vec<&Package> = serve
@@ -960,7 +991,7 @@ impl WasmerRunner {
             .collect();
         let is_built_with_go = build_deps
             .iter()
-            .any(|dep| dep.name == "go" || dep.name == "go-wasix");
+            .any(|dep| dep.is_default_named("go") || dep.is_default_named("go-wasix"));
 
         // Note: phpix is multi-threaded, so this is only needed for raw php server and go.
         if (has_php && !has_phpix) || is_built_with_go {
@@ -1143,9 +1174,10 @@ impl Runner for WasmerRunner {
                 let mut deps: Vec<Package> = Vec::new();
                 let mut found_go = false;
                 for package in &use_step.dependencies {
-                    if package.name == "go" {
+                    if package.is_default_named("go") {
                         deps.push(Package {
                             name: "go-wasix".to_owned(),
+                            backend: DependencyBackend::Default,
                             version: None,
                             architecture: None,
                         });
@@ -1409,11 +1441,7 @@ mod tests {
     }
 
     fn package(name: &str, version: Option<&str>, architecture: Option<&str>) -> Package {
-        Package {
-            name: name.to_owned(),
-            version: version.map(str::to_owned),
-            architecture: architecture.map(str::to_owned),
-        }
+        Package::parse(name, version, architecture).unwrap()
     }
 
     fn serve(
@@ -1455,6 +1483,61 @@ mod tests {
             .unwrap()
             .parse::<DocumentMut>()
             .unwrap()
+    }
+
+    #[test]
+    fn wasmer_registry_dependency_supplies_files_for_the_node_start_command() {
+        for (version, expected) in [(None, "*"), (Some("=2.48.4"), "=2.48.4")] {
+            let tmp = tempfile::tempdir().unwrap();
+            let runner = make_runner(tmp.path());
+            let serve = serve(
+                "n8n",
+                "node",
+                vec![
+                    package("node", Some("24"), None),
+                    package("wasmer:wasmer/n8n", version, None),
+                ],
+                None,
+                &[("start", "node /n8n/wasmer-start.cjs")],
+            );
+            runner.build_serve(&serve).unwrap();
+            let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
+            assert_eq!(
+                manifest["dependencies"]["wasmer/n8n"].as_str(),
+                Some(expected)
+            );
+            let commands = manifest["command"].as_array_of_tables().unwrap();
+            let start = commands.get(0).unwrap();
+            assert_eq!(start["module"].as_str(), Some("wasmer/edgejs-quickjs:edge"));
+            let args = start["annotations"]["wasi"]["main-args"]
+                .as_array()
+                .unwrap();
+            assert!(args
+                .iter()
+                .any(|arg| arg.as_str() == Some("/n8n/wasmer-start.cjs")));
+        }
+    }
+
+    #[test]
+    fn explicit_wasmer_pin_cannot_replace_a_runtime_mapping() {
+        let tmp = tempfile::tempdir().unwrap();
+        let runner = make_runner(tmp.path());
+        let mut serve = serve(
+            "app",
+            "node",
+            vec![
+                package("node", Some("24"), None),
+                package("wasmer:wasmer/edgejs-quickjs", Some("=0.2.6"), None),
+            ],
+            None,
+            &[("start", "node server.js")],
+        );
+        let error = runner.build_serve(&serve).unwrap_err().to_string();
+        assert!(error.contains("Conflicting requirements for Wasmer package wasmer/edgejs-quickjs"));
+        serve.deps[1].version = Some("=0.2.5".to_owned());
+        runner.build_serve(&serve).unwrap();
+        let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
+        assert_eq!(manifest["dependencies"].as_table().unwrap().len(), 1);
     }
 
     #[test]
@@ -2326,6 +2409,11 @@ mod tests {
     fn test_prepare_build_steps_swaps_go_for_go_wasix() {
         let tmp = tempfile::tempdir().unwrap();
         let runner = make_runner(tmp.path());
+        let mise_steps = vec![Step::Use(UseStep {
+            dependencies: vec![package("mise:go", Some("1.22"), None)],
+        })];
+        assert_eq!(runner.prepare_build_steps(mise_steps.clone()), mise_steps);
+
         let steps = vec![Step::Use(UseStep {
             dependencies: vec![package("go", Some("1.22"), None)],
         })];

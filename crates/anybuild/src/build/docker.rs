@@ -14,7 +14,7 @@ use indexmap::IndexMap;
 use sha2::{Digest, Sha256};
 
 use crate::operation::OperationContext;
-use crate::plan::{Mount, Package, Step};
+use crate::plan::{DependencyBackend, Mount, Package, Step};
 
 use crate::build::BuildBackend;
 
@@ -60,16 +60,29 @@ fn mise_postinstall(dependency: &str) -> Option<&'static str> {
     }
 }
 
-pub(crate) fn dependency_install_contents(dependency: &Package) -> String {
+pub(crate) fn dependency_install_contents(dependency: &Package) -> Result<String> {
+    match dependency.backend {
+        DependencyBackend::Default => {}
+        DependencyBackend::Mise => {
+            let spec = dependency.mise_tool_spec();
+            let command = serde_json::to_string(&["mise", "use", "--global", "--", &spec])?;
+            return Ok(format!(
+                "RUN --mount=type=cache,target=/mise/cache,sharing=locked {command}\n"
+            ));
+        }
+        DependencyBackend::Wasmer => {
+            bail!("Dependency {dependency} requires the Wasmer runner")
+        }
+    }
     let mut contents = String::new();
     if dependency.name == "bash" {
-        return contents;
+        return Ok(contents);
     }
     if dependency.name == "sendmail" {
         contents.push_str(
             "RUN --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt/lists,sharing=locked if ! command -v sendmail >/dev/null 2>&1; then rm -f /etc/apt/apt.conf.d/docker-clean && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install sendmail-bin; fi\n",
         );
-        return contents;
+        return Ok(contents);
     }
     if dependency.name == "pie" {
         contents.push_str(
@@ -78,14 +91,14 @@ pub(crate) fn dependency_install_contents(dependency: &Package) -> String {
         contents.push_str(
             "RUN curl -L --output /usr/bin/pie https://github.com/php/pie/releases/download/1.2.0/pie.phar && chmod +x /usr/bin/pie\n",
         );
-        return contents;
+        return Ok(contents);
     }
     if dependency.name == "composer" {
         let version = dependency.version.as_deref().unwrap_or("2.9.2");
         contents.push_str(&format!(
             "RUN curl -L --output /usr/bin/composer https://github.com/composer/composer/releases/download/{version}/composer.phar && chmod +x /usr/bin/composer\n"
         ));
-        return contents;
+        return Ok(contents);
     }
     if dependency.name == "static-web-server" {
         if let Some(version) = dependency.version.as_deref() {
@@ -94,7 +107,7 @@ pub(crate) fn dependency_install_contents(dependency: &Package) -> String {
         contents.push_str(
             "RUN curl --proto '=https' --tlsv1.2 -sSfL https://get.static-web-server.net | sh\n",
         );
-        return contents;
+        return Ok(contents);
     }
 
     let package_name = mise_source(&dependency.name).unwrap_or(dependency.name.as_str());
@@ -110,7 +123,7 @@ pub(crate) fn dependency_install_contents(dependency: &Package) -> String {
     if let Some(postinstall) = mise_postinstall(&dependency.name) {
         contents.push_str(&format!("RUN {postinstall}\n"));
     }
-    contents
+    Ok(contents)
 }
 
 /// The build-stage preamble (verbatim from docker.py).
@@ -477,7 +490,7 @@ impl DockerBuildBackend {
                 }
                 Step::Use(step) => {
                     for dependency in &step.dependencies {
-                        docker_file_contents.push_str(&dependency_install_contents(dependency));
+                        docker_file_contents.push_str(&dependency_install_contents(dependency)?);
                     }
                 }
             }
@@ -761,10 +774,11 @@ mod tests {
 
         let dependency = Package {
             name: "sendmail".to_owned(),
+            backend: DependencyBackend::Default,
             version: None,
             architecture: None,
         };
-        let contents = dependency_install_contents(&dependency);
+        let contents = dependency_install_contents(&dependency).unwrap();
         let script = &contents[contents.find("if ! command").unwrap()..];
         for installed in [false, true] {
             let temporary = tempfile::tempdir().unwrap();
@@ -823,21 +837,31 @@ mod tests {
                 dependencies: vec![
                     Package {
                         name: "php".to_owned(),
+                        backend: DependencyBackend::Default,
                         version: Some("8.3".to_owned()),
                         architecture: None,
                     },
                     Package {
                         name: "composer".to_owned(),
+                        backend: DependencyBackend::Default,
                         version: None,
                         architecture: None,
                     },
                     Package {
                         name: "node".to_owned(),
+                        backend: DependencyBackend::Default,
                         version: None,
                         architecture: None,
                     },
                     Package {
                         name: "bash".to_owned(),
+                        backend: DependencyBackend::Default,
+                        version: None,
+                        architecture: None,
+                    },
+                    Package {
+                        name: "jq".to_owned(),
+                        backend: DependencyBackend::Mise,
                         version: None,
                         architecture: None,
                     },
@@ -898,6 +922,7 @@ mod tests {
             "RUN --mount=type=cache,target=/mise/cache,sharing=locked mise use --global \"node\"\n"
         ));
         assert!(!contents.contains("mise use --global \"bash\"\n"));
+        assert!(contents.contains(r#"["mise","use","--global","--","jq@latest"]"#));
         assert!(contents.contains("ENV FOO=bar\n"));
         assert!(contents.contains("ENV PATH=/custom/bin:$PATH\n"));
         assert_eq!(env.get("FOO"), Some(&"bar".to_owned()));

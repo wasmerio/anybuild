@@ -12,7 +12,7 @@ use crate::build::docker::dependency_install_contents;
 use crate::build::BuildBackend;
 use crate::internal::volumes::load_volume_mappings;
 use crate::operation::OperationContext;
-use crate::plan::{RunStep, Serve, Step};
+use crate::plan::{DependencyBackend, RunStep, Serve, Step};
 use crate::run::{HostMount, Runner};
 use crate::RuntimeArtifact;
 
@@ -155,25 +155,26 @@ impl DockerRunner {
         );
         let mut contents = String::from(TOOLCHAIN_STAGE);
         let uses_mise = serve.deps.iter().any(|dependency| {
-            !matches!(
-                dependency.name.as_str(),
-                "bash" | "composer" | "pie" | "sendmail" | "static-web-server"
-            )
+            dependency.backend == DependencyBackend::Mise
+                || !matches!(
+                    dependency.name.as_str(),
+                    "bash" | "composer" | "pie" | "sendmail" | "static-web-server"
+                )
         });
         if uses_mise {
             contents.push_str(MISE_SETUP);
         }
         for dependency in &serve.deps {
-            if dependency.name != "sendmail" {
-                contents.push_str(&dependency_install_contents(dependency));
+            if !dependency.is_default_named("sendmail") {
+                contents.push_str(&dependency_install_contents(dependency)?);
             }
         }
         contents.push_str(RUNTIME_STAGE);
         // Sendmail needs its distro configuration and libraries in the final
         // image, rather than a binary copied out of the toolchain stage.
         for dependency in &serve.deps {
-            if dependency.name == "sendmail" {
-                contents.push_str(&dependency_install_contents(dependency));
+            if dependency.is_default_named("sendmail") {
+                contents.push_str(&dependency_install_contents(dependency)?);
             }
         }
         contents.push_str(&format!(
@@ -188,7 +189,7 @@ impl DockerRunner {
         } else if serve
             .deps
             .iter()
-            .any(|dependency| dependency.name == "static-web-server")
+            .any(|dependency| dependency.is_default_named("static-web-server"))
         {
             contents.push_str(
                 "COPY --from=runtime-tools /usr/local/bin/static-web-server /usr/local/bin/static-web-server\n",
@@ -197,11 +198,15 @@ impl DockerRunner {
         if serve
             .deps
             .iter()
-            .any(|dependency| dependency.name == "composer")
+            .any(|dependency| dependency.is_default_named("composer"))
         {
             contents.push_str("COPY --from=runtime-tools /usr/bin/composer /usr/bin/composer\n");
         }
-        if serve.deps.iter().any(|dependency| dependency.name == "pie") {
+        if serve
+            .deps
+            .iter()
+            .any(|dependency| dependency.is_default_named("pie"))
+        {
             contents.push_str("COPY --from=runtime-tools /usr/bin/pie /usr/bin/pie\n");
         }
 
@@ -520,6 +525,7 @@ mod tests {
             build: Vec::new(),
             deps: vec![Package {
                 name: "node".to_owned(),
+                backend: DependencyBackend::Default,
                 version: Some("22".to_owned()),
                 architecture: None,
             }],
@@ -573,6 +579,25 @@ mod tests {
     }
 
     #[test]
+    fn dockerfile_installs_qualified_mise_serve_tools() {
+        let temporary = tempfile::tempdir().unwrap();
+        let runner = runner(temporary.path());
+        let mut serve = serve();
+        for (name, version) in [("aqua:BurntSushi/ripgrep", "14.1.1"), ("sendmail", "1.0.0")] {
+            serve.deps =
+                vec![Package::parse(&format!("mise:{name}"), Some(version), None).unwrap()];
+            let dockerfile = runner.dockerfile_contents(&serve).unwrap();
+            let (tools, runtime) = dockerfile.split_once(RUNTIME_STAGE).unwrap();
+            assert!(tools.contains(MISE_SETUP));
+            assert!(tools.contains(&format!(
+                r#"["mise","use","--global","--","{name}@{version}"]"#
+            )));
+            assert!(runtime.contains("COPY --from=runtime-tools /mise /mise"));
+            assert!(!dockerfile.contains("install sendmail-bin"));
+        }
+    }
+
+    #[test]
     fn dockerfile_installs_sendmail_in_the_final_runtime_without_mise() {
         for with_node in [false, true] {
             let temporary = tempfile::tempdir().unwrap();
@@ -583,6 +608,7 @@ mod tests {
             }
             serve.deps.push(Package {
                 name: "sendmail".to_owned(),
+                backend: DependencyBackend::Default,
                 version: None,
                 architecture: None,
             });

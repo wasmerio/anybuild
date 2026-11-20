@@ -134,7 +134,7 @@ impl Runner for LambdaRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::{Mount, Package};
+    use crate::plan::{DependencyBackend, Mount, Package};
 
     struct TestBackend {
         root: PathBuf,
@@ -198,6 +198,7 @@ mod tests {
             build: Vec::new(),
             deps: vec![Package {
                 name: "node".to_owned(),
+                backend: DependencyBackend::Default,
                 version: Some("24".to_owned()),
                 architecture: None,
             }],

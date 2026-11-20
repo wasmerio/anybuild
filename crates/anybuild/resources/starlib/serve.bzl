@@ -94,11 +94,12 @@ def _configured_dependencies(config):
     )
     for spec in specs:
         parts = spec.rsplit("@", 1)
-        if len(parts) == 2 and parts[0] and parts[1]:
+        # In mise:npm:@scope/tool the first @ is part of the tool identifier.
+        if len(parts) == 2 and parts[0] and parts[1] and not parts[0].endswith(":"):
             dependency = dep(parts[0], parts[1])
         else:
             dependency = dep(spec)
-        dependencies[dependency.name] = dependency
+        dependencies[(dependency.backend, dependency.name)] = dependency
     return dependencies.values()
 
 def serve(

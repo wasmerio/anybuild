@@ -43,6 +43,7 @@ impl<'v> StarlarkValue<'v> for PackageValue {
     fn get_attr(&self, attribute: &str, heap: Heap<'v>) -> Option<Value<'v>> {
         match attribute {
             "name" => Some(heap.alloc(self.0.name.as_str())),
+            "backend" => Some(heap.alloc(self.0.backend.as_str())),
             "version" => Some(alloc_opt_str(heap, &self.0.version)),
             "architecture" => Some(alloc_opt_str(heap, &self.0.architecture)),
             _ => None,

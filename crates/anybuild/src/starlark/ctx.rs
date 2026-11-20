@@ -21,8 +21,8 @@ use starlark::values::{Value, ValueLike};
 
 use crate::plan::layout::MountLayout;
 use crate::plan::{
-    CopyStep, EnvStep, Mount, Package, PathStep, RunStep, Serve, Service, Step, UseStep, Volume,
-    WorkdirStep, WriteFileStep,
+    CopyStep, DependencyBackend, EnvStep, Mount, Package, PathStep, RunStep, Serve, Service, Step,
+    UseStep, Volume, WorkdirStep, WriteFileStep,
 };
 use crate::starlark::config::{ConfigResolutionOptions, ConfigValue, ResolvedConfig};
 
@@ -300,11 +300,7 @@ pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
         version: Option<NoneOr<&str>>,
         architecture: Option<NoneOr<&str>>,
     ) -> anyhow::Result<PackageValue> {
-        Ok(PackageValue(Package {
-            name: name.to_owned(),
-            version: flat(version).map(str::to_owned),
-            architecture: flat(architecture).map(str::to_owned),
-        }))
+        Package::parse(name, flat(version), flat(architecture)).map(PackageValue)
     }
 
     fn service(name: &str, provider: &str) -> anyhow::Result<ServiceValue> {
@@ -377,6 +373,11 @@ pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
             .iter()
             .map(|v| package_from(*v)?.ok_or_else(|| anyhow!("use() does not accept None")))
             .collect::<Result<Vec<Package>>>()?;
+        for package in &dependencies {
+            if package.backend == DependencyBackend::Wasmer {
+                bail!("Build dependency {package} requires serve_deps with the Wasmer runner");
+            }
+        }
         Ok(StepValue(Step::Use(UseStep { dependencies })))
     }
 
