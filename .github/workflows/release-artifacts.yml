@@ -59,6 +59,8 @@ jobs:
           if [ -z "$checkout_ref" ]; then
             checkout_ref="$(jq -r '.targetCommitish' <<<"$release_json")"
           fi
+          checkout_ref="$(gh api \
+            "repos/$GITHUB_REPOSITORY/commits/$checkout_ref" --jq '.sha')"
           version="${TAG_NAME#v}"
           if [ -z "$version" ] || [ "$version" = "$TAG_NAME" ]; then
             echo "::error::Expected a v-prefixed release tag, got $TAG_NAME"
@@ -155,3 +157,16 @@ jobs:
       BACKEND_PR_TOKEN: ${{ secrets.BACKEND_PR_TOKEN }}
     permissions:
       contents: read
+
+  publish_crates:
+    name: Publish crates after GitHub release
+    needs:
+      - resolve
+      - publish
+    uses: ./.github/workflows/publish-crates.yml
+    with:
+      tag_name: ${{ inputs.tag_name }}
+      release_sha: ${{ needs.resolve.outputs.checkout_ref }}
+    permissions:
+      contents: read
+      id-token: write

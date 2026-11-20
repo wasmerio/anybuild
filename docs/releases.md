@@ -1,4 +1,62 @@
-# Backend release updates
+# Releases
+
+## Crates.io publishing
+
+Release Please coordinates one version for the workspace, `anybuild`, and
+`anybuild-cli`, including the CLI's dependency on the SDK. Release Artifacts
+builds the binaries and publishes the GitHub release, then calls Publish
+Crates with the same release commit. The SDK is published before the CLI.
+
+Publish Crates verifies the published release tag, commit, package versions,
+and SDK dependency before building the crate archives. It obtains a temporary
+crates.io token using `rust-lang/crates-io-auth-action`; no crates.io token
+secret is needed in GitHub. Only runs on `wasmerio/anybuild`'s `main` branch
+can publish, using the `crates-io` GitHub environment.
+
+### Initial publish and trusted publisher setup
+
+Both crates must exist before crates.io permits trusted publisher setup.
+For the first publish, use a clean checkout of the release tag and a local
+crates.io API token with permission to create both crates:
+
+```sh
+git checkout v0.34.0
+cargo publish --locked --registry crates-io --dry-run \
+  -p anybuild -p anybuild-cli
+cargo publish --locked --registry crates-io -p anybuild
+cargo publish --locked --registry crates-io -p anybuild-cli
+```
+
+Create the GitHub environment `crates-io` with a deployment branch policy
+allowing only `main`. In each crate's Settings → Trusted Publishing, add
+GitHub configurations with owner `wasmerio`, repository
+`anybuild`, and environment `crates-io` for these workflow filenames:
+
+- `release-please.yml`: automatic releases from merged release PRs.
+- `release-artifacts.yml`: manually dispatched artifact builds.
+- `publish-crates.yml`: manual crate publication retries and backfills.
+
+Crates.io checks the calling workflow's OIDC `workflow_ref`, so all three
+entry points need a configuration even though they share Publish Crates.
+The `id-token: write` permission is passed through each reusable workflow
+call and granted to the publishing job. See the
+[crates.io trusted publishing documentation][trusted-publishing].
+
+### Crate retries and backfills
+
+Run Publish Crates manually from `main`, supplying a published tag such as
+`v0.34.0`. The workflow uses current publishing automation with the source
+from that release tag, so releases predating the workflow are supported.
+Existing versions are skipped, allowing a retry after only the SDK was
+published. A yanked version or a registry failure stops publication.
+
+Run the release planning tests locally with:
+
+```sh
+python3 -m unittest discover -s scripts -p test_crate_release.py
+```
+
+## Backend release updates
 
 After Release Artifacts uploads all platform binaries and `SHA256SUMS` and
 publishes the release, it calls Update Backend Anybuild. That workflow
@@ -15,7 +73,7 @@ call from Release Artifacts is necessary because releases published with
 `GITHUB_TOKEN` do not trigger another release-event workflow. See
 [GitHub's token documentation][gh-token].
 
-## Credential setup
+### Credential setup
 
 Add the Actions secret `BACKEND_PR_TOKEN` to `wasmerio/anybuild`, or expose an
 organization secret with that name to the repository. Use a fine-grained
@@ -30,7 +88,7 @@ The ordinary Anybuild `GITHUB_TOKEN` cannot write to the backend repository.
 The backend credential is used only for the backend API calls; release
 validation uses Anybuild's own token. No backend code is executed.
 
-## Retries and backfills
+### Retries and backfills
 
 Run Update Backend Anybuild manually and supply the release tag, for example
 `v0.29.0`. This also recovers a release whose binaries were attached after
@@ -70,3 +128,4 @@ For unauthenticated local pulls, set the package visibility to Public in
 package settings and verify an unauthenticated pull.
 
 [gh-token]: https://docs.github.com/en/actions/concepts/security/github_token
+[trusted-publishing]: https://crates.io/docs/trusted-publishing

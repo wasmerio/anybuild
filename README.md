@@ -16,6 +16,12 @@ curl -fsSL https://anybuild.run/install | sh
 anybuild .
 ```
 
+Or install the CLI from crates.io:
+
+```sh
+cargo install --locked anybuild-cli
+```
+
 Running in `auto` mode will generate the `Anybuild` file when needed, build the
 project, and can also run it. Anybuild picks the safest builder automatically
 and falls back to Docker or Wasmer when requested:
@@ -331,7 +337,11 @@ Anybuild works with three execution environments:
 ## Rust SDK
 
 The `anybuild` crate exposes the same project pipeline without invoking the
-CLI:
+CLI. Add it to your project with:
+
+```sh
+cargo add anybuild
+```
 
 ```rust
 use anybuild::{Anybuild, BuildOptions, RunOptions};

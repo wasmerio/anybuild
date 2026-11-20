@@ -30,6 +30,9 @@ jobs:
       - name: Test backend release updates
         run: node --test scripts/backend-release-pr.test.cjs
 
+      - name: Test crate release planning
+        run: python3 -m unittest discover -s scripts -p test_crate_release.py
+
   test_and_e2e:
     name: Test + E2E
     uses: ./.github/workflows/reusable-test-e2e.yml

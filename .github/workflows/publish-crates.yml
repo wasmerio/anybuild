@@ -1,0 +1,122 @@
+name: Publish Crates
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        description: Published GitHub release tag to publish to crates.io.
+        required: true
+        type: string
+      release_sha:
+        description: Expected release commit, when called by Release Artifacts.
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Published GitHub release tag to publish or retry.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-crates-${{ inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish SDK and CLI
+    if: github.repository == 'wasmerio/anybuild' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: release-source
+
+    steps:
+      - name: Validate published release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a stable vX.Y.Z release tag"
+            exit 1
+          fi
+          gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease | \
+            jq -e '.isDraft == false and .isPrerelease == false'
+
+      - name: Checkout publishing automation
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag_name }}
+          path: release-source
+          persist-credentials: false
+
+      - name: Verify release commit
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          if [ -n "$RELEASE_SHA" ] && \
+            [ "$(git rev-parse HEAD)" != "$RELEASE_SHA" ]; then
+            echo "::error::Release tag does not match the expected commit"
+            exit 1
+          fi
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: release-source -> target
+
+      - name: Select unpublished crates and validate versions
+        id: plan
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          python3 ../scripts/crate_release.py "${TAG_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify crate packages
+        if: steps.plan.outputs.packages != ''
+        env:
+          PACKAGES: ${{ steps.plan.outputs.packages }}
+        run: |
+          read -r -a crates <<< "$PACKAGES"
+          args=()
+          for crate in "${crates[@]}"; do
+            args+=(-p "$crate")
+          done
+          cargo publish --locked --registry crates-io --dry-run "${args[@]}"
+
+      - name: Authenticate to crates.io
+        if: steps.plan.outputs.packages != ''
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish SDK before CLI
+        if: steps.plan.outputs.packages != ''
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          PACKAGES: ${{ steps.plan.outputs.packages }}
+        run: |
+          read -r -a crates <<< "$PACKAGES"
+          for crate in "${crates[@]}"; do
+            cargo publish --locked --registry crates-io -p "$crate"
+          done
