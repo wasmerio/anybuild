@@ -68,7 +68,7 @@ dependencies = [
 
 [[package]]
 name = "anybuild"
-version = "0.33.0"
+version = "0.33.3"
 dependencies = [
  "allocative",
  "anyhow",
@@ -79,6 +79,7 @@ dependencies = [
  "indexmap",
  "path-clean",
  "regex",
+ "semver",
  "serde",
  "serde_json",
  "serde_yaml",

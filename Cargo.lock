@@ -129,6 +129,7 @@ dependencies = [
  "indexmap",
  "path-clean",
  "regex",
+ "semver",
  "serde",
  "serde_json",
  "serde_yaml",

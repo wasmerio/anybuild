@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex};
 use anybuild::plan::Step;
 use anybuild::{
     Anybuild, AutoOptions, AwsLambdaOptions, BuildOptions, DeployOptions, DeployOutcome,
-    DeployTarget, DeploymentPlatform, Event, FlyOptions, GenerateOptions, GenerationCheckStatus,
-    GenerationPolicy, PlanOptions, ProcessIo, RunOptions, RuntimeArtifact, RuntimeEnvironment,
-    WasmerOptions,
+    DeployTarget, DeploymentPlatform, DockerOptions, Event, FlyOptions, GenerateOptions,
+    GenerationCheckStatus, GenerationPolicy, PlanOptions, ProcessIo, RunOptions, RuntimeArtifact,
+    RuntimeEnvironment, WasmerOptions,
 };
 
 fn static_project() -> tempfile::TempDir {
@@ -966,6 +966,171 @@ fn edgejs_engine_is_optional_and_configurable() {
         let error = invalid.plan(PlanOptions::default()).unwrap_err();
         assert!(format!("{error:#}").contains("ANYBUILD_EDGEJS_ENGINE"));
     }
+}
+
+#[test]
+fn mise_serve_dependency_cannot_target_wasmer() {
+    let project = static_project();
+    std::fs::write(
+        project.path().join("Anybuild"),
+        r#"
+load("//anybuild:serve.bzl", "build", "serve")
+load("//anybuild/tools:staticfile.bzl", "staticfile_config")
+
+serve(
+    staticfile_config(),
+    build(steps = [run("touch build-started")]),
+    serve_deps = [dep("mise:aqua:BurntSushi/ripgrep", "14.1.1")],
+    commands = {"start": "true"},
+)
+"#,
+    )
+    .unwrap();
+    let sdk = Anybuild::new(project.path());
+    let wasmer = RuntimeEnvironment::Wasmer(WasmerOptions::default());
+    let plan_error = sdk
+        .plan(PlanOptions {
+            runtime_environment: wasmer.clone(),
+            ..Default::default()
+        })
+        .unwrap_err();
+    let build_error = sdk
+        .build(BuildOptions {
+            runtime_environment: wasmer.clone(),
+            ..Default::default()
+        })
+        .unwrap_err();
+    let deploy_error = sdk
+        .auto(AutoOptions {
+            build: BuildOptions {
+                runtime_environment: wasmer,
+                ..Default::default()
+            },
+            deploy: Some(DeployOptions {
+                platform: DeploymentPlatform::Wasmer(WasmerOptions::default()),
+                target: DeployTarget::WriteConfig {
+                    path: project.path().join("deploy.json"),
+                },
+                process_io: ProcessIo::Events,
+            }),
+            ..Default::default()
+        })
+        .unwrap_err();
+    for error in [plan_error, build_error, deploy_error] {
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("serve_deps: mise:aqua:BurntSushi/ripgrep@14.1.1"),
+            "{message}"
+        );
+        assert!(
+            message.contains("requires a Docker runtime image"),
+            "{message}"
+        );
+        assert!(message.contains("selected runner is wasmer"), "{message}");
+    }
+    assert!(!project
+        .path()
+        .join(".anybuild/local/build/build-started")
+        .exists());
+    assert!(!project.path().join(".anybuild/artifact.json").exists());
+
+    for runtime in [
+        RuntimeEnvironment::Docker(DockerOptions::default()),
+        RuntimeEnvironment::Lambda(DockerOptions::default()),
+    ] {
+        let plan = sdk
+            .plan(PlanOptions {
+                runtime_environment: runtime,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            plan.serve.deps[0].to_string(),
+            "mise:aqua:BurntSushi/ripgrep@14.1.1"
+        );
+    }
+}
+
+#[test]
+fn configured_mise_dependencies_keep_scoped_tool_identifiers() {
+    let project = static_project();
+    let plan = Anybuild::new(project.path())
+        .with_config(serde_json::json!({
+            "extra_dependencies": ["mise:npm:@scope/tool", "mise:npm:@scope/pinned@1.2.3"]
+        }))
+        .plan(PlanOptions {
+            runtime_environment: RuntimeEnvironment::Docker(DockerOptions::default()),
+            ..Default::default()
+        })
+        .unwrap();
+    let matches = |name: &str, version| {
+        plan.serve
+            .deps
+            .iter()
+            .any(|dep| dep.name == name && dep.version.as_deref() == version)
+    };
+    assert!(matches("mise:npm:@scope/tool", None));
+    assert!(matches("mise:npm:@scope/pinned", Some("1.2.3")));
+}
+
+#[cfg(unix)]
+#[test]
+fn local_mise_dependency_is_available_only_in_build_steps() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let project = static_project();
+    let fake_mise = project.path().join("mise");
+    let tool_bin = project.path().join("tool-bin");
+    std::fs::create_dir(&tool_bin).unwrap();
+    let tool = tool_bin.join("example-tool");
+    std::fs::write(&tool, "#!/bin/sh\necho installed\n").unwrap();
+    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(
+        &fake_mise,
+        r#"#!/bin/sh
+test "$2" = -- && test "$3" = aqua:example/example-tool@1.2.3 || exit 2
+case "$1" in
+  install) echo "$3" > mise-installed ;;
+  bin-paths) test -f mise-installed && printf '%s\n' "$TOOL_BIN" ;;
+  *) exit 2 ;;
+esac
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_mise, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(
+        project.path().join("Anybuild"),
+        r#"
+load("//anybuild/tools:staticfile.bzl", "staticfile_config")
+
+config = staticfile_config()
+serve(
+    name = "app",
+    provider = "staticfile",
+    build = [
+        use(dep("mise:aqua:example/example-tool", "1.2.3")),
+        run("example-tool > result"),
+    ],
+    deps = [],
+    commands = {"start": "true"},
+)
+"#,
+    )
+    .unwrap();
+    let sdk = Anybuild::new(project.path())
+        .inherit_process_env(false)
+        .with_env(
+            "PATH",
+            format!("{}:/usr/bin:/bin", project.path().display()),
+        )
+        .with_env("TOOL_BIN", tool_bin.to_str().unwrap());
+    let outcome = sdk.build(BuildOptions::default()).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(outcome.state_dir.join("local/build/result")).unwrap(),
+        "installed\n"
+    );
+    let start = std::fs::read_to_string(outcome.state_dir.join("runner/local/bin/start")).unwrap();
+    assert!(!start.contains(tool_bin.to_str().unwrap()));
 }
 
 #[test]

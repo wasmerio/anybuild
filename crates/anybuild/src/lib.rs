@@ -6,6 +6,7 @@
 mod artifact;
 mod build;
 mod common;
+mod dependency;
 mod deploy;
 mod error;
 mod event;

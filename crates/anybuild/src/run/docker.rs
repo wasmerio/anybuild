@@ -165,7 +165,7 @@ impl DockerRunner {
         }
         for dependency in &serve.deps {
             if dependency.name != "sendmail" {
-                contents.push_str(&dependency_install_contents(dependency));
+                contents.push_str(&dependency_install_contents(dependency)?);
             }
         }
         contents.push_str(RUNTIME_STAGE);
@@ -173,7 +173,7 @@ impl DockerRunner {
         // image, rather than a binary copied out of the toolchain stage.
         for dependency in &serve.deps {
             if dependency.name == "sendmail" {
-                contents.push_str(&dependency_install_contents(dependency));
+                contents.push_str(&dependency_install_contents(dependency)?);
             }
         }
         contents.push_str(&format!(
@@ -570,6 +570,26 @@ mod tests {
             DockerRunner::image_name(&serve.name),
             crate::build::docker::internal_image_name("Acme Web")
         );
+    }
+
+    #[test]
+    fn dockerfile_installs_qualified_mise_serve_tools() {
+        let temporary = tempfile::tempdir().unwrap();
+        let runner = runner(temporary.path());
+        let mut serve = serve();
+        serve.deps = vec![Package {
+            name: "mise:aqua:BurntSushi/ripgrep".to_owned(),
+            version: Some("14.1.1".to_owned()),
+            architecture: None,
+        }];
+
+        let dockerfile = runner.dockerfile_contents(&serve).unwrap();
+        let (tools, runtime) = dockerfile.split_once(RUNTIME_STAGE).unwrap();
+        assert!(tools.contains(MISE_SETUP));
+        assert!(
+            tools.contains(r#"["mise","use","--global","--","aqua:BurntSushi/ripgrep@14.1.1"]"#)
+        );
+        assert!(runtime.contains("COPY --from=runtime-tools /mise /mise"));
     }
 
     #[test]

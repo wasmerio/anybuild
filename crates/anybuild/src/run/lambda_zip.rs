@@ -11,6 +11,7 @@ use zip::ZipWriter;
 
 use crate::artifact::RuntimeArtifact;
 use crate::build::BuildBackend;
+use crate::dependency::DependencyBackend;
 use crate::plan::{Package, Serve};
 
 struct ManagedRuntime {
@@ -87,6 +88,12 @@ pub(crate) fn package(
 fn managed_runtime(dependencies: &[Package]) -> Option<ManagedRuntime> {
     let mut selected: Option<ManagedRuntime> = None;
     for dependency in dependencies {
+        if !matches!(
+            DependencyBackend::parse(dependency).ok()?,
+            DependencyBackend::Default
+        ) {
+            return None;
+        }
         let runtime = match dependency.name.as_str() {
             "bash" => continue,
             "python" => python_runtime(dependency.version.as_deref()?),
@@ -295,6 +302,22 @@ fn unix_mode(metadata: &std::fs::Metadata) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mise_serve_dependency_requires_a_container_image() {
+        let mut dependencies = vec![Package {
+            name: "node".to_owned(),
+            version: Some("24".to_owned()),
+            architecture: None,
+        }];
+        assert!(managed_runtime(&dependencies).is_some());
+        dependencies.push(Package {
+            name: "mise:aqua:BurntSushi/ripgrep".to_owned(),
+            version: Some("14.1.1".to_owned()),
+            architecture: None,
+        });
+        assert!(managed_runtime(&dependencies).is_none());
+    }
     use crate::plan::{Mount, Step};
     use indexmap::IndexMap;
 

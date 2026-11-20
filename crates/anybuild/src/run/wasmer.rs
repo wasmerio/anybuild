@@ -20,6 +20,7 @@ use toml_edit::{value, Array, ArrayOfTables, DocumentMut, Item, Table};
 
 use crate::build::BuildBackend;
 use crate::common::volumes::load_volume_mappings;
+use crate::dependency::DependencyBackend;
 use crate::event::{Event, WasmerPackageMapping};
 use crate::operation::OperationContext;
 use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
@@ -289,18 +290,6 @@ pub fn mapper() -> &'static IndexMap<&'static str, MapperItem> {
 }
 
 /// Python's `Path.absolute()`: prefix with the cwd, no normalization.
-fn is_registry_package_name(name: &str) -> bool {
-    name.split_once('/').is_some_and(|(namespace, package)| {
-        let valid = |part: &str| {
-            !part.is_empty()
-                && part
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
-        };
-        valid(namespace) && valid(package)
-    })
-}
-
 fn absolute_path(path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -619,6 +608,40 @@ impl WasmerRunner {
         None
     }
 
+    fn map_dependency(&self, dep: &Package) -> Result<(&str, &MapperItem)> {
+        let item = mapper()
+            .get(dep.name.as_str())
+            .ok_or_else(|| anyhow!("Dependency {} not found in Wasmer", dep.name))?;
+        let version = dep
+            .version
+            .as_deref()
+            .filter(|v| !v.is_empty())
+            .unwrap_or("latest");
+        let mapped_dependencies = dep
+            .architecture
+            .as_deref()
+            .filter(|a| !a.is_empty())
+            .and_then(|arch| item.architecture_dependencies.get(arch))
+            .filter(|deps| !deps.is_empty())
+            .unwrap_or(&item.dependencies);
+        let mapped_dependency = mapped_dependencies
+            .get(version)
+            .ok_or_else(|| anyhow!("Dependency {}@{version} not found in Wasmer", dep.name))?;
+        let mapped_dependency = if dep.name == "node"
+            && self
+                .provider_config
+                .as_ref()
+                .and_then(|config| config.get("edgejs_engine"))
+                .and_then(JsonValue::as_str)
+                == Some("external")
+        {
+            EDGEJS_EXTERNAL_DEPENDENCY
+        } else {
+            mapped_dependency.as_str()
+        };
+        Ok((mapped_dependency, item))
+    }
+
     /// Port of `build_serve`: generate wasmer.toml + app.yaml.
     pub fn build_serve(&self, serve: &Serve) -> Result<()> {
         let mut doc = DocumentMut::new();
@@ -652,51 +675,31 @@ impl WasmerRunner {
         let mut dependency_names: Vec<String> = Vec::new();
         let mut package_mappings = Vec::new();
         for dep in &deps {
-            let Some(item) = mapper().get(dep.name.as_str()) else {
-                // A full `namespace/name` is a Wasmer registry package: pass
-                // it through so its filesystem is mounted at runtime.
-                if is_registry_package_name(&dep.name) {
-                    let version = dep
-                        .version
-                        .clone()
-                        .filter(|v| !v.is_empty())
-                        .unwrap_or_else(|| "*".to_owned());
-                    dependencies.insert(&dep.name, value(&version));
-                    dependency_names.push(dep.name.clone());
-                    continue;
+            let (package_name, package_version, item) = match DependencyBackend::parse(dep)? {
+                DependencyBackend::Default => {
+                    let (mapped, item) = self.map_dependency(dep)?;
+                    let (name, version) = mapped
+                        .split_once('@')
+                        .ok_or_else(|| anyhow!("invalid mapped dependency {mapped}"))?;
+                    (name, version, Some(item))
                 }
-                bail!("Dependency {} not found in Wasmer", dep.name);
-            };
-            let version = dep
-                .version
-                .clone()
-                .filter(|v| !v.is_empty())
-                .unwrap_or_else(|| "latest".to_owned());
-            let mut mapped_dependencies = &item.dependencies;
-            if let Some(architecture) = dep.architecture.as_deref().filter(|a| !a.is_empty()) {
-                if let Some(architecture_dependencies) =
-                    item.architecture_dependencies.get(architecture)
-                {
-                    if !architecture_dependencies.is_empty() {
-                        mapped_dependencies = architecture_dependencies;
-                    }
+                // The registry package contributes its filesystem at runtime.
+                DependencyBackend::Wasmer(name) => {
+                    (name, dep.version.as_deref().unwrap_or("*"), None)
                 }
-            }
-            let Some(mapped_dependency) = mapped_dependencies.get(version.as_str()) else {
-                bail!("Dependency {}@{} not found in Wasmer", dep.name, version);
+                DependencyBackend::Mise(_) => {
+                    bail!("serve_deps: {dep} requires a Docker runtime image; selected runner is wasmer")
+                }
             };
-            let mapped_dependency = if dep.name == "node"
-                && self
-                    .provider_config
-                    .as_ref()
-                    .and_then(|config| config.get("edgejs_engine"))
-                    .and_then(JsonValue::as_str)
-                    == Some("external")
-            {
-                EDGEJS_EXTERNAL_DEPENDENCY
+            if let Some(existing) = dependencies.get(package_name).and_then(Item::as_str) {
+                ensure!(
+                    existing == package_version,
+                    "Conflicting requirements for Wasmer package {package_name}: {existing} and {package_version} (from {dep})"
+                );
             } else {
-                mapped_dependency.as_str()
-            };
+                dependencies.insert(package_name, value(package_version));
+                dependency_names.push(package_name.to_owned());
+            }
             let source = dep
                 .version
                 .as_deref()
@@ -707,13 +710,9 @@ impl WasmerRunner {
                 );
             package_mappings.push(WasmerPackageMapping {
                 source,
-                target: mapped_dependency.to_owned(),
+                target: format!("{package_name}@{package_version}"),
             });
-            let (package_name, package_version) = mapped_dependency
-                .split_once('@')
-                .ok_or_else(|| anyhow!("invalid mapped dependency {mapped_dependency}"))?;
-            dependencies.insert(package_name, value(package_version));
-            dependency_names.push(package_name.to_owned());
+            let Some(item) = item else { continue };
             for (binary, script) in item
                 .scripts
                 .iter()
@@ -1479,6 +1478,61 @@ mod tests {
             .unwrap()
             .parse::<DocumentMut>()
             .unwrap()
+    }
+
+    #[test]
+    fn wasmer_registry_dependency_supplies_files_for_the_node_start_command() {
+        for (version, expected) in [(None, "*"), (Some("=2.48.4"), "=2.48.4")] {
+            let tmp = tempfile::tempdir().unwrap();
+            let runner = make_runner(tmp.path());
+            let serve = serve(
+                "n8n",
+                "node",
+                vec![
+                    package("node", Some("24"), None),
+                    package("wasmer:wasmer/n8n", version, None),
+                ],
+                None,
+                &[("start", "node /n8n/wasmer-start.cjs")],
+            );
+            runner.build_serve(&serve).unwrap();
+            let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
+            assert_eq!(
+                manifest["dependencies"]["wasmer/n8n"].as_str(),
+                Some(expected)
+            );
+            let commands = manifest["command"].as_array_of_tables().unwrap();
+            let start = commands.get(0).unwrap();
+            assert_eq!(start["module"].as_str(), Some("wasmer/edgejs-quickjs:edge"));
+            let args = start["annotations"]["wasi"]["main-args"]
+                .as_array()
+                .unwrap();
+            assert!(args
+                .iter()
+                .any(|arg| arg.as_str() == Some("/n8n/wasmer-start.cjs")));
+        }
+    }
+
+    #[test]
+    fn explicit_wasmer_pin_cannot_replace_a_runtime_mapping() {
+        let tmp = tempfile::tempdir().unwrap();
+        let runner = make_runner(tmp.path());
+        let mut serve = serve(
+            "app",
+            "node",
+            vec![
+                package("node", Some("24"), None),
+                package("wasmer:wasmer/edgejs-quickjs", Some("=0.2.6"), None),
+            ],
+            None,
+            &[("start", "node server.js")],
+        );
+        let error = runner.build_serve(&serve).unwrap_err().to_string();
+        assert!(error.contains("Conflicting requirements for Wasmer package wasmer/edgejs-quickjs"));
+        serve.deps[1].version = Some("=0.2.5".to_owned());
+        runner.build_serve(&serve).unwrap();
+        let manifest = read_toml(&runner.wasmer_dir_path.join("wasmer.toml"));
+        assert_eq!(manifest["dependencies"].as_table().unwrap().len(), 1);
     }
 
     #[test]
@@ -2470,57 +2524,6 @@ mod tests {
                 command.get(0).unwrap()["module"].as_str(),
                 Some("sendmail/sendmail:sendmail")
             );
-        }
-    }
-
-    #[test]
-    fn test_wasmer_registry_package_dependency_passes_through() {
-        for (version, expected) in [(None, "*"), (Some("=2.48.4"), "=2.48.4")] {
-            let tmp = tempfile::tempdir().unwrap();
-            let runner = make_runner(tmp.path());
-            let serve = serve(
-                "n8n",
-                "node",
-                vec![
-                    package("node", None, None),
-                    package("wasmer/n8n", version, None),
-                ],
-                None,
-                &[("start", "node /n8n/wasmer-start.cjs")],
-            );
-            runner.build_serve(&serve).unwrap();
-            let manifest = std::fs::read_to_string(runner.wasmer_dir_path.join("wasmer.toml"))
-                .unwrap()
-                .parse::<DocumentMut>()
-                .unwrap();
-            assert_eq!(
-                manifest["dependencies"]["wasmer/n8n"].as_str(),
-                Some(expected)
-            );
-        }
-    }
-
-    #[test]
-    fn test_wasmer_unknown_short_dependency_still_fails() {
-        let tmp = tempfile::tempdir().unwrap();
-        let runner = make_runner(tmp.path());
-        let serve = serve(
-            "app",
-            "node",
-            vec![package("not-a-tool", None, None)],
-            None,
-            &[("start", "node server.js")],
-        );
-        let err = runner.build_serve(&serve).unwrap_err().to_string();
-        assert!(err.contains("Dependency not-a-tool not found in Wasmer"));
-    }
-
-    #[test]
-    fn test_registry_package_name() {
-        assert!(is_registry_package_name("wasmer/n8n"));
-        assert!(is_registry_package_name("php/php-64"));
-        for name in ["node", "/n8n", "wasmer/", "a/b/c", "wasmer/n 8n"] {
-            assert!(!is_registry_package_name(name), "{name}");
         }
     }
 

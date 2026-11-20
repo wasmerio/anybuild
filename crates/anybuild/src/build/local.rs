@@ -7,12 +7,13 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use indexmap::IndexMap;
 
 use crate::common::paths::normalize_absolute;
+use crate::dependency::{mise_tool_spec, DependencyBackend};
 use crate::operation::OperationContext;
-use crate::plan::{Mount, Step};
+use crate::plan::{Mount, Package, Step};
 
 use crate::build::BuildBackend;
 
@@ -277,7 +278,73 @@ impl LocalBuildBackend {
         );
     }
 
-    fn execute_step(&mut self, step: &Step, env: &mut IndexMap<String, String>) -> Result<()> {
+    fn search_paths(&self, env: &IndexMap<String, String>) -> Vec<PathBuf> {
+        // Plan PATH values are colon-separated even on non-POSIX hosts.
+        let mut paths: Vec<_> = env
+            .get("PATH")
+            .map_or("", String::as_str)
+            .split(':')
+            .map(|path| pythonic_join(&self.workdir, path))
+            .collect();
+        paths.extend(std::env::split_paths(
+            &self.operation.environment_var("PATH").unwrap_or_default(),
+        ));
+        paths
+    }
+
+    fn install_mise_tool(
+        &self,
+        tool: &str,
+        package: &Package,
+        env: &IndexMap<String, String>,
+        mise_paths: &IndexMap<String, Vec<PathBuf>>,
+    ) -> Result<Vec<PathBuf>> {
+        let paths = self.search_paths(env);
+        let mise = which("mise", &paths).with_context(|| {
+            format!("Build dependency {package} requires mise on PATH or --builder=docker")
+        })?;
+        let spec = mise_tool_spec(tool, package);
+        let path = std::env::join_paths(mise_paths.values().rev().flatten().chain(&paths))?;
+        let command = |action: &str| {
+            let mut command = Command::new(&mise);
+            command
+                .args([action, "--", &spec])
+                .env_clear()
+                .envs(env.iter())
+                .env("PATH", &path)
+                .current_dir(&self.workdir);
+            command
+        };
+        let status = self
+            .operation
+            .command_status(&mut command("install"))
+            .with_context(|| format!("Installing {package} with mise"))?;
+        ensure!(
+            status.success(),
+            "mise could not install {package}: {status}"
+        );
+
+        let output = command("bin-paths")
+            .output()
+            .with_context(|| format!("Finding binaries for {package}"))?;
+        ensure!(
+            output.status.success(),
+            "mise could not find binaries for {package}: {}",
+            String::from_utf8_lossy(&output.stderr).trim(),
+        );
+        Ok(String::from_utf8(output.stdout)?
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(PathBuf::from)
+            .collect())
+    }
+
+    fn execute_step(
+        &mut self,
+        step: &Step,
+        env: &mut IndexMap<String, String>,
+        mise_paths: &mut IndexMap<String, Vec<PathBuf>>,
+    ) -> Result<()> {
         let build_path = self.workdir.clone();
         match step {
             Step::Use(step) => {
@@ -288,6 +355,13 @@ impl LocalBuildBackend {
                     .collect::<Vec<_>>()
                     .join(", ");
                 self.report_build_step(format!("Using dependencies: {deps}"));
+                for package in &step.dependencies {
+                    if let DependencyBackend::Mise(tool) = DependencyBackend::for_build(package)? {
+                        let paths = self.install_mise_tool(tool, package, env, mise_paths)?;
+                        mise_paths.shift_remove(tool);
+                        mise_paths.insert(tool.to_owned(), paths);
+                    }
+                }
             }
             Step::Workdir(step) => {
                 self.report_build_step(format!("Working in {}", step.path.display()));
@@ -326,17 +400,13 @@ impl LocalBuildBackend {
                 let program = parts
                     .first()
                     .ok_or_else(|| anyhow!("Program is not installed: "))?;
-                let empty = String::new();
-                let env_path = env.get("PATH").unwrap_or(&empty);
-                // Plan env values are POSIX (':'-separated); the host PATH
-                // appended after them uses the platform separator.
-                let mut search_paths: Vec<PathBuf> = env_path
-                    .split(':')
-                    .map(|path| pythonic_join(&build_path, path))
+                let search_paths: Vec<_> = mise_paths
+                    .values()
+                    .rev()
+                    .flatten()
+                    .cloned()
+                    .chain(self.search_paths(env))
                     .collect();
-                search_paths.extend(std::env::split_paths(
-                    &self.operation.environment_var("PATH").unwrap_or_default(),
-                ));
                 if which(program, &search_paths).is_none() {
                     bail!("Program is not installed: {program}");
                 }
@@ -466,8 +536,9 @@ impl BuildBackend for LocalBuildBackend {
             std::fs::create_dir_all(&mount.build_path)?;
         }
         let mut env = env.clone();
+        let mut mise_paths = IndexMap::new();
         for step in steps {
-            self.execute_step(step, &mut env)?;
+            self.execute_step(step, &mut env, &mut mise_paths)?;
         }
 
         if let Some(path) = env.get("PATH") {

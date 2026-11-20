@@ -19,6 +19,7 @@ use starlark::values::none::{NoneOr, NoneType};
 use starlark::values::tuple::UnpackTuple;
 use starlark::values::{Value, ValueLike};
 
+use crate::dependency::DependencyBackend;
 use crate::plan::layout::MountLayout;
 use crate::plan::{
     CopyStep, EnvStep, Mount, Package, PathStep, RunStep, Serve, Service, Step, UseStep, Volume,
@@ -300,11 +301,13 @@ pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
         version: Option<NoneOr<&str>>,
         architecture: Option<NoneOr<&str>>,
     ) -> anyhow::Result<PackageValue> {
-        Ok(PackageValue(Package {
+        let package = Package {
             name: name.to_owned(),
             version: flat(version).map(str::to_owned),
             architecture: flat(architecture).map(str::to_owned),
-        }))
+        };
+        DependencyBackend::parse(&package)?;
+        Ok(PackageValue(package))
     }
 
     fn service(name: &str, provider: &str) -> anyhow::Result<ServiceValue> {
@@ -377,6 +380,9 @@ pub fn anybuild_builtins(builder: &mut GlobalsBuilder) {
             .iter()
             .map(|v| package_from(*v)?.ok_or_else(|| anyhow!("use() does not accept None")))
             .collect::<Result<Vec<Package>>>()?;
+        for package in &dependencies {
+            DependencyBackend::for_build(package)?;
+        }
         Ok(StepValue(Step::Use(UseStep { dependencies })))
     }
 
