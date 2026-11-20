@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/wasmerio/anybuild/compare/v0.33.3...v0.34.0) (2026-11-20)
+
+
+### Features
+
+* pass Wasmer registry packages through as runtime dependencies ([#143](https://github.com/wasmerio/anybuild/issues/143)) ([67e0052](https://github.com/wasmerio/anybuild/commit/67e0052d79b9eb4f069895be730ce7837b551cfb))
+
 ## [0.33.3](https://github.com/wasmerio/anybuild/compare/v0.33.2...v0.33.3) (2026-11-10)
 
 
