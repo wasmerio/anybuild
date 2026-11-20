@@ -289,6 +289,18 @@ pub fn mapper() -> &'static IndexMap<&'static str, MapperItem> {
 }
 
 /// Python's `Path.absolute()`: prefix with the cwd, no normalization.
+fn is_registry_package_name(name: &str) -> bool {
+    name.split_once('/').is_some_and(|(namespace, package)| {
+        let valid = |part: &str| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        };
+        valid(namespace) && valid(package)
+    })
+}
+
 fn absolute_path(path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -641,6 +653,18 @@ impl WasmerRunner {
         let mut package_mappings = Vec::new();
         for dep in &deps {
             let Some(item) = mapper().get(dep.name.as_str()) else {
+                // A full `namespace/name` is a Wasmer registry package: pass
+                // it through so its filesystem is mounted at runtime.
+                if is_registry_package_name(&dep.name) {
+                    let version = dep
+                        .version
+                        .clone()
+                        .filter(|v| !v.is_empty())
+                        .unwrap_or_else(|| "*".to_owned());
+                    dependencies.insert(&dep.name, value(&version));
+                    dependency_names.push(dep.name.clone());
+                    continue;
+                }
                 bail!("Dependency {} not found in Wasmer", dep.name);
             };
             let version = dep
@@ -2446,6 +2470,57 @@ mod tests {
                 command.get(0).unwrap()["module"].as_str(),
                 Some("sendmail/sendmail:sendmail")
             );
+        }
+    }
+
+    #[test]
+    fn test_wasmer_registry_package_dependency_passes_through() {
+        for (version, expected) in [(None, "*"), (Some("=2.48.4"), "=2.48.4")] {
+            let tmp = tempfile::tempdir().unwrap();
+            let runner = make_runner(tmp.path());
+            let serve = serve(
+                "n8n",
+                "node",
+                vec![
+                    package("node", None, None),
+                    package("wasmer/n8n", version, None),
+                ],
+                None,
+                &[("start", "node /n8n/wasmer-start.cjs")],
+            );
+            runner.build_serve(&serve).unwrap();
+            let manifest = std::fs::read_to_string(runner.wasmer_dir_path.join("wasmer.toml"))
+                .unwrap()
+                .parse::<DocumentMut>()
+                .unwrap();
+            assert_eq!(
+                manifest["dependencies"]["wasmer/n8n"].as_str(),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn test_wasmer_unknown_short_dependency_still_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let runner = make_runner(tmp.path());
+        let serve = serve(
+            "app",
+            "node",
+            vec![package("not-a-tool", None, None)],
+            None,
+            &[("start", "node server.js")],
+        );
+        let err = runner.build_serve(&serve).unwrap_err().to_string();
+        assert!(err.contains("Dependency not-a-tool not found in Wasmer"));
+    }
+
+    #[test]
+    fn test_registry_package_name() {
+        assert!(is_registry_package_name("wasmer/n8n"));
+        assert!(is_registry_package_name("php/php-64"));
+        for name in ["node", "/n8n", "wasmer/", "a/b/c", "wasmer/n 8n"] {
+            assert!(!is_registry_package_name(name), "{name}");
         }
     }
 

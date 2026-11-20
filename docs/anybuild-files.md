@@ -219,6 +219,24 @@ Python packages continue to use `python_extra_dependencies`; Node build tools
 use `node_extra_dependencies`.
 For packages needed during the build, add `use(dep(...))` in `build_pre`.
 
+A runtime dependency named as a full Wasmer registry package,
+`namespace/name`, is passed through to the generated `wasmer.toml` instead of
+being mapped. Its filesystem is mounted when the app starts, so a serve can run
+files from a prebuilt package without copying them into the build output. The
+version is used as written, or `*` when omitted:
+
+```python
+serve(
+    config,
+    build(steps = []),
+    serve_deps = [dep("node", "24"), dep("wasmer/n8n", "=2.48.4")],
+    commands = {"start": "node /n8n/wasmer-start.cjs"},
+)
+```
+
+The local and Docker runners do not install registry packages; use
+`--wasmer` to run such a serve.
+
 For Node apps targeting Wasmer, the optional `edgejs_engine` field accepts
 `"quickjs"` or `"external"`. Leaving it unset uses QuickJS by default.
 QuickJS uses `wasmer/edgejs-quickjs@0.2.5`, and the external engine uses
