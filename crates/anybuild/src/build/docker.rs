@@ -13,9 +13,8 @@ use base64::Engine as _;
 use indexmap::IndexMap;
 use sha2::{Digest, Sha256};
 
-use crate::dependency::{mise_tool_spec, DependencyBackend};
 use crate::operation::OperationContext;
-use crate::plan::{Mount, Package, Step};
+use crate::plan::{DependencyBackend, Mount, Package, Step};
 
 use crate::build::BuildBackend;
 
@@ -62,16 +61,16 @@ fn mise_postinstall(dependency: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn dependency_install_contents(dependency: &Package) -> Result<String> {
-    match DependencyBackend::parse(dependency)? {
+    match dependency.backend {
         DependencyBackend::Default => {}
-        DependencyBackend::Mise(tool) => {
-            let spec = mise_tool_spec(tool, dependency);
+        DependencyBackend::Mise => {
+            let spec = dependency.mise_tool_spec();
             let command = serde_json::to_string(&["mise", "use", "--global", "--", &spec])?;
             return Ok(format!(
                 "RUN --mount=type=cache,target=/mise/cache,sharing=locked {command}\n"
             ));
         }
-        DependencyBackend::Wasmer(_) => {
+        DependencyBackend::Wasmer => {
             bail!("Dependency {dependency} requires the Wasmer runner")
         }
     }
@@ -775,6 +774,7 @@ mod tests {
 
         let dependency = Package {
             name: "sendmail".to_owned(),
+            backend: DependencyBackend::Default,
             version: None,
             architecture: None,
         };
@@ -837,26 +837,31 @@ mod tests {
                 dependencies: vec![
                     Package {
                         name: "php".to_owned(),
+                        backend: DependencyBackend::Default,
                         version: Some("8.3".to_owned()),
                         architecture: None,
                     },
                     Package {
                         name: "composer".to_owned(),
+                        backend: DependencyBackend::Default,
                         version: None,
                         architecture: None,
                     },
                     Package {
                         name: "node".to_owned(),
+                        backend: DependencyBackend::Default,
                         version: None,
                         architecture: None,
                     },
                     Package {
                         name: "bash".to_owned(),
+                        backend: DependencyBackend::Default,
                         version: None,
                         architecture: None,
                     },
                     Package {
-                        name: "mise:jq".to_owned(),
+                        name: "jq".to_owned(),
+                        backend: DependencyBackend::Mise,
                         version: None,
                         architecture: None,
                     },

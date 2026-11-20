@@ -223,6 +223,9 @@ For packages needed during the build, add `use(dep(...))` in `build_pre`.
 
 An unprefixed name such as `node` uses the selected builder or runner's
 standard package mapping. A prefix selects a specific dependency backend.
+`dep()` stores the package's `backend` and `name` separately. For example,
+`dep("wasmer:wasmer/n8n").name` is `"wasmer/n8n"` and its `backend` is
+`"wasmer"`.
 
 | Prefix | Build dependencies in `use(...)` | Runtime dependencies in `serve_deps` or `extra_dependencies` |
 | ------ | --------------------------------- | ------------------------------------------------------------ |

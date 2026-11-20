@@ -99,7 +99,7 @@ def _configured_dependencies(config):
             dependency = dep(parts[0], parts[1])
         else:
             dependency = dep(spec)
-        dependencies[dependency.name] = dependency
+        dependencies[(dependency.backend, dependency.name)] = dependency
     return dependencies.values()
 
 def serve(

@@ -20,10 +20,9 @@ use toml_edit::{value, Array, ArrayOfTables, DocumentMut, Item, Table};
 
 use crate::build::BuildBackend;
 use crate::common::volumes::load_volume_mappings;
-use crate::dependency::DependencyBackend;
 use crate::event::{Event, WasmerPackageMapping};
 use crate::operation::OperationContext;
-use crate::plan::{EnvStep, Package, RunStep, Serve, Step, UseStep};
+use crate::plan::{DependencyBackend, EnvStep, Package, RunStep, Serve, Step, UseStep};
 use crate::providers::node::{NodeRuntimeConfigFields, NodeServer};
 use crate::providers::php::PhpFramework;
 use crate::providers::python::PythonConfig;
@@ -532,6 +531,9 @@ impl WasmerRunner {
 
         let mut env: IndexMap<String, String> = IndexMap::new();
         for dep in &serve.deps {
+            if dep.backend != DependencyBackend::Default {
+                continue;
+            }
             if let Some(item) = mapper().get(dep.name.as_str()) {
                 if let Some(dep_env) = item.env {
                     for (key, value) in dep_env {
@@ -658,10 +660,11 @@ impl WasmerRunner {
             .prepare
             .as_ref()
             .is_some_and(|steps| !steps.is_empty())
-            && !deps.iter().any(|dep| dep.name == "bash")
+            && !deps.iter().any(|dep| dep.is_default_named("bash"))
         {
             deps.push(Package {
                 name: "bash".to_owned(),
+                backend: DependencyBackend::Default,
                 version: None,
                 architecture: None,
             });
@@ -675,7 +678,7 @@ impl WasmerRunner {
         let mut dependency_names: Vec<String> = Vec::new();
         let mut package_mappings = Vec::new();
         for dep in &deps {
-            let (package_name, package_version, item) = match DependencyBackend::parse(dep)? {
+            let (package_name, package_version, item) = match dep.backend {
                 DependencyBackend::Default => {
                     let (mapped, item) = self.map_dependency(dep)?;
                     let (name, version) = mapped
@@ -684,10 +687,12 @@ impl WasmerRunner {
                     (name, version, Some(item))
                 }
                 // The registry package contributes its filesystem at runtime.
-                DependencyBackend::Wasmer(name) => {
-                    (name, dep.version.as_deref().unwrap_or("*"), None)
-                }
-                DependencyBackend::Mise(_) => {
+                DependencyBackend::Wasmer => (
+                    dep.name.as_str(),
+                    dep.version.as_deref().unwrap_or("*"),
+                    None,
+                ),
+                DependencyBackend::Mise => {
                     bail!("serve_deps: {dep} requires a Docker runtime image; selected runner is wasmer")
                 }
             };
@@ -700,14 +705,11 @@ impl WasmerRunner {
                 dependencies.insert(package_name, value(package_version));
                 dependency_names.push(package_name.to_owned());
             }
-            let source = dep
-                .version
-                .as_deref()
-                .filter(|version| !version.is_empty())
-                .map_or_else(
-                    || dep.name.clone(),
-                    |version| format!("{}@{version}", dep.name),
-                );
+            let mut source = dep.qualified_name();
+            if let Some(version) = dep.version.as_deref().filter(|version| !version.is_empty()) {
+                source.push('@');
+                source.push_str(version);
+            }
             package_mappings.push(WasmerPackageMapping {
                 source,
                 target: format!("{package_name}@{package_version}"),
@@ -967,9 +969,15 @@ impl WasmerRunner {
             yaml_config.insert(yaml_str("volumes"), YamlValue::Sequence(volumes_yaml));
         }
 
-        let has_php = serve.deps.iter().any(|dep| dep.name == "php");
-        let has_phpix = serve.deps.iter().any(|dep| dep.name == "phpix");
-        if has_php || has_phpix || serve.deps.iter().any(|dep| dep.name == "sendmail") {
+        let has_php = serve.deps.iter().any(|dep| dep.is_default_named("php"));
+        let has_phpix = serve.deps.iter().any(|dep| dep.is_default_named("phpix"));
+        if has_php
+            || has_phpix
+            || serve
+                .deps
+                .iter()
+                .any(|dep| dep.is_default_named("sendmail"))
+        {
             yaml_config.insert(yaml_str("enable_email"), YamlValue::Bool(true));
         }
         let build_deps: Vec<&Package> = serve
@@ -983,7 +991,7 @@ impl WasmerRunner {
             .collect();
         let is_built_with_go = build_deps
             .iter()
-            .any(|dep| dep.name == "go" || dep.name == "go-wasix");
+            .any(|dep| dep.is_default_named("go") || dep.is_default_named("go-wasix"));
 
         // Note: phpix is multi-threaded, so this is only needed for raw php server and go.
         if (has_php && !has_phpix) || is_built_with_go {
@@ -1166,9 +1174,10 @@ impl Runner for WasmerRunner {
                 let mut deps: Vec<Package> = Vec::new();
                 let mut found_go = false;
                 for package in &use_step.dependencies {
-                    if package.name == "go" {
+                    if package.is_default_named("go") {
                         deps.push(Package {
                             name: "go-wasix".to_owned(),
+                            backend: DependencyBackend::Default,
                             version: None,
                             architecture: None,
                         });
@@ -1432,11 +1441,7 @@ mod tests {
     }
 
     fn package(name: &str, version: Option<&str>, architecture: Option<&str>) -> Package {
-        Package {
-            name: name.to_owned(),
-            version: version.map(str::to_owned),
-            architecture: architecture.map(str::to_owned),
-        }
+        Package::parse(name, version, architecture).unwrap()
     }
 
     fn serve(
@@ -2404,6 +2409,11 @@ mod tests {
     fn test_prepare_build_steps_swaps_go_for_go_wasix() {
         let tmp = tempfile::tempdir().unwrap();
         let runner = make_runner(tmp.path());
+        let mise_steps = vec![Step::Use(UseStep {
+            dependencies: vec![package("mise:go", Some("1.22"), None)],
+        })];
+        assert_eq!(runner.prepare_build_steps(mise_steps.clone()), mise_steps);
+
         let steps = vec![Step::Use(UseStep {
             dependencies: vec![package("go", Some("1.22"), None)],
         })];

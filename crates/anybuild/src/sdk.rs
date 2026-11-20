@@ -5,10 +5,9 @@ use indexmap::IndexMap;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::plan::{Serve, Service, Step};
+use crate::plan::{DependencyBackend, Serve, Service, Step};
 
 use crate::artifact::{ArtifactKind, RuntimeArtifact};
-use crate::dependency::{validate_build_dependencies, DependencyBackend};
 use crate::deploy::resolve_deployer;
 use crate::error::{Error, ErrorKind, Result};
 pub use crate::event::ProcessIo;
@@ -139,10 +138,10 @@ impl RuntimeEnvironment {
 
     fn validate_serve_dependencies(&self, serve: &Serve) -> AnyResult<()> {
         for package in &serve.deps {
-            let (kind, required_runner) = match DependencyBackend::parse(package)? {
+            let (kind, required_runner) = match package.backend {
                 DependencyBackend::Default => continue,
-                DependencyBackend::Mise(_) => (ArtifactKind::Docker, "a Docker runtime image"),
-                DependencyBackend::Wasmer(_) => (ArtifactKind::Wasmer, "--runner=wasmer"),
+                DependencyBackend::Mise => (ArtifactKind::Docker, "a Docker runtime image"),
+                DependencyBackend::Wasmer => (ArtifactKind::Wasmer, "--runner=wasmer"),
             };
             anyhow::ensure!(
                 self.artifact_kinds().contains(&kind),
@@ -684,7 +683,6 @@ impl Anybuild {
             &environment_options(&options.build_environment, &options.runtime_environment),
             context,
         )?;
-        validate_build_dependencies(&project.serve.build)?;
         options
             .runtime_environment
             .validate_serve_dependencies(&project.serve)?;
@@ -710,16 +708,17 @@ impl Anybuild {
                 &env_options,
                 operation,
             )?;
-            let installs_mise_tools = validate_build_dependencies(&context.serve.build)?;
             if skip_safe
                 && matches!(build_environment, BuildEnvironment::Docker(_))
-                && !installs_mise_tools
                 && !context.serve.build.is_empty()
-                && !context
-                    .serve
-                    .build
-                    .iter()
-                    .any(|step| matches!(step, Step::Run(_)))
+                && !context.serve.build.iter().any(|step| match step {
+                    Step::Run(_) => true,
+                    Step::Use(step) => step
+                        .dependencies
+                        .iter()
+                        .any(|package| package.backend == DependencyBackend::Mise),
+                    _ => false,
+                })
             {
                 operation.emit(Event::Diagnostic {
                     level: DiagnosticLevel::Info,
@@ -1151,7 +1150,7 @@ fn build_plan_event(build: &[Step], serve: &Serve, include_prepare: bool) -> Eve
     let mut packages: IndexMap<PackageKey, (bool, bool)> = IndexMap::new();
     let mut mark_package = |package: &crate::plan::Package, build: bool, deploy: bool| {
         let key = (
-            package.name.clone(),
+            package.qualified_name(),
             package.version.clone(),
             package.architecture.clone(),
         );

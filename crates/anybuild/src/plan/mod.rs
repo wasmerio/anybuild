@@ -3,15 +3,17 @@
 //! Plan-visible maps (env vars, commands) use `IndexMap`: Python dicts
 //! preserve insertion order and plan JSON is the compatibility contract.
 
-use std::fmt;
 use std::path::PathBuf;
 
 use indexmap::IndexMap;
 use serde::Serialize;
 
 pub(crate) mod layout;
+mod package;
 #[cfg(test)]
 pub(crate) mod snapshot;
+
+pub use package::{DependencyBackend, Package};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Mount {
@@ -36,30 +38,6 @@ pub struct Service {
     pub name: String,
     /// "postgres" | "mysql" | "redis"
     pub provider: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Package {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
-    /// "64-bit" | "32-bit"
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub architecture: Option<String>,
-}
-
-impl fmt::Display for Package {
-    /// Matches Python's `Package.__str__`: `name(arch)@version`.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.architecture {
-            Some(arch) => write!(f, "{}({})", self.name, arch)?,
-            None => write!(f, "{}", self.name)?,
-        }
-        if let Some(version) = &self.version {
-            write!(f, "@{}", version)?;
-        }
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

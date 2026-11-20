@@ -11,8 +11,7 @@ use zip::ZipWriter;
 
 use crate::artifact::RuntimeArtifact;
 use crate::build::BuildBackend;
-use crate::dependency::DependencyBackend;
-use crate::plan::{Package, Serve};
+use crate::plan::{DependencyBackend, Package, Serve};
 
 struct ManagedRuntime {
     identifier: String,
@@ -88,10 +87,7 @@ pub(crate) fn package(
 fn managed_runtime(dependencies: &[Package]) -> Option<ManagedRuntime> {
     let mut selected: Option<ManagedRuntime> = None;
     for dependency in dependencies {
-        if !matches!(
-            DependencyBackend::parse(dependency).ok()?,
-            DependencyBackend::Default
-        ) {
+        if dependency.backend != DependencyBackend::Default {
             return None;
         }
         let runtime = match dependency.name.as_str() {
@@ -307,12 +303,14 @@ mod tests {
     fn mise_serve_dependency_requires_a_container_image() {
         let mut dependencies = vec![Package {
             name: "node".to_owned(),
+            backend: DependencyBackend::Default,
             version: Some("24".to_owned()),
             architecture: None,
         }];
         assert!(managed_runtime(&dependencies).is_some());
         dependencies.push(Package {
-            name: "mise:aqua:BurntSushi/ripgrep".to_owned(),
+            name: "aqua:BurntSushi/ripgrep".to_owned(),
+            backend: DependencyBackend::Mise,
             version: Some("14.1.1".to_owned()),
             architecture: None,
         });
@@ -362,6 +360,7 @@ mod tests {
     fn selects_only_supported_single_language_runtimes() {
         let package = |name: &str, version: Option<&str>| Package {
             name: name.to_owned(),
+            backend: DependencyBackend::Default,
             version: version.map(str::to_owned),
             architecture: None,
         };
@@ -429,11 +428,13 @@ mod tests {
             deps: vec![
                 Package {
                     name: "python".to_owned(),
+                    backend: DependencyBackend::Default,
                     version: Some("3.13.4".to_owned()),
                     architecture: None,
                 },
                 Package {
                     name: "bash".to_owned(),
+                    backend: DependencyBackend::Default,
                     version: None,
                     architecture: None,
                 },

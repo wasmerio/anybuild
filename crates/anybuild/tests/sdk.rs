@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use anybuild::plan::Step;
+use anybuild::plan::{DependencyBackend, Step};
 use anybuild::{
     Anybuild, AutoOptions, AwsLambdaOptions, BuildOptions, DeployOptions, DeployOutcome,
     DeployTarget, DeploymentPlatform, DockerOptions, Event, FlyOptions, GenerateOptions,
@@ -1044,10 +1044,10 @@ serve(
                 ..Default::default()
             })
             .unwrap();
-        assert_eq!(
-            plan.serve.deps[0].to_string(),
-            "mise:aqua:BurntSushi/ripgrep@14.1.1"
-        );
+        let dep = &plan.serve.deps[0];
+        assert_eq!(dep.backend, DependencyBackend::Mise);
+        assert_eq!(dep.name, "aqua:BurntSushi/ripgrep");
+        assert_eq!(dep.to_string(), "mise:aqua:BurntSushi/ripgrep@14.1.1");
     }
 }
 
@@ -1056,21 +1056,29 @@ fn configured_mise_dependencies_keep_scoped_tool_identifiers() {
     let project = static_project();
     let plan = Anybuild::new(project.path())
         .with_config(serde_json::json!({
-            "extra_dependencies": ["mise:npm:@scope/tool", "mise:npm:@scope/pinned@1.2.3"]
+            "extra_dependencies": [
+                "mise:npm:@scope/tool", "mise:npm:@scope/pinned@1.2.3",
+                "node@24", "mise:node@24",
+            ]
         }))
         .plan(PlanOptions {
             runtime_environment: RuntimeEnvironment::Docker(DockerOptions::default()),
             ..Default::default()
         })
         .unwrap();
-    let matches = |name: &str, version| {
-        plan.serve
-            .deps
-            .iter()
-            .any(|dep| dep.name == name && dep.version.as_deref() == version)
+    let matches = |backend, name: &str, version| {
+        plan.serve.deps.iter().any(|dep| {
+            dep.backend == backend && dep.name == name && dep.version.as_deref() == version
+        })
     };
-    assert!(matches("mise:npm:@scope/tool", None));
-    assert!(matches("mise:npm:@scope/pinned", Some("1.2.3")));
+    assert!(matches(DependencyBackend::Mise, "npm:@scope/tool", None));
+    assert!(matches(
+        DependencyBackend::Mise,
+        "npm:@scope/pinned",
+        Some("1.2.3")
+    ));
+    assert!(matches(DependencyBackend::Default, "node", Some("24")));
+    assert!(matches(DependencyBackend::Mise, "node", Some("24")));
 }
 
 #[cfg(unix)]

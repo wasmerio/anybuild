@@ -11,9 +11,8 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use indexmap::IndexMap;
 
 use crate::common::paths::normalize_absolute;
-use crate::dependency::{mise_tool_spec, DependencyBackend};
 use crate::operation::OperationContext;
-use crate::plan::{Mount, Package, Step};
+use crate::plan::{DependencyBackend, Mount, Package, Step};
 
 use crate::build::BuildBackend;
 
@@ -294,7 +293,6 @@ impl LocalBuildBackend {
 
     fn install_mise_tool(
         &self,
-        tool: &str,
         package: &Package,
         env: &IndexMap<String, String>,
         mise_paths: &IndexMap<String, Vec<PathBuf>>,
@@ -303,7 +301,7 @@ impl LocalBuildBackend {
         let mise = which("mise", &paths).with_context(|| {
             format!("Build dependency {package} requires mise on PATH or --builder=docker")
         })?;
-        let spec = mise_tool_spec(tool, package);
+        let spec = package.mise_tool_spec();
         let path = std::env::join_paths(mise_paths.values().rev().flatten().chain(&paths))?;
         let command = |action: &str| {
             let mut command = Command::new(&mise);
@@ -356,10 +354,10 @@ impl LocalBuildBackend {
                     .join(", ");
                 self.report_build_step(format!("Using dependencies: {deps}"));
                 for package in &step.dependencies {
-                    if let DependencyBackend::Mise(tool) = DependencyBackend::for_build(package)? {
-                        let paths = self.install_mise_tool(tool, package, env, mise_paths)?;
-                        mise_paths.shift_remove(tool);
-                        mise_paths.insert(tool.to_owned(), paths);
+                    if package.backend == DependencyBackend::Mise {
+                        let paths = self.install_mise_tool(package, env, mise_paths)?;
+                        mise_paths.shift_remove(&package.name);
+                        mise_paths.insert(package.name.clone(), paths);
                     }
                 }
             }
